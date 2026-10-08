@@ -218,3 +218,21 @@ TEST_CASE(haptics_are_recorded_per_hand) {
   CHECK_NEAR(backend.lastHapticAmplitude(VrHand::Right), 0.75f, 1e-6);
   CHECK_NEAR(backend.lastHapticAmplitude(VrHand::Left), 0.0f, 1e-6);
 }
+
+
+TEST_CASE(input_source_is_sampled_each_poll) {
+  VrEmulatorBackend backend = makeRunningBackend();
+
+  backend.setInputSource([] {
+    VrEmulatorInput input;
+    input.moveForward = 1.0f;
+    return input;
+  });
+
+  backend.pollInput(backend.waitFrame().predictedDisplayTime);
+  const float first = backend.pollInput(backend.waitFrame().predictedDisplayTime).headPose.position.z;
+  const float second = backend.pollInput(backend.waitFrame().predictedDisplayTime).headPose.position.z;
+
+  CHECK(first < 0.0f);
+  CHECK(second < first);
+}

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <vector>
 
 #include "vr_backend.h"
@@ -91,6 +92,13 @@ namespace dxvk {
     void setInput(const VrEmulatorInput& input);
 
     /**
+     * rief Sets a function that is sampled once per pollInput
+     *
+     * Its result is applied like setInput, before the rig advances.
+     */
+    void setInputSource(std::function<VrEmulatorInput()> source);
+
+    /**
      * \brief Replaces interactive head control with a scripted path
      *
      * Keyframes must be sorted by time. The pose is interpolated between
@@ -116,6 +124,7 @@ namespace dxvk {
     VrSessionState    m_state = VrSessionState::Idle;
 
     VrEmulatorInput   m_pendingInput;
+    std::function<VrEmulatorInput()> m_inputSource;
     std::vector<VrPoseKeyframe> m_script;
     IVRFrameSink*     m_sink = nullptr;
 

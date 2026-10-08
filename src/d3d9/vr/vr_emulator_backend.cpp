@@ -87,6 +87,9 @@ namespace dxvk {
     const float dt = float(displayTime - m_lastInputTime) * 1e-9f;
     m_lastInputTime = displayTime;
 
+    if (m_inputSource)
+      setInput(m_inputSource());
+
     m_rig.update(m_pendingInput, dt);
 
     // Mouse deltas are consumed once, movement keys stay held
@@ -166,6 +169,11 @@ namespace dxvk {
     m_pendingInput.mouseDeltaX = dx;
     m_pendingInput.mouseDeltaY = dy;
     m_pendingInput.recenter    = recenter;
+  }
+
+
+  void VrEmulatorBackend::setInputSource(std::function<VrEmulatorInput()> source) {
+    m_inputSource = std::move(source);
   }
 
 

@@ -1,0 +1,34 @@
+#include <windows.h>
+
+#include "vr_emulator_keyboard.h"
+
+namespace dxvk {
+
+  namespace {
+
+    // Mouse pixels per frame reported while a turn key is held
+    constexpr float TurnPixelsPerFrame = 6.0f;
+
+    bool isDown(int key) {
+      return (GetAsyncKeyState(key) & 0x8000) != 0;
+    }
+
+    float axis(int positive, int negative) {
+      return (isDown(positive) ? 1.0f : 0.0f) - (isDown(negative) ? 1.0f : 0.0f);
+    }
+
+  }
+
+
+  VrEmulatorInput VrEmulatorKeyboard::sample() const {
+    VrEmulatorInput input;
+    input.moveRight   = axis(VK_RIGHT, VK_LEFT);
+    input.moveForward = axis(VK_UP, VK_DOWN);
+    input.moveUp      = axis(VK_PRIOR, VK_NEXT);
+    input.mouseDeltaX = axis(VK_NUMPAD6, VK_NUMPAD4) * TurnPixelsPerFrame;
+    input.mouseDeltaY = axis(VK_NUMPAD2, VK_NUMPAD8) * TurnPixelsPerFrame;
+    input.recenter    = isDown(VK_NUMPAD0);
+    return input;
+  }
+
+}

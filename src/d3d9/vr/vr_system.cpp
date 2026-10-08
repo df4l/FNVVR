@@ -9,6 +9,8 @@
 
 #include "vr_backend_factory.h"
 #include "vr_d3d9_bridge.h"
+#include "vr_emulator_backend.h"
+#include "vr_emulator_keyboard.h"
 #include "vr_extension_provider.h"
 #include "vr_stereo_renderer.h"
 #include "vr_system.h"
@@ -58,6 +60,11 @@ namespace dxvk {
 
     // The emulator has no headset to look through, so it shows a window by default
     bool showPreview = config.getOption<bool>("d3d9.vrPreviewWindow", name == "emulator");
+
+    if (auto* emulator = dynamic_cast<VrEmulatorBackend*>(backend.get())) {
+      VrEmulatorKeyboard keyboard;
+      emulator->setInputSource([keyboard] { return keyboard.sample(); });
+    }
 
     g_vrSystem.reset(new VrSystem(std::move(backend), showPreview));
     DxvkInstance::registerExtensionProvider(g_vrSystem->m_extensionProvider.get());
