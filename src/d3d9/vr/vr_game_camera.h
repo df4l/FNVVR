@@ -30,6 +30,11 @@ namespace dxvk {
      */
     bool acquire();
 
+    /**
+     * \brief Checks whether a pointer is the camera found by acquire()
+     */
+    bool isCamera(const void* camera) const { return camera && camera == m_camera; }
+
     VrGameCameraState save() const;
 
     /**

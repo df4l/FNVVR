@@ -1,4 +1,5 @@
 #include "d3d9_swapchain.h"
+#include "vr/vr_system.h"
 #include "d3d9_surface.h"
 #include "d3d9_monitor.h"
 
@@ -123,6 +124,10 @@ namespace dxvk {
     // I am not sure what the actual HRESULT returned here is
     // or should be, but it is better than crashing... probably!
     if (m_backBuffers.empty())
+      return D3D_OK;
+
+    // The VR layer draws a frame per eye and presents only the last one
+    if (VrSystem::skipsPresent())
       return D3D_OK;
 
     uint32_t presentInterval = m_presentParams.PresentationInterval;

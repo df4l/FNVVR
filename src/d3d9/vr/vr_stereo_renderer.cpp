@@ -10,13 +10,26 @@ namespace dxvk {
 
   namespace {
 
-    // Main::Render is __thiscall with three stack arguments, which a
-    // __fastcall function with an unused second argument matches exactly
-    using RenderFn = void (__fastcall*)(void* main, void* unused,
-      uint32_t arg0, uint32_t arg1, uint32_t arg2);
+    // Main::Swap is __thiscall without stack arguments
+    using SwapFn = void (__fastcall*)(void* main, void* unused);
+
+    // InterfaceManager::RenderInterface is __thiscall with two stack arguments,
+    // which a __fastcall function with an unused second argument matches exactly
+    using RenderInterfaceFn = void (__fastcall*)(void* interfaceManager, void* unused,
+      void* arg0, uint32_t arg1);
+
+    // PlaceCamera is __thiscall without arguments
+    using PlaceCameraFn = void (__fastcall*)(void* main, void* unused);
+
+    // NiCamera::UpdateWorldData is __thiscall with one stack argument
+    using CameraUpdateFn = void (__fastcall*)(void* camera, void* unused, void* updateData);
 
     VrStereoRenderer* g_stereoRenderer = nullptr;
-    RenderFn          g_originalRender = nullptr;
+
+    SwapFn            g_originalSwap            = reinterpret_cast<SwapFn>(VrGame::Swap);
+    RenderInterfaceFn g_originalRenderInterface = reinterpret_cast<RenderInterfaceFn>(VrGame::RenderInterface);
+    PlaceCameraFn     g_originalPlaceCamera     = reinterpret_cast<PlaceCameraFn>(VrGame::PlaceCamera);
+    CameraUpdateFn    g_originalCameraUpdate    = reinterpret_cast<CameraUpdateFn>(VrGame::CameraUpdateWorldData);
 
   }
 
@@ -26,7 +39,7 @@ namespace dxvk {
 
 
   VrStereoRenderer::~VrStereoRenderer() {
-    // The patched call stays in place and falls back to the game's own render
+    // The patched calls stay in place and fall through to the game's own code
     g_stereoRenderer = nullptr;
   }
 
@@ -38,13 +51,26 @@ namespace dxvk {
     if (g_stereoRenderer)
       return nullptr;
 
-    if (!VrGameMemory::redirectCall(VrGame::RenderCallSite,
-        VrGame::Render, reinterpret_cast<const void*>(&VrStereoRenderer::renderHook))) {
-      Logger::info("VR: The game's render call was not found, stereo rendering is disabled");
-      return nullptr;
+    // Every hook forwards to the game's own function while no renderer is
+    // active, so a patch that stays in place after a later one failed is inert
+    bool patched = VrGameMemory::redirectCall(VrGame::SwapCallSite, VrGame::Swap,
+      reinterpret_cast<const void*>(&VrStereoRenderer::swapHook));
+
+    patched = patched && VrGameMemory::redirectCall(VrGame::RenderInterfaceCallSite,
+      VrGame::RenderInterface, reinterpret_cast<const void*>(&VrStereoRenderer::renderInterfaceHook));
+
+    for (uintptr_t site : VrGame::PlaceCameraCallSites) {
+      patched = patched && VrGameMemory::redirectCall(site, VrGame::PlaceCamera,
+        reinterpret_cast<const void*>(&VrStereoRenderer::placeCameraHook));
     }
 
-    g_originalRender = reinterpret_cast<RenderFn>(VrGame::Render);
+    patched = patched && VrGameMemory::redirectVirtual(VrGame::CameraUpdateWorldDataSlot,
+      VrGame::CameraUpdateWorldData, reinterpret_cast<const void*>(&VrStereoRenderer::cameraUpdateHook));
+
+    if (!patched) {
+      Logger::info("VR: The game's frame code was not found, stereo rendering is disabled");
+      return nullptr;
+    }
 
     std::unique_ptr<VrStereoRenderer> renderer(new VrStereoRenderer(backend, device, showPreview));
     g_stereoRenderer = renderer.get();
@@ -52,24 +78,54 @@ namespace dxvk {
   }
 
 
-  void __fastcall VrStereoRenderer::renderHook(
+  void __fastcall VrStereoRenderer::swapHook(
           void*                 main,
-          void*                 unused,
-          uint32_t              arg0,
-          uint32_t              arg1,
-          uint32_t              arg2) {
+          void*                 unused) {
     if (g_stereoRenderer)
-      g_stereoRenderer->renderFrame(main, arg0, arg1, arg2);
+      g_stereoRenderer->renderFrame(main);
     else
-      g_originalRender(main, nullptr, arg0, arg1, arg2);
+      g_originalSwap(main, nullptr);
   }
 
 
-  void VrStereoRenderer::renderFrame(void* main, uint32_t arg0, uint32_t arg1, uint32_t arg2) {
-    VrGameCamera camera;
+  void __fastcall VrStereoRenderer::renderInterfaceHook(
+          void*                 interfaceManager,
+          void*                 unused,
+          void*                 arg0,
+          uint32_t              arg1) {
+    // The 3D image is complete here and the interface is not drawn yet
+    if (g_stereoRenderer)
+      g_stereoRenderer->captureEye();
 
-    if (m_texturesFailed || !camera.acquire() || !createEyeTextures()) {
-      g_originalRender(main, nullptr, arg0, arg1, arg2);
+    g_originalRenderInterface(interfaceManager, nullptr, arg0, arg1);
+  }
+
+
+  void __fastcall VrStereoRenderer::placeCameraHook(
+          void*                 main,
+          void*                 unused) {
+    g_originalPlaceCamera(main, nullptr);
+
+    if (g_stereoRenderer && g_stereoRenderer->m_eyeView)
+      g_stereoRenderer->applyEyePose();
+  }
+
+
+  void __fastcall VrStereoRenderer::cameraUpdateHook(
+          void*                 camera,
+          void*                 unused,
+          void*                 updateData) {
+    g_originalCameraUpdate(camera, nullptr, updateData);
+
+    if (g_stereoRenderer && g_stereoRenderer->m_eyeView
+     && g_stereoRenderer->m_renderCamera.isCamera(camera))
+      g_stereoRenderer->applyEyePose();
+  }
+
+
+  void VrStereoRenderer::renderFrame(void* main) {
+    if (m_texturesFailed || !m_renderCamera.acquire() || !createEyeTextures()) {
+      g_originalSwap(main, nullptr);
       return;
     }
 
@@ -77,12 +133,13 @@ namespace dxvk {
 
     if (!timing.shouldRender) {
       m_backend.submitEmptyFrame(timing.predictedDisplayTime);
-      g_originalRender(main, nullptr, arg0, arg1, arg2);
+      g_originalSwap(main, nullptr);
       return;
     }
 
     if (FAILED(m_device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &m_gameTarget))) {
-      g_originalRender(main, nullptr, arg0, arg1, arg2);
+      m_backend.submitEmptyFrame(timing.predictedDisplayTime);
+      g_originalSwap(main, nullptr);
       return;
     }
 
@@ -95,14 +152,26 @@ namespace dxvk {
 
     auto views = m_backend.locateViews(timing.predictedDisplayTime);
 
-    VrGameCameraState savedState = camera.save();
-    VrGameCameraPose  basePose   = camera.readPose();
+    m_gameCamera     = m_renderCamera.save();
+    m_gameCameraPose = m_renderCamera.readPose();
 
-    for (uint32_t eye = 0; eye < VrEyeCount; eye++)
-      renderEye(eye, views[eye], camera, basePose, main, arg0, arg1, arg2);
+    for (uint32_t eye = 0; eye < VrEyeCount; eye++) {
+      m_eyeCopied[eye] = false;
+      renderEye(eye, views[eye], main);
+    }
 
-    camera.restore(savedState);
+    m_renderCamera.restore(m_gameCamera);
     m_gameTarget = nullptr;
+
+    if (!m_eyeCopied[0] || !m_eyeCopied[1]) {
+      if (!m_loggedFailure) {
+        Logger::err("VR: The game did not reach the interface while drawing an eye, the frame is dropped");
+        m_loggedFailure = true;
+      }
+
+      m_backend.submitEmptyFrame(timing.predictedDisplayTime);
+      return;
+    }
 
     IDirect3DTexture9* eyes[VrEyeCount] = { m_eyeTextures[0].ptr(), m_eyeTextures[1].ptr() };
 
@@ -160,23 +229,36 @@ namespace dxvk {
   void VrStereoRenderer::renderEye(
           uint32_t              eye,
     const VrEyeView&            view,
-          VrGameCamera&         camera,
-    const VrGameCameraPose&     basePose,
-          void*                 main,
-          uint32_t              arg0,
-          uint32_t              arg1,
-          uint32_t              arg2) {
+          void*                 main) {
+    m_eye     = eye;
+    m_eyeView = &view;
+
+    applyEyePose();
+    g_originalSwap(main, nullptr);
+
+    m_eye     = NoEye;
+    m_eyeView = nullptr;
+  }
+
+
+  void VrStereoRenderer::applyEyePose() {
     VrPose eyeInReference = m_hasReference
-      ? vrComputeEyeInReference(m_reference, view.pose)
+      ? vrComputeEyeInReference(m_reference, m_eyeView->pose)
       : VrPose();
 
-    camera.apply(
-      vrComputeEyeCameraPose(basePose, eyeInReference, VrGameUnitsPerMetre),
-      vrComputeGameFrustum(view.fov));
+    m_renderCamera.apply(
+      vrComputeEyeCameraPose(m_gameCameraPose, eyeInReference, VrGameUnitsPerMetre),
+      vrComputeGameFrustum(m_eyeView->fov));
+  }
 
-    g_originalRender(main, nullptr, arg0, arg1, arg2);
 
-    if (!copyRenderTarget(eye) && !m_loggedFailure) {
+  void VrStereoRenderer::captureEye() {
+    if (m_eye == NoEye || m_eyeCopied[m_eye])
+      return;
+
+    m_eyeCopied[m_eye] = copyRenderTarget(m_eye);
+
+    if (!m_eyeCopied[m_eye] && !m_loggedFailure) {
       Logger::err("VR: Failed to copy the rendered eye image");
       m_loggedFailure = true;
     }

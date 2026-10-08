@@ -42,6 +42,14 @@ namespace dxvk {
      */
     static VrSystem* get();
 
+    /**
+     * \brief Checks whether the present that is happening must be dropped
+     *
+     * True while the game draws the first eye's frame, which is not shown.
+     * Safe to call when VR is disabled.
+     */
+    static bool skipsPresent();
+
     IVRBackend& backend() { return *m_backend; }
 
     /**

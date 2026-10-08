@@ -29,6 +29,19 @@ namespace dxvk {
             uintptr_t             expectedTarget,
       const void*                 newTarget);
 
+    /**
+     * \brief Replaces an entry of a virtual function table
+     *
+     * \param [in] slot Address of the table entry
+     * \param [in] expectedTarget Function the entry must currently hold
+     * \param [in] newTarget Function to store instead
+     * \returns \c true if the entry matched and was replaced
+     */
+    static bool redirectVirtual(
+            uintptr_t             slot,
+            uintptr_t             expectedTarget,
+      const void*                 newTarget);
+
   };
 
 }

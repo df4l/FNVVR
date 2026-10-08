@@ -76,6 +76,11 @@ namespace dxvk {
   }
 
 
+  bool VrSystem::skipsPresent() {
+    return g_vrSystem && g_vrSystem->m_stereoRenderer && g_vrSystem->m_stereoRenderer->skipsPresent();
+  }
+
+
   bool VrSystem::attachDevice(IDirect3DDevice9* device) {
     if (m_hasSession)
       return true;

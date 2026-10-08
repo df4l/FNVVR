@@ -14,15 +14,17 @@
 namespace dxvk {
 
   /**
-   * \brief Renders the game's world once per eye
+   * \brief Renders the game's frame once per eye
    *
-   * Takes over the call to Main::Render in the gameplay branch of the game's
-   * frame. For each eye it moves the world camera to the eye's pose and field
-   * of view, lets the game render, copies the result into the eye texture and
-   * puts the camera back. The game logic still runs once per frame, and the
-   * HUD and the desktop window show the right eye.
+   * Takes over the call to Main::Swap in the game's main loop, which draws
+   * the world, the HUD and presents. Everything before it, the game logic,
+   * still runs once per frame. For each eye the world camera is moved to the
+   * eye's pose and field of view and the game draws a whole frame. The 3D
+   * image is copied into the eye texture just before the game draws the HUD
+   * over it, so the eye textures hold the scene without the interface.
    *
-   * Menus and loading screens take other paths and stay monoscopic.
+   * The game positions the camera again at several points while it draws,
+   * so two more hooks keep the eye pose in place.
    */
   class VrStereoRenderer {
 
@@ -31,7 +33,7 @@ namespace dxvk {
     ~VrStereoRenderer();
 
     /**
-     * \brief Hooks the game's render call
+     * \brief Hooks the game's frame
      *
      * \param [in] backend Backend that provides poses and receives frames
      * \param [in] device D3D9 device the game renders with
@@ -43,7 +45,18 @@ namespace dxvk {
             IDirect3DDevice9*     device,
             bool                  showPreview);
 
+    /**
+     * \brief Checks whether the frame being drawn is the left eye's
+     *
+     * The game presents after every frame. The left eye's present is
+     * dropped, so the window shows the right eye and the game's frame
+     * state machine still sees a completed frame.
+     */
+    bool skipsPresent() const { return m_eye == 0; }
+
   private:
+
+    static constexpr uint32_t NoEye = ~0u;
 
     VrStereoRenderer(IVRBackend& backend, IDirect3DDevice9* device, bool showPreview);
 
@@ -54,9 +67,19 @@ namespace dxvk {
     Com<IDirect3DTexture9> m_eyeTextures[VrEyeCount];
     std::unique_ptr<VrPreviewWindow> m_preview;
 
-    // The game composes its final image into the backbuffer. The render target
-    // bound after Main::Render is not reliable, in dialogs it is an HDR target.
+    // The game composes its final 3D image into the backbuffer
     Com<IDirect3DSurface9> m_gameTarget;
+
+    // The eye the game is drawing, or NoEye outside of the per-eye frames
+    uint32_t            m_eye         = NoEye;
+    const VrEyeView*    m_eyeView     = nullptr;
+    bool                m_eyeCopied[VrEyeCount] = { };
+
+    // The camera the game draws with, as the game placed it for this frame.
+    // It is restored after the eyes.
+    VrGameCamera        m_renderCamera;
+    VrGameCameraState   m_gameCamera  = { };
+    VrGameCameraPose    m_gameCameraPose;
 
     VrPose m_reference;
     bool   m_hasReference  = false;
@@ -64,26 +87,37 @@ namespace dxvk {
     bool   m_loggedStart   = false;
     bool   m_loggedFailure = false;
 
-    static void __fastcall renderHook(
+    static void __fastcall swapHook(
             void*                 main,
-            void*                 unused,
-            uint32_t              arg0,
-            uint32_t              arg1,
-            uint32_t              arg2);
+            void*                 unused);
 
-    void renderFrame(void* main, uint32_t arg0, uint32_t arg1, uint32_t arg2);
+    static void __fastcall renderInterfaceHook(
+            void*                 interfaceManager,
+            void*                 unused,
+            void*                 arg0,
+            uint32_t              arg1);
+
+    static void __fastcall placeCameraHook(
+            void*                 main,
+            void*                 unused);
+
+    static void __fastcall cameraUpdateHook(
+            void*                 camera,
+            void*                 unused,
+            void*                 updateData);
+
+    void renderFrame(void* main);
 
     bool createEyeTextures();
 
     void renderEye(
             uint32_t              eye,
-            const VrEyeView&      view,
-            VrGameCamera&         camera,
-      const VrGameCameraPose&     basePose,
-            void*                 main,
-            uint32_t              arg0,
-            uint32_t              arg1,
-            uint32_t              arg2);
+      const VrEyeView&            view,
+            void*                 main);
+
+    void applyEyePose();
+
+    void captureEye();
 
     bool copyRenderTarget(uint32_t eye);
 

@@ -62,4 +62,28 @@ namespace dxvk {
     return true;
   }
 
+
+  bool VrGameMemory::redirectVirtual(
+          uintptr_t             slot,
+          uintptr_t             expectedTarget,
+    const void*                 newTarget) {
+    if (!isReadable(slot, sizeof(uintptr_t)))
+      return false;
+
+    uintptr_t* entry = reinterpret_cast<uintptr_t*>(slot);
+
+    if (*entry != expectedTarget)
+      return false;
+
+    DWORD oldProtect = 0;
+
+    if (!VirtualProtect(entry, sizeof(*entry), PAGE_READWRITE, &oldProtect))
+      return false;
+
+    *entry = reinterpret_cast<uintptr_t>(newTarget);
+
+    VirtualProtect(entry, sizeof(*entry), oldProtect, &oldProtect);
+    return true;
+  }
+
 }
