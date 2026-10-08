@@ -2,9 +2,11 @@
 #include <xinput.h>
 
 #include "../../util/log/log.h"
+#include "../../util/util_string.h"
 
 #include "vr_game_addresses.h"
 #include "vr_game_memory.h"
+#include "vr_gamepad_head.h"
 #include "vr_gamepad_hook.h"
 #include "vr_virtual_gamepad.h"
 
@@ -20,6 +22,11 @@ namespace dxvk {
     DWORD g_packetNumber = 0;
 
     VrGamepadHold g_hold;
+
+    VrGamepadHead g_head;
+
+    bool g_virtualPad  = true;
+    bool g_headControl = true;
 
     // Also true for a key that was pressed and released since the previous
     // sample, so that a short tap is not missed
@@ -42,10 +49,43 @@ namespace dxvk {
       return keys;
     }
 
+    void applyHeadControl(XINPUT_STATE* state) {
+      XINPUT_GAMEPAD& pad = state->Gamepad;
+
+      VrGamepadSample sample;
+      sample.buttons      = pad.wButtons;
+      sample.thumbLeftX   = pad.sThumbLX;
+      sample.thumbLeftY   = pad.sThumbLY;
+      sample.thumbRightX  = pad.sThumbRX;
+      sample.thumbRightY  = pad.sThumbRY;
+      sample.leftTrigger  = pad.bLeftTrigger;
+      sample.rightTrigger = pad.bRightTrigger;
+
+      g_head.apply(sample);
+
+      pad.wButtons      = sample.buttons;
+      pad.sThumbLX      = sample.thumbLeftX;
+      pad.sThumbLY      = sample.thumbLeftY;
+      pad.sThumbRX      = sample.thumbRightX;
+      pad.sThumbRY      = sample.thumbRightY;
+      pad.bLeftTrigger  = sample.leftTrigger;
+      pad.bRightTrigger = sample.rightTrigger;
+    }
+
     DWORD WINAPI getStateHook(DWORD index, XINPUT_STATE* state) {
       DWORD result = g_originalGetState(index, state);
 
-      if (result == ERROR_SUCCESS || index != 0)
+      if (index != 0)
+        return result;
+
+      if (result == ERROR_SUCCESS) {
+        if (g_headControl)
+          applyHeadControl(state);
+
+        return result;
+      }
+
+      if (!g_virtualPad)
         return result;
 
       if (g_packetNumber == 0)
@@ -60,16 +100,25 @@ namespace dxvk {
   }
 
 
-  bool VrGamepadHook::install() {
+  bool VrGamepadHook::install(bool virtualPad, bool headControl) {
+    g_virtualPad  = virtualPad;
+    g_headControl = headControl;
+
     bool patched = VrGameMemory::redirectCall(VrGame::XInputPollCallSite,
       VrGame::XInputGetStateThunk, reinterpret_cast<const void*>(&getStateHook));
 
     if (patched)
-      Logger::info("VR: Virtual gamepad enabled (I/K/J/L D-pad, Enter = A, U = B)");
+      Logger::info(str::format("VR: Gamepad hook installed (virtual gamepad ", virtualPad ? "on" : "off",
+        ", head control with LB + RB ", headControl ? "on" : "off", ")"));
     else
-      Logger::info("VR: The game's gamepad polling call was not found, virtual gamepad is disabled");
+      Logger::info("VR: The game's gamepad polling call was not found, gamepad hook is disabled");
 
     return patched;
+  }
+
+
+  VrEmulatorInput VrGamepadHook::headInput() {
+    return g_head.input();
   }
 
 }
