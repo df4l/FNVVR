@@ -3,11 +3,9 @@
 
 #include "com_guid.h"
 
-#include "../../d3d11/d3d11_interfaces.h"
-
-#include "../../dxgi/dxgi_interfaces.h"
-
 #include "../../dxvk/dxvk_hash.h"
+
+#include "../log/log.h"
 
 #include "../thread.h"
 
