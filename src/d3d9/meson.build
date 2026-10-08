@@ -52,6 +52,9 @@ d3d9_src = [
   'd3d9_shader_analysis.cpp',
 ]
 
+subdir('vr')
+d3d9_src += vr_src
+
 d3d9_ld_args      = []
 d3d9_link_depends = []
 
