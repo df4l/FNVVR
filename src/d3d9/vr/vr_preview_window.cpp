@@ -62,10 +62,15 @@ namespace dxvk {
     RECT rect = { 0, 0, LONG(width), LONG(height) };
     AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, FALSE);
 
+    LONG windowWidth  = rect.right - rect.left;
+    LONG windowHeight = rect.bottom - rect.top;
+
+    // Right edge of the screen, so that the game window keeps its menus visible
+    LONG left = std::max(0l, LONG(GetSystemMetrics(SM_CXSCREEN)) - windowWidth);
+
     // The game pauses when it loses the focus, so the preview must never take it
     HWND window = CreateWindowExW(WS_EX_NOACTIVATE, WindowClassName, WindowTitle,
-      WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
-      rect.right - rect.left, rect.bottom - rect.top,
+      WS_OVERLAPPEDWINDOW, left, 0, windowWidth, windowHeight,
       nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
 
     if (!window)
