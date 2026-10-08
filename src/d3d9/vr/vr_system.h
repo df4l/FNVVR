@@ -64,12 +64,13 @@ namespace dxvk {
 
   private:
 
-    explicit VrSystem(std::unique_ptr<IVRBackend> backend);
+    VrSystem(std::unique_ptr<IVRBackend> backend, bool showPreview);
 
     std::unique_ptr<IVRBackend>          m_backend;
     std::unique_ptr<VrExtensionProvider> m_extensionProvider;
     std::unique_ptr<VrStereoRenderer>    m_stereoRenderer;
-    bool                                m_hasSession = false;
+    bool                                 m_showPreview;
+    bool                                 m_hasSession = false;
 
   };
 

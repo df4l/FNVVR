@@ -19,9 +19,10 @@ namespace dxvk {
   static bool                      g_vrInitialized = false;
 
 
-  VrSystem::VrSystem(std::unique_ptr<IVRBackend> backend)
+  VrSystem::VrSystem(std::unique_ptr<IVRBackend> backend, bool showPreview)
   : m_backend(std::move(backend)),
-    m_extensionProvider(std::make_unique<VrExtensionProvider>(*m_backend)) { }
+    m_extensionProvider(std::make_unique<VrExtensionProvider>(*m_backend)),
+    m_showPreview(showPreview) { }
 
 
   VrSystem::~VrSystem() {
@@ -55,7 +56,10 @@ namespace dxvk {
 
     Logger::info(str::format("VR: Using backend '", backend->name(), "'"));
 
-    g_vrSystem.reset(new VrSystem(std::move(backend)));
+    // The emulator has no headset to look through, so it shows a window by default
+    bool showPreview = config.getOption<bool>("d3d9.vrPreviewWindow", name == "emulator");
+
+    g_vrSystem.reset(new VrSystem(std::move(backend), showPreview));
     DxvkInstance::registerExtensionProvider(g_vrSystem->m_extensionProvider.get());
   }
 
@@ -86,7 +90,7 @@ namespace dxvk {
       return false;
     }
 
-    m_stereoRenderer = VrStereoRenderer::install(*m_backend, device);
+    m_stereoRenderer = VrStereoRenderer::install(*m_backend, device, m_showPreview);
     return true;
   }
 

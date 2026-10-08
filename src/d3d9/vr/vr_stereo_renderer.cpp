@@ -21,8 +21,8 @@ namespace dxvk {
   }
 
 
-  VrStereoRenderer::VrStereoRenderer(IVRBackend& backend, IDirect3DDevice9* device)
-  : m_backend(backend), m_device(device) { }
+  VrStereoRenderer::VrStereoRenderer(IVRBackend& backend, IDirect3DDevice9* device, bool showPreview)
+  : m_backend(backend), m_device(device), m_showPreview(showPreview) { }
 
 
   VrStereoRenderer::~VrStereoRenderer() {
@@ -33,7 +33,8 @@ namespace dxvk {
 
   std::unique_ptr<VrStereoRenderer> VrStereoRenderer::install(
           IVRBackend&           backend,
-          IDirect3DDevice9*     device) {
+          IDirect3DDevice9*     device,
+          bool                  showPreview) {
     if (g_stereoRenderer)
       return nullptr;
 
@@ -45,7 +46,7 @@ namespace dxvk {
 
     g_originalRender = reinterpret_cast<RenderFn>(VrGame::Render);
 
-    std::unique_ptr<VrStereoRenderer> renderer(new VrStereoRenderer(backend, device));
+    std::unique_ptr<VrStereoRenderer> renderer(new VrStereoRenderer(backend, device, showPreview));
     g_stereoRenderer = renderer.get();
     return renderer;
   }
@@ -80,6 +81,11 @@ namespace dxvk {
       return;
     }
 
+    if (FAILED(m_device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &m_gameTarget))) {
+      g_originalRender(main, nullptr, arg0, arg1, arg2);
+      return;
+    }
+
     VrInputState input = m_backend.pollInput(timing.predictedDisplayTime);
 
     if (!m_hasReference && input.isHeadTracked) {
@@ -96,6 +102,7 @@ namespace dxvk {
       renderEye(eye, views[eye], camera, basePose, main, arg0, arg1, arg2);
 
     camera.restore(savedState);
+    m_gameTarget = nullptr;
 
     IDirect3DTexture9* eyes[VrEyeCount] = { m_eyeTextures[0].ptr(), m_eyeTextures[1].ptr() };
 
@@ -104,6 +111,9 @@ namespace dxvk {
       Logger::err("VR: The backend rejected a stereo frame");
       m_loggedFailure = true;
     }
+
+    if (m_preview)
+      m_preview->present(eyes);
   }
 
 
@@ -133,6 +143,9 @@ namespace dxvk {
         return false;
       }
     }
+
+    if (m_showPreview)
+      m_preview = VrPreviewWindow::create(m_device, extent);
 
     if (!m_loggedStart) {
       Logger::info(str::format("VR: Stereo rendering started, eye size ",
@@ -171,15 +184,13 @@ namespace dxvk {
 
 
   bool VrStereoRenderer::copyRenderTarget(uint32_t eye) {
-    Com<IDirect3DSurface9> source;
     Com<IDirect3DSurface9> destination;
 
-    if (FAILED(m_device->GetRenderTarget(0, &source))
-     || FAILED(m_eyeTextures[eye]->GetSurfaceLevel(0, &destination)))
+    if (FAILED(m_eyeTextures[eye]->GetSurfaceLevel(0, &destination)))
       return false;
 
     return SUCCEEDED(m_device->StretchRect(
-      source.ptr(), nullptr, destination.ptr(), nullptr, D3DTEXF_LINEAR));
+      m_gameTarget.ptr(), nullptr, destination.ptr(), nullptr, D3DTEXF_LINEAR));
   }
 
 }
