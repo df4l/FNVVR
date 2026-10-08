@@ -18,10 +18,8 @@ namespace dxvk {
       return false;
     }
 
-    VkQueue queue = VK_NULL_HANDLE;
-
     interop->GetVulkanHandles(&binding.instance, &binding.physicalDevice, &binding.device);
-    interop->GetSubmissionQueue(&queue, &binding.queueIndex, &binding.queueFamilyIndex);
+    interop->GetSubmissionQueue(&binding.queue, &binding.queueIndex, &binding.queueFamilyIndex);
     return true;
   }
 

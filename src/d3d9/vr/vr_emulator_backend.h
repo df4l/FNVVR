@@ -64,6 +64,8 @@ namespace dxvk {
 
     VrVulkanRequirements queryVulkanRequirements() override;
 
+    std::vector<std::string> queryDeviceExtensions(VkPhysicalDevice physicalDevice) override;
+
     VkPhysicalDevice selectPhysicalDevice(VkInstance instance) override;
 
     bool beginSession(const VrGraphicsBinding& binding) override;

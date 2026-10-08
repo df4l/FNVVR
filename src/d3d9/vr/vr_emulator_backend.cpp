@@ -36,6 +36,11 @@ namespace dxvk {
   }
 
 
+  std::vector<std::string> VrEmulatorBackend::queryDeviceExtensions(VkPhysicalDevice physicalDevice) {
+    return { };
+  }
+
+
   VkPhysicalDevice VrEmulatorBackend::selectPhysicalDevice(VkInstance instance) {
     return VK_NULL_HANDLE;
   }

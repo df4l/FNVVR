@@ -31,7 +31,7 @@ namespace dxvk {
 
     IVRBackend&           m_backend;
     DxvkExtensionList     m_instanceExtensions;
-    DxvkExtensionList     m_deviceExtensions;
+    std::vector<DxvkExtensionList> m_deviceExtensions;
 
   };
 

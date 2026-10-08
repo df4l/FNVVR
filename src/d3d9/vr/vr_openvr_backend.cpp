@@ -1,0 +1,422 @@
+#include <windows.h>
+
+#include <algorithm>
+#include <sstream>
+
+#include "../../util/log/log.h"
+#include "../../util/util_string.h"
+
+#ifdef __GNUC__
+#pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
+#endif
+
+#include <openvr/openvr.hpp>
+
+#include "vr_eye_transition.h"
+#include "vr_math.h"
+#include "vr_openvr_backend.h"
+#include "vr_openvr_convert.h"
+
+namespace dxvk {
+
+  namespace {
+
+    constexpr const char* RuntimeLibraryName = "openvr_api.dll";
+
+    constexpr int64_t NanosecondsPerSecond = 1000000000;
+
+    // Used when the headset does not report its refresh rate
+    constexpr float FallbackRefreshRate = 90.0f;
+
+    VrPose poseFromOpenVr(const vr::HmdMatrix34_t& matrix) {
+      return vrPoseFromMatrix34(matrix.m);
+    }
+
+    std::vector<std::string> splitExtensions(const std::string& list) {
+      std::vector<std::string> result;
+      std::stringstream stream(list);
+      std::string name;
+
+      while (std::getline(stream, name, ' ')) {
+        if (!name.empty())
+          result.push_back(name);
+      }
+
+      return result;
+    }
+
+    std::string trimTerminator(std::vector<char> buffer, uint32_t length) {
+      // The reported length includes the terminating zero
+      size_t size = std::min<size_t>(length, buffer.size());
+
+      while (size && buffer[size - 1] == '\0')
+        size--;
+
+      return std::string(buffer.data(), size);
+    }
+
+  }
+
+
+  /**
+   * \brief The loaded openvr_api.dll and the interfaces taken from it
+   */
+  struct VrOpenVrBackend::Runtime {
+    using InitFn      = vr::IVRSystem* (VR_CALLTYPE*)(vr::EVRInitError*, vr::EVRApplicationType);
+    using ShutdownFn  = void (VR_CALLTYPE*)();
+    using InterfaceFn = void* (VR_CALLTYPE*)(const char*, vr::EVRInitError*);
+
+    HMODULE            library    = nullptr;
+    ShutdownFn         shutdown   = nullptr;
+    vr::IVRSystem*     system     = nullptr;
+    vr::IVRCompositor* compositor = nullptr;
+    bool               initialized = false;
+  };
+
+
+  VrOpenVrBackend::VrOpenVrBackend() { }
+
+
+  VrOpenVrBackend::~VrOpenVrBackend() {
+    endSession();
+    shutdownRuntime();
+  }
+
+
+  const char* VrOpenVrBackend::name() const {
+    return "OpenVR";
+  }
+
+
+  bool VrOpenVrBackend::initializeRuntime() {
+    if (m_runtime)
+      return m_runtime->initialized;
+
+    m_runtime = std::make_unique<Runtime>();
+    m_runtime->library = LoadLibraryA(RuntimeLibraryName);
+
+    if (!m_runtime->library) {
+      Logger::err(str::format("VR: ", RuntimeLibraryName, " was not found, copy the 32-bit version next to the game"));
+      return false;
+    }
+
+    auto init = reinterpret_cast<Runtime::InitFn>(GetProcAddress(m_runtime->library, "VR_InitInternal"));
+    auto getInterface = reinterpret_cast<Runtime::InterfaceFn>(GetProcAddress(m_runtime->library, "VR_GetGenericInterface"));
+    m_runtime->shutdown = reinterpret_cast<Runtime::ShutdownFn>(GetProcAddress(m_runtime->library, "VR_ShutdownInternal"));
+
+    if (!init || !getInterface || !m_runtime->shutdown) {
+      Logger::err(str::format("VR: ", RuntimeLibraryName, " does not export the OpenVR entry points"));
+      return false;
+    }
+
+    vr::EVRInitError error = vr::VRInitError_None;
+    init(&error, vr::VRApplication_Scene);
+
+    if (error != vr::VRInitError_None) {
+      Logger::err(str::format("VR: OpenVR could not be initialized, error ", int32_t(error),
+        ". Is SteamVR installed and the headset connected?"));
+      return false;
+    }
+
+    m_runtime->initialized = true;
+
+    m_runtime->system = static_cast<vr::IVRSystem*>(getInterface(vr::IVRSystem_Version, &error));
+
+    if (error == vr::VRInitError_None)
+      m_runtime->compositor = static_cast<vr::IVRCompositor*>(getInterface(vr::IVRCompositor_Version, &error));
+
+    if (error != vr::VRInitError_None || !m_runtime->system || !m_runtime->compositor) {
+      Logger::err(str::format("VR: The OpenVR interfaces are not available, error ", int32_t(error)));
+      m_runtime->system     = nullptr;
+      m_runtime->compositor = nullptr;
+      return false;
+    }
+
+    Logger::info("VR: OpenVR initialized");
+    return true;
+  }
+
+
+  void VrOpenVrBackend::shutdownRuntime() {
+    if (!m_runtime)
+      return;
+
+    if (m_runtime->initialized)
+      m_runtime->shutdown();
+
+    if (m_runtime->library)
+      FreeLibrary(m_runtime->library);
+
+    m_runtime = nullptr;
+  }
+
+
+  VrVulkanRequirements VrOpenVrBackend::queryVulkanRequirements() {
+    VrVulkanRequirements requirements;
+
+    if (!initializeRuntime() || !m_runtime->compositor)
+      return requirements;
+
+    uint32_t length = m_runtime->compositor->GetVulkanInstanceExtensionsRequired(nullptr, 0);
+    std::vector<char> buffer(length);
+    length = m_runtime->compositor->GetVulkanInstanceExtensionsRequired(buffer.data(), length);
+
+    requirements.instanceExtensions = splitExtensions(trimTerminator(std::move(buffer), length));
+    return requirements;
+  }
+
+
+  std::vector<std::string> VrOpenVrBackend::queryDeviceExtensions(VkPhysicalDevice physicalDevice) {
+    if (!m_runtime || !m_runtime->compositor)
+      return { };
+
+    auto* device = reinterpret_cast<VkPhysicalDevice_T*>(physicalDevice);
+
+    uint32_t length = m_runtime->compositor->GetVulkanDeviceExtensionsRequired(device, nullptr, 0);
+    std::vector<char> buffer(length);
+    length = m_runtime->compositor->GetVulkanDeviceExtensionsRequired(device, buffer.data(), length);
+
+    return splitExtensions(trimTerminator(std::move(buffer), length));
+  }
+
+
+  VkPhysicalDevice VrOpenVrBackend::selectPhysicalDevice(VkInstance instance) {
+    if (!m_runtime || !m_runtime->system)
+      return VK_NULL_HANDLE;
+
+    uint64_t device = 0;
+    m_runtime->system->GetOutputDevice(&device, vr::TextureType_Vulkan,
+      reinterpret_cast<VkInstance_T*>(instance));
+
+    return reinterpret_cast<VkPhysicalDevice>(device);
+  }
+
+
+  bool VrOpenVrBackend::beginSession(const VrGraphicsBinding& binding) {
+    if (!initializeRuntime() || !m_runtime->compositor)
+      return false;
+
+    m_transition = VrEyeTransition::create(binding);
+
+    if (!m_transition)
+      return false;
+
+    m_binding = binding;
+
+    // Poses are reported relative to the floor, with the origin where the
+    // room set-up of the user puts it
+    m_runtime->compositor->SetTrackingSpace(vr::TrackingUniverseStanding);
+
+    float rate = m_runtime->system->GetFloatTrackedDeviceProperty(
+      vr::k_unTrackedDeviceIndex_Hmd, vr::Prop_DisplayFrequency_Float);
+
+    if (rate <= 0.0f)
+      rate = FallbackRefreshRate;
+
+    m_periodNs = int64_t(double(NanosecondsPerSecond) / double(rate));
+    m_state    = VrSessionState::Running;
+    return true;
+  }
+
+
+  void VrOpenVrBackend::endSession() {
+    m_transition = nullptr;
+
+    if (m_state != VrSessionState::Idle)
+      m_state = VrSessionState::Idle;
+  }
+
+
+  VrSessionState VrOpenVrBackend::sessionState() const {
+    return m_state;
+  }
+
+
+  VrExtent VrOpenVrBackend::recommendedEyeExtent() const {
+    VrExtent extent;
+
+    if (m_runtime && m_runtime->system)
+      m_runtime->system->GetRecommendedRenderTargetSize(&extent.width, &extent.height);
+
+    return extent;
+  }
+
+
+  void VrOpenVrBackend::pollEvents() {
+    vr::VREvent_t event;
+
+    while (m_runtime->system->PollNextEvent(&event, sizeof(event))) {
+      if (event.eventType == vr::VREvent_Quit && m_state == VrSessionState::Running) {
+        Logger::info("VR: SteamVR asked the application to quit");
+        m_state = VrSessionState::Stopping;
+      }
+    }
+  }
+
+
+  uint32_t VrOpenVrBackend::controllerIndex(VrHand hand) const {
+    return m_runtime->system->GetTrackedDeviceIndexForControllerRole(
+      hand == VrHand::Left ? vr::TrackedControllerRole_LeftHand : vr::TrackedControllerRole_RightHand);
+  }
+
+
+  VrFrameTiming VrOpenVrBackend::waitFrame() {
+    VrFrameTiming timing;
+    timing.predictedPeriod = m_periodNs;
+
+    if (m_state != VrSessionState::Running)
+      return timing;
+
+    pollEvents();
+
+    // Blocks until the compositor wants the next frame. The poses are
+    // converted here and handed out by pollInput
+    std::vector<vr::TrackedDevicePose_t> poses(vr::k_unMaxTrackedDeviceCount);
+    vr::EVRCompositorError error = m_runtime->compositor->WaitGetPoses(
+      poses.data(), uint32_t(poses.size()), nullptr, 0);
+
+    if (error != vr::VRCompositorError_None)
+      return timing;
+
+    m_poses = VrInputState();
+
+    const vr::TrackedDevicePose_t& head = poses[vr::k_unTrackedDeviceIndex_Hmd];
+    m_poses.isHeadTracked = head.bPoseIsValid;
+
+    if (head.bPoseIsValid)
+      m_poses.headPose = poseFromOpenVr(head.mDeviceToAbsoluteTracking);
+
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      uint32_t index = controllerIndex(VrHand(i));
+
+      if (index >= poses.size() || !poses[index].bPoseIsValid)
+        continue;
+
+      VrControllerState& controller = m_poses.controllers[i];
+      controller.isActive = true;
+      controller.gripPose = poseFromOpenVr(poses[index].mDeviceToAbsoluteTracking);
+      controller.aimPose  = controller.gripPose;
+    }
+
+    // The runtime predicts the poses itself, so the display time is only a
+    // frame counter for the callers
+    timing.shouldRender         = m_runtime->compositor->CanRenderScene();
+    timing.predictedDisplayTime = ++m_frameCounter;
+    return timing;
+  }
+
+
+  VrInputState VrOpenVrBackend::pollInput(int64_t displayTime) {
+    VrInputState input = m_poses;
+
+    if (!m_runtime || !m_runtime->system)
+      return input;
+
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      VrControllerState& controller = input.controllers[i];
+
+      if (!controller.isActive)
+        continue;
+
+      vr::VRControllerState_t state = { };
+
+      if (!m_runtime->system->GetControllerState(controllerIndex(VrHand(i)), &state, sizeof(state))) {
+        controller.isActive = false;
+        continue;
+      }
+
+      controller.trigger = state.rAxis[1].x;
+      controller.squeeze = (state.ulButtonPressed & (uint64_t(1) << VrOpenVrButtonId::Grip)) ? 1.0f : 0.0f;
+      controller.stick   = { state.rAxis[0].x, state.rAxis[0].y };
+      controller.buttons = vrButtonsFromOpenVr(state.ulButtonPressed);
+    }
+
+    return input;
+  }
+
+
+  std::array<VrEyeView, VrEyeCount> VrOpenVrBackend::locateViews(int64_t displayTime) {
+    std::array<VrEyeView, VrEyeCount> views;
+
+    if (!m_runtime || !m_runtime->system)
+      return views;
+
+    for (uint32_t i = 0; i < VrEyeCount; i++) {
+      vr::EVREye eye = i == uint32_t(VrEye::Left) ? vr::Eye_Left : vr::Eye_Right;
+
+      VrPose eyeInHead = poseFromOpenVr(m_runtime->system->GetEyeToHeadTransform(eye));
+      views[i].pose = vrCompose(m_poses.headPose, eyeInHead);
+
+      float left = 0.0f, right = 0.0f, top = 0.0f, bottom = 0.0f;
+      m_runtime->system->GetProjectionRaw(eye, &left, &right, &top, &bottom);
+      views[i].fov = vrFovFromProjectionRaw(left, right, top, bottom);
+    }
+
+    return views;
+  }
+
+
+  bool VrOpenVrBackend::submitFrame(const VrFrameSubmission& frame) {
+    if (m_state != VrSessionState::Running || !m_transition)
+      return false;
+
+    // OpenVR takes whole images, not layers of an array
+    for (const VrEyeImage& eye : frame.images) {
+      if (eye.arrayLayer != 0 || eye.image == VK_NULL_HANDLE)
+        return false;
+    }
+
+    if (!m_transition->toTransferSource(frame.images))
+      return false;
+
+    bool accepted = true;
+
+    for (uint32_t i = 0; i < VrEyeCount; i++) {
+      const VrEyeImage& eye = frame.images[i];
+
+      vr::VRVulkanTextureData_t data = { };
+      data.m_nImage            = uint64_t(eye.image);
+      data.m_pDevice           = reinterpret_cast<VkDevice_T*>(m_binding.device);
+      data.m_pPhysicalDevice   = reinterpret_cast<VkPhysicalDevice_T*>(m_binding.physicalDevice);
+      data.m_pInstance         = reinterpret_cast<VkInstance_T*>(m_binding.instance);
+      data.m_pQueue            = reinterpret_cast<VkQueue_T*>(m_binding.queue);
+      data.m_nQueueFamilyIndex = m_binding.queueFamilyIndex;
+      data.m_nWidth            = eye.extent.width;
+      data.m_nHeight           = eye.extent.height;
+      data.m_nFormat           = uint32_t(eye.format);
+      data.m_nSampleCount      = 1;
+
+      // The game writes final display values, so the image is gamma encoded
+      vr::Texture_t texture = { &data, vr::TextureType_Vulkan, vr::ColorSpace_Gamma };
+
+      vr::EVRCompositorError error = m_runtime->compositor->Submit(
+        i == uint32_t(VrEye::Left) ? vr::Eye_Left : vr::Eye_Right, &texture, nullptr, vr::Submit_Default);
+
+      if (error != vr::VRCompositorError_None) {
+        Logger::err(str::format("VR: The compositor rejected an eye image, error ", int32_t(error)));
+        accepted = false;
+      }
+    }
+
+    // Always put the images back, DXVK still owns them
+    return m_transition->restore(frame.images) && accepted;
+  }
+
+
+  void VrOpenVrBackend::submitEmptyFrame(int64_t displayTime) {
+    // OpenVR has no frame to close: the next WaitGetPoses starts the next one
+  }
+
+
+  void VrOpenVrBackend::applyHaptic(VrHand hand, float amplitude, int64_t durationNs) {
+    if (!m_runtime || !m_runtime->system)
+      return;
+
+    uint32_t index = controllerIndex(hand);
+    uint16_t micros = vrHapticMicroseconds(amplitude, durationNs);
+
+    if (micros)
+      m_runtime->system->TriggerHapticPulse(index, 0, micros);
+  }
+
+}

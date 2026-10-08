@@ -17,19 +17,20 @@ namespace dxvk {
     VkInstance       instance         = VK_NULL_HANDLE;
     VkPhysicalDevice physicalDevice   = VK_NULL_HANDLE;
     VkDevice         device           = VK_NULL_HANDLE;
+    VkQueue          queue            = VK_NULL_HANDLE;
     uint32_t         queueFamilyIndex = 0;
     uint32_t         queueIndex       = 0;
   };
 
   /**
-   * \brief Vulkan extensions a backend requires
+   * \brief Vulkan instance extensions a backend requires
    *
-   * Must be queried before the Vulkan instance and device are created
-   * so that they can be enabled alongside DXVK's own extensions.
+   * Must be queried before the Vulkan instance is created so that they can
+   * be enabled alongside DXVK's own extensions. Device extensions depend on
+   * the physical device, see IVRBackend::queryDeviceExtensions.
    */
   struct VrVulkanRequirements {
     std::vector<std::string> instanceExtensions;
-    std::vector<std::string> deviceExtensions;
   };
 
   /**
@@ -66,7 +67,7 @@ namespace dxvk {
    *
    * Expected call order:
    *  1. queryVulkanRequirements, before creating the Vulkan instance
-   *  2. selectPhysicalDevice, when picking the adapter
+   *  2. queryDeviceExtensions for each adapter, and selectPhysicalDevice
    *  3. beginSession, once the device exists
    *  4. per frame: waitFrame, pollInput, locateViews, submitFrame
    *  5. endSession
@@ -80,11 +81,19 @@ namespace dxvk {
     virtual ~IVRBackend() { }
 
     /**
-     * \brief Short backend name used in logs, e.g. "OpenXR"
+     * \brief Short backend name used in logs, e.g. "OpenVR"
      */
     virtual const char* name() const = 0;
 
     virtual VrVulkanRequirements queryVulkanRequirements() = 0;
+
+    /**
+     * \brief Vulkan device extensions the runtime needs on a GPU
+     *
+     * \param [in] physicalDevice Physical device of the instance created
+     *    with the extensions from queryVulkanRequirements
+     */
+    virtual std::vector<std::string> queryDeviceExtensions(VkPhysicalDevice physicalDevice) = 0;
 
     /**
      * \brief Selects the GPU the runtime wants to use

@@ -10,7 +10,7 @@ namespace dxvk {
   /**
    * \brief Creates the backend with the given name
    *
-   * Known names are "emulator" and "openxr". The name is case insensitive.
+   * Known names are "emulator" and "openvr". The name is case insensitive.
    *
    * \param [in] name Backend name
    * \returns The backend, or \c nullptr if the name is unknown

@@ -2,8 +2,8 @@ vr_src = files([
   'vr_math.cpp',
   'vr_emulator_rig.cpp',
   'vr_emulator_backend.cpp',
-  'vr_backend_factory.cpp',
   'vr_game_space.cpp',
+  'vr_openvr_convert.cpp',
   'vr_virtual_gamepad.cpp',
   'vr_gamepad_head.cpp',
 ])
@@ -11,6 +11,9 @@ vr_src = files([
 # Parts that depend on DXVK and Vulkan, only built into d3d9.dll
 vr_dxvk_src = files([
   'vr_system.cpp',
+  'vr_backend_factory.cpp',
+  'vr_openvr_backend.cpp',
+  'vr_eye_transition.cpp',
   'vr_extension_provider.cpp',
   'vr_gamepad_hook.cpp',
   'vr_d3d9_bridge.cpp',
@@ -32,6 +35,7 @@ if add_languages('cpp', native: true, required: false)
     'tests/test_vr_game_space.cpp',
     'tests/test_vr_virtual_gamepad.cpp',
     'tests/test_vr_gamepad_head.cpp',
+    'tests/test_vr_openvr_convert.cpp',
   ])
 
   vr_test = executable('vr_tests', vr_test_sources, vr_src,
