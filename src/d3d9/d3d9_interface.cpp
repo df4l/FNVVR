@@ -430,10 +430,12 @@ namespace dxvk {
       if (unlikely(FAILED(hr)))
         return hr;
 
+      *ppReturnedDeviceInterface = ref(device);
+
+      // The device is only reference counted from here on, querying interfaces
+      // from it earlier would destroy it when they are released again
       if (VrSystem* vr = VrSystem::get())
         vr->attachDevice(device);
-
-      *ppReturnedDeviceInterface = ref(device);
     }
     catch (const DxvkError& e) {
       Logger::err(e.message());
