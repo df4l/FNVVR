@@ -17,7 +17,8 @@ namespace dxvk {
    *  - Numpad 0: put the head back at the origin
    *
    * Keys are read with the global key state, so the window that has the
-   * focus does not matter.
+   * focus does not matter. A tap shorter than a frame still counts as one
+   * frame of input.
    */
   class VrEmulatorKeyboard {
 

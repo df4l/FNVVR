@@ -9,8 +9,10 @@ namespace dxvk {
     // Mouse pixels per frame reported while a turn key is held
     constexpr float TurnPixelsPerFrame = 6.0f;
 
+    // Also true for a key that was pressed and released since the previous
+    // sample, so that a short tap, such as a synthesized one, is not missed
     bool isDown(int key) {
-      return (GetAsyncKeyState(key) & 0x8000) != 0;
+      return (GetAsyncKeyState(key) & 0x8001) != 0;
     }
 
     float axis(int positive, int negative) {
