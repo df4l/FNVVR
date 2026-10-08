@@ -9,6 +9,7 @@
 
 #include "vr_backend.h"
 #include "vr_game_camera.h"
+#include "vr_game_state.h"
 #include "vr_preview_window.h"
 
 namespace dxvk {
@@ -81,6 +82,10 @@ namespace dxvk {
     VrGameCameraState   m_gameCamera  = { };
     VrGameCameraPose    m_gameCameraPose;
 
+    // Logged on every change, so tools that drive the game can follow it
+    VrGameState         m_gameState;
+    VrGameStateKind     m_lastGameState = VrGameStateKind::Unknown;
+
     VrPose m_reference;
     bool   m_hasReference  = false;
     bool   m_texturesFailed = false;
@@ -107,6 +112,8 @@ namespace dxvk {
             void*                 updateData);
 
     void renderFrame(void* main);
+
+    void logGameState();
 
     bool createEyeTextures();
 

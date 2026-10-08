@@ -57,6 +57,20 @@ namespace dxvk {
     constexpr uintptr_t XInputPollCallSite  = 0x00A2304C;
     constexpr uintptr_t XInputGetStateThunk = 0x009F996E;
 
+    /**
+     * isInStartMenu, __cdecl without arguments: true while the main menu is
+     * shown (StartMenu exists without its in-game flag, so not the pause
+     * menu). Checked against its first bytes before it is called.
+     */
+    constexpr uintptr_t IsInStartMenu = 0x0070EDF0;
+    constexpr uint8_t   IsInStartMenuPrologue[] = { 0x55, 0x8B, 0xEC, 0x51, 0x83, 0x3D, 0xC0, 0xAA, 0x1D, 0x01, 0x00 };
+
+    /** LoadingMenu*, not null while a loading screen is shown */
+    constexpr uintptr_t LoadingMenu = 0x011DA0C0;
+
+    /** Main::bInMenuMode, a bool set while any menu (Pip-Boy included) pauses the game */
+    constexpr uintptr_t MenuMode = 0x011DEA2B;
+
     /** NiCamera layout */
     constexpr uintptr_t CameraWorldRotation    = 0x68;
     constexpr uintptr_t CameraWorldTranslation = 0x8C;

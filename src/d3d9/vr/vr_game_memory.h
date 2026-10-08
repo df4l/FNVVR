@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 namespace dxvk {
@@ -15,6 +16,25 @@ namespace dxvk {
   class VrGameMemory {
 
   public:
+
+    /**
+     * \brief Checks that memory is readable and holds the given bytes
+     *
+     * \param [in] address Start of the range
+     * \param [in] bytes Expected content
+     * \param [in] size Number of bytes
+     */
+    static bool matches(
+            uintptr_t             address,
+      const uint8_t*              bytes,
+            size_t                size);
+
+    /**
+     * \brief Checks that memory is committed and readable
+     */
+    static bool readable(
+            uintptr_t             address,
+            size_t                size);
 
     /**
      * \brief Redirects a relative call instruction

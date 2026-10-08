@@ -28,6 +28,22 @@ namespace dxvk {
   }
 
 
+  bool VrGameMemory::matches(
+          uintptr_t             address,
+    const uint8_t*              bytes,
+          size_t                size) {
+    return isReadable(address, size)
+        && !std::memcmp(reinterpret_cast<const void*>(address), bytes, size);
+  }
+
+
+  bool VrGameMemory::readable(
+          uintptr_t             address,
+          size_t                size) {
+    return isReadable(address, size);
+  }
+
+
   bool VrGameMemory::redirectCall(
           uintptr_t             site,
           uintptr_t             expectedTarget,

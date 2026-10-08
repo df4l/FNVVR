@@ -73,6 +73,10 @@ namespace dxvk {
     }
 
     std::unique_ptr<VrStereoRenderer> renderer(new VrStereoRenderer(backend, device, showPreview));
+
+    if (!renderer->m_gameState.initialize())
+      Logger::info("VR: The game state flags were not found, game state changes are not logged");
+
     g_stereoRenderer = renderer.get();
     return renderer;
   }
@@ -124,6 +128,8 @@ namespace dxvk {
 
 
   void VrStereoRenderer::renderFrame(void* main) {
+    logGameState();
+
     if (m_texturesFailed || !m_renderCamera.acquire() || !createEyeTextures()) {
       g_originalSwap(main, nullptr);
       return;
@@ -183,6 +189,17 @@ namespace dxvk {
 
     if (m_preview)
       m_preview->present(eyes);
+  }
+
+
+  void VrStereoRenderer::logGameState() {
+    VrGameStateKind state = m_gameState.read();
+
+    if (state == m_lastGameState)
+      return;
+
+    Logger::info(str::format("VR: Game state: ", VrGameState::name(state)));
+    m_lastGameState = state;
   }
 
 
