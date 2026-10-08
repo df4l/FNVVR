@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 
 namespace dxvk {
@@ -42,5 +43,34 @@ namespace dxvk {
    * Opposite directions of the D-pad cancel out, as they do on a real pad.
    */
   uint16_t vrGamepadButtons(const VrGamepadKeys& keys);
+
+
+  /**
+   * \brief Keeps a button reported as pressed for a minimum number of polls
+   *
+   * A key tapped by an automation tool is down for a few milliseconds, so the
+   * game would see it in a single poll at best. The game's menus need a button
+   * to stay down for a few frames, so every press is stretched to
+   * \ref MinPolls reports.
+   */
+  class VrGamepadHold {
+
+  public:
+
+    constexpr static uint32_t MinPolls = 4;
+
+    /**
+     * \brief Records one poll of the game
+     *
+     * \param [in] pressed Button mask sampled from the keys
+     * \returns Button mask to report to the game
+     */
+    uint16_t update(uint16_t pressed);
+
+  private:
+
+    std::array<uint32_t, 16> m_remaining = { };
+
+  };
 
 }

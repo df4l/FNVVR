@@ -21,4 +21,23 @@ namespace dxvk {
     return buttons;
   }
 
+
+  uint16_t VrGamepadHold::update(uint16_t pressed) {
+    uint16_t held = 0;
+
+    for (uint32_t i = 0; i < m_remaining.size(); i++) {
+      uint16_t bit = uint16_t(1u << i);
+
+      if (pressed & bit)
+        m_remaining[i] = MinPolls;
+
+      if (m_remaining[i]) {
+        held |= bit;
+        m_remaining[i]--;
+      }
+    }
+
+    return held;
+  }
+
 }

@@ -19,6 +19,8 @@ namespace dxvk {
 
     DWORD g_packetNumber = 0;
 
+    VrGamepadHold g_hold;
+
     // Also true for a key that was pressed and released since the previous
     // sample, so that a short tap is not missed
     bool isDown(int key) {
@@ -51,7 +53,7 @@ namespace dxvk {
 
       *state = XINPUT_STATE();
       state->dwPacketNumber = ++g_packetNumber;
-      state->Gamepad.wButtons = vrGamepadButtons(sampleKeys());
+      state->Gamepad.wButtons = g_hold.update(vrGamepadButtons(sampleKeys()));
       return ERROR_SUCCESS;
     }
 
