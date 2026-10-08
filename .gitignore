@@ -1,0 +1,6 @@
+build*/
+subprojects/.wraplock
+FNVVR_old/
+.vscode/
+.idea/
+*.swp
