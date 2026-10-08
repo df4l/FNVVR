@@ -3,6 +3,7 @@ vr_src = files([
   'vr_emulator_rig.cpp',
   'vr_emulator_backend.cpp',
   'vr_backend_factory.cpp',
+  'vr_game_space.cpp',
 ])
 
 # Parts that depend on DXVK and Vulkan, only built into d3d9.dll
@@ -19,6 +20,7 @@ if add_languages('cpp', native: true, required: false)
     'tests/test_main.cpp',
     'tests/test_vr_math.cpp',
     'tests/test_vr_emulator.cpp',
+    'tests/test_vr_game_space.cpp',
   ])
 
   vr_test = executable('vr_tests', vr_test_sources, vr_src,
