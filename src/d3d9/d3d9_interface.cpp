@@ -6,6 +6,8 @@
 #include "d3d9_bridge.h"
 #include "d3d9_window.h"
 
+#include "vr/vr_system.h"
+
 #include "../util/util_singleton.h"
 
 #include <algorithm>
@@ -427,6 +429,9 @@ namespace dxvk {
 
       if (unlikely(FAILED(hr)))
         return hr;
+
+      if (VrSystem* vr = VrSystem::get())
+        vr->attachDevice(device);
 
       *ppReturnedDeviceInterface = ref(device);
     }

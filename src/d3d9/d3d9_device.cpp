@@ -16,6 +16,8 @@
 #include "d3d9_names.h"
 #include "d3d9_format_helpers.h"
 
+#include "vr/vr_system.h"
+
 #include "../dxvk/dxvk_adapter.h"
 #include "../dxvk/dxvk_instance.h"
 
@@ -159,6 +161,9 @@ namespace dxvk {
     // in DxvkDevice::~DxvkDevice.
     if (this_thread::isInModuleDetachment())
       return;
+
+    if (VrSystem* vr = VrSystem::get())
+      vr->detachDevice();
 
     ExecuteFlush(true);
     SynchronizeCsThread(DxvkCsThread::SynchronizeAll);
