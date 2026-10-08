@@ -16,6 +16,14 @@
 
 namespace dxvk {
 
+  std::vector<DxvkExtensionProvider*> DxvkInstance::s_registeredProviders;
+
+
+  void DxvkInstance::registerExtensionProvider(DxvkExtensionProvider* provider) {
+    s_registeredProviders.push_back(provider);
+  }
+
+
   DxvkInstance::DxvkInstance(DxvkInstanceFlags flags)
   : DxvkInstance(DxvkInstanceImportInfo(), flags) {
 
@@ -45,6 +53,8 @@ namespace dxvk {
     m_extProviders.push_back(&VrInstance::s_instance);
     m_extProviders.push_back(&DxvkXrProvider::s_instance);
 #endif
+    m_extProviders.insert(m_extProviders.end(),
+      s_registeredProviders.begin(), s_registeredProviders.end());
 
     Logger::info("Extension providers:");
 

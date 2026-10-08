@@ -1,0 +1,71 @@
+#pragma once
+
+#include <memory>
+
+#include "../d3d9_include.h"
+
+#include "vr_backend.h"
+
+namespace dxvk {
+
+  class VrExtensionProvider;
+
+  /**
+   * \brief Process-wide owner of the active VR backend
+   *
+   * The backend has to exist before the Vulkan instance is created,
+   * because it decides which Vulkan extensions are enabled. For that reason
+   * this object is created once per process, before the first D3D9
+   * interface, and lives until the process ends.
+   *
+   * The backend is chosen by the \c d3d9.vrBackend option in dxvk.conf, which
+   * the \c DXVK_VR_BACKEND environment variable overrides. Valid values are
+   * "off" (default), "emulator" and "openxr".
+   */
+  class VrSystem {
+
+  public:
+
+    ~VrSystem();
+
+    /**
+     * \brief Creates the VR system if VR is enabled
+     *
+     * Registers the Vulkan extension provider. Must be called before
+     * the first Vulkan instance is created. Calling it again has no effect.
+     */
+    static void initialize();
+
+    /**
+     * \brief Returns the VR system, or \c nullptr when VR is disabled
+     */
+    static VrSystem* get();
+
+    IVRBackend& backend() { return *m_backend; }
+
+    /**
+     * \brief Starts the VR session on the device's Vulkan queue
+     *
+     * \param [in] device D3D9 device created by DXVK
+     * \returns \c true if the session is running
+     */
+    bool attachDevice(IDirect3DDevice9* device);
+
+    /**
+     * \brief Ends the session
+     */
+    void detachDevice();
+
+    bool hasSession() const { return m_hasSession; }
+
+  private:
+
+    explicit VrSystem(std::unique_ptr<IVRBackend> backend);
+
+    std::unique_ptr<IVRBackend>          m_backend;
+    std::unique_ptr<VrExtensionProvider> m_extensionProvider;
+    bool                                 m_hasSession = false;
+
+  };
+
+}

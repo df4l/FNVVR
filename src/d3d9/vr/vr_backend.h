@@ -37,6 +37,9 @@ namespace dxvk {
    *
    * The image is owned by the renderer. The backend only reads it during
    * IVRBackend::submitFrame and must not keep references to it afterwards.
+   * It is in \c layout when submitFrame is called, and the backend has to
+   * leave it in that layout. The Vulkan queue is locked for the duration of
+   * the call, so the backend may submit work on it.
    */
   struct VrEyeImage {
     VkImage       image     = VK_NULL_HANDLE;

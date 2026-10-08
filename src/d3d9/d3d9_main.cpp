@@ -5,6 +5,8 @@
 
 #include "d3d9_annotation.h"
 
+#include "vr/vr_system.h"
+
 class D3DFE_PROCESSVERTICES;
 using PSGPERRORID = UINT;
 
@@ -19,6 +21,8 @@ namespace dxvk {
           uint32_t       OverrideCount) {
     if (!ppDirect3D9Ex)
       return D3DERR_INVALIDCALL;
+
+    VrSystem::initialize();
 
     *ppDirect3D9Ex = ref(new D3D9InterfaceEx(Extended, pOverrideList, OverrideCount));
     return D3D_OK;

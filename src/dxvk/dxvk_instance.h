@@ -89,6 +89,16 @@ namespace dxvk {
             DxvkInstanceFlags       flags);
 
     ~DxvkInstance();
+
+    /**
+     * \brief Registers an additional extension provider
+     *
+     * Must be called before the first instance is created. The provider
+     * has to outlive the instance.
+     * \param [in] provider Extension provider
+     */
+    static void registerExtensionProvider(
+            DxvkExtensionProvider*  provider);
     
     /**
      * \brief Vulkan instance functions
@@ -208,6 +218,8 @@ namespace dxvk {
     VkDebugUtilsMessengerEXT  m_messenger = VK_NULL_HANDLE;
 
     std::vector<DxvkExtensionProvider*> m_extProviders;
+
+    static std::vector<DxvkExtensionProvider*> s_registeredProviders;
     std::vector<Rc<DxvkAdapter>> m_adapters;
 
     bool initVulkanLoader(

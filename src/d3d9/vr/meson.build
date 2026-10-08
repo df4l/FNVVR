@@ -2,6 +2,14 @@ vr_src = files([
   'vr_math.cpp',
   'vr_emulator_rig.cpp',
   'vr_emulator_backend.cpp',
+  'vr_backend_factory.cpp',
+])
+
+# Parts that depend on DXVK and Vulkan, only built into d3d9.dll
+vr_dxvk_src = files([
+  'vr_system.cpp',
+  'vr_extension_provider.cpp',
+  'vr_d3d9_bridge.cpp',
 ])
 
 # Unit tests for the VR layer. They are built with the host compiler so they
