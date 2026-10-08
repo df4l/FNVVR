@@ -27,9 +27,9 @@ namespace dxvk {
     input.moveRight   = axis(VK_RIGHT, VK_LEFT);
     input.moveForward = axis(VK_UP, VK_DOWN);
     input.moveUp      = axis(VK_PRIOR, VK_NEXT);
-    input.mouseDeltaX = axis(VK_NUMPAD6, VK_NUMPAD4) * TurnPixelsPerFrame;
-    input.mouseDeltaY = axis(VK_NUMPAD2, VK_NUMPAD8) * TurnPixelsPerFrame;
-    input.recenter    = isDown(VK_NUMPAD0);
+    input.mouseDeltaX = axis(VK_END, VK_HOME) * TurnPixelsPerFrame;
+    input.mouseDeltaY = axis(VK_DELETE, VK_INSERT) * TurnPixelsPerFrame;
+    input.recenter    = isDown(VK_BACK);
     return input;
   }
 

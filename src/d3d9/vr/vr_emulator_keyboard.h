@@ -12,9 +12,9 @@ namespace dxvk {
    *
    *  - Arrow keys: move the head right, left, forward and backward
    *  - Page Up, Page Down: move the head up and down
-   *  - Numpad 4, 6: turn the head left and right
-   *  - Numpad 8, 2: look up and down
-   *  - Numpad 0: put the head back at the origin
+   *  - Home, End: turn the head left and right
+   *  - Insert, Delete: look up and down
+   *  - Backspace: put the head back at the origin
    *
    * Keys are read with the global key state, so the window that has the
    * focus does not matter. A tap shorter than a frame still counts as one
