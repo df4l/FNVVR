@@ -50,6 +50,13 @@ namespace dxvk {
     /** Refreshes the cached matrices of a NiCamera, __thiscall without arguments */
     constexpr uintptr_t CameraUpdateWorldToCamera = 0x00A70BA0;
 
+    /**
+     * Call to XInputGetState in OSInputGlobals::Poll, and the game's import
+     * thunk (a jump through the XInput import) that it calls
+     */
+    constexpr uintptr_t XInputPollCallSite  = 0x00A2304C;
+    constexpr uintptr_t XInputGetStateThunk = 0x009F996E;
+
     /** NiCamera layout */
     constexpr uintptr_t CameraWorldRotation    = 0x68;
     constexpr uintptr_t CameraWorldTranslation = 0x8C;

@@ -12,6 +12,7 @@
 #include "vr_emulator_backend.h"
 #include "vr_emulator_keyboard.h"
 #include "vr_extension_provider.h"
+#include "vr_gamepad_hook.h"
 #include "vr_stereo_renderer.h"
 #include "vr_system.h"
 
@@ -64,6 +65,9 @@ namespace dxvk {
     if (auto* emulator = dynamic_cast<VrEmulatorBackend*>(backend.get())) {
       VrEmulatorKeyboard keyboard;
       emulator->setInputSource([keyboard] { return keyboard.sample(); });
+
+      if (config.getOption<bool>("d3d9.vrVirtualGamepad", true))
+        VrGamepadHook::install();
     }
 
     g_vrSystem.reset(new VrSystem(std::move(backend), showPreview));
