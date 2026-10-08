@@ -9,6 +9,7 @@
 namespace dxvk {
 
   class VrExtensionProvider;
+  class VrStereoRenderer;
 
   /**
    * \brief Process-wide owner of the active VR backend
@@ -46,6 +47,9 @@ namespace dxvk {
     /**
      * \brief Starts the VR session on the device's Vulkan queue
      *
+     * Also hooks the game's rendering so that it draws both eyes,
+     * if the executable is the supported version.
+     *
      * \param [in] device D3D9 device created by DXVK
      * \returns \c true if the session is running
      */
@@ -64,7 +68,8 @@ namespace dxvk {
 
     std::unique_ptr<IVRBackend>          m_backend;
     std::unique_ptr<VrExtensionProvider> m_extensionProvider;
-    bool                                 m_hasSession = false;
+    std::unique_ptr<VrStereoRenderer>    m_stereoRenderer;
+    bool                                m_hasSession = false;
 
   };
 

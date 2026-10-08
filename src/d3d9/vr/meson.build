@@ -11,6 +11,9 @@ vr_dxvk_src = files([
   'vr_system.cpp',
   'vr_extension_provider.cpp',
   'vr_d3d9_bridge.cpp',
+  'vr_game_camera.cpp',
+  'vr_game_memory.cpp',
+  'vr_stereo_renderer.cpp',
 ])
 
 # Unit tests for the VR layer. They are built with the host compiler so they

@@ -10,6 +10,7 @@
 #include "vr_backend_factory.h"
 #include "vr_d3d9_bridge.h"
 #include "vr_extension_provider.h"
+#include "vr_stereo_renderer.h"
 #include "vr_system.h"
 
 namespace dxvk {
@@ -80,10 +81,13 @@ namespace dxvk {
 
     m_hasSession = m_backend->beginSession(binding);
 
-    if (!m_hasSession)
+    if (!m_hasSession) {
       Logger::err("VR: Failed to start the VR session");
+      return false;
+    }
 
-    return m_hasSession;
+    m_stereoRenderer = VrStereoRenderer::install(*m_backend, device);
+    return true;
   }
 
 
@@ -91,6 +95,8 @@ namespace dxvk {
     if (!m_hasSession)
       return;
 
+    // The eye textures belong to the device and must go before the session
+    m_stereoRenderer = nullptr;
     m_backend->endSession();
     m_hasSession = false;
   }
