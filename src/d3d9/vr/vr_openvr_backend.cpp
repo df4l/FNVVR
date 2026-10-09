@@ -1,6 +1,7 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <array>
 #include <sstream>
 
 #include "../../util/log/log.h"
@@ -21,7 +22,12 @@ namespace dxvk {
 
   namespace {
 
-    constexpr const char* RuntimeLibraryName = "openvr_api.dll";
+    // A copy next to the game takes precedence. Proton installs its own
+    // 32-bit build as openvr_api_dxvk.dll in syswow64, for its DXVK.
+    constexpr std::array<const char*, 2> RuntimeLibraryNames = {
+      "openvr_api.dll",
+      "openvr_api_dxvk.dll",
+    };
 
     constexpr int64_t NanosecondsPerSecond = 1000000000;
 
@@ -93,19 +99,30 @@ namespace dxvk {
       return m_runtime->initialized;
 
     m_runtime = std::make_unique<Runtime>();
-    m_runtime->library = LoadLibraryA(RuntimeLibraryName);
+    const char* libraryName = nullptr;
+
+    for (const char* name : RuntimeLibraryNames) {
+      m_runtime->library = LoadLibraryA(name);
+
+      if (m_runtime->library) {
+        libraryName = name;
+        break;
+      }
+    }
 
     if (!m_runtime->library) {
-      Logger::err(str::format("VR: ", RuntimeLibraryName, " was not found, copy the 32-bit version next to the game"));
+      Logger::err("VR: No OpenVR runtime library was found, copy the 32-bit openvr_api.dll next to the game");
       return false;
     }
+
+    Logger::info(str::format("VR: Loaded ", libraryName));
 
     auto init = reinterpret_cast<Runtime::InitFn>(GetProcAddress(m_runtime->library, "VR_InitInternal"));
     auto getInterface = reinterpret_cast<Runtime::InterfaceFn>(GetProcAddress(m_runtime->library, "VR_GetGenericInterface"));
     m_runtime->shutdown = reinterpret_cast<Runtime::ShutdownFn>(GetProcAddress(m_runtime->library, "VR_ShutdownInternal"));
 
     if (!init || !getInterface || !m_runtime->shutdown) {
-      Logger::err(str::format("VR: ", RuntimeLibraryName, " does not export the OpenVR entry points"));
+      Logger::err(str::format("VR: ", libraryName, " does not export the OpenVR entry points"));
       return false;
     }
 
