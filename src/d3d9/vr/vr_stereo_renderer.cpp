@@ -144,7 +144,7 @@ namespace dxvk {
     if (g_stereoRenderer) {
       g_stereoRenderer->captureEye();
 
-      if (g_stereoRenderer->renderHud(interfaceManager, arg0, arg1))
+      if (g_stereoRenderer->renderLayer(interfaceManager, arg0, arg1))
         return;
     }
 
@@ -212,16 +212,19 @@ namespace dxvk {
     VrGameStateKind state = readGameState();
 
     if (showsPanel(state)) {
+      m_layer = InterfaceLayer::None;
       hideHud();
       renderPanelFrame(main);
       return;
     }
 
-    hidePanel();
+    m_layer = chooseLayer(state);
+    m_layerRendered = false;
 
-    // In menus, the HUD is not drawn and the menus are not on a panel yet
-    m_hudWanted   = m_hudAvailable && !m_hudFailed && state == VrGameStateKind::InGame;
-    m_hudRendered = false;
+    // The panel is placed again when it switches from the whole frame to a
+    // menu drawn in game
+    if (m_layer != InterfaceLayer::Menu || !m_panelShowsMenu)
+      hidePanel();
 
     if (m_texturesFailed || !m_renderCamera.acquire() || !createEyeTextures()) {
       g_originalSwap(main, nullptr);
@@ -281,10 +284,14 @@ namespace dxvk {
       m_loggedFailure = true;
     }
 
-    if (m_hudRendered)
+    if (m_layerRendered && m_layer == InterfaceLayer::Hud)
       submitHud();
     else
       hideHud();
+
+    // A menu keeps its last image for a frame where it was not drawn
+    if (m_layerRendered && m_layer == InterfaceLayer::Menu)
+      submitMenu();
 
     if (m_preview)
       m_preview->present(eyes);
@@ -420,26 +427,44 @@ namespace dxvk {
 
 
 
-  bool VrStereoRenderer::renderHud(
+  VrStereoRenderer::InterfaceLayer VrStereoRenderer::chooseLayer(VrGameStateKind state) const {
+    if (m_interfaceFailed)
+      return InterfaceLayer::None;
+
+    switch (state) {
+      case VrGameStateKind::InGame:
+        return m_hudAvailable ? InterfaceLayer::Hud : InterfaceLayer::None;
+      case VrGameStateKind::Menu:
+        return InterfaceLayer::Menu;
+      default:
+        return InterfaceLayer::None;
+    }
+  }
+
+
+  bool VrStereoRenderer::renderLayer(
           void*                 interfaceManager,
           void*                 arg0,
           uint32_t              arg1) {
-    if (m_eye != 0 || !m_hudWanted || !createHudTexture())
+    if (m_eye != 0 || m_layer == InterfaceLayer::None || !createInterfaceTextures())
       return false;
 
-    Com<IDirect3DSurface9> hudSurface;
+    IDirect3DTexture9* texture = m_layer == InterfaceLayer::Hud
+      ? m_hudTexture.ptr() : m_menuTexture.ptr();
+
+    Com<IDirect3DSurface9> layerSurface;
     Com<IDirect3DSurface9> renderTarget;
     Com<IDirect3DSurface9> depthStencil;
 
-    if (FAILED(m_hudTexture->GetSurfaceLevel(0, &hudSurface))
+    if (FAILED(texture->GetSurfaceLevel(0, &layerSurface))
      || FAILED(m_device->GetRenderTarget(0, &renderTarget)))
       return false;
 
-    // The HUD draws without depth, and the game's depth buffer may not
+    // The interface draws without depth, and the game's depth buffer may not
     // match the texture's sample count
     m_device->GetDepthStencilSurface(&depthStencil);
     m_device->SetDepthStencilSurface(nullptr);
-    m_device->SetRenderTarget(0, hudSurface.ptr());
+    m_device->SetRenderTarget(0, layerSurface.ptr());
     m_device->Clear(0, nullptr, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 0, 0, 0), 1.0f, 0);
 
     // The other HUD groups were culled by isolateHud when the interface
@@ -449,16 +474,18 @@ namespace dxvk {
 
     Com<IDirect3DSurface9> usedTarget;
     m_device->GetRenderTarget(0, &usedTarget);
-    bool kept = usedTarget == hudSurface;
-    m_hudRendered = kept && m_hudIsolated;
+    bool kept = usedTarget == layerSurface;
+    // Menus are shown even if the HUD could not be hidden: the game hides
+    // most of it while a menu is open
+    m_layerRendered = kept && (m_hudIsolated || m_layer == InterfaceLayer::Menu);
 
     m_device->SetRenderTarget(0, renderTarget.ptr());
     m_device->SetDepthStencilSurface(depthStencil.ptr());
 
-    if (!m_hudRendered && !m_loggedHudFailure) {
+    if (!m_layerRendered && !m_loggedHudFailure) {
       Logger::err(kept
         ? "VR: The interface pass did not cull the HUD, the HUD is not shown in the headset"
-        : "VR: The interface pass changed the render target, the HUD is not shown in the headset");
+        : "VR: The interface pass changed the render target, the HUD and menus are not shown in the headset");
       m_loggedHudFailure = true;
     }
 
@@ -467,31 +494,40 @@ namespace dxvk {
 
 
   void VrStereoRenderer::isolateHud() {
-    // Only the left eye's interface pass goes to the HUD panel. The flags
-    // stay set until that pass is drawn, see renderHud.
-    if (m_eye != 0 || !m_hudWanted || m_hudIsolated)
+    // Only the left eye's interface pass goes to the panels. The flags stay
+    // set until that pass is drawn, see renderLayer. Menus are drawn
+    // without any HUD group.
+    if (m_eye != 0 || m_layer == InterfaceLayer::None || !m_hudAvailable || m_hudIsolated)
       return;
 
-    m_hudIsolated = m_hudLayers.isolate(HeadHudGroups, std::size(HeadHudGroups));
+    m_hudIsolated = m_layer == InterfaceLayer::Hud
+      ? m_hudLayers.isolate(HeadHudGroups, std::size(HeadHudGroups))
+      : m_hudLayers.isolate(nullptr, 0);
   }
 
 
-  bool VrStereoRenderer::createHudTexture() {
+  bool VrStereoRenderer::createInterfaceTextures() {
     if (m_hudTexture != nullptr)
       return true;
 
     D3DSURFACE_DESC desc = { };
     m_gameTarget->GetDesc(&desc);
 
-    if (FAILED(m_device->CreateTexture(desc.Width, desc.Height, 1,
-        D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &m_hudTexture, nullptr))) {
+    // One texture per panel, since a panel keeps showing its last image
+    bool created = SUCCEEDED(m_device->CreateTexture(desc.Width, desc.Height, 1,
+        D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &m_hudTexture, nullptr))
+      && SUCCEEDED(m_device->CreateTexture(desc.Width, desc.Height, 1,
+        D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &m_menuTexture, nullptr));
+
+    if (!created) {
       Logger::err(str::format("VR: Failed to create the ", desc.Width, "x", desc.Height,
-        " HUD texture, the HUD is not shown in the headset"));
-      m_hudFailed = true;
-      return false;
+        " interface textures, the HUD and menus are not shown in the headset"));
+      m_hudTexture  = nullptr;
+      m_menuTexture = nullptr;
+      m_interfaceFailed = true;
     }
 
-    return true;
+    return created;
   }
 
 
@@ -511,6 +547,23 @@ namespace dxvk {
   }
 
 
+  void VrStereoRenderer::submitMenu() {
+    // Placed once when it appears, and again once the head is known
+    if (!m_panelShown || (!m_panelPlacedWithHead && m_hasHeadPose))
+      placePanel(m_panelConfig.hudDistance);
+
+    m_panelShowsMenu = true;
+
+    m_panelShown = VrD3D9Bridge::submitPanel(m_device, m_backend, VrPanelId::Menu,
+      m_menuTexture.ptr(), m_panelPose, m_panelConfig.hudWidth, VrPanelAnchor::Room);
+
+    if (!m_panelShown && !m_loggedPanelFailure) {
+      Logger::err("VR: The backend rejected the menu panel");
+      m_loggedPanelFailure = true;
+    }
+  }
+
+
   void VrStereoRenderer::hideHud() {
     if (!m_hudShown)
       return;
@@ -521,13 +574,16 @@ namespace dxvk {
 
 
   void VrStereoRenderer::updatePanel(IDirect3DSwapChain9* swapchain) {
-    if (!showsPanel(readGameState())) {
-      hidePanel();
+    // Other states are handled by renderFrame, which also runs when the
+    // game draws a single frame in them
+    if (!showsPanel(readGameState()) || m_panelFailed)
       return;
-    }
 
-    if (m_panelFailed)
-      return;
+    // Placed again when it switches from a menu drawn in game to the whole frame
+    if (m_panelShowsMenu)
+      hidePanel();
+
+    m_panelShowsMenu = false;
 
     Com<IDirect3DSurface9> backBuffer;
 
@@ -543,7 +599,7 @@ namespace dxvk {
 
     // Placed once when it appears, and again once the head is known
     if (!m_panelShown || (!m_panelPlacedWithHead && m_hasHeadPose))
-      placePanel();
+      placePanel(m_panelConfig.distance);
 
     m_panelShown = VrD3D9Bridge::submitPanel(m_device, m_backend, VrPanelId::Menu,
       m_panelTexture.ptr(), m_panelPose, m_panelConfig.width, VrPanelAnchor::Room);
@@ -555,14 +611,14 @@ namespace dxvk {
   }
 
 
-  void VrStereoRenderer::placePanel() {
+  void VrStereoRenderer::placePanel(float distance) {
     VrPose head;
     head.position.y = DefaultHeadHeight;
 
     if (m_hasHeadPose)
       head = m_headPose;
 
-    m_panelPose = vrComputePanelPose(head, m_panelConfig.distance);
+    m_panelPose = vrComputePanelPose(head, distance);
     m_panelPlacedWithHead = m_hasHeadPose;
   }
 

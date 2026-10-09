@@ -91,6 +91,14 @@ namespace dxvk {
     constexpr uintptr_t InterfaceCullCallSite = 0x007136B7;
     constexpr uintptr_t InterfaceCull         = 0x00B6BEE0;
 
+    /**
+     * Returns true while the Pip-Boy is opening or open (InterfaceManager+0x4BC
+     * is 2 or 3), __cdecl without arguments, see findings/pipboy.md. Checked
+     * against its first bytes before it is called.
+     */
+    constexpr uintptr_t IsPipBoyShown = 0x00705A00;
+    constexpr uint8_t   IsPipBoyShownPrologue[] = { 0x55, 0x8B, 0xEC, 0x51, 0xE8, 0x07, 0x18, 0xDB, 0xFF, 0x85, 0xC0, 0x74, 0x42 };
+
     /** LoadingMenu*, not null while a loading screen is shown */
     constexpr uintptr_t LoadingMenu = 0x011DA0C0;
 

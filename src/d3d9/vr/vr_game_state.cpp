@@ -9,6 +9,7 @@ namespace dxvk {
   namespace {
 
     using IsInStartMenuFn = bool (__cdecl*)();
+    using IsPipBoyShownFn = bool (__cdecl*)();
 
   }
 
@@ -16,6 +17,8 @@ namespace dxvk {
   bool VrGameState::initialize() {
     m_available = VrGameMemory::matches(VrGame::IsInStartMenu,
         VrGame::IsInStartMenuPrologue, sizeof(VrGame::IsInStartMenuPrologue))
+      && VrGameMemory::matches(VrGame::IsPipBoyShown,
+        VrGame::IsPipBoyShownPrologue, sizeof(VrGame::IsPipBoyShownPrologue))
       && VrGameMemory::readable(VrGame::LoadingMenu, sizeof(uintptr_t))
       && VrGameMemory::readable(VrGame::MenuMode, sizeof(uint8_t));
 
@@ -35,8 +38,11 @@ namespace dxvk {
     if (*reinterpret_cast<const uintptr_t*>(VrGame::LoadingMenu))
       return VrGameStateKind::Loading;
 
-    if (*reinterpret_cast<const uint8_t*>(VrGame::MenuMode))
-      return VrGameStateKind::Menu;
+    if (*reinterpret_cast<const uint8_t*>(VrGame::MenuMode)) {
+      return reinterpret_cast<IsPipBoyShownFn>(VrGame::IsPipBoyShown)()
+        ? VrGameStateKind::PipBoy
+        : VrGameStateKind::Menu;
+    }
 
     return VrGameStateKind::InGame;
   }
@@ -47,6 +53,7 @@ namespace dxvk {
       case VrGameStateKind::MainMenu: return "main menu";
       case VrGameStateKind::Loading:  return "loading";
       case VrGameStateKind::Menu:     return "menu";
+      case VrGameStateKind::PipBoy:   return "Pip-Boy";
       case VrGameStateKind::InGame:   return "in game";
       default:                        return "unknown";
     }

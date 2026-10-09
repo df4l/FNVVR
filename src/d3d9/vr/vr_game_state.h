@@ -9,7 +9,9 @@ namespace dxvk {
     Unknown,
     MainMenu,
     Loading,
+    /// A menu other than the Pip-Boy pauses the game
     Menu,
+    PipBoy,
     InGame,
   };
 

@@ -20,9 +20,10 @@ namespace dxvk {
    *
    * Set by \c d3d9.vrPanelDistance, \c d3d9.vrPanelWidth,
    * \c d3d9.vrHudDistance, \c d3d9.vrHudWidth and \c d3d9.vrHudHeight in
-   * dxvk.conf. The menu panel covers about 53 degrees horizontally; the HUD
-   * panel is wider, so that the messages at its edges stay readable, and
-   * sits slightly below eye level.
+   * dxvk.conf. The panel of the main menu and the loading screens covers
+   * about 53 degrees horizontally. The HUD panel is wider, so that the
+   * messages at its edges stay readable, and sits slightly below eye level.
+   * Menus opened in game use the HUD distance and width.
    */
   struct VrPanelConfig {
     /// Distance of the menu panel from the head when it appears, in metres
@@ -53,7 +54,9 @@ namespace dxvk {
    * In game, the HUD messages and objectives are shown on a panel that
    * follows the head. The left eye's interface pass, whose image is never
    * shown, draws them alone into the panel's texture instead of the
-   * backbuffer, with the other HUD groups hidden.
+   * backbuffer, with the other HUD groups hidden. Menus opened in game
+   * (pause, dialogue, containers, ...) are drawn the same way, without the
+   * HUD, and shown on the menu panel. The Pip-Boy is not shown.
    *
    * The main menu and the loading screens have no 3D scene. There, the game
    * draws a single frame, and the whole presented image, interface included,
@@ -100,6 +103,17 @@ namespace dxvk {
 
     static constexpr uint32_t NoEye = ~0u;
 
+    /**
+     * \brief What the left eye's interface pass draws for the headset
+     */
+    enum class InterfaceLayer {
+      None,
+      /// HUD messages and objectives, for the panel in front of the head
+      Hud,
+      /// Menus opened in game, for the menu panel
+      Menu,
+    };
+
     VrStereoRenderer(IVRBackend& backend, IDirect3DDevice9* device,
       bool showPreview, const VrPanelConfig& panel);
 
@@ -129,15 +143,17 @@ namespace dxvk {
     VrGameState         m_gameState;
     VrGameStateKind     m_lastGameState = VrGameStateKind::Unknown;
 
-    // HUD panel in front of the head, drawn during the left eye
+    // HUD panel in front of the head and menus opened in game, drawn by the
+    // left eye's interface pass
     VrHudLayers            m_hudLayers;
     Com<IDirect3DTexture9> m_hudTexture;
+    Com<IDirect3DTexture9> m_menuTexture;
+    InterfaceLayer m_layer = InterfaceLayer::None;
     bool   m_hudAvailable  = false;
-    bool   m_hudWanted     = false;
-    bool   m_hudRendered   = false;
+    bool   m_layerRendered = false;
     bool   m_hudIsolated   = false;
     bool   m_hudShown      = false;
-    bool   m_hudFailed     = false;
+    bool   m_interfaceFailed = false;
     bool   m_loggedHudFailure = false;
 
     // Latest tracked head pose, used to place the panel
@@ -151,6 +167,7 @@ namespace dxvk {
     VrPose m_panelPose;
     bool   m_panelShown    = false;
     bool   m_panelPlacedWithHead = false;
+    bool   m_panelShowsMenu = false;
     bool   m_panelFailed   = false;
     bool   m_loggedPanelFailure = false;
 
@@ -211,22 +228,26 @@ namespace dxvk {
 
     bool copyRenderTarget(uint32_t eye);
 
-    bool renderHud(
+    InterfaceLayer chooseLayer(VrGameStateKind state) const;
+
+    bool renderLayer(
             void*                 interfaceManager,
             void*                 arg0,
             uint32_t              arg1);
 
     void isolateHud();
 
-    bool createHudTexture();
+    bool createInterfaceTextures();
 
     void submitHud();
+
+    void submitMenu();
 
     void hideHud();
 
     void updatePanel(IDirect3DSwapChain9* swapchain);
 
-    void placePanel();
+    void placePanel(float distance);
 
     void hidePanel();
 
