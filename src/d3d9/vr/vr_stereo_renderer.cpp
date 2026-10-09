@@ -1,3 +1,5 @@
+#include <iterator>
+
 #include "../../util/log/log.h"
 #include "../../util/util_string.h"
 
@@ -26,6 +28,9 @@ namespace dxvk {
     using CameraUpdateFn = void (__fastcall*)(void* camera, void* unused, void* updateData);
 
     VrStereoRenderer* g_stereoRenderer = nullptr;
+
+    // HUD groups shown on the panel in front of the head
+    constexpr uintptr_t HeadHudGroups[] = { VrGame::HudMessages, VrGame::HudQuestReminder };
 
     // Head pose used to place the panel before the headset reported one:
     // standing at the origin and looking ahead
@@ -56,6 +61,7 @@ namespace dxvk {
     // The patched calls stay in place and fall through to the game's own code
     g_stereoRenderer = nullptr;
     hidePanel();
+    hideHud();
   }
 
 
@@ -93,6 +99,11 @@ namespace dxvk {
     if (!renderer->m_gameState.initialize())
       Logger::info("VR: The game state flags were not found, game state changes are not logged");
 
+    renderer->m_hudAvailable = renderer->m_hudLayers.initialize();
+
+    if (!renderer->m_hudAvailable)
+      Logger::info("VR: The HUD layout was not found, the HUD is not shown in the headset");
+
     g_stereoRenderer = renderer.get();
     return renderer;
   }
@@ -114,8 +125,12 @@ namespace dxvk {
           void*                 arg0,
           uint32_t              arg1) {
     // The 3D image is complete here and the interface is not drawn yet
-    if (g_stereoRenderer)
+    if (g_stereoRenderer) {
       g_stereoRenderer->captureEye();
+
+      if (g_stereoRenderer->renderHud(interfaceManager, arg0, arg1))
+        return;
+    }
 
     g_originalRenderInterface(interfaceManager, nullptr, arg0, arg1);
   }
@@ -155,12 +170,19 @@ namespace dxvk {
 
 
   void VrStereoRenderer::renderFrame(void* main) {
-    if (showsPanel(readGameState())) {
+    VrGameStateKind state = readGameState();
+
+    if (showsPanel(state)) {
+      hideHud();
       renderPanelFrame(main);
       return;
     }
 
     hidePanel();
+
+    // In menus, the HUD is not drawn and the menus are not on a panel yet
+    m_hudWanted   = m_hudAvailable && !m_hudFailed && state == VrGameStateKind::InGame;
+    m_hudRendered = false;
 
     if (m_texturesFailed || !m_renderCamera.acquire() || !createEyeTextures()) {
       g_originalSwap(main, nullptr);
@@ -219,6 +241,11 @@ namespace dxvk {
       Logger::err("VR: The backend rejected a stereo frame");
       m_loggedFailure = true;
     }
+
+    if (m_hudRendered)
+      submitHud();
+    else
+      hideHud();
 
     if (m_preview)
       m_preview->present(eyes);
@@ -347,6 +374,93 @@ namespace dxvk {
       m_gameTarget.ptr(), nullptr, destination.ptr(), nullptr, D3DTEXF_LINEAR));
   }
 
+
+
+  bool VrStereoRenderer::renderHud(
+          void*                 interfaceManager,
+          void*                 arg0,
+          uint32_t              arg1) {
+    if (m_eye != 0 || !m_hudWanted || !createHudTexture())
+      return false;
+
+    Com<IDirect3DSurface9> hudSurface;
+    Com<IDirect3DSurface9> renderTarget;
+    Com<IDirect3DSurface9> depthStencil;
+
+    if (FAILED(m_hudTexture->GetSurfaceLevel(0, &hudSurface))
+     || FAILED(m_device->GetRenderTarget(0, &renderTarget)))
+      return false;
+
+    if (!m_hudLayers.isolate(HeadHudGroups, std::size(HeadHudGroups)))
+      return false;
+
+    // The HUD draws without depth, and the game's depth buffer may not
+    // match the texture's sample count
+    m_device->GetDepthStencilSurface(&depthStencil);
+    m_device->SetDepthStencilSurface(nullptr);
+    m_device->SetRenderTarget(0, hudSurface.ptr());
+    m_device->Clear(0, nullptr, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 0, 0, 0), 1.0f, 0);
+
+    g_originalRenderInterface(interfaceManager, nullptr, arg0, arg1);
+
+    Com<IDirect3DSurface9> usedTarget;
+    m_device->GetRenderTarget(0, &usedTarget);
+    m_hudRendered = usedTarget == hudSurface;
+
+    m_device->SetRenderTarget(0, renderTarget.ptr());
+    m_device->SetDepthStencilSurface(depthStencil.ptr());
+    m_hudLayers.restore();
+
+    if (!m_hudRendered && !m_loggedHudFailure) {
+      Logger::err("VR: The interface pass changed the render target, the HUD is not shown in the headset");
+      m_loggedHudFailure = true;
+    }
+
+    return true;
+  }
+
+
+  bool VrStereoRenderer::createHudTexture() {
+    if (m_hudTexture != nullptr)
+      return true;
+
+    D3DSURFACE_DESC desc = { };
+    m_gameTarget->GetDesc(&desc);
+
+    if (FAILED(m_device->CreateTexture(desc.Width, desc.Height, 1,
+        D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &m_hudTexture, nullptr))) {
+      Logger::err(str::format("VR: Failed to create the ", desc.Width, "x", desc.Height,
+        " HUD texture, the HUD is not shown in the headset"));
+      m_hudFailed = true;
+      return false;
+    }
+
+    return true;
+  }
+
+
+  void VrStereoRenderer::submitHud() {
+    // Centred in front of the eyes, facing them
+    VrPose pose;
+    pose.position.z = -m_panelConfig.hudDistance;
+
+    m_hudShown = VrD3D9Bridge::submitPanel(m_device, m_backend, VrPanelId::HudHead,
+      m_hudTexture.ptr(), pose, m_panelConfig.hudWidth, VrPanelAnchor::Head);
+
+    if (!m_hudShown && !m_loggedHudFailure) {
+      Logger::err("VR: The backend rejected the HUD panel");
+      m_loggedHudFailure = true;
+    }
+  }
+
+
+  void VrStereoRenderer::hideHud() {
+    if (!m_hudShown)
+      return;
+
+    m_backend.hidePanel(VrPanelId::HudHead);
+    m_hudShown = false;
+  }
 
 
   void VrStereoRenderer::updatePanel(IDirect3DSwapChain9* swapchain) {

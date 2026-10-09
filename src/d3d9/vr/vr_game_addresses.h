@@ -8,7 +8,8 @@ namespace dxvk {
    * \brief Locations in FalloutNV.exe 1.4.0.525
    *
    * Every game address used by the VR layer is defined here. The
-   * sources and how each one was verified are in findings/vr-render-hooks.md.
+   * sources and how each one was verified are in findings/vr-render-hooks.md,
+   * and in findings/hud.md for the HUD.
    */
   namespace VrGame {
 
@@ -80,6 +81,55 @@ namespace dxvk {
 
     /** Main::bInMenuMode, a bool set while any menu (Pip-Boy included) pauses the game */
     constexpr uintptr_t MenuMode = 0x011DEA2B;
+
+    /**
+     * HUDMainMenu*, the HUD. Its top-level element groups are Tile* fields,
+     * see findings/hud.md. HUDMainMenu::Create reads the pointer before it
+     * stores each group, which is checked at these sites
+     * (mov ecx,[HudMainMenu] / mov [ecx+offset],eax).
+     */
+    constexpr uintptr_t HudMainMenu = 0x011D96C0;
+    constexpr uintptr_t HudMessagesStoreSite      = 0x0076D4E8;
+    constexpr uintptr_t HudQuestReminderStoreSite = 0x0076CF81;
+    constexpr uint8_t   HudMessagesStore[]      = { 0x8B, 0x0D, 0xC0, 0x96, 0x1D, 0x01, 0x89, 0x81, 0x34, 0x01, 0x00, 0x00 };
+    constexpr uint8_t   HudQuestReminderStore[] = { 0x8B, 0x0D, 0xC0, 0x96, 0x1D, 0x01, 0x89, 0x81, 0x24, 0x01, 0x00, 0x00 };
+
+    /** HUDMainMenu fields holding the HUD groups shown in front of the head */
+    constexpr uintptr_t HudQuestReminder = 0x124;
+    constexpr uintptr_t HudMessages      = 0x134;
+
+    /**
+     * HUDMainMenu fields holding every top-level HUD group: ActionPoints,
+     * HitPoints (with the compass), RadiationMeter, EnemyHealth, QuestReminder,
+     * Region_Location, ReticleCenter, SneakMeter, Messages, Info, Subtitles,
+     * Hokeys, XPMeter, BreathMeter, Explosive_positioning_rect,
+     * crippled_limb_indicator, DDTIcon, DDTIconEnemy, AmmoTypeLabel,
+     * HardcoreMode, DDTIcon (second), DDTIconEnemyAP, CNDArrows.
+     */
+    constexpr uintptr_t HudGroups[] = {
+      0x114, 0x118, 0x11C, 0x120, 0x124, 0x128, 0x12C, 0x130, 0x134, 0x138, 0x13C,
+      0x140, 0x144, 0x148, 0x14C, 0x150, 0x154, 0x158, 0x15C, 0x160, 0x170, 0x174,
+      0x180,
+    };
+
+    /**
+     * Tile::GetNode, which returns the NiNode* at Tile+0x2C, checked against
+     * its first bytes (... add ecx,0x2C)
+     */
+    constexpr uintptr_t TileGetNode = 0x0056C7F0;
+    constexpr uint8_t   TileGetNodePrologue[] = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x4D, 0xFC, 0x83, 0xC1, 0x2C };
+    constexpr uintptr_t TileNode = 0x2C;
+
+    /**
+     * NiAVObject flags. The game hides a tile's node from one interface pass
+     * by setting the app-culled bit (RenderInterface does it for three menus).
+     * The flag setter is checked against its first bytes (... mov edx,[ecx+0x30]).
+     */
+    constexpr uintptr_t ObjectSetFlag = 0x0043B370;
+    constexpr uint8_t   ObjectSetFlagPrologue[] = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x0F, 0xB6, 0x45, 0x08,
+                                                    0x85, 0xC0, 0x74, 0x11, 0x8B, 0x4D, 0xFC, 0x8B, 0x51, 0x30 };
+    constexpr uintptr_t ObjectFlags         = 0x30;
+    constexpr uint32_t  ObjectFlagAppCulled = 0x1;
 
     /** NiCamera layout */
     constexpr uintptr_t CameraWorldRotation    = 0x68;
