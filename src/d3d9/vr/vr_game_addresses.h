@@ -58,6 +58,16 @@ namespace dxvk {
     constexpr uintptr_t XInputGetStateThunk = 0x009F996E;
 
     /**
+     * The other calls to the same thunk. The interface keeps its own gamepad
+     * flag, which hides the menu cursor: InterfaceManager::Update and the
+     * InterfaceManager setup set it, and the start menu builds its entries
+     * from a direct check.
+     */
+    constexpr uintptr_t XInputInterfaceUpdateCallSite = 0x0070C525;
+    constexpr uintptr_t XInputInterfaceSetupCallSite  = 0x00709FFB;
+    constexpr uintptr_t XInputStartMenuCallSite       = 0x007D4399;
+
+    /**
      * isInStartMenu, __cdecl without arguments: true while the main menu is
      * shown (StartMenu exists without its in-game flag, so not the pause
      * menu). Checked against its first bytes before it is called.

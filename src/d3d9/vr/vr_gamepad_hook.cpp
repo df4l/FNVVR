@@ -117,6 +117,21 @@ namespace dxvk {
     bool patched = VrGameMemory::redirectCall(VrGame::XInputPollCallSite,
       VrGame::XInputGetStateThunk, reinterpret_cast<const void*>(&getStateHook));
 
+    // The interface checks for a gamepad on its own, so hiding one has to
+    // cover those calls as well
+    if (patched && options.hidePad) {
+      const uintptr_t interfaceSites[] = {
+        VrGame::XInputInterfaceUpdateCallSite,
+        VrGame::XInputInterfaceSetupCallSite,
+        VrGame::XInputStartMenuCallSite,
+      };
+
+      for (uintptr_t site : interfaceSites) {
+        if (!VrGameMemory::redirectCall(site, VrGame::XInputGetStateThunk, reinterpret_cast<const void*>(&getStateHook)))
+          Logger::warn(str::format("VR: Gamepad check at 0x", std::hex, site, " was not found, the menu cursor may stay hidden"));
+      }
+    }
+
     if (patched && options.hidePad)
       Logger::info("VR: Gamepad hook installed, gamepads are hidden from the game");
     else if (patched)

@@ -23,7 +23,8 @@ namespace dxvk {
    *
    * It can also hide every gamepad from the game. The game switches its menus
    * to gamepad navigation and ignores the mouse cursor as soon as XInput
-   * reports a device, and it has no setting to ignore XInput.
+   * reports a device, and it has no setting to ignore XInput. The interface
+   * checks for a gamepad on its own, so hiding also covers those calls.
    */
   class VrGamepadHook {
 
