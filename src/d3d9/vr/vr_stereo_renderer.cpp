@@ -120,6 +120,13 @@ namespace dxvk {
     if (!renderer->m_hudAvailable)
       Logger::info("VR: The HUD layout was not found, the HUD is not shown in the headset");
 
+    renderer->m_menuBackgroundFound = VrGameMemory::matches(VrGame::StaticMenuBackgroundReadSite,
+        VrGame::StaticMenuBackgroundRead, sizeof(VrGame::StaticMenuBackgroundRead))
+      && VrGameMemory::readable(VrGame::StaticMenuBackground, 1);
+
+    if (!renderer->m_menuBackgroundFound)
+      Logger::info("VR: The menu background setting was not found, menus may show a frozen image of the world");
+
     g_stereoRenderer = renderer.get();
     return renderer;
   }
@@ -209,6 +216,8 @@ namespace dxvk {
 
 
   void VrStereoRenderer::renderFrame(void* main) {
+    disableStaticMenuBackground();
+
     VrGameStateKind state = readGameState();
 
     if (showsPanel(state)) {
@@ -316,6 +325,28 @@ namespace dxvk {
 
     m_headPose    = input.headPose;
     m_hasHeadPose = true;
+  }
+
+
+  void VrStereoRenderer::disableStaticMenuBackground() {
+    // The game reads the setting once at startup, possibly after the
+    // renderer was installed, so the flag is cleared before every frame.
+    // A frozen background is a single mono image, which looks flat and
+    // stuck to the head in the headset.
+    if (!m_menuBackgroundFound)
+      return;
+
+    auto flag = reinterpret_cast<volatile uint8_t*>(VrGame::StaticMenuBackground);
+
+    if (!*flag)
+      return;
+
+    *flag = 0;
+
+    if (!m_loggedMenuBackground) {
+      Logger::info("VR: Disabled the static menu background, the world stays live behind menus");
+      m_loggedMenuBackground = true;
+    }
   }
 
 

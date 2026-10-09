@@ -156,6 +156,11 @@ namespace dxvk {
     bool   m_interfaceFailed = false;
     bool   m_loggedHudFailure = false;
 
+    // The game's blurred, frozen menu background is turned off, so that the
+    // world stays live and in stereo behind menus opened in game
+    bool   m_menuBackgroundFound = false;
+    bool   m_loggedMenuBackground = false;
+
     // Latest tracked head pose, used to place the panel
     VrPose m_headPose;
     bool   m_hasHeadPose   = false;
@@ -208,6 +213,8 @@ namespace dxvk {
             void*                 updateData);
 
     void renderFrame(void* main);
+
+    void disableStaticMenuBackground();
 
     void renderPanelFrame(void* main);
 
