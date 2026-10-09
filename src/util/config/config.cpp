@@ -953,12 +953,15 @@ namespace dxvk {
       { "d3d9.deviceLossOnFocusLoss",       "True" },
     }} },
     /* Fallout New Vegas - Various visual issues  *
-     * in mod New Vegas Reloaded. Nvidia path in  *
-     * same mod use NvAPI_D3D9_StretchRectEx for  *
-     * depth buffer resolves                      */
+     * in mod New Vegas Reloaded.                 *
+     * The GPU is not hidden: the game restarts   *
+     * through its launcher whenever the adapter  *
+     * name differs from sD3DDevice in its INI,   *
+     * so the reported name must stay the real    *
+     * one. New Vegas Reloaded's Nvidia path      *
+     * needs d3d9.hideNvidiaGpu in dxvk.conf.     */
     { R"(\\Fallout( -)? New Vegas.*\\(FalloutNV)?(Launcher)?\.exe$)", {{
       { "d3d9.floatEmulation",            "Strict" },
-      { "d3d9.hideNvidiaGpu",               "True" },
     }} },
     /* Dungeons and Dragons: Dragonshard          *
      * Massive FPS decreases in some scenes       */
