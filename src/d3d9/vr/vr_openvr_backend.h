@@ -88,6 +88,11 @@ namespace dxvk {
     int64_t                           m_frameCounter = 0;
     int64_t                           m_periodNs     = 0;
 
+    // Each step of the first frame is logged once, so that a failure
+    // inside the runtime can be located from the log
+    bool                              m_loggedWait   = false;
+    bool                              m_loggedSubmit = false;
+
   };
 
 }

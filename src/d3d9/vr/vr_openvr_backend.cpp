@@ -292,13 +292,25 @@ namespace dxvk {
     vr::EVRCompositorError error = m_runtime->compositor->WaitGetPoses(
       poses.data(), uint32_t(poses.size()), nullptr, 0);
 
-    if (error != vr::VRCompositorError_None)
+    if (error != vr::VRCompositorError_None) {
+      if (!m_loggedWait) {
+        Logger::err(str::format("VR: WaitGetPoses failed, error ", int32_t(error)));
+        m_loggedWait = true;
+      }
+
       return timing;
+    }
 
     m_poses = VrInputState();
 
     const vr::TrackedDevicePose_t& head = poses[vr::k_unTrackedDeviceIndex_Hmd];
     m_poses.isHeadTracked = head.bPoseIsValid;
+
+    if (!m_loggedWait) {
+      Logger::info(str::format("VR: First poses received, head tracked: ",
+        head.bPoseIsValid ? "yes" : "no"));
+      m_loggedWait = true;
+    }
 
     if (head.bPoseIsValid)
       m_poses.headPose = poseFromOpenVr(head.mDeviceToAbsoluteTracking);
@@ -383,8 +395,17 @@ namespace dxvk {
         return false;
     }
 
+    if (!m_loggedSubmit) {
+      Logger::info(str::format("VR: Submitting the first frame, eye image ",
+        frame.images[0].extent.width, "x", frame.images[0].extent.height,
+        ", format ", uint32_t(frame.images[0].format), ", layout ", uint32_t(frame.images[0].layout)));
+    }
+
     if (!m_transition->toTransferSource(frame.images))
       return false;
+
+    if (!m_loggedSubmit)
+      Logger::info("VR: Eye images ready for the compositor");
 
     bool accepted = true;
 
@@ -413,6 +434,11 @@ namespace dxvk {
         Logger::err(str::format("VR: The compositor rejected an eye image, error ", int32_t(error)));
         accepted = false;
       }
+    }
+
+    if (!m_loggedSubmit) {
+      Logger::info("VR: First frame handed to the compositor");
+      m_loggedSubmit = true;
     }
 
     // Always put the images back, DXVK still owns them
