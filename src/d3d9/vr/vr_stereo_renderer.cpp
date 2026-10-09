@@ -496,8 +496,9 @@ namespace dxvk {
 
 
   void VrStereoRenderer::submitHud() {
-    // Centred in front of the eyes, facing them
+    // In front of the eyes and slightly below them, facing the head
     VrPose pose;
+    pose.position.y = m_panelConfig.hudHeight;
     pose.position.z = -m_panelConfig.hudDistance;
 
     m_hudShown = VrD3D9Bridge::submitPanel(m_device, m_backend, VrPanelId::HudHead,

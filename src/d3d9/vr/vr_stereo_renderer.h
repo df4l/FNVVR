@@ -19,8 +19,10 @@ namespace dxvk {
    * \brief Where the panels are placed
    *
    * Set by \c d3d9.vrPanelDistance, \c d3d9.vrPanelWidth,
-   * \c d3d9.vrHudDistance and \c d3d9.vrHudWidth in dxvk.conf. The defaults
-   * give both panels a field of view of about 53 degrees.
+   * \c d3d9.vrHudDistance, \c d3d9.vrHudWidth and \c d3d9.vrHudHeight in
+   * dxvk.conf. The menu panel covers about 53 degrees horizontally; the HUD
+   * panel is wider, so that the messages at its edges stay readable, and
+   * sits slightly below eye level.
    */
   struct VrPanelConfig {
     /// Distance of the menu panel from the head when it appears, in metres
@@ -30,7 +32,9 @@ namespace dxvk {
     /// Distance of the HUD panel in front of the head, in metres
     float hudDistance = 1.0f;
     /// Width of the HUD panel, in metres
-    float hudWidth    = 1.0f;
+    float hudWidth    = 1.5f;
+    /// Height of the HUD panel's centre relative to the eyes, in metres
+    float hudHeight   = -0.15f;
   };
 
   /**

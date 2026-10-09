@@ -69,6 +69,7 @@ namespace dxvk {
     panel.width    = config.getOption<float>("d3d9.vrPanelWidth",    panel.width);
     panel.hudDistance = config.getOption<float>("d3d9.vrHudDistance", panel.hudDistance);
     panel.hudWidth    = config.getOption<float>("d3d9.vrHudWidth",    panel.hudWidth);
+    panel.hudHeight   = config.getOption<float>("d3d9.vrHudHeight",   panel.hudHeight);
 
     if (auto* emulator = dynamic_cast<VrEmulatorBackend*>(backend.get())) {
       VrEmulatorKeyboard keyboard;
