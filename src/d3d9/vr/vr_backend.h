@@ -62,17 +62,41 @@ namespace dxvk {
   };
 
   /**
+   * \brief Flat panels a backend can show at the same time
+   */
+  enum class VrPanelId : uint32_t {
+    /// Screens without a 3D scene, such as the main menu
+    Menu,
+    /// HUD messages and objectives, in front of the head
+    HudHead,
+  };
+
+  constexpr uint32_t VrPanelCount = 2;
+
+  /**
+   * \brief What a panel's pose is relative to
+   */
+  enum class VrPanelAnchor : uint32_t {
+    /// Tracking space: the panel stays fixed in the room
+    Room,
+    /// The head: the panel moves with it, without latency
+    Head,
+  };
+
+  /**
    * \brief Flat image shown in front of the user
    *
-   * Used for screens without a 3D scene, such as the main menu. The panel
-   * is a rectangle in tracking space, centred on \c pose and facing along
-   * its +Z axis. It is \c width metres wide, and its height follows the
-   * aspect ratio of the image. The image follows the rules of VrEyeImage.
+   * The panel is a rectangle centred on \c pose and facing along its +Z
+   * axis. The pose is in tracking space or relative to the head, see
+   * \c anchor. The panel is \c width metres wide, and its height follows the
+   * aspect ratio of the image. The image follows the rules of VrEyeImage,
+   * and its alpha channel is used for blending.
    */
   struct VrPanelSubmission {
-    VrEyeImage  image;
-    VrPose      pose;
-    float       width = 0.0f;
+    VrEyeImage    image;
+    VrPose        pose;
+    float         width  = 0.0f;
+    VrPanelAnchor anchor = VrPanelAnchor::Room;
   };
 
   /**
@@ -174,16 +198,17 @@ namespace dxvk {
     virtual void submitEmptyFrame(int64_t displayTime) = 0;
 
     /**
-     * \brief Shows a flat panel, or updates the one shown
+     * \brief Shows a flat panel, or updates it if it is shown
      *
      * The panel is drawn over the stereo frames and stays visible with its
-     * last image until hidePanel is called. It does not depend on the frame
-     * loop: it may be submitted while no stereo frames are rendered, for
-     * example while the game loads.
+     * last image until hidePanel is called for it. It does not depend on the
+     * frame loop: it may be submitted while no stereo frames are rendered,
+     * for example while the game loads. Panels are independent of each other,
+     * and HudHead is drawn over Menu.
      */
-    virtual bool submitPanel(const VrPanelSubmission& panel) = 0;
+    virtual bool submitPanel(VrPanelId id, const VrPanelSubmission& panel) = 0;
 
-    virtual void hidePanel() = 0;
+    virtual void hidePanel(VrPanelId id) = 0;
 
     /**
      * \brief Triggers controller vibration

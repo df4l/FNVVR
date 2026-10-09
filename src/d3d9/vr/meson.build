@@ -21,6 +21,7 @@ vr_dxvk_src = files([
   'vr_game_camera.cpp',
   'vr_game_memory.cpp',
   'vr_game_state.cpp',
+  'vr_hud_layers.cpp',
   'vr_preview_window.cpp',
   'vr_stereo_renderer.cpp',
 ])

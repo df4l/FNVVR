@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <memory>
 
 #include "vr_backend.h"
@@ -31,7 +32,8 @@ namespace dxvk {
    * the grip pose), the squeeze is on or off, and a haptic pulse has a
    * duration but no amplitude.
    *
-   * The panel is an IVROverlay placed in the standing tracking space.
+   * Each panel is an IVROverlay, placed in the standing tracking space or
+   * relative to the headset.
    *
    * Everything here needs a headset to be verified; the conversions are
    * tested in vr_openvr_convert.h.
@@ -69,9 +71,9 @@ namespace dxvk {
 
     void submitEmptyFrame(int64_t displayTime) override;
 
-    bool submitPanel(const VrPanelSubmission& panel) override;
+    bool submitPanel(VrPanelId id, const VrPanelSubmission& panel) override;
 
-    void hidePanel() override;
+    void hidePanel(VrPanelId id) override;
 
     void applyHaptic(VrHand hand, float amplitude, int64_t durationNs) override;
 
@@ -89,9 +91,16 @@ namespace dxvk {
 
     void fillTextureData(const VrEyeImage& image, vr::VRVulkanTextureData_t& data) const;
 
-    bool createPanel();
+    struct Panel {
+      uint64_t handle  = 0;
+      bool     visible = false;
+      bool     failed  = false;
+      bool     logged  = false;
+    };
 
-    void destroyPanel();
+    bool createPanel(VrPanelId id);
+
+    void destroyPanels();
 
     std::unique_ptr<Runtime>          m_runtime;
     std::unique_ptr<VrEyeTransition>  m_transition;
@@ -101,16 +110,13 @@ namespace dxvk {
     int64_t                           m_frameCounter = 0;
     int64_t                           m_periodNs     = 0;
 
-    // The panel is an overlay, created when it is first shown
-    uint64_t                          m_panelHandle  = 0;
-    bool                              m_panelVisible = false;
-    bool                              m_panelFailed  = false;
+    // One overlay per panel, created when the panel is first shown
+    std::array<Panel, VrPanelCount>   m_panels;
 
     // Each step of the first frame is logged once, so that a failure
     // inside the runtime can be located from the log
     bool                              m_loggedWait   = false;
     bool                              m_loggedSubmit = false;
-    bool                              m_loggedPanel  = false;
 
   };
 

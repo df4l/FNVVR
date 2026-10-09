@@ -10,21 +10,27 @@
 #include "vr_backend.h"
 #include "vr_game_camera.h"
 #include "vr_game_state.h"
+#include "vr_hud_layers.h"
 #include "vr_preview_window.h"
 
 namespace dxvk {
 
   /**
-   * \brief Where the panel for menus and loading screens is placed
+   * \brief Where the panels are placed
    *
-   * Set by \c d3d9.vrPanelDistance and \c d3d9.vrPanelWidth in dxvk.conf.
-   * The defaults give a field of view of about 53 degrees.
+   * Set by \c d3d9.vrPanelDistance, \c d3d9.vrPanelWidth,
+   * \c d3d9.vrHudDistance and \c d3d9.vrHudWidth in dxvk.conf. The defaults
+   * give both panels a field of view of about 53 degrees.
    */
   struct VrPanelConfig {
-    /// Distance from the head when the panel appears, in metres
-    float distance = 2.0f;
-    /// Width of the panel, in metres
-    float width    = 2.0f;
+    /// Distance of the menu panel from the head when it appears, in metres
+    float distance    = 2.0f;
+    /// Width of the menu panel, in metres
+    float width       = 2.0f;
+    /// Distance of the HUD panel in front of the head, in metres
+    float hudDistance = 1.0f;
+    /// Width of the HUD panel, in metres
+    float hudWidth    = 1.0f;
   };
 
   /**
@@ -39,6 +45,11 @@ namespace dxvk {
    *
    * The game positions the camera again at several points while it draws,
    * so two more hooks keep the eye pose in place.
+   *
+   * In game, the HUD messages and objectives are shown on a panel that
+   * follows the head. The left eye's interface pass, whose image is never
+   * shown, draws them alone into the panel's texture instead of the
+   * backbuffer, with the other HUD groups hidden.
    *
    * The main menu and the loading screens have no 3D scene. There, the game
    * draws a single frame, and the whole presented image, interface included,
@@ -114,6 +125,16 @@ namespace dxvk {
     VrGameState         m_gameState;
     VrGameStateKind     m_lastGameState = VrGameStateKind::Unknown;
 
+    // HUD panel in front of the head, drawn during the left eye
+    VrHudLayers            m_hudLayers;
+    Com<IDirect3DTexture9> m_hudTexture;
+    bool   m_hudAvailable  = false;
+    bool   m_hudWanted     = false;
+    bool   m_hudRendered   = false;
+    bool   m_hudShown      = false;
+    bool   m_hudFailed     = false;
+    bool   m_loggedHudFailure = false;
+
     // Latest tracked head pose, used to place the panel
     VrPose m_headPose;
     bool   m_hasHeadPose   = false;
@@ -173,6 +194,17 @@ namespace dxvk {
     void captureEye();
 
     bool copyRenderTarget(uint32_t eye);
+
+    bool renderHud(
+            void*                 interfaceManager,
+            void*                 arg0,
+            uint32_t              arg1);
+
+    bool createHudTexture();
+
+    void submitHud();
+
+    void hideHud();
 
     void updatePanel(IDirect3DSwapChain9* swapchain);
 

@@ -17,14 +17,16 @@ namespace {
       lastDisplayTime = frame.displayTime;
     }
 
-    void onPanel(const VrPanelSubmission& panel) override {
+    void onPanel(VrPanelId id, const VrPanelSubmission& panel) override {
       panelCount++;
+      lastPanelId    = id;
       lastPanelWidth = panel.width;
     }
 
     int     count = 0;
     int64_t lastDisplayTime = 0;
     int     panelCount = 0;
+    VrPanelId lastPanelId = VrPanelId::Menu;
     float   lastPanelWidth = 0.0f;
 
   };
@@ -254,13 +256,13 @@ TEST_CASE(panel_stays_visible_until_hidden) {
   panel.width = 2.0f;
 
   // No session yet
-  CHECK(!backend.submitPanel(panel));
-  CHECK(!backend.isPanelVisible());
+  CHECK(!backend.submitPanel(VrPanelId::Menu, panel));
+  CHECK(!backend.isPanelVisible(VrPanelId::Menu));
 
   backend.beginSession(VrGraphicsBinding());
-  CHECK(backend.submitPanel(panel));
-  CHECK(backend.submitPanel(panel));
-  CHECK(backend.isPanelVisible());
+  CHECK(backend.submitPanel(VrPanelId::Menu, panel));
+  CHECK(backend.submitPanel(VrPanelId::Menu, panel));
+  CHECK(backend.isPanelVisible(VrPanelId::Menu));
   CHECK(backend.submittedPanelCount() == 2);
   CHECK(sink.panelCount == 2);
   CHECK_NEAR(sink.lastPanelWidth, 2.0f, 1e-6);
@@ -268,6 +270,31 @@ TEST_CASE(panel_stays_visible_until_hidden) {
   // Panels are independent of the frame loop
   CHECK(backend.submittedFrameCount() == 0);
 
-  backend.hidePanel();
-  CHECK(!backend.isPanelVisible());
+  backend.hidePanel(VrPanelId::Menu);
+  CHECK(!backend.isPanelVisible(VrPanelId::Menu));
+}
+
+
+TEST_CASE(panels_are_shown_and_hidden_separately) {
+  VrEmulatorBackend backend;
+  CountingSink sink;
+  backend.setFrameSink(&sink);
+  backend.beginSession(VrGraphicsBinding());
+
+  VrPanelSubmission hud;
+  hud.width  = 1.0f;
+  hud.anchor = VrPanelAnchor::Head;
+
+  CHECK(backend.submitPanel(VrPanelId::HudHead, hud));
+  CHECK(sink.lastPanelId == VrPanelId::HudHead);
+  CHECK(backend.isPanelVisible(VrPanelId::HudHead));
+  CHECK(!backend.isPanelVisible(VrPanelId::Menu));
+
+  CHECK(backend.submitPanel(VrPanelId::Menu, VrPanelSubmission()));
+  backend.hidePanel(VrPanelId::HudHead);
+  CHECK(!backend.isPanelVisible(VrPanelId::HudHead));
+  CHECK(backend.isPanelVisible(VrPanelId::Menu));
+
+  backend.endSession();
+  CHECK(!backend.isPanelVisible(VrPanelId::Menu));
 }
