@@ -76,6 +76,17 @@ namespace dxvk {
     constexpr uintptr_t IsInStartMenu = 0x0070EDF0;
     constexpr uint8_t   IsInStartMenuPrologue[] = { 0x55, 0x8B, 0xEC, 0x51, 0x83, 0x3D, 0xC0, 0xAA, 0x1D, 0x01, 0x00 };
 
+    /**
+     * Call in RenderInterface that culls the interface scene graph into the
+     * shader accumulator, __cdecl with three arguments (camera, scene graph,
+     * accumulator data). It comes after the tile updates, which rewrite the
+     * nodes' app-culled flags from the tiles' visible values, and after the
+     * game app-culls its own menus for the pass; RenderScene then draws the
+     * accumulated geometry.
+     */
+    constexpr uintptr_t InterfaceCullCallSite = 0x007136B7;
+    constexpr uintptr_t InterfaceCull         = 0x00B6BEE0;
+
     /** LoadingMenu*, not null while a loading screen is shown */
     constexpr uintptr_t LoadingMenu = 0x011DA0C0;
 

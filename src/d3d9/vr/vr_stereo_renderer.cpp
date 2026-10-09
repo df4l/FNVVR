@@ -21,6 +21,9 @@ namespace dxvk {
     using RenderInterfaceFn = void (__fastcall*)(void* interfaceManager, void* unused,
       void* arg0, uint32_t arg1);
 
+    // The interface cull is __cdecl with three arguments
+    using InterfaceCullFn = void (__cdecl*)(void* camera, void* sceneGraph, void* data);
+
     // PlaceCamera is __thiscall without arguments
     using PlaceCameraFn = void (__fastcall*)(void* main, void* unused);
 
@@ -46,6 +49,7 @@ namespace dxvk {
 
     SwapFn            g_originalSwap            = reinterpret_cast<SwapFn>(VrGame::Swap);
     RenderInterfaceFn g_originalRenderInterface = reinterpret_cast<RenderInterfaceFn>(VrGame::RenderInterface);
+    InterfaceCullFn   g_originalInterfaceCull   = reinterpret_cast<InterfaceCullFn>(VrGame::InterfaceCull);
     PlaceCameraFn     g_originalPlaceCamera     = reinterpret_cast<PlaceCameraFn>(VrGame::PlaceCamera);
     CameraUpdateFn    g_originalCameraUpdate    = reinterpret_cast<CameraUpdateFn>(VrGame::CameraUpdateWorldData);
 
@@ -80,6 +84,9 @@ namespace dxvk {
 
     patched = patched && VrGameMemory::redirectCall(VrGame::RenderInterfaceCallSite,
       VrGame::RenderInterface, reinterpret_cast<const void*>(&VrStereoRenderer::renderInterfaceHook));
+
+    patched = patched && VrGameMemory::redirectCall(VrGame::InterfaceCullCallSite,
+      VrGame::InterfaceCull, reinterpret_cast<const void*>(&VrStereoRenderer::interfaceCullHook));
 
     for (uintptr_t site : VrGame::PlaceCameraCallSites) {
       patched = patched && VrGameMemory::redirectCall(site, VrGame::PlaceCamera,
@@ -133,6 +140,25 @@ namespace dxvk {
     }
 
     g_originalRenderInterface(interfaceManager, nullptr, arg0, arg1);
+  }
+
+
+  void __cdecl VrStereoRenderer::interfaceCullHook(
+          void*                 camera,
+          void*                 sceneGraph,
+          void*                 data) {
+    // The tile updates are done here, so the HUD groups' culled flags are
+    // final until the next frame. The accumulated geometry no longer depends
+    // on them once the cull returns.
+    bool isolate = g_stereoRenderer && g_stereoRenderer->m_hudPassActive
+      && g_stereoRenderer->m_hudLayers.isolate(HeadHudGroups, std::size(HeadHudGroups));
+
+    g_originalInterfaceCull(camera, sceneGraph, data);
+
+    if (isolate) {
+      g_stereoRenderer->m_hudLayers.restore();
+      g_stereoRenderer->m_hudIsolated = true;
+    }
   }
 
 
@@ -391,9 +417,6 @@ namespace dxvk {
      || FAILED(m_device->GetRenderTarget(0, &renderTarget)))
       return false;
 
-    if (!m_hudLayers.isolate(HeadHudGroups, std::size(HeadHudGroups)))
-      return false;
-
     // The HUD draws without depth, and the game's depth buffer may not
     // match the texture's sample count
     m_device->GetDepthStencilSurface(&depthStencil);
@@ -401,18 +424,26 @@ namespace dxvk {
     m_device->SetRenderTarget(0, hudSurface.ptr());
     m_device->Clear(0, nullptr, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 0, 0, 0), 1.0f, 0);
 
+    // The other HUD groups are culled by interfaceCullHook during the pass
+    m_hudPassActive = true;
+    m_hudIsolated   = false;
+
     g_originalRenderInterface(interfaceManager, nullptr, arg0, arg1);
+
+    m_hudPassActive = false;
 
     Com<IDirect3DSurface9> usedTarget;
     m_device->GetRenderTarget(0, &usedTarget);
-    m_hudRendered = usedTarget == hudSurface;
+    bool kept = usedTarget == hudSurface;
+    m_hudRendered = kept && m_hudIsolated;
 
     m_device->SetRenderTarget(0, renderTarget.ptr());
     m_device->SetDepthStencilSurface(depthStencil.ptr());
-    m_hudLayers.restore();
 
     if (!m_hudRendered && !m_loggedHudFailure) {
-      Logger::err("VR: The interface pass changed the render target, the HUD is not shown in the headset");
+      Logger::err(kept
+        ? "VR: The interface pass did not cull the HUD, the HUD is not shown in the headset"
+        : "VR: The interface pass changed the render target, the HUD is not shown in the headset");
       m_loggedHudFailure = true;
     }
 

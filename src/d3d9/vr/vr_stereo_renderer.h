@@ -131,6 +131,8 @@ namespace dxvk {
     bool   m_hudAvailable  = false;
     bool   m_hudWanted     = false;
     bool   m_hudRendered   = false;
+    bool   m_hudPassActive = false;
+    bool   m_hudIsolated   = false;
     bool   m_hudShown      = false;
     bool   m_hudFailed     = false;
     bool   m_loggedHudFailure = false;
@@ -164,6 +166,11 @@ namespace dxvk {
             void*                 unused,
             void*                 arg0,
             uint32_t              arg1);
+
+    static void __cdecl interfaceCullHook(
+            void*                 camera,
+            void*                 sceneGraph,
+            void*                 data);
 
     static void __fastcall placeCameraHook(
             void*                 main,
