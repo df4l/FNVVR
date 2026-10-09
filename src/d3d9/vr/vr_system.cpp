@@ -74,11 +74,20 @@ namespace dxvk {
         return vrMergeInput(keyboard.sample(), VrGamepadHook::headInput());
       });
 
-      bool virtualPad  = config.getOption<bool>("d3d9.vrVirtualGamepad", true);
-      bool headControl = config.getOption<bool>("d3d9.vrGamepadHead", true);
+      VrGamepadHook::Options gamepad;
+      gamepad.virtualPad  = config.getOption<bool>("d3d9.vrVirtualGamepad", true);
+      gamepad.headControl = config.getOption<bool>("d3d9.vrGamepadHead", true);
 
-      if (virtualPad || headControl)
-        VrGamepadHook::install(virtualPad, headControl);
+      if (gamepad.virtualPad || gamepad.headControl)
+        VrGamepadHook::install(gamepad);
+    } else {
+      // A headset session can come with a gamepad the player never touches
+      // (Steam's virtual controllers), which takes the mouse cursor away
+      VrGamepadHook::Options gamepad;
+      gamepad.hidePad = config.getOption<bool>("d3d9.vrHideGamepad", true);
+
+      if (gamepad.hidePad)
+        VrGamepadHook::install(gamepad);
     }
 
     g_vrSystem.reset(new VrSystem(std::move(backend), showPreview, panel));

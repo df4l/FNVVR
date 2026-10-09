@@ -25,8 +25,9 @@ namespace dxvk {
 
     VrGamepadHead g_head;
 
-    bool g_virtualPad  = true;
-    bool g_headControl = true;
+    VrGamepadHook::Options g_options;
+
+    bool g_loggedHidden = false;
 
     // Also true for a key that was pressed and released since the previous
     // sample, so that a short tap is not missed
@@ -78,14 +79,24 @@ namespace dxvk {
       if (index != 0)
         return result;
 
+      if (g_options.hidePad) {
+        if (result == ERROR_SUCCESS && !g_loggedHidden) {
+          Logger::info("VR: A gamepad is connected, hiding it from the game");
+          g_loggedHidden = true;
+        }
+
+        *state = XINPUT_STATE();
+        return ERROR_DEVICE_NOT_CONNECTED;
+      }
+
       if (result == ERROR_SUCCESS) {
-        if (g_headControl)
+        if (g_options.headControl)
           applyHeadControl(state);
 
         return result;
       }
 
-      if (!g_virtualPad)
+      if (!g_options.virtualPad)
         return result;
 
       if (g_packetNumber == 0)
@@ -100,16 +111,17 @@ namespace dxvk {
   }
 
 
-  bool VrGamepadHook::install(bool virtualPad, bool headControl) {
-    g_virtualPad  = virtualPad;
-    g_headControl = headControl;
+  bool VrGamepadHook::install(const Options& options) {
+    g_options = options;
 
     bool patched = VrGameMemory::redirectCall(VrGame::XInputPollCallSite,
       VrGame::XInputGetStateThunk, reinterpret_cast<const void*>(&getStateHook));
 
-    if (patched)
-      Logger::info(str::format("VR: Gamepad hook installed (virtual gamepad ", virtualPad ? "on" : "off",
-        ", head control with LB + RB ", headControl ? "on" : "off", ")"));
+    if (patched && options.hidePad)
+      Logger::info("VR: Gamepad hook installed, gamepads are hidden from the game");
+    else if (patched)
+      Logger::info(str::format("VR: Gamepad hook installed (virtual gamepad ", options.virtualPad ? "on" : "off",
+        ", head control with LB + RB ", options.headControl ? "on" : "off", ")"));
     else
       Logger::info("VR: The game's gamepad polling call was not found, gamepad hook is disabled");
 

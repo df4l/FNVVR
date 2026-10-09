@@ -20,19 +20,31 @@ namespace dxvk {
    *
    * With a real gamepad the same hook also reads its state to drive the
    * emulated head, see \ref VrGamepadHead.
+   *
+   * It can also hide every gamepad from the game. The game switches its menus
+   * to gamepad navigation and ignores the mouse cursor as soon as XInput
+   * reports a device, and it has no setting to ignore XInput.
    */
   class VrGamepadHook {
 
   public:
 
+    struct Options {
+      /// Report a virtual gamepad if none is connected
+      bool virtualPad  = false;
+      /// Drive the emulated head from a real gamepad
+      bool headControl = false;
+      /// Report no gamepad even if one is connected
+      bool hidePad     = false;
+    };
+
     /**
      * \brief Redirects the game's gamepad polling call
      *
-     * \param [in] virtualPad Report a virtual gamepad if none is connected
-     * \param [in] headControl Drive the emulated head from a real gamepad
+     * \param [in] options What the hook reports to the game
      * \returns \c true if the call matched and was redirected
      */
-    static bool install(bool virtualPad, bool headControl);
+    static bool install(const Options& options);
 
     /**
      * \brief Returns the head input from the latest real gamepad poll
