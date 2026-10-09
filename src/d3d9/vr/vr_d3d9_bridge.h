@@ -53,23 +53,27 @@ namespace dxvk {
             int64_t               displayTime);
 
     /**
-     * \brief Shows a rendered texture on the backend's panel
+     * \brief Shows a rendered texture on one of the backend's panels
      *
      * Same synchronisation as submitStereoFrame, with IVRBackend::submitPanel.
      *
      * \param [in] device D3D9 device that owns the texture
      * \param [in] backend Backend to submit to
+     * \param [in] id Panel to show the texture on
      * \param [in] texture Panel image
-     * \param [in] pose Panel pose in tracking space
+     * \param [in] pose Panel pose, relative to \c anchor
      * \param [in] width Panel width, in metres
+     * \param [in] anchor What the pose is relative to
      * \returns \c true if the backend accepted the panel
      */
     static bool submitPanel(
             IDirect3DDevice9*     device,
             IVRBackend&           backend,
+            VrPanelId             id,
             IDirect3DTexture9*    texture,
       const VrPose&               pose,
-            float                 width);
+            float                 width,
+            VrPanelAnchor         anchor);
 
   private:
 

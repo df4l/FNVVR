@@ -374,8 +374,8 @@ namespace dxvk {
     if (!m_panelShown || (!m_panelPlacedWithHead && m_hasHeadPose))
       placePanel();
 
-    m_panelShown = VrD3D9Bridge::submitPanel(m_device, m_backend,
-      m_panelTexture.ptr(), m_panelPose, m_panelConfig.width);
+    m_panelShown = VrD3D9Bridge::submitPanel(m_device, m_backend, VrPanelId::Menu,
+      m_panelTexture.ptr(), m_panelPose, m_panelConfig.width, VrPanelAnchor::Room);
 
     if (!m_panelShown && !m_loggedPanelFailure) {
       Logger::err("VR: The backend rejected the panel");
@@ -400,7 +400,7 @@ namespace dxvk {
     if (!m_panelShown)
       return;
 
-    m_backend.hidePanel();
+    m_backend.hidePanel(VrPanelId::Menu);
     m_panelShown = false;
   }
 

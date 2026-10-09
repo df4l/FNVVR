@@ -69,9 +69,11 @@ namespace dxvk {
   bool VrD3D9Bridge::submitPanel(
           IDirect3DDevice9*     device,
           IVRBackend&           backend,
+          VrPanelId             id,
           IDirect3DTexture9*    texture,
     const VrPose&               pose,
-          float                 width) {
+          float                 width,
+          VrPanelAnchor         anchor) {
     Com<ID3D9VkInteropDevice> interop;
 
     if (FAILED(device->QueryInterface(__uuidof(ID3D9VkInteropDevice),
@@ -79,8 +81,9 @@ namespace dxvk {
       return false;
 
     VrPanelSubmission panel;
-    panel.pose  = pose;
-    panel.width = width;
+    panel.pose   = pose;
+    panel.width  = width;
+    panel.anchor = anchor;
 
     Com<ID3D9VkInteropTexture> textureInterop;
 
@@ -90,7 +93,7 @@ namespace dxvk {
     // See submitStereoFrame
     interop->FlushRenderingCommands();
     interop->LockSubmissionQueue();
-    bool result = backend.submitPanel(panel);
+    bool result = backend.submitPanel(id, panel);
     interop->ReleaseSubmissionQueue();
     return result;
   }

@@ -57,7 +57,9 @@ namespace dxvk {
 
   void VrEmulatorBackend::endSession() {
     m_state = VrSessionState::Idle;
-    m_panelVisible = false;
+
+    for (bool& visible : m_panelVisible)
+      visible = false;
   }
 
 
@@ -160,22 +162,22 @@ namespace dxvk {
   }
 
 
-  bool VrEmulatorBackend::submitPanel(const VrPanelSubmission& panel) {
+  bool VrEmulatorBackend::submitPanel(VrPanelId id, const VrPanelSubmission& panel) {
     if (m_state != VrSessionState::Running)
       return false;
 
     m_submittedPanels++;
-    m_panelVisible = true;
+    m_panelVisible[uint32_t(id)] = true;
 
     if (m_sink)
-      m_sink->onPanel(panel);
+      m_sink->onPanel(id, panel);
 
     return true;
   }
 
 
-  void VrEmulatorBackend::hidePanel() {
-    m_panelVisible = false;
+  void VrEmulatorBackend::hidePanel(VrPanelId id) {
+    m_panelVisible[uint32_t(id)] = false;
   }
 
 

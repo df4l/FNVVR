@@ -35,8 +35,10 @@ namespace dxvk {
     constexpr float FallbackRefreshRate = 90.0f;
 
     // Identifies the panel overlay within SteamVR, and names it in its UI
-    constexpr const char* PanelOverlayKey  = "fnvvr.panel";
-    constexpr const char* PanelOverlayName = "Fallout: New Vegas";
+    // Overlay key and name of each panel, indexed by VrPanelId. The sort
+    // order follows the index, so the HUD is drawn over the menu panel.
+    constexpr std::array<const char*, VrPanelCount> PanelOverlayKeys  = { "fnvvr.panel", "fnvvr.hud.head" };
+    constexpr std::array<const char*, VrPanelCount> PanelOverlayNames = { "Fallout: New Vegas", "Fallout: New Vegas HUD" };
 
     VrPose poseFromOpenVr(const vr::HmdMatrix34_t& matrix) {
       return vrPoseFromMatrix34(matrix.m);
@@ -275,7 +277,7 @@ namespace dxvk {
 
 
   void VrOpenVrBackend::endSession() {
-    destroyPanel();
+    destroyPanels();
     m_transition = nullptr;
 
     if (m_state != VrSessionState::Idle)
@@ -493,19 +495,25 @@ namespace dxvk {
   }
 
 
-  bool VrOpenVrBackend::submitPanel(const VrPanelSubmission& panel) {
-    if (m_state != VrSessionState::Running || !m_transition || !createPanel())
+  bool VrOpenVrBackend::submitPanel(VrPanelId id, const VrPanelSubmission& panel) {
+    if (m_state != VrSessionState::Running || !m_transition || !createPanel(id))
       return false;
 
     if (panel.image.arrayLayer != 0 || panel.image.image == VK_NULL_HANDLE)
       return false;
 
     vr::IVROverlay* overlay = m_runtime->overlay;
+    Panel& state = m_panels[uint32_t(id)];
 
     vr::HmdMatrix34_t transform = { };
     vrPoseToMatrix34(panel.pose, transform.m);
-    overlay->SetOverlayTransformAbsolute(m_panelHandle, vr::TrackingUniverseStanding, &transform);
-    overlay->SetOverlayWidthInMeters(m_panelHandle, panel.width);
+
+    if (panel.anchor == VrPanelAnchor::Head)
+      overlay->SetOverlayTransformTrackedDeviceRelative(state.handle, vr::k_unTrackedDeviceIndex_Hmd, &transform);
+    else
+      overlay->SetOverlayTransformAbsolute(state.handle, vr::TrackingUniverseStanding, &transform);
+
+    overlay->SetOverlayWidthInMeters(state.handle, panel.width);
 
     if (!m_transition->toTransferSource(&panel.image, 1))
       return false;
@@ -514,65 +522,74 @@ namespace dxvk {
     fillTextureData(panel.image, data);
 
     vr::Texture_t texture = { &data, vr::TextureType_Vulkan, vr::ColorSpace_Gamma };
-    vr::EVROverlayError error = overlay->SetOverlayTexture(m_panelHandle, &texture);
+    vr::EVROverlayError error = overlay->SetOverlayTexture(state.handle, &texture);
 
-    if (error == vr::VROverlayError_None && !m_panelVisible) {
-      error = overlay->ShowOverlay(m_panelHandle);
-      m_panelVisible = error == vr::VROverlayError_None;
+    if (error == vr::VROverlayError_None && !state.visible) {
+      error = overlay->ShowOverlay(state.handle);
+      state.visible = error == vr::VROverlayError_None;
     }
 
-    if (!m_loggedPanel) {
+    if (!state.logged) {
       if (error == vr::VROverlayError_None) {
-        Logger::info(str::format("VR: Showing the panel, image ",
+        Logger::info(str::format("VR: Showing the panel ", PanelOverlayKeys[uint32_t(id)], ", image ",
           panel.image.extent.width, "x", panel.image.extent.height, ", ", panel.width, " m wide"));
       } else {
-        Logger::err(str::format("VR: The panel image was rejected, error ", int32_t(error)));
+        Logger::err(str::format("VR: The image of the panel ", PanelOverlayKeys[uint32_t(id)],
+          " was rejected, error ", int32_t(error)));
       }
 
-      m_loggedPanel = true;
+      state.logged = true;
     }
 
     return m_transition->restore(&panel.image, 1) && error == vr::VROverlayError_None;
   }
 
 
-  void VrOpenVrBackend::hidePanel() {
-    if (!m_panelVisible)
+  void VrOpenVrBackend::hidePanel(VrPanelId id) {
+    Panel& state = m_panels[uint32_t(id)];
+
+    if (!state.visible)
       return;
 
-    m_runtime->overlay->HideOverlay(m_panelHandle);
-    m_panelVisible = false;
+    m_runtime->overlay->HideOverlay(state.handle);
+    state.visible = false;
   }
 
 
-  bool VrOpenVrBackend::createPanel() {
-    if (m_panelHandle)
+  bool VrOpenVrBackend::createPanel(VrPanelId id) {
+    Panel& state = m_panels[uint32_t(id)];
+
+    if (state.handle)
       return true;
 
-    if (m_panelFailed || !m_runtime || !m_runtime->overlay)
+    if (state.failed || !m_runtime || !m_runtime->overlay)
       return false;
 
     vr::VROverlayHandle_t handle = vr::k_ulOverlayHandleInvalid;
-    vr::EVROverlayError error = m_runtime->overlay->CreateOverlay(PanelOverlayKey, PanelOverlayName, &handle);
+    vr::EVROverlayError error = m_runtime->overlay->CreateOverlay(
+      PanelOverlayKeys[uint32_t(id)], PanelOverlayNames[uint32_t(id)], &handle);
 
     if (error != vr::VROverlayError_None || handle == vr::k_ulOverlayHandleInvalid) {
-      Logger::err(str::format("VR: The panel overlay could not be created, error ", int32_t(error)));
-      m_panelFailed = true;
+      Logger::err(str::format("VR: The overlay of the panel ", PanelOverlayKeys[uint32_t(id)],
+        " could not be created, error ", int32_t(error)));
+      state.failed = true;
       return false;
     }
 
-    m_panelHandle = handle;
+    m_runtime->overlay->SetOverlaySortOrder(handle, uint32_t(id));
+    state.handle = handle;
     return true;
   }
 
 
-  void VrOpenVrBackend::destroyPanel() {
-    if (!m_panelHandle)
-      return;
+  void VrOpenVrBackend::destroyPanels() {
+    for (Panel& state : m_panels) {
+      if (state.handle)
+        m_runtime->overlay->DestroyOverlay(state.handle);
 
-    m_runtime->overlay->DestroyOverlay(m_panelHandle);
-    m_panelHandle  = 0;
-    m_panelVisible = false;
+      state.handle  = 0;
+      state.visible = false;
+    }
   }
 
 
