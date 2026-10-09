@@ -4,6 +4,7 @@
 #include "vr_d3d9_bridge.h"
 #include "vr_game_addresses.h"
 #include "vr_game_memory.h"
+#include "vr_math.h"
 #include "vr_stereo_renderer.h"
 
 namespace dxvk {
@@ -26,6 +27,18 @@ namespace dxvk {
 
     VrStereoRenderer* g_stereoRenderer = nullptr;
 
+    // Head pose used to place the panel before the headset reported one:
+    // standing at the origin and looking ahead
+    constexpr float DefaultHeadHeight = 1.6f;
+
+    /**
+     * \brief Checks whether a state has no 3D scene and is shown on the panel
+     */
+    bool showsPanel(VrGameStateKind state) {
+      return state == VrGameStateKind::MainMenu
+          || state == VrGameStateKind::Loading;
+    }
+
     SwapFn            g_originalSwap            = reinterpret_cast<SwapFn>(VrGame::Swap);
     RenderInterfaceFn g_originalRenderInterface = reinterpret_cast<RenderInterfaceFn>(VrGame::RenderInterface);
     PlaceCameraFn     g_originalPlaceCamera     = reinterpret_cast<PlaceCameraFn>(VrGame::PlaceCamera);
@@ -34,20 +47,23 @@ namespace dxvk {
   }
 
 
-  VrStereoRenderer::VrStereoRenderer(IVRBackend& backend, IDirect3DDevice9* device, bool showPreview)
-  : m_backend(backend), m_device(device), m_showPreview(showPreview) { }
+  VrStereoRenderer::VrStereoRenderer(IVRBackend& backend, IDirect3DDevice9* device,
+    bool showPreview, const VrPanelConfig& panel)
+  : m_backend(backend), m_device(device), m_showPreview(showPreview), m_panelConfig(panel) { }
 
 
   VrStereoRenderer::~VrStereoRenderer() {
     // The patched calls stay in place and fall through to the game's own code
     g_stereoRenderer = nullptr;
+    hidePanel();
   }
 
 
   std::unique_ptr<VrStereoRenderer> VrStereoRenderer::install(
           IVRBackend&           backend,
           IDirect3DDevice9*     device,
-          bool                  showPreview) {
+          bool                  showPreview,
+    const VrPanelConfig&        panel) {
     if (g_stereoRenderer)
       return nullptr;
 
@@ -72,7 +88,7 @@ namespace dxvk {
       return nullptr;
     }
 
-    std::unique_ptr<VrStereoRenderer> renderer(new VrStereoRenderer(backend, device, showPreview));
+    std::unique_ptr<VrStereoRenderer> renderer(new VrStereoRenderer(backend, device, showPreview, panel));
 
     if (!renderer->m_gameState.initialize())
       Logger::info("VR: The game state flags were not found, game state changes are not logged");
@@ -127,8 +143,24 @@ namespace dxvk {
   }
 
 
+  bool VrStereoRenderer::onPresent(IDirect3DSwapChain9* swapchain) {
+    if (m_eye == 0)
+      return true;
+
+    if (m_eye == NoEye)
+      updatePanel(swapchain);
+
+    return false;
+  }
+
+
   void VrStereoRenderer::renderFrame(void* main) {
-    logGameState();
+    if (showsPanel(readGameState())) {
+      renderPanelFrame(main);
+      return;
+    }
+
+    hidePanel();
 
     if (m_texturesFailed || !m_renderCamera.acquire() || !createEyeTextures()) {
       g_originalSwap(main, nullptr);
@@ -150,6 +182,7 @@ namespace dxvk {
     }
 
     VrInputState input = m_backend.pollInput(timing.predictedDisplayTime);
+    trackHead(input);
 
     if (!m_hasReference && input.isHeadTracked) {
       m_reference    = vrMakeRecenterReference(input.headPose);
@@ -192,14 +225,36 @@ namespace dxvk {
   }
 
 
-  void VrStereoRenderer::logGameState() {
-    VrGameStateKind state = m_gameState.read();
+  void VrStereoRenderer::renderPanelFrame(void* main) {
+    // The runtime draws the panel. The game draws one frame, which
+    // onPresent copies to the panel. Waiting still paces the game to the
+    // headset and provides the head pose the panel is placed with.
+    VrFrameTiming timing = m_backend.waitFrame();
+    trackHead(m_backend.pollInput(timing.predictedDisplayTime));
+    m_backend.submitEmptyFrame(timing.predictedDisplayTime);
 
-    if (state == m_lastGameState)
+    g_originalSwap(main, nullptr);
+  }
+
+
+  void VrStereoRenderer::trackHead(const VrInputState& input) {
+    if (!input.isHeadTracked)
       return;
 
-    Logger::info(str::format("VR: Game state: ", VrGameState::name(state)));
-    m_lastGameState = state;
+    m_headPose    = input.headPose;
+    m_hasHeadPose = true;
+  }
+
+
+  VrGameStateKind VrStereoRenderer::readGameState() {
+    VrGameStateKind state = m_gameState.read();
+
+    if (state != m_lastGameState) {
+      Logger::info(str::format("VR: Game state: ", VrGameState::name(state)));
+      m_lastGameState = state;
+    }
+
+    return state;
   }
 
 
@@ -290,6 +345,128 @@ namespace dxvk {
 
     return SUCCEEDED(m_device->StretchRect(
       m_gameTarget.ptr(), nullptr, destination.ptr(), nullptr, D3DTEXF_LINEAR));
+  }
+
+
+
+  void VrStereoRenderer::updatePanel(IDirect3DSwapChain9* swapchain) {
+    if (!showsPanel(readGameState())) {
+      hidePanel();
+      return;
+    }
+
+    if (m_panelFailed)
+      return;
+
+    Com<IDirect3DSurface9> backBuffer;
+
+    if (FAILED(swapchain->GetBackBuffer(0, D3DBACKBUFFER_TYPE_MONO, &backBuffer))
+     || !copyPanelImage(backBuffer.ptr())) {
+      if (!m_loggedPanelFailure) {
+        Logger::err("VR: Failed to copy the frame to the panel");
+        m_loggedPanelFailure = true;
+      }
+
+      return;
+    }
+
+    // Placed once when it appears, and again once the head is known
+    if (!m_panelShown || (!m_panelPlacedWithHead && m_hasHeadPose))
+      placePanel();
+
+    m_panelShown = VrD3D9Bridge::submitPanel(m_device, m_backend,
+      m_panelTexture.ptr(), m_panelPose, m_panelConfig.width);
+
+    if (!m_panelShown && !m_loggedPanelFailure) {
+      Logger::err("VR: The backend rejected the panel");
+      m_loggedPanelFailure = true;
+    }
+  }
+
+
+  void VrStereoRenderer::placePanel() {
+    VrPose head;
+    head.position.y = DefaultHeadHeight;
+
+    if (m_hasHeadPose)
+      head = m_headPose;
+
+    m_panelPose = vrComputePanelPose(head, m_panelConfig.distance);
+    m_panelPlacedWithHead = m_hasHeadPose;
+  }
+
+
+  void VrStereoRenderer::hidePanel() {
+    if (!m_panelShown)
+      return;
+
+    m_backend.hidePanel();
+    m_panelShown = false;
+  }
+
+
+  bool VrStereoRenderer::createPanelTextures(const D3DSURFACE_DESC& desc) {
+    if (m_panelTexture != nullptr) {
+      D3DSURFACE_DESC current = { };
+      m_panelTexture->GetLevelDesc(0, &current);
+
+      if (current.Width == desc.Width && current.Height == desc.Height)
+        return true;
+
+      m_panelTexture = nullptr;
+      m_panelStaging = nullptr;
+    }
+
+    bool created = SUCCEEDED(m_device->CreateTexture(desc.Width, desc.Height, 1,
+      D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &m_panelTexture, nullptr));
+
+    if (created && desc.Format != D3DFMT_X8R8G8B8) {
+      created = SUCCEEDED(m_device->CreateTexture(desc.Width, desc.Height, 1,
+        D3DUSAGE_RENDERTARGET, D3DFMT_X8R8G8B8, D3DPOOL_DEFAULT, &m_panelStaging, nullptr));
+    }
+
+    if (!created) {
+      Logger::err(str::format("VR: Failed to create the ", desc.Width, "x", desc.Height,
+        " panel texture, menus are not shown in the headset"));
+      m_panelTexture = nullptr;
+      m_panelStaging = nullptr;
+      m_panelFailed  = true;
+    }
+
+    return created;
+  }
+
+
+  bool VrStereoRenderer::copyPanelImage(IDirect3DSurface9* backBuffer) {
+    D3DSURFACE_DESC desc = { };
+    backBuffer->GetDesc(&desc);
+
+    if (!createPanelTextures(desc))
+      return false;
+
+    Com<IDirect3DSurface9> panel;
+
+    if (FAILED(m_panelTexture->GetSurfaceLevel(0, &panel)))
+      return false;
+
+    // The runtime blends the panel with its alpha channel, which the game
+    // leaves undefined. DXVK reads the alpha of an X8R8G8B8 image as one
+    // when it converts it, so an image with alpha is first copied into an
+    // X8R8G8B8 texture.
+    Com<IDirect3DSurface9> source = backBuffer;
+
+    if (m_panelStaging != nullptr) {
+      Com<IDirect3DSurface9> staging;
+
+      if (FAILED(m_panelStaging->GetSurfaceLevel(0, &staging))
+       || FAILED(m_device->StretchRect(backBuffer, nullptr, staging.ptr(), nullptr, D3DTEXF_NONE)))
+        return false;
+
+      source = staging;
+    }
+
+    return SUCCEEDED(m_device->StretchRect(
+      source.ptr(), nullptr, panel.ptr(), nullptr, D3DTEXF_NONE));
   }
 
 }

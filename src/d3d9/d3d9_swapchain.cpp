@@ -127,7 +127,7 @@ namespace dxvk {
       return D3D_OK;
 
     // The VR layer draws a frame per eye and presents only the last one
-    if (VrSystem::skipsPresent())
+    if (VrSystem::onPresent(this))
       return D3D_OK;
 
     uint32_t presentInterval = m_presentParams.PresentationInterval;

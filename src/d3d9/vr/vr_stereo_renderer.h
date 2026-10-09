@@ -15,6 +15,19 @@
 namespace dxvk {
 
   /**
+   * \brief Where the panel for menus and loading screens is placed
+   *
+   * Set by \c d3d9.vrPanelDistance and \c d3d9.vrPanelWidth in dxvk.conf.
+   * The defaults give a field of view of about 53 degrees.
+   */
+  struct VrPanelConfig {
+    /// Distance from the head when the panel appears, in metres
+    float distance = 2.0f;
+    /// Width of the panel, in metres
+    float width    = 2.0f;
+  };
+
+  /**
    * \brief Renders the game's frame once per eye
    *
    * Takes over the call to Main::Swap in the game's main loop, which draws
@@ -26,6 +39,11 @@ namespace dxvk {
    *
    * The game positions the camera again at several points while it draws,
    * so two more hooks keep the eye pose in place.
+   *
+   * The main menu and the loading screens have no 3D scene. There, the game
+   * draws a single frame, and the whole presented image, interface included,
+   * is shown on the backend's panel. The panel is placed in front of the
+   * head when it appears and then stays where it is.
    */
   class VrStereoRenderer {
 
@@ -39,31 +57,41 @@ namespace dxvk {
      * \param [in] backend Backend that provides poses and receives frames
      * \param [in] device D3D9 device the game renders with
      * \param [in] showPreview Show both eyes in a window of their own
+     * \param [in] panel Placement of the panel for menus and loading screens
      * \returns \c nullptr if the executable is not the supported version
      */
     static std::unique_ptr<VrStereoRenderer> install(
             IVRBackend&           backend,
             IDirect3DDevice9*     device,
-            bool                  showPreview);
+            bool                  showPreview,
+      const VrPanelConfig&        panel);
 
     /**
-     * \brief Checks whether the frame being drawn is the left eye's
+     * \brief Called when the game presents, before the image is shown
      *
      * The game presents after every frame. The left eye's present is
      * dropped, so the window shows the right eye and the game's frame
-     * state machine still sees a completed frame.
+     * state machine still sees a completed frame. Frames drawn once, such
+     * as the main menu's, are copied to the panel here, with the interface.
+     * This also catches the frames the game draws outside of its main loop
+     * while it loads.
+     *
+     * \param [in] swapchain Swap chain being presented
+     * \returns \c true if the present must be dropped
      */
-    bool skipsPresent() const { return m_eye == 0; }
+    bool onPresent(IDirect3DSwapChain9* swapchain);
 
   private:
 
     static constexpr uint32_t NoEye = ~0u;
 
-    VrStereoRenderer(IVRBackend& backend, IDirect3DDevice9* device, bool showPreview);
+    VrStereoRenderer(IVRBackend& backend, IDirect3DDevice9* device,
+      bool showPreview, const VrPanelConfig& panel);
 
     IVRBackend&        m_backend;
     IDirect3DDevice9*  m_device;
     bool               m_showPreview;
+    VrPanelConfig      m_panelConfig;
 
     Com<IDirect3DTexture9> m_eyeTextures[VrEyeCount];
     std::unique_ptr<VrPreviewWindow> m_preview;
@@ -85,6 +113,20 @@ namespace dxvk {
     // Logged on every change, so tools that drive the game can follow it
     VrGameState         m_gameState;
     VrGameStateKind     m_lastGameState = VrGameStateKind::Unknown;
+
+    // Latest tracked head pose, used to place the panel
+    VrPose m_headPose;
+    bool   m_hasHeadPose   = false;
+
+    // The panel shows the whole frame. The staging texture is only used
+    // when the backbuffer has an alpha channel, see copyPanelImage.
+    Com<IDirect3DTexture9> m_panelTexture;
+    Com<IDirect3DTexture9> m_panelStaging;
+    VrPose m_panelPose;
+    bool   m_panelShown    = false;
+    bool   m_panelPlacedWithHead = false;
+    bool   m_panelFailed   = false;
+    bool   m_loggedPanelFailure = false;
 
     VrPose m_reference;
     bool   m_hasReference  = false;
@@ -113,7 +155,11 @@ namespace dxvk {
 
     void renderFrame(void* main);
 
-    void logGameState();
+    void renderPanelFrame(void* main);
+
+    void trackHead(const VrInputState& input);
+
+    VrGameStateKind readGameState();
 
     bool createEyeTextures();
 
@@ -127,6 +173,16 @@ namespace dxvk {
     void captureEye();
 
     bool copyRenderTarget(uint32_t eye);
+
+    void updatePanel(IDirect3DSwapChain9* swapchain);
+
+    void placePanel();
+
+    void hidePanel();
+
+    bool createPanelTextures(const D3DSURFACE_DESC& desc);
+
+    bool copyPanelImage(IDirect3DSurface9* backBuffer);
 
   };
 

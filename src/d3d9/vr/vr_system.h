@@ -5,11 +5,11 @@
 #include "../d3d9_include.h"
 
 #include "vr_backend.h"
+#include "vr_stereo_renderer.h"
 
 namespace dxvk {
 
   class VrExtensionProvider;
-  class VrStereoRenderer;
 
   /**
    * \brief Process-wide owner of the active VR backend
@@ -43,12 +43,16 @@ namespace dxvk {
     static VrSystem* get();
 
     /**
-     * \brief Checks whether the present that is happening must be dropped
+     * \brief Called by a swap chain before it presents
      *
-     * True while the game draws the first eye's frame, which is not shown.
+     * Hands the frame to the VR layer, see VrStereoRenderer::onPresent.
      * Safe to call when VR is disabled.
+     *
+     * \param [in] swapchain Swap chain being presented
+     * \returns \c true if the present must be dropped, which is the case
+     *    for the first eye's frame
      */
-    static bool skipsPresent();
+    static bool onPresent(IDirect3DSwapChain9* swapchain);
 
     IVRBackend& backend() { return *m_backend; }
 
@@ -72,12 +76,13 @@ namespace dxvk {
 
   private:
 
-    VrSystem(std::unique_ptr<IVRBackend> backend, bool showPreview);
+    VrSystem(std::unique_ptr<IVRBackend> backend, bool showPreview, const VrPanelConfig& panel);
 
     std::unique_ptr<IVRBackend>          m_backend;
     std::unique_ptr<VrExtensionProvider> m_extensionProvider;
     std::unique_ptr<VrStereoRenderer>    m_stereoRenderer;
     bool                                 m_showPreview;
+    VrPanelConfig                        m_panelConfig;
     bool                                 m_hasSession = false;
 
   };

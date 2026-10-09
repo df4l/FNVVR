@@ -23,10 +23,11 @@ namespace dxvk {
   static bool                      g_vrInitialized = false;
 
 
-  VrSystem::VrSystem(std::unique_ptr<IVRBackend> backend, bool showPreview)
+  VrSystem::VrSystem(std::unique_ptr<IVRBackend> backend, bool showPreview, const VrPanelConfig& panel)
   : m_backend(std::move(backend)),
     m_extensionProvider(std::make_unique<VrExtensionProvider>(*m_backend)),
-    m_showPreview(showPreview) { }
+    m_showPreview(showPreview),
+    m_panelConfig(panel) { }
 
 
   VrSystem::~VrSystem() {
@@ -63,6 +64,10 @@ namespace dxvk {
     // The emulator has no headset to look through, so it shows a window by default
     bool showPreview = config.getOption<bool>("d3d9.vrPreviewWindow", name == "emulator");
 
+    VrPanelConfig panel;
+    panel.distance = config.getOption<float>("d3d9.vrPanelDistance", panel.distance);
+    panel.width    = config.getOption<float>("d3d9.vrPanelWidth",    panel.width);
+
     if (auto* emulator = dynamic_cast<VrEmulatorBackend*>(backend.get())) {
       VrEmulatorKeyboard keyboard;
       emulator->setInputSource([keyboard] {
@@ -76,7 +81,7 @@ namespace dxvk {
         VrGamepadHook::install(virtualPad, headControl);
     }
 
-    g_vrSystem.reset(new VrSystem(std::move(backend), showPreview));
+    g_vrSystem.reset(new VrSystem(std::move(backend), showPreview, panel));
     DxvkInstance::registerExtensionProvider(g_vrSystem->m_extensionProvider.get());
   }
 
@@ -86,8 +91,8 @@ namespace dxvk {
   }
 
 
-  bool VrSystem::skipsPresent() {
-    return g_vrSystem && g_vrSystem->m_stereoRenderer && g_vrSystem->m_stereoRenderer->skipsPresent();
+  bool VrSystem::onPresent(IDirect3DSwapChain9* swapchain) {
+    return g_vrSystem && g_vrSystem->m_stereoRenderer && g_vrSystem->m_stereoRenderer->onPresent(swapchain);
   }
 
 
@@ -112,7 +117,7 @@ namespace dxvk {
       return false;
     }
 
-    m_stereoRenderer = VrStereoRenderer::install(*m_backend, device, m_showPreview);
+    m_stereoRenderer = VrStereoRenderer::install(*m_backend, device, m_showPreview, m_panelConfig);
     return true;
   }
 
