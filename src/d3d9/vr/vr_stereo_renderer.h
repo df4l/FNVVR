@@ -131,7 +131,6 @@ namespace dxvk {
     bool   m_hudAvailable  = false;
     bool   m_hudWanted     = false;
     bool   m_hudRendered   = false;
-    bool   m_hudPassActive = false;
     bool   m_hudIsolated   = false;
     bool   m_hudShown      = false;
     bool   m_hudFailed     = false;
@@ -172,6 +171,12 @@ namespace dxvk {
             void*                 sceneGraph,
             void*                 data);
 
+    static void __fastcall accumTaskHook(
+            void*                 manager,
+            void*                 unused,
+            uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4,
+            uint32_t a5, uint32_t a6, uint32_t a7, uint32_t a8);
+
     static void __fastcall placeCameraHook(
             void*                 main,
             void*                 unused);
@@ -206,6 +211,8 @@ namespace dxvk {
             void*                 interfaceManager,
             void*                 arg0,
             uint32_t              arg1);
+
+    void isolateHud();
 
     bool createHudTexture();
 

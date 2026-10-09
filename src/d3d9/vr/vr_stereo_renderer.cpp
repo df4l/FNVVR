@@ -24,6 +24,11 @@ namespace dxvk {
     // The interface cull is __cdecl with three arguments
     using InterfaceCullFn = void (__cdecl*)(void* camera, void* sceneGraph, void* data);
 
+    // MTRenderManager::AddAccumTask is __thiscall with nine stack arguments
+    using AccumTaskFn = void (__fastcall*)(void* manager, void* unused,
+      uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4,
+      uint32_t a5, uint32_t a6, uint32_t a7, uint32_t a8);
+
     // PlaceCamera is __thiscall without arguments
     using PlaceCameraFn = void (__fastcall*)(void* main, void* unused);
 
@@ -50,6 +55,7 @@ namespace dxvk {
     SwapFn            g_originalSwap            = reinterpret_cast<SwapFn>(VrGame::Swap);
     RenderInterfaceFn g_originalRenderInterface = reinterpret_cast<RenderInterfaceFn>(VrGame::RenderInterface);
     InterfaceCullFn   g_originalInterfaceCull   = reinterpret_cast<InterfaceCullFn>(VrGame::InterfaceCull);
+    AccumTaskFn       g_originalAccumTask       = reinterpret_cast<AccumTaskFn>(VrGame::AddAccumTask);
     PlaceCameraFn     g_originalPlaceCamera     = reinterpret_cast<PlaceCameraFn>(VrGame::PlaceCamera);
     CameraUpdateFn    g_originalCameraUpdate    = reinterpret_cast<CameraUpdateFn>(VrGame::CameraUpdateWorldData);
 
@@ -87,6 +93,9 @@ namespace dxvk {
 
     patched = patched && VrGameMemory::redirectCall(VrGame::InterfaceCullCallSite,
       VrGame::InterfaceCull, reinterpret_cast<const void*>(&VrStereoRenderer::interfaceCullHook));
+
+    patched = patched && VrGameMemory::redirectCall(VrGame::InterfaceAccumTaskCallSite,
+      VrGame::AddAccumTask, reinterpret_cast<const void*>(&VrStereoRenderer::accumTaskHook));
 
     for (uintptr_t site : VrGame::PlaceCameraCallSites) {
       patched = patched && VrGameMemory::redirectCall(site, VrGame::PlaceCamera,
@@ -147,18 +156,22 @@ namespace dxvk {
           void*                 camera,
           void*                 sceneGraph,
           void*                 data) {
-    // The tile updates are done here, so the HUD groups' culled flags are
-    // final until the next frame. The accumulated geometry no longer depends
-    // on them once the cull returns.
-    bool isolate = g_stereoRenderer && g_stereoRenderer->m_hudPassActive
-      && g_stereoRenderer->m_hudLayers.isolate(HeadHudGroups, std::size(HeadHudGroups));
+    if (g_stereoRenderer)
+      g_stereoRenderer->isolateHud();
 
     g_originalInterfaceCull(camera, sceneGraph, data);
+  }
 
-    if (isolate) {
-      g_stereoRenderer->m_hudLayers.restore();
-      g_stereoRenderer->m_hudIsolated = true;
-    }
+
+  void __fastcall VrStereoRenderer::accumTaskHook(
+          void*                 manager,
+          void*                 unused,
+          uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4,
+          uint32_t a5, uint32_t a6, uint32_t a7, uint32_t a8) {
+    if (g_stereoRenderer)
+      g_stereoRenderer->isolateHud();
+
+    g_originalAccumTask(manager, nullptr, a0, a1, a2, a3, a4, a5, a6, a7, a8);
   }
 
 
@@ -358,8 +371,13 @@ namespace dxvk {
     m_eye     = eye;
     m_eyeView = &view;
 
+    m_hudIsolated = false;
+
     applyEyePose();
     g_originalSwap(main, nullptr);
+
+    // Normally restored right after the interface pass
+    m_hudLayers.restore();
 
     m_eye     = NoEye;
     m_eyeView = nullptr;
@@ -424,13 +442,10 @@ namespace dxvk {
     m_device->SetRenderTarget(0, hudSurface.ptr());
     m_device->Clear(0, nullptr, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 0, 0, 0), 1.0f, 0);
 
-    // The other HUD groups are culled by interfaceCullHook during the pass
-    m_hudPassActive = true;
-    m_hudIsolated   = false;
-
+    // The other HUD groups were culled by isolateHud when the interface
+    // was culled, which may run on a worker thread that this pass waits for
     g_originalRenderInterface(interfaceManager, nullptr, arg0, arg1);
-
-    m_hudPassActive = false;
+    m_hudLayers.restore();
 
     Com<IDirect3DSurface9> usedTarget;
     m_device->GetRenderTarget(0, &usedTarget);
@@ -448,6 +463,16 @@ namespace dxvk {
     }
 
     return true;
+  }
+
+
+  void VrStereoRenderer::isolateHud() {
+    // Only the left eye's interface pass goes to the HUD panel. The flags
+    // stay set until that pass is drawn, see renderHud.
+    if (m_eye != 0 || !m_hudWanted || m_hudIsolated)
+      return;
+
+    m_hudIsolated = m_hudLayers.isolate(HeadHudGroups, std::size(HeadHudGroups));
   }
 
 

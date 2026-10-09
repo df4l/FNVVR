@@ -77,13 +77,17 @@ namespace dxvk {
     constexpr uint8_t   IsInStartMenuPrologue[] = { 0x55, 0x8B, 0xEC, 0x51, 0x83, 0x3D, 0xC0, 0xAA, 0x1D, 0x01, 0x00 };
 
     /**
-     * Call in RenderInterface that culls the interface scene graph into the
-     * shader accumulator, __cdecl with three arguments (camera, scene graph,
-     * accumulator data). It comes after the tile updates, which rewrite the
-     * nodes' app-culled flags from the tiles' visible values, and after the
-     * game app-culls its own menus for the pass; RenderScene then draws the
-     * accumulated geometry.
+     * The interface scene graph is culled into the shader accumulator after
+     * the tile updates, which rewrite the nodes' app-culled flags from the
+     * tiles' visible values. In game, the world render prepares it early:
+     * it updates the tiles and calls MTRenderManager::AddAccumTask
+     * (__thiscall, nine stack arguments), which culls on a worker thread
+     * that RenderInterface waits for. Otherwise RenderInterface updates the
+     * tiles and culls itself (__cdecl, three arguments: camera, scene graph,
+     * culling data). RenderScene then draws the accumulated geometry.
      */
+    constexpr uintptr_t InterfaceAccumTaskCallSite = 0x00713F97;
+    constexpr uintptr_t AddAccumTask               = 0x00BA3390;
     constexpr uintptr_t InterfaceCullCallSite = 0x007136B7;
     constexpr uintptr_t InterfaceCull         = 0x00B6BEE0;
 
