@@ -51,9 +51,9 @@ namespace dxvk {
    * The game positions the camera again at several points while it draws,
    * so two more hooks keep the eye pose in place.
    *
-   * In game, the HUD messages and objectives are shown on a panel that
-   * follows the head. The left eye's interface pass, whose image is never
-   * shown, draws them alone into the panel's texture instead of the
+   * In game, the HUD messages, objectives and subtitles are shown on a
+   * panel that follows the head. The left eye's interface pass, whose image
+   * is never shown, draws them alone into the panel's texture instead of the
    * backbuffer, with the other HUD groups hidden. Menus opened in game
    * (pause, dialogue, containers, ...) are drawn the same way, without the
    * HUD, and shown on the menu panel. The Pip-Boy is not shown.
@@ -108,7 +108,7 @@ namespace dxvk {
      */
     enum class InterfaceLayer {
       None,
-      /// HUD messages and objectives, for the panel in front of the head
+      /// HUD messages, objectives and subtitles, for the panel in front of the head
       Hud,
       /// Menus opened in game, for the menu panel
       Menu,

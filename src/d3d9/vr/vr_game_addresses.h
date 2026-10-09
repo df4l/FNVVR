@@ -99,6 +99,17 @@ namespace dxvk {
     constexpr uintptr_t IsPipBoyShown = 0x00705A00;
     constexpr uint8_t   IsPipBoyShownPrologue[] = { 0x55, 0x8B, 0xEC, 0x51, 0xE8, 0x07, 0x18, 0xDB, 0xFF, 0x85, 0xC0, 0x74, 0x42 };
 
+    /**
+     * Main's copy of the bStaticMenuBackground:Display setting, a bool read
+     * once at startup (stored at 0x0086E123). While it is set, opening most
+     * menus renders the world once, blurred by an image space modifier, into
+     * a background texture that every frame then shows instead of the world.
+     * The menu background update reads it at the checked site.
+     */
+    constexpr uintptr_t StaticMenuBackground = 0x011DEA28;
+    constexpr uintptr_t StaticMenuBackgroundReadSite = 0x0086F4D5;
+    constexpr uint8_t   StaticMenuBackgroundRead[] = { 0x0F, 0xB6, 0x15, 0x28, 0xEA, 0x1D, 0x01 };
+
     /** LoadingMenu*, not null while a loading screen is shown */
     constexpr uintptr_t LoadingMenu = 0x011DA0C0;
 
@@ -114,12 +125,15 @@ namespace dxvk {
     constexpr uintptr_t HudMainMenu = 0x011D96C0;
     constexpr uintptr_t HudMessagesStoreSite      = 0x0076D4E8;
     constexpr uintptr_t HudQuestReminderStoreSite = 0x0076CF81;
+    constexpr uintptr_t HudSubtitlesStoreSite     = 0x0076DF31;
     constexpr uint8_t   HudMessagesStore[]      = { 0x8B, 0x0D, 0xC0, 0x96, 0x1D, 0x01, 0x89, 0x81, 0x34, 0x01, 0x00, 0x00 };
     constexpr uint8_t   HudQuestReminderStore[] = { 0x8B, 0x0D, 0xC0, 0x96, 0x1D, 0x01, 0x89, 0x81, 0x24, 0x01, 0x00, 0x00 };
+    constexpr uint8_t   HudSubtitlesStore[]     = { 0x8B, 0x0D, 0xC0, 0x96, 0x1D, 0x01, 0x89, 0x81, 0x3C, 0x01, 0x00, 0x00 };
 
     /** HUDMainMenu fields holding the HUD groups shown in front of the head */
     constexpr uintptr_t HudQuestReminder = 0x124;
     constexpr uintptr_t HudMessages      = 0x134;
+    constexpr uintptr_t HudSubtitles     = 0x13C;
 
     /**
      * HUDMainMenu fields holding every top-level HUD group: ActionPoints,

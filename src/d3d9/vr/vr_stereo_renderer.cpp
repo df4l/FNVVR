@@ -38,7 +38,7 @@ namespace dxvk {
     VrStereoRenderer* g_stereoRenderer = nullptr;
 
     // HUD groups shown on the panel in front of the head
-    constexpr uintptr_t HeadHudGroups[] = { VrGame::HudMessages, VrGame::HudQuestReminder };
+    constexpr uintptr_t HeadHudGroups[] = { VrGame::HudMessages, VrGame::HudQuestReminder, VrGame::HudSubtitles };
 
     // Head pose used to place the panel before the headset reported one:
     // standing at the origin and looking ahead

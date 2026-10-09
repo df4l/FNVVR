@@ -67,7 +67,7 @@ namespace dxvk {
   enum class VrPanelId : uint32_t {
     /// Screens without a 3D scene, such as the main menu
     Menu,
-    /// HUD messages and objectives, in front of the head
+    /// HUD messages, objectives and subtitles, in front of the head
     HudHead,
   };
 

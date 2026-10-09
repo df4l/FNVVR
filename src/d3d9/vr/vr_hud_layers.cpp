@@ -21,6 +21,8 @@ namespace dxvk {
         VrGame::HudMessagesStore, sizeof(VrGame::HudMessagesStore))
       && VrGameMemory::matches(VrGame::HudQuestReminderStoreSite,
         VrGame::HudQuestReminderStore, sizeof(VrGame::HudQuestReminderStore))
+      && VrGameMemory::matches(VrGame::HudSubtitlesStoreSite,
+        VrGame::HudSubtitlesStore, sizeof(VrGame::HudSubtitlesStore))
       && VrGameMemory::matches(VrGame::TileGetNode,
         VrGame::TileGetNodePrologue, sizeof(VrGame::TileGetNodePrologue))
       && VrGameMemory::matches(VrGame::ObjectSetFlag,
