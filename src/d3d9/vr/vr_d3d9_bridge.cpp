@@ -1,3 +1,4 @@
+#include "../d3d9_device.h"
 #include "../d3d9_interfaces.h"
 
 #include "../../util/com/com_pointer.h"
@@ -17,6 +18,11 @@ namespace dxvk {
       Logger::err("VR: Device does not expose the Vulkan interop interface");
       return false;
     }
+
+    // The device always comes from this DLL. Its loader is the one DXVK picked
+    // at startup, which is winevulkan.dll rather than vulkan-1.dll under Wine.
+    binding.getInstanceProcAddr = static_cast<D3D9DeviceEx*>(device)
+      ->GetDXVKDevice()->vki()->getLoaderProc();
 
     interop->GetVulkanHandles(&binding.instance, &binding.physicalDevice, &binding.device);
     interop->GetSubmissionQueue(&binding.queue, &binding.queueIndex, &binding.queueFamilyIndex);

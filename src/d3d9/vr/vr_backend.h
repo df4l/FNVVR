@@ -14,6 +14,8 @@ namespace dxvk {
    * \brief Vulkan objects a backend needs to submit frames
    */
   struct VrGraphicsBinding {
+    /// Entry point of the Vulkan loader DXVK uses (winevulkan.dll under Wine)
+    PFN_vkGetInstanceProcAddr getInstanceProcAddr = nullptr;
     VkInstance       instance         = VK_NULL_HANDLE;
     VkPhysicalDevice physicalDevice   = VK_NULL_HANDLE;
     VkDevice         device           = VK_NULL_HANDLE;

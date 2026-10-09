@@ -1,5 +1,3 @@
-#include <windows.h>
-
 #include "../../util/log/log.h"
 
 #include "vr_eye_transition.h"
@@ -29,19 +27,11 @@ namespace dxvk {
     PFN_vkQueueSubmit           queueSubmit           = nullptr;
 
     bool load(const VrGraphicsBinding& binding) {
-      HMODULE library = GetModuleHandleA("vulkan-1.dll");
-
-      if (!library)
-        return false;
-
-      auto getInstanceProc = reinterpret_cast<PFN_vkGetInstanceProcAddr>(
-        GetProcAddress(library, "vkGetInstanceProcAddr"));
-
-      if (!getInstanceProc)
+      if (!binding.getInstanceProcAddr)
         return false;
 
       auto getDeviceProc = reinterpret_cast<PFN_vkGetDeviceProcAddr>(
-        getInstanceProc(binding.instance, "vkGetDeviceProcAddr"));
+        binding.getInstanceProcAddr(binding.instance, "vkGetDeviceProcAddr"));
 
       if (!getDeviceProc)
         return false;
