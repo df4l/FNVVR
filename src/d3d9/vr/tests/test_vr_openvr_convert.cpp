@@ -89,3 +89,23 @@ TEST_CASE(haptic_pulse_scales_and_is_limited) {
   CHECK(vrHapticMicroseconds(-1.0f, 2000000) == 0);
   CHECK(vrHapticMicroseconds(1.0f, -5) == 0);
 }
+
+
+TEST_CASE(pose_to_matrix_is_the_inverse_of_matrix_to_pose) {
+  VrPose pose;
+  pose.orientation = vrQuaternionFromAxisAngle({ 0.2f, 1.0f, -0.4f }, 1.1f);
+  pose.position    = { 0.5f, 1.6f, -2.0f };
+
+  float m[3][4] = { };
+  vrPoseToMatrix34(pose, m);
+  checkMatrix(m);
+
+  VrPose back = vrPoseFromMatrix34(m);
+  VrVector3 v = { 0.3f, -0.5f, 0.8f };
+  VrVector3 expected = vrTransformPoint(pose, v);
+  VrVector3 actual   = vrTransformPoint(back, v);
+
+  CHECK_NEAR(actual.x, expected.x, 1e-5);
+  CHECK_NEAR(actual.y, expected.y, 1e-5);
+  CHECK_NEAR(actual.z, expected.z, 1e-5);
+}

@@ -51,19 +51,8 @@ namespace dxvk {
     Com<ID3D9VkInteropTexture> textures[VrEyeCount];
 
     for (uint32_t i = 0; i < VrEyeCount; i++) {
-      if (!eyes[i] || FAILED(eyes[i]->QueryInterface(__uuidof(ID3D9VkInteropTexture),
-          reinterpret_cast<void**>(&textures[i]))))
+      if (!queryImage(eyes[i], textures[i], frame.images[i]))
         return false;
-
-      VkImageCreateInfo info = { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
-      VrEyeImage& image = frame.images[i];
-
-      if (FAILED(textures[i]->GetVulkanImageInfo(&image.image, &image.layout, &info)))
-        return false;
-
-      image.format      = info.format;
-      image.extent      = { info.extent.width, info.extent.height };
-      image.arrayLayer  = 0;
     }
 
     // Rendering has to reach the queue before the backend reads the images.
@@ -74,6 +63,56 @@ namespace dxvk {
     bool result = backend.submitFrame(frame);
     interop->ReleaseSubmissionQueue();
     return result;
+  }
+
+
+  bool VrD3D9Bridge::submitPanel(
+          IDirect3DDevice9*     device,
+          IVRBackend&           backend,
+          IDirect3DTexture9*    texture,
+    const VrPose&               pose,
+          float                 width) {
+    Com<ID3D9VkInteropDevice> interop;
+
+    if (FAILED(device->QueryInterface(__uuidof(ID3D9VkInteropDevice),
+        reinterpret_cast<void**>(&interop))))
+      return false;
+
+    VrPanelSubmission panel;
+    panel.pose  = pose;
+    panel.width = width;
+
+    Com<ID3D9VkInteropTexture> textureInterop;
+
+    if (!queryImage(texture, textureInterop, panel.image))
+      return false;
+
+    // See submitStereoFrame
+    interop->FlushRenderingCommands();
+    interop->LockSubmissionQueue();
+    bool result = backend.submitPanel(panel);
+    interop->ReleaseSubmissionQueue();
+    return result;
+  }
+
+
+  bool VrD3D9Bridge::queryImage(
+          IDirect3DTexture9*    texture,
+          Com<ID3D9VkInteropTexture>& interop,
+          VrEyeImage&           image) {
+    if (!texture || FAILED(texture->QueryInterface(__uuidof(ID3D9VkInteropTexture),
+        reinterpret_cast<void**>(&interop))))
+      return false;
+
+    VkImageCreateInfo info = { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
+
+    if (FAILED(interop->GetVulkanImageInfo(&image.image, &image.layout, &info)))
+      return false;
+
+    image.format     = info.format;
+    image.extent     = { info.extent.width, info.extent.height };
+    image.arrayLayer = 0;
+    return true;
   }
 
 }

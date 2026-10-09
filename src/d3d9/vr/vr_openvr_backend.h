@@ -7,6 +7,7 @@
 namespace vr {
   class IVRCompositor;
   class IVRSystem;
+  struct VRVulkanTextureData_t;
 }
 
 struct HINSTANCE__;
@@ -29,6 +30,8 @@ namespace dxvk {
    * the action-based input: there is no separate aim pose (the aim pose equals
    * the grip pose), the squeeze is on or off, and a haptic pulse has a
    * duration but no amplitude.
+   *
+   * The panel is an IVROverlay placed in the standing tracking space.
    *
    * Everything here needs a headset to be verified; the conversions are
    * tested in vr_openvr_convert.h.
@@ -66,6 +69,10 @@ namespace dxvk {
 
     void submitEmptyFrame(int64_t displayTime) override;
 
+    bool submitPanel(const VrPanelSubmission& panel) override;
+
+    void hidePanel() override;
+
     void applyHaptic(VrHand hand, float amplitude, int64_t durationNs) override;
 
   private:
@@ -80,6 +87,12 @@ namespace dxvk {
 
     uint32_t controllerIndex(VrHand hand) const;
 
+    void fillTextureData(const VrEyeImage& image, vr::VRVulkanTextureData_t& data) const;
+
+    bool createPanel();
+
+    void destroyPanel();
+
     std::unique_ptr<Runtime>          m_runtime;
     std::unique_ptr<VrEyeTransition>  m_transition;
     VrGraphicsBinding                 m_binding;
@@ -88,10 +101,16 @@ namespace dxvk {
     int64_t                           m_frameCounter = 0;
     int64_t                           m_periodNs     = 0;
 
+    // The panel is an overlay, created when it is first shown
+    uint64_t                          m_panelHandle  = 0;
+    bool                              m_panelVisible = false;
+    bool                              m_panelFailed  = false;
+
     // Each step of the first frame is logged once, so that a failure
     // inside the runtime can be located from the log
     bool                              m_loggedWait   = false;
     bool                              m_loggedSubmit = false;
+    bool                              m_loggedPanel  = false;
 
   };
 

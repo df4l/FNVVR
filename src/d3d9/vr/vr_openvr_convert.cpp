@@ -52,6 +52,28 @@ namespace dxvk {
   }
 
 
+  void vrPoseToMatrix34(const VrPose& pose, float m[3][4]) {
+    const VrQuaternion q = vrNormalize(pose.orientation);
+
+    // Column c is the image of the c-th basis vector
+    const VrVector3 columns[3] = {
+      vrRotate(q, { 1.0f, 0.0f, 0.0f }),
+      vrRotate(q, { 0.0f, 1.0f, 0.0f }),
+      vrRotate(q, { 0.0f, 0.0f, 1.0f }),
+    };
+
+    for (uint32_t c = 0; c < 3; c++) {
+      m[0][c] = columns[c].x;
+      m[1][c] = columns[c].y;
+      m[2][c] = columns[c].z;
+    }
+
+    m[0][3] = pose.position.x;
+    m[1][3] = pose.position.y;
+    m[2][3] = pose.position.z;
+  }
+
+
   VrFov vrFovFromProjectionRaw(float left, float right, float top, float bottom) {
     VrFov fov;
     fov.angleLeft  = std::atan(left);

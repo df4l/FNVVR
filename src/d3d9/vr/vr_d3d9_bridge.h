@@ -1,6 +1,9 @@
 #pragma once
 
 #include "../d3d9_include.h"
+#include "../d3d9_interfaces.h"
+
+#include "../../util/com/com_pointer.h"
 
 #include "vr_backend.h"
 
@@ -48,6 +51,32 @@ namespace dxvk {
             IDirect3DTexture9*    eyes[VrEyeCount],
       const std::array<VrEyeView, VrEyeCount>& views,
             int64_t               displayTime);
+
+    /**
+     * \brief Shows a rendered texture on the backend's panel
+     *
+     * Same synchronisation as submitStereoFrame, with IVRBackend::submitPanel.
+     *
+     * \param [in] device D3D9 device that owns the texture
+     * \param [in] backend Backend to submit to
+     * \param [in] texture Panel image
+     * \param [in] pose Panel pose in tracking space
+     * \param [in] width Panel width, in metres
+     * \returns \c true if the backend accepted the panel
+     */
+    static bool submitPanel(
+            IDirect3DDevice9*     device,
+            IVRBackend&           backend,
+            IDirect3DTexture9*    texture,
+      const VrPose&               pose,
+            float                 width);
+
+  private:
+
+    static bool queryImage(
+            IDirect3DTexture9*    texture,
+            Com<ID3D9VkInteropTexture>& interop,
+            VrEyeImage&           image);
 
   };
 

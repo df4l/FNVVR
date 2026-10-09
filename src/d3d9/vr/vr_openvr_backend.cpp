@@ -34,6 +34,10 @@ namespace dxvk {
     // Used when the headset does not report its refresh rate
     constexpr float FallbackRefreshRate = 90.0f;
 
+    // Identifies the panel overlay within SteamVR, and names it in its UI
+    constexpr const char* PanelOverlayKey  = "fnvvr.panel";
+    constexpr const char* PanelOverlayName = "Fallout: New Vegas";
+
     VrPose poseFromOpenVr(const vr::HmdMatrix34_t& matrix) {
       return vrPoseFromMatrix34(matrix.m);
     }
@@ -100,6 +104,7 @@ namespace dxvk {
     ShutdownFn         shutdown   = nullptr;
     vr::IVRSystem*     system     = nullptr;
     vr::IVRCompositor* compositor = nullptr;
+    vr::IVROverlay*    overlay    = nullptr;
     bool               initialized = false;
   };
 
@@ -171,6 +176,15 @@ namespace dxvk {
       m_runtime->system     = nullptr;
       m_runtime->compositor = nullptr;
       return false;
+    }
+
+    // Only the panel needs the overlay interface, VR works without it
+    m_runtime->overlay = static_cast<vr::IVROverlay*>(getInterface(vr::IVROverlay_Version, &error));
+
+    if (error != vr::VRInitError_None || !m_runtime->overlay) {
+      Logger::warn(str::format("VR: The OpenVR overlay interface is not available, error ", int32_t(error),
+        ". Menus will not be shown in the headset"));
+      m_runtime->overlay = nullptr;
     }
 
     Logger::info("VR: OpenVR initialized");
@@ -261,6 +275,7 @@ namespace dxvk {
 
 
   void VrOpenVrBackend::endSession() {
+    destroyPanel();
     m_transition = nullptr;
 
     if (m_state != VrSessionState::Idle)
@@ -425,7 +440,7 @@ namespace dxvk {
         ", format ", uint32_t(frame.images[0].format), ", layout ", uint32_t(frame.images[0].layout)));
     }
 
-    if (!m_transition->toTransferSource(frame.images))
+    if (!m_transition->toTransferSource(frame.images.data(), VrEyeCount))
       return false;
 
     if (!m_loggedSubmit)
@@ -434,19 +449,8 @@ namespace dxvk {
     bool accepted = true;
 
     for (uint32_t i = 0; i < VrEyeCount; i++) {
-      const VrEyeImage& eye = frame.images[i];
-
       vr::VRVulkanTextureData_t data = { };
-      data.m_nImage            = uint64_t(eye.image);
-      data.m_pDevice           = reinterpret_cast<VkDevice_T*>(m_binding.device);
-      data.m_pPhysicalDevice   = reinterpret_cast<VkPhysicalDevice_T*>(m_binding.physicalDevice);
-      data.m_pInstance         = reinterpret_cast<VkInstance_T*>(m_binding.instance);
-      data.m_pQueue            = reinterpret_cast<VkQueue_T*>(m_binding.queue);
-      data.m_nQueueFamilyIndex = m_binding.queueFamilyIndex;
-      data.m_nWidth            = eye.extent.width;
-      data.m_nHeight           = eye.extent.height;
-      data.m_nFormat           = uint32_t(eye.format);
-      data.m_nSampleCount      = 1;
+      fillTextureData(frame.images[i], data);
 
       // The game writes final display values, so the image is gamma encoded
       vr::Texture_t texture = { &data, vr::TextureType_Vulkan, vr::ColorSpace_Gamma };
@@ -466,12 +470,109 @@ namespace dxvk {
     }
 
     // Always put the images back, DXVK still owns them
-    return m_transition->restore(frame.images) && accepted;
+    return m_transition->restore(frame.images.data(), VrEyeCount) && accepted;
+  }
+
+
+  void VrOpenVrBackend::fillTextureData(const VrEyeImage& image, vr::VRVulkanTextureData_t& data) const {
+    data.m_nImage            = uint64_t(image.image);
+    data.m_pDevice           = reinterpret_cast<VkDevice_T*>(m_binding.device);
+    data.m_pPhysicalDevice   = reinterpret_cast<VkPhysicalDevice_T*>(m_binding.physicalDevice);
+    data.m_pInstance         = reinterpret_cast<VkInstance_T*>(m_binding.instance);
+    data.m_pQueue            = reinterpret_cast<VkQueue_T*>(m_binding.queue);
+    data.m_nQueueFamilyIndex = m_binding.queueFamilyIndex;
+    data.m_nWidth            = image.extent.width;
+    data.m_nHeight           = image.extent.height;
+    data.m_nFormat           = uint32_t(image.format);
+    data.m_nSampleCount      = 1;
   }
 
 
   void VrOpenVrBackend::submitEmptyFrame(int64_t displayTime) {
     // OpenVR has no frame to close: the next WaitGetPoses starts the next one
+  }
+
+
+  bool VrOpenVrBackend::submitPanel(const VrPanelSubmission& panel) {
+    if (m_state != VrSessionState::Running || !m_transition || !createPanel())
+      return false;
+
+    if (panel.image.arrayLayer != 0 || panel.image.image == VK_NULL_HANDLE)
+      return false;
+
+    vr::IVROverlay* overlay = m_runtime->overlay;
+
+    vr::HmdMatrix34_t transform = { };
+    vrPoseToMatrix34(panel.pose, transform.m);
+    overlay->SetOverlayTransformAbsolute(m_panelHandle, vr::TrackingUniverseStanding, &transform);
+    overlay->SetOverlayWidthInMeters(m_panelHandle, panel.width);
+
+    if (!m_transition->toTransferSource(&panel.image, 1))
+      return false;
+
+    vr::VRVulkanTextureData_t data = { };
+    fillTextureData(panel.image, data);
+
+    vr::Texture_t texture = { &data, vr::TextureType_Vulkan, vr::ColorSpace_Gamma };
+    vr::EVROverlayError error = overlay->SetOverlayTexture(m_panelHandle, &texture);
+
+    if (error == vr::VROverlayError_None && !m_panelVisible) {
+      error = overlay->ShowOverlay(m_panelHandle);
+      m_panelVisible = error == vr::VROverlayError_None;
+    }
+
+    if (!m_loggedPanel) {
+      if (error == vr::VROverlayError_None) {
+        Logger::info(str::format("VR: Showing the panel, image ",
+          panel.image.extent.width, "x", panel.image.extent.height, ", ", panel.width, " m wide"));
+      } else {
+        Logger::err(str::format("VR: The panel image was rejected, error ", int32_t(error)));
+      }
+
+      m_loggedPanel = true;
+    }
+
+    return m_transition->restore(&panel.image, 1) && error == vr::VROverlayError_None;
+  }
+
+
+  void VrOpenVrBackend::hidePanel() {
+    if (!m_panelVisible)
+      return;
+
+    m_runtime->overlay->HideOverlay(m_panelHandle);
+    m_panelVisible = false;
+  }
+
+
+  bool VrOpenVrBackend::createPanel() {
+    if (m_panelHandle)
+      return true;
+
+    if (m_panelFailed || !m_runtime || !m_runtime->overlay)
+      return false;
+
+    vr::VROverlayHandle_t handle = vr::k_ulOverlayHandleInvalid;
+    vr::EVROverlayError error = m_runtime->overlay->CreateOverlay(PanelOverlayKey, PanelOverlayName, &handle);
+
+    if (error != vr::VROverlayError_None || handle == vr::k_ulOverlayHandleInvalid) {
+      Logger::err(str::format("VR: The panel overlay could not be created, error ", int32_t(error)));
+      m_panelFailed = true;
+      return false;
+    }
+
+    m_panelHandle = handle;
+    return true;
+  }
+
+
+  void VrOpenVrBackend::destroyPanel() {
+    if (!m_panelHandle)
+      return;
+
+    m_runtime->overlay->DestroyOverlay(m_panelHandle);
+    m_panelHandle  = 0;
+    m_panelVisible = false;
   }
 
 

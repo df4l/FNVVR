@@ -17,8 +17,15 @@ namespace {
       lastDisplayTime = frame.displayTime;
     }
 
+    void onPanel(const VrPanelSubmission& panel) override {
+      panelCount++;
+      lastPanelWidth = panel.width;
+    }
+
     int     count = 0;
     int64_t lastDisplayTime = 0;
+    int     panelCount = 0;
+    float   lastPanelWidth = 0.0f;
 
   };
 
@@ -235,4 +242,32 @@ TEST_CASE(input_source_is_sampled_each_poll) {
 
   CHECK(first < 0.0f);
   CHECK(second < first);
+}
+
+
+TEST_CASE(panel_stays_visible_until_hidden) {
+  VrEmulatorBackend backend;
+  CountingSink sink;
+  backend.setFrameSink(&sink);
+
+  VrPanelSubmission panel;
+  panel.width = 2.0f;
+
+  // No session yet
+  CHECK(!backend.submitPanel(panel));
+  CHECK(!backend.isPanelVisible());
+
+  backend.beginSession(VrGraphicsBinding());
+  CHECK(backend.submitPanel(panel));
+  CHECK(backend.submitPanel(panel));
+  CHECK(backend.isPanelVisible());
+  CHECK(backend.submittedPanelCount() == 2);
+  CHECK(sink.panelCount == 2);
+  CHECK_NEAR(sink.lastPanelWidth, 2.0f, 1e-6);
+
+  // Panels are independent of the frame loop
+  CHECK(backend.submittedFrameCount() == 0);
+
+  backend.hidePanel();
+  CHECK(!backend.isPanelVisible());
 }

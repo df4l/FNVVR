@@ -8,8 +8,9 @@
 namespace dxvk {
 
   /**
-   * \brief Moves the eye images to the layout the OpenVR compositor reads
+   * \brief Moves images to the layout the OpenVR compositor reads
    *
+   * Used for the eye images and for the panel image.
    * The compositor takes no layout with a Vulkan texture and expects
    * \c VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, whereas DXVK leaves the images
    * in whatever layout it used last (see VrEyeImage). The images are moved
@@ -34,20 +35,25 @@ namespace dxvk {
     VrEyeTransition(const VrEyeTransition&) = delete;
     VrEyeTransition& operator = (const VrEyeTransition&) = delete;
 
-    /**
-     * \brief Moves both images to the transfer source layout
-     *
-     * Waits until the transition is done on the GPU.
-     * \returns \c false if the transition could not be submitted
-     */
-    bool toTransferSource(const std::array<VrEyeImage, VrEyeCount>& images);
+    /// Most images moved by one call
+    static constexpr uint32_t MaxImages = VrEyeCount;
 
     /**
-     * \brief Moves both images back to the layout they had
+     * \brief Moves images to the transfer source layout
+     *
+     * Waits until the transition is done on the GPU.
+     * \param [in] images Images, at most MaxImages
+     * \param [in] count Number of images
+     * \returns \c false if the transition could not be submitted
+     */
+    bool toTransferSource(const VrEyeImage* images, uint32_t count);
+
+    /**
+     * \brief Moves images back to the layout they had
      *
      * Does not wait: the queue executes it after the compositor's work.
      */
-    bool restore(const std::array<VrEyeImage, VrEyeCount>& images);
+    bool restore(const VrEyeImage* images, uint32_t count);
 
   private:
 
@@ -62,7 +68,7 @@ namespace dxvk {
 
     bool initialize();
 
-    bool submit(const std::array<VrEyeImage, VrEyeCount>& images, Slot& slot, bool toSource);
+    bool submit(const VrEyeImage* images, uint32_t count, Slot& slot, bool toSource);
 
     VrGraphicsBinding          m_binding;
     std::unique_ptr<Functions> m_vk;

@@ -130,17 +130,20 @@ namespace dxvk {
   }
 
 
-  bool VrEyeTransition::toTransferSource(const std::array<VrEyeImage, VrEyeCount>& images) {
-    return submit(images, m_toSource, true);
+  bool VrEyeTransition::toTransferSource(const VrEyeImage* images, uint32_t count) {
+    return submit(images, count, m_toSource, true);
   }
 
 
-  bool VrEyeTransition::restore(const std::array<VrEyeImage, VrEyeCount>& images) {
-    return submit(images, m_restore, false);
+  bool VrEyeTransition::restore(const VrEyeImage* images, uint32_t count) {
+    return submit(images, count, m_restore, false);
   }
 
 
-  bool VrEyeTransition::submit(const std::array<VrEyeImage, VrEyeCount>& images, Slot& slot, bool toSource) {
+  bool VrEyeTransition::submit(const VrEyeImage* images, uint32_t count, Slot& slot, bool toSource) {
+    if (count > MaxImages)
+      return false;
+
     // The previous use of this slot must be done before its buffer is reset
     if (m_vk->waitForFences(m_binding.device, 1, &slot.fence, VK_TRUE, WaitTimeoutNs) != VK_SUCCESS)
       return false;
@@ -152,10 +155,12 @@ namespace dxvk {
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     m_vk->beginCommandBuffer(slot.commandBuffer, &beginInfo);
 
-    std::array<VkImageMemoryBarrier, VrEyeCount> barriers = { };
+    std::array<VkImageMemoryBarrier, MaxImages> barriers = { };
     uint32_t barrierCount = 0;
 
-    for (const VrEyeImage& eye : images) {
+    for (uint32_t i = 0; i < count; i++) {
+      const VrEyeImage& eye = images[i];
+
       if (eye.layout == VK_IMAGE_LAYOUT_UNDEFINED || eye.layout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
         continue;
 
@@ -188,7 +193,7 @@ namespace dxvk {
     submitInfo.pCommandBuffers    = &slot.commandBuffer;
 
     if (m_vk->queueSubmit(m_binding.queue, 1, &submitInfo, slot.fence) != VK_SUCCESS) {
-      Logger::err("VR: Could not submit the eye image transition");
+      Logger::err("VR: Could not submit the image layout transition");
       return false;
     }
 

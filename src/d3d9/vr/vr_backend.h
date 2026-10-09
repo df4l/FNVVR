@@ -62,6 +62,20 @@ namespace dxvk {
   };
 
   /**
+   * \brief Flat image shown in front of the user
+   *
+   * Used for screens without a 3D scene, such as the main menu. The panel
+   * is a rectangle in tracking space, centred on \c pose and facing along
+   * its +Z axis. It is \c width metres wide, and its height follows the
+   * aspect ratio of the image. The image follows the rules of VrEyeImage.
+   */
+  struct VrPanelSubmission {
+    VrEyeImage  image;
+    VrPose      pose;
+    float       width = 0.0f;
+  };
+
+  /**
    * \brief Abstract VR runtime
    *
    * All game-facing VR code talks to this interface. The implementation is
@@ -73,6 +87,8 @@ namespace dxvk {
    *  3. beginSession, once the device exists
    *  4. per frame: waitFrame, pollInput, locateViews, submitFrame
    *  5. endSession
+   *
+   * submitPanel and hidePanel may be called at any time during the session.
    *
    * Methods are called from the render/game thread only.
    */
@@ -156,6 +172,18 @@ namespace dxvk {
     virtual bool submitFrame(const VrFrameSubmission& frame) = 0;
 
     virtual void submitEmptyFrame(int64_t displayTime) = 0;
+
+    /**
+     * \brief Shows a flat panel, or updates the one shown
+     *
+     * The panel is drawn over the stereo frames and stays visible with its
+     * last image until hidePanel is called. It does not depend on the frame
+     * loop: it may be submitted while no stereo frames are rendered, for
+     * example while the game loads.
+     */
+    virtual bool submitPanel(const VrPanelSubmission& panel) = 0;
+
+    virtual void hidePanel() = 0;
 
     /**
      * \brief Triggers controller vibration

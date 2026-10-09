@@ -22,6 +22,8 @@ namespace dxvk {
 
     virtual void onFrame(const VrFrameSubmission& frame) = 0;
 
+    virtual void onPanel(const VrPanelSubmission& panel) { }
+
   };
 
   /**
@@ -86,6 +88,10 @@ namespace dxvk {
 
     void submitEmptyFrame(int64_t displayTime) override;
 
+    bool submitPanel(const VrPanelSubmission& panel) override;
+
+    void hidePanel() override;
+
     void applyHaptic(VrHand hand, float amplitude, int64_t durationNs) override;
 
     /**
@@ -114,6 +120,10 @@ namespace dxvk {
 
     uint32_t emptyFrameCount() const { return m_emptyFrames; }
 
+    uint32_t submittedPanelCount() const { return m_submittedPanels; }
+
+    bool isPanelVisible() const { return m_panelVisible; }
+
     /**
      * \brief Last haptic pulse requested for a hand, for tests
      */
@@ -137,6 +147,8 @@ namespace dxvk {
 
     uint32_t          m_submittedFrames = 0;
     uint32_t          m_emptyFrames = 0;
+    uint32_t          m_submittedPanels = 0;
+    bool              m_panelVisible = false;
     float             m_haptic[VrHandCount] = { };
 
     VrPose scriptedPose(int64_t timeNs) const;

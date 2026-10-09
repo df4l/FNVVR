@@ -34,6 +34,13 @@ namespace dxvk {
   VrPose vrPoseFromMatrix34(const float m[3][4]);
 
   /**
+   * \brief Converts a pose to an OpenVR 3x4 row-major transform
+   *
+   * Inverse of vrPoseFromMatrix34.
+   */
+  void vrPoseToMatrix34(const VrPose& pose, float m[3][4]);
+
+  /**
    * \brief Converts the tangents from IVRSystem::GetProjectionRaw to angles
    *
    * Assumes OpenVR's convention that the vertical values are negated

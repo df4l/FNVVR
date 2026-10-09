@@ -105,6 +105,21 @@ namespace dxvk {
   }
 
 
+  VrQuaternion vrHeading(const VrQuaternion& q) {
+    VrVector3 forward = vrRotate(q, { 0.0f, 0.0f, -1.0f });
+    float yaw = std::atan2(-forward.x, -forward.z);
+    return vrQuaternionFromAxisAngle({ 0.0f, 1.0f, 0.0f }, yaw);
+  }
+
+
+  VrPose vrComputePanelPose(const VrPose& head, float distance) {
+    VrPose panel;
+    panel.orientation = vrHeading(head.orientation);
+    panel.position    = head.position + vrRotate(panel.orientation, { 0.0f, 0.0f, -distance });
+    return panel;
+  }
+
+
   VrPose vrCompose(const VrPose& parent, const VrPose& child) {
     VrPose result;
     result.orientation = vrNormalize(parent.orientation * child.orientation);

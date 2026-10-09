@@ -181,3 +181,27 @@ TEST_CASE(texture_bounds_shrink_for_narrower_eye) {
   CHECK_NEAR(b.vMin, 0.0f, 1e-5);
   CHECK_NEAR(b.vMax, 1.0f, 1e-5);
 }
+
+
+TEST_CASE(panel_is_placed_ahead_at_head_height) {
+  // Head at 1.7 m, turned a quarter to the left and looking down
+  VrPose head;
+  head.position    = { 1.0f, 1.7f, 2.0f };
+  head.orientation = vrQuaternionFromAxisAngle({ 0.0f, 1.0f, 0.0f }, Pi * 0.5f)
+                   * vrQuaternionFromAxisAngle({ 1.0f, 0.0f, 0.0f }, -0.6f);
+
+  VrPose panel = vrComputePanelPose(head, 2.0f);
+
+  // Forward after a left quarter turn is -X
+  CHECK_NEAR(panel.position.x, -1.0f, 1e-5);
+  CHECK_NEAR(panel.position.y,  1.7f, 1e-5);
+  CHECK_NEAR(panel.position.z,  2.0f, 1e-5);
+
+  // Upright, and its +Z axis points back at the head
+  VrVector3 up     = vrRotate(panel.orientation, { 0.0f, 1.0f, 0.0f });
+  VrVector3 normal = vrRotate(panel.orientation, { 0.0f, 0.0f, 1.0f });
+
+  CHECK_NEAR(up.y, 1.0f, 1e-5);
+  CHECK_NEAR(normal.x, 1.0f, 1e-5);
+  CHECK_NEAR(normal.z, 0.0f, 1e-5);
+}

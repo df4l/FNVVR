@@ -33,6 +33,26 @@ namespace dxvk {
   VrVector3 vrRotate(const VrQuaternion& q, const VrVector3& v);
 
   /**
+   * \brief Keeps only the rotation around the vertical axis
+   *
+   * The result looks along the input's viewing direction (-Z) projected
+   * onto the floor plane.
+   */
+  VrQuaternion vrHeading(const VrQuaternion& q);
+
+  /**
+   * \brief Places a flat panel in front of a viewer
+   *
+   * The panel is upright, at head height, \c distance metres ahead of the
+   * head along its heading, and faces the head: its +Z axis points back at
+   * the viewer. Looking up or down does not tilt it.
+   *
+   * \param [in] head Head pose in tracking space
+   * \param [in] distance Distance from the head, in metres
+   */
+  VrPose vrComputePanelPose(const VrPose& head, float distance);
+
+  /**
    * \brief Composes two poses
    *
    * The result applies \c child first, then \c parent,

@@ -5,12 +5,8 @@
 namespace dxvk {
 
   VrPose vrMakeRecenterReference(const VrPose& head) {
-    // The head looks along -Z, project that direction onto the floor plane
-    VrVector3 forward = vrRotate(head.orientation, { 0.0f, 0.0f, -1.0f });
-    float yaw = std::atan2(-forward.x, -forward.z);
-
     VrPose reference;
-    reference.orientation = vrQuaternionFromAxisAngle({ 0.0f, 1.0f, 0.0f }, yaw);
+    reference.orientation = vrHeading(head.orientation);
     reference.position    = head.position;
     return reference;
   }
