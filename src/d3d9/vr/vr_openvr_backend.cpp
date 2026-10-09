@@ -38,6 +38,30 @@ namespace dxvk {
       return vrPoseFromMatrix34(matrix.m);
     }
 
+    /**
+     * \brief Calls IVRSystem::GetEyeToHeadTransform
+     *
+     * The runtime is built with MSVC, which passes \c this in ECX and the
+     * address of a returned struct on the stack. 32-bit GCC swaps the two
+     * for virtual methods returning a struct, so the method is called
+     * through the vtable with MSVC's convention instead.
+     */
+    vr::HmdMatrix34_t getEyeToHeadTransform(vr::IVRSystem* system, vr::EVREye eye) {
+#if defined(__i386__) && !defined(_MSC_VER)
+      // Slot of GetEyeToHeadTransform in the IVRSystem_019 vtable
+      constexpr size_t EyeToHeadTransformSlot = 4;
+
+      using Fn = void (__thiscall*)(vr::IVRSystem*, vr::HmdMatrix34_t*, vr::EVREye);
+
+      vr::HmdMatrix34_t result = { };
+      auto vtable = *reinterpret_cast<void* const* const*>(system);
+      reinterpret_cast<Fn>(vtable[EyeToHeadTransformSlot])(system, &result, eye);
+      return result;
+#else
+      return system->GetEyeToHeadTransform(eye);
+#endif
+    }
+
     std::vector<std::string> splitExtensions(const std::string& list) {
       std::vector<std::string> result;
       std::stringstream stream(list);
@@ -373,7 +397,7 @@ namespace dxvk {
     for (uint32_t i = 0; i < VrEyeCount; i++) {
       vr::EVREye eye = i == uint32_t(VrEye::Left) ? vr::Eye_Left : vr::Eye_Right;
 
-      VrPose eyeInHead = poseFromOpenVr(m_runtime->system->GetEyeToHeadTransform(eye));
+      VrPose eyeInHead = poseFromOpenVr(getEyeToHeadTransform(m_runtime->system, eye));
       views[i].pose = vrCompose(m_poses.headPose, eyeInHead);
 
       float left = 0.0f, right = 0.0f, top = 0.0f, bottom = 0.0f;
