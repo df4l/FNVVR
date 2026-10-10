@@ -52,7 +52,8 @@ namespace dxvk {
    *
    * In menus the actions press the buttons the game's menus use: A selects,
    * B goes back, X and Y are the alternate actions, LB and RB change tabs,
-   * and the navigation stick is the D-pad. Both sticks are also passed on
+   * the triggers are LT and RT (V.A.T.S. targets the selected body part
+   * with RT) and the navigation stick is the D-pad. Both sticks are also passed on
    * as the thumbsticks, for menus that read them (lockpicking).
    *
    * \param [in] actions Actions sampled for this frame

@@ -145,9 +145,11 @@ namespace dxvk {
     MenuOption,
     MenuPrevious,
     MenuNext,
+    MenuLeftTrigger,
+    MenuRightTrigger,
   };
 
-  constexpr uint32_t VrActionCount = 16;
+  constexpr uint32_t VrActionCount = 18;
 
   /**
    * \brief State of the actions for one frame

@@ -105,6 +105,13 @@ namespace dxvk {
           pad.buttons |= entry.button;
       }
 
+      // V.A.T.S. queues an attack on the selected body part with RT
+      if (actions.isPressed(VrAction::MenuLeftTrigger))
+        pad.leftTrigger = 0xFF;
+
+      if (actions.isPressed(VrAction::MenuRightTrigger))
+        pad.rightTrigger = 0xFF;
+
       // The sticks are passed on as well, for menus that read them directly
       // (lockpicking: the left stick turns the pin, the right one the
       // screwdriver). The interface treats the left stick and the D-pad as
