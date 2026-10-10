@@ -269,6 +269,8 @@ namespace dxvk {
     void updateWeaponHand(const VrInputState& input, VrGameStateKind state,
       const VrGameCameraPose& gameCamera);
 
+    VrGameCameraPose handInGame(const VrControllerState& controller) const;
+
     void captureEye();
 
     bool copyRenderTarget(uint32_t eye);

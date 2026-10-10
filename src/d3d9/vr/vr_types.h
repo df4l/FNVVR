@@ -130,7 +130,7 @@ namespace dxvk {
    */
   enum class VrAction : uint32_t {
     Attack,
-    Aim,
+    TwoHandGrip,
     Activate,
     Jump,
     Reload,

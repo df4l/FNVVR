@@ -50,8 +50,9 @@ namespace dxvk {
    * Needs no hardware and no Vulkan runtime support. Head and hands are
    * driven by VrEmulatorInput or by a scripted head path. The emulated
    * triggers are the only actions: the right one attacks in game and selects
-   * in menus, the left one aims in game and goes back in menus. Submitted
-   * frames are forwarded to an optional IVRFrameSink.
+   * in menus, the left one holds the weapon with both hands in game and
+   * goes back in menus. Submitted frames are forwarded to an optional
+   * IVRFrameSink.
    *
    * Time is virtual unless \c realtime is set: every waitFrame advances
    * the clock by exactly one refresh period, which makes runs reproducible.

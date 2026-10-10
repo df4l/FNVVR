@@ -475,20 +475,29 @@ namespace dxvk {
     if (!m_weaponHand)
       return;
 
-    const VrControllerState& controller = input.controllers[uint32_t(VrHand::Right)];
+    const VrControllerState& right = input.controllers[uint32_t(VrHand::Right)];
+    const VrControllerState& left  = input.controllers[uint32_t(VrHand::Left)];
 
-    if (state != VrGameStateKind::InGame || !m_hasReference || !controller.isActive) {
-      m_weaponHand->beginFrame(gameCamera, nullptr);
+    if (state != VrGameStateKind::InGame || !m_hasReference || !right.isActive) {
+      m_weaponHand->beginFrame(gameCamera, nullptr, nullptr, false);
       return;
     }
 
+    VrGameCameraPose hand      = handInGame(right);
+    VrGameCameraPose otherHand = handInGame(left);
+
+    m_weaponHand->beginFrame(gameCamera, &hand, left.isActive ? &otherHand : nullptr,
+      input.hasActions && input.actions.isPressed(VrAction::TwoHandGrip));
+  }
+
+
+  VrGameCameraPose VrStereoRenderer::handInGame(const VrControllerState& controller) const {
     // Points where the controller points, held where the controller is
     VrGameCameraPose hand = vrComputeEyeCameraPose(m_gameCameraPose,
       vrComputeEyeInReference(m_reference, controller.aimPose), VrGameUnitsPerMetre);
     hand.position = vrComputeEyeCameraPose(m_gameCameraPose,
       vrComputeEyeInReference(m_reference, controller.gripPose), VrGameUnitsPerMetre).position;
-
-    m_weaponHand->beginFrame(gameCamera, &hand);
+    return hand;
   }
 
 

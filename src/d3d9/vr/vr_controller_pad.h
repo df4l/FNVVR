@@ -48,7 +48,9 @@ namespace dxvk {
    * game's own bindings give to its control, so that the action does what
    * the control does whatever the bindings are. The move stick is the left
    * thumbstick. The turn stick is not passed on: turning is done by
-   * VrHeadLook. Pause is the Start button, which the game hardwires.
+   * VrHeadLook. The two-handed grip is not passed on either: it is used by
+   * VrWeaponHand, and the game's aim control (aim and block) stays
+   * unpressed. Pause is the Start button, which the game hardwires.
    *
    * In menus the actions press the buttons the game's menus use: A selects,
    * B goes back, X and Y are the alternate actions, LB and RB change tabs,

@@ -46,7 +46,7 @@
       "requirement": "suggested"
     },
     {
-      "name": "/actions/game/in/aim",
+      "name": "/actions/game/in/two_hand_grip",
       "type": "boolean",
       "requirement": "suggested"
     },
@@ -162,7 +162,7 @@
       "/actions/game/in/move": "Move",
       "/actions/game/in/turn": "Turn",
       "/actions/game/in/attack": "Attack",
-      "/actions/game/in/aim": "Aim / block",
+      "/actions/game/in/two_hand_grip": "Hold the weapon with both hands",
       "/actions/game/in/activate": "Activate",
       "/actions/game/in/jump": "Jump",
       "/actions/game/in/reload": "Reload",

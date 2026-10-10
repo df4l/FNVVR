@@ -119,7 +119,7 @@ namespace dxvk {
 
     state.hasActions = true;
     state.actions.setPressed(inMenu ? VrAction::MenuSelect : VrAction::Attack, m_pendingInput.rightTrigger);
-    state.actions.setPressed(inMenu ? VrAction::MenuBack   : VrAction::Aim,    m_pendingInput.leftTrigger);
+    state.actions.setPressed(inMenu ? VrAction::MenuBack   : VrAction::TwoHandGrip, m_pendingInput.leftTrigger);
     return state;
   }
 

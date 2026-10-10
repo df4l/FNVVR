@@ -45,6 +45,17 @@ TEST_CASE(game_actions_press_the_bound_inputs) {
 }
 
 
+TEST_CASE(two_hand_grip_does_not_aim) {
+  Bindings bindings;
+  VrActionState actions;
+  actions.setPressed(VrAction::TwoHandGrip, true);
+
+  VrPadState pad = vrComputePadState(actions, VrInputContext::Game, bindings.codes);
+  CHECK(pad.buttons == 0);
+  CHECK(pad.leftTrigger == 0 && pad.rightTrigger == 0);
+}
+
+
 TEST_CASE(unbound_controls_press_nothing) {
   Bindings bindings;
   VrActionState actions;

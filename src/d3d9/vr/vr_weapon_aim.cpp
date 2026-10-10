@@ -5,6 +5,18 @@
 
 namespace dxvk {
 
+  namespace {
+
+    VrVector3 cross(const VrVector3& a, const VrVector3& b) {
+      return VrVector3 {
+        a.y * b.z - a.z * b.y,
+        a.z * b.x - a.x * b.z,
+        a.x * b.y - a.y * b.x };
+    }
+
+  }
+
+
   VrGameRotation operator * (const VrGameRotation& a, const VrGameRotation& b) {
     VrGameRotation result;
 
@@ -58,6 +70,41 @@ namespace dxvk {
     VrGameTransform result;
     result.rotate    = vrCameraRotation(hand) * vrTranspose(vrCameraRotation(gameCamera));
     result.translate = hand.position - result.rotate * weaponPosition;
+    return result;
+  }
+
+
+  VrGameCameraPose vrComputeTwoHandedPose(
+    const VrGameCameraPose& hand,
+    const VrVector3&        support,
+    const VrVector3&        target) {
+    float supportLength = vrLength(support);
+    float targetLength  = vrLength(target);
+
+    if (supportLength <= 0.0f || targetLength <= 0.0f)
+      return hand;
+
+    VrVector3 from = support * (1.0f / supportLength);
+    VrVector3 to   = target * (1.0f / targetLength);
+    VrVector3 axis = cross(from, to);
+
+    float s = vrLength(axis);
+    float c = vrDot(from, to);
+
+    if (s < 1e-4f)
+      return hand;
+
+    axis = axis * (1.0f / s);
+
+    // Rodrigues' rotation formula
+    auto rotate = [&] (const VrVector3& v) {
+      return v * c + cross(axis, v) * s + axis * (vrDot(axis, v) * (1.0f - c));
+    };
+
+    VrGameCameraPose result = hand;
+    result.forward = rotate(hand.forward);
+    result.up      = rotate(hand.up);
+    result.right   = rotate(hand.right);
     return result;
   }
 
