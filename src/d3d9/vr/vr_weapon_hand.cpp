@@ -108,6 +108,66 @@ namespace dxvk {
         vrFindGameObject(reinterpret_cast<uintptr_t>(root), name, MaxModelDepth));
     }
 
+    bool isAncestor(const uint8_t* ancestor, uint8_t* object) {
+      for (; object; object = field<uint8_t*>(object, VrGame::ObjectParent)) {
+        if (object == ancestor)
+          return true;
+      }
+
+      return false;
+    }
+
+    /**
+     * \brief Top bone of the arm holding a hand
+     *
+     * The highest ancestor of the hand that is not also an ancestor of the
+     * other hand: the clavicle in the game's skeleton.
+     */
+    uint8_t* armBone(uint8_t* hand, uint8_t* otherHand) {
+      uint8_t* bone = hand;
+
+      while (uint8_t* parent = field<uint8_t*>(bone, VrGame::ObjectParent)) {
+        if (isAncestor(parent, otherHand))
+          break;
+
+        bone = parent;
+      }
+
+      return bone;
+    }
+
+    /**
+     * \brief Folds a subtree into one point, except the hand below it
+     *
+     * Skinned vertices follow the world transforms of their bones when they
+     * are drawn (0x00E6FE30), so with the scale near zero the arm's vertices
+     * end up on the wrist, and the hand, whose world transform was already
+     * computed, keeps its shape. The next update rebuilds the transforms.
+     */
+    void foldBones(uint8_t* object, const uint8_t* hand, const VrVector3& wrist, uint32_t depth) {
+      // Not zero, the game inverts some world transforms
+      constexpr float FoldedScale = 1.0e-4f;
+
+      if (object == hand)
+        return;
+
+      writeVector(object, VrGame::ObjectWorldTranslation, wrist);
+      field<float>(object, VrGame::ObjectWorldScale) = FoldedScale;
+
+      uintptr_t node = vrGameAsNode(reinterpret_cast<uintptr_t>(object));
+
+      if (!node || !depth)
+        return;
+
+      auto children = readField<uint8_t* const*>(reinterpret_cast<const uint8_t*>(node), VrGame::NodeChildren);
+      auto count    = readField<uint16_t>(reinterpret_cast<const uint8_t*>(node), VrGame::NodeChildCount);
+
+      for (uint32_t i = 0; children && i < count; i++) {
+        if (children[i])
+          foldBones(children[i], hand, wrist, depth - 1);
+      }
+    }
+
   }
 
 
@@ -278,6 +338,8 @@ namespace dxvk {
     writeRotation(root, VrGame::ObjectLocalRotation, rotation);
     writeVector(root, VrGame::NodeLocalTranslate, translation);
 
+    hideArms(root);
+
     uint8_t* muzzle = findObject(weapon, VrGame::ProjectileNodeName);
 
     if (!muzzle)
@@ -292,6 +354,38 @@ namespace dxvk {
       Logger::info("VR: The weapon is in the right hand");
       m_loggedActive = true;
     }
+  }
+
+
+  void VrWeaponHand::hideArms(uint8_t* root) {
+    uint8_t* hands[2] = {
+      findObject(root, VrGame::LeftHandNodeName),
+      findObject(root, VrGame::RightHandNodeName) };
+
+    if (!hands[0] || !hands[1]) {
+      if (!m_loggedArms)
+        Logger::warn("VR: The hand bones were not found, the arms stay visible");
+
+      m_loggedArms = true;
+      return;
+    }
+
+    for (uint32_t i = 0; i < 2; i++) {
+      uint8_t* hand = hands[i];
+      uint8_t* arm  = armBone(hand, hands[1 - i]);
+
+      if (arm == hand)
+        continue;
+
+      if (!m_loggedArms) {
+        auto name = field<const char*>(arm, VrGame::ObjectName);
+        Logger::info(str::format("VR: Hiding the arm from '", name ? name : "", "'"));
+      }
+
+      foldBones(arm, hand, readVector(hand, VrGame::ObjectWorldTranslation), MaxModelDepth);
+    }
+
+    m_loggedArms = true;
   }
 
 
