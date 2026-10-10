@@ -14,6 +14,7 @@
 #include "vr_hud_layers.h"
 #include "vr_menu_scenes.h"
 #include "vr_preview_window.h"
+#include "vr_weapon_hand.h"
 
 namespace dxvk {
 
@@ -87,6 +88,7 @@ namespace dxvk {
      * \param [in] showPreview Show both eyes in a window of their own
      * \param [in] panel Placement of the panel for menus and loading screens
      * \param [in] turn How the turning stick turns the player
+     * \param [in] weaponInHand Draw the weapon in the right hand and shoot along it
      * \returns \c nullptr if the executable is not the supported version
      */
     static std::unique_ptr<VrStereoRenderer> install(
@@ -94,7 +96,8 @@ namespace dxvk {
             IDirect3DDevice9*     device,
             bool                  showPreview,
       const VrPanelConfig&        panel,
-      const VrTurnConfig&         turn);
+      const VrTurnConfig&         turn,
+            bool                  weaponInHand);
 
     /**
      * \brief Called when the game presents, before the image is shown
@@ -187,6 +190,10 @@ namespace dxvk {
     // Controller input for the game, and the head driving the player's look
     VrControls          m_controls;
 
+    // The first-person weapon, drawn in the hand when it is installed
+    std::unique_ptr<VrWeaponHand> m_weaponHand;
+    VrVector3           m_eyePosition;
+
     // Latest tracked head pose, used to place the panel
     VrPose m_headPose;
     bool   m_hasHeadPose   = false;
@@ -258,6 +265,9 @@ namespace dxvk {
             void*                 main);
 
     void applyEyePose();
+
+    void updateWeaponHand(const VrInputState& input, VrGameStateKind state,
+      const VrGameCameraPose& gameCamera);
 
     void captureEye();
 

@@ -93,6 +93,52 @@ namespace dxvk {
     constexpr uintptr_t PlayerDisabledControls = 0x680;
     constexpr uint8_t   ControlLook       = 0x2;
 
+    /**
+     * Weapon in the hand, see findings/weapon.md.
+     *
+     * Main::PlaceCamera draws the first-person model around the origin: it
+     * sets the root's translation to zero, calls NiAVObject::Update
+     * (__thiscall, one stack argument) on it at this site and restores the
+     * translation. The first-person camera (NiCamera*, Main+0xA0) is placed
+     * relative to the root as well.
+     */
+    constexpr uintptr_t FirstPersonUpdateCallSite = 0x00874F55;
+    constexpr uintptr_t ObjectUpdate              = 0x00A59C60;
+    constexpr uintptr_t MainFirstPersonCamera     = 0xA0;
+    constexpr uintptr_t FirstPersonZeroSite       = 0x00874F41;
+    constexpr uint8_t   FirstPersonZero[]         = { 0x68, 0x6C, 0x42, 0x1F, 0x01 };
+    constexpr uintptr_t FirstPersonCameraSite     = 0x00874F16;
+    constexpr uint8_t   FirstPersonCamera[]       = { 0x81, 0xC1, 0xA0, 0x00, 0x00, 0x00 };
+
+    /**
+     * Call to Projectile::Create in TESObjectWEAP::Fire (0x00523150), and the
+     * function: __cdecl with 16 arguments, see ProjectileCreateFn
+     */
+    constexpr uintptr_t ProjectileCreateCallSite = 0x005245BD;
+    constexpr uintptr_t ProjectileCreate         = 0x009BCA60;
+
+    /**
+     * Player fields: first-person root (NiNode*) and whether the first-person
+     * model is used (0) or the third-person one, as Fire reads it (0x00524D10).
+     * Actor process (+0x68) and its virtual function telling whether the
+     * weapon is out (HighProcess 0x00915D40, reads +0x135).
+     */
+    constexpr uintptr_t PlayerFirstPersonRoot = 0x694;
+    constexpr uintptr_t PlayerThirdPerson     = 0x64B;
+    constexpr uintptr_t ActorProcess          = 0x68;
+    constexpr uintptr_t ProcessIsWeaponOutSlot = 0x454;
+
+    /** Nodes of the first-person model: the weapon, under the right hand, and the muzzle in the weapon's model */
+    constexpr char WeaponNodeName[]           = "Weapon";
+    constexpr char ProjectileNodeName[]       = "ProjectileNode";
+    constexpr char ProjectileNodeAltName[]    = "##ProjectileNode";
+
+    /** NiAVObject transforms: parent, local rotation (row-major 3x3) and world transform */
+    constexpr uintptr_t ObjectParent          = 0x18;
+    constexpr uintptr_t ObjectLocalRotation   = 0x34;
+    constexpr uintptr_t ObjectWorldRotation   = 0x68;
+    constexpr uintptr_t ObjectWorldTranslation = 0x8C;
+
     /** State of the VATS camera, 0 when VATS is not running */
     constexpr uintptr_t VatsCameraState = 0x011F2258;
 
