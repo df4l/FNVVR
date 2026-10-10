@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <cmath>
 #include <iterator>
 
 #include "../../util/log/log.h"
@@ -589,9 +591,12 @@ namespace dxvk {
     D3DSURFACE_DESC desc = { };
     m_gameTarget->GetDesc(&desc);
 
-    // One texture per panel, since a panel keeps showing its last image
+    // One texture per panel, since a panel keeps showing its last image.
+    // The HUD is drawn into one texture and rearranged into the panel's.
     bool created = SUCCEEDED(m_device->CreateTexture(desc.Width, desc.Height, 1,
         D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &m_hudTexture, nullptr))
+      && SUCCEEDED(m_device->CreateTexture(desc.Width, desc.Height, 1,
+        D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &m_hudPanelTexture, nullptr))
       && SUCCEEDED(m_device->CreateTexture(desc.Width, desc.Height, 1,
         D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &m_menuTexture, nullptr));
 
@@ -599,6 +604,7 @@ namespace dxvk {
       Logger::err(str::format("VR: Failed to create the ", desc.Width, "x", desc.Height,
         " interface textures, the HUD and menus are not shown in the headset"));
       m_hudTexture  = nullptr;
+      m_hudPanelTexture = nullptr;
       m_menuTexture = nullptr;
       m_interfaceFailed = true;
     }
@@ -607,14 +613,57 @@ namespace dxvk {
   }
 
 
+  bool VrStereoRenderer::composeHud() {
+    // The game puts the messages and objectives in the top left corner and
+    // the subtitles at the bottom, in the centre. Seen from the head, the
+    // corner is too far to the side to read comfortably, so the upper half
+    // of the image is moved towards the centre and the lower half is kept.
+    Com<IDirect3DSurface9> source;
+    Com<IDirect3DSurface9> destination;
+
+    if (FAILED(m_hudTexture->GetSurfaceLevel(0, &source))
+     || FAILED(m_hudPanelTexture->GetSurfaceLevel(0, &destination)))
+      return false;
+
+    D3DSURFACE_DESC desc = { };
+    source->GetDesc(&desc);
+
+    LONG width  = LONG(desc.Width);
+    LONG height = LONG(desc.Height);
+    LONG split  = height / 2;
+
+    float shiftScale = m_panelConfig.hudWidth > 0.0f
+      ? m_panelConfig.hudMessagesOffset / m_panelConfig.hudWidth : 0.0f;
+    LONG shift = std::clamp(LONG(std::lround(shiftScale * float(width))), LONG(0), width / 2);
+
+    RECT lower       = { 0,     split, width,         height };
+    RECT upperSource = { 0,     0,     width - shift, split  };
+    RECT upperTarget = { shift, 0,     width,         split  };
+
+    return SUCCEEDED(m_device->ColorFill(destination.ptr(), nullptr, D3DCOLOR_ARGB(0, 0, 0, 0)))
+        && SUCCEEDED(m_device->StretchRect(source.ptr(), &lower, destination.ptr(), &lower, D3DTEXF_NONE))
+        && SUCCEEDED(m_device->StretchRect(source.ptr(), &upperSource, destination.ptr(), &upperTarget, D3DTEXF_NONE));
+  }
+
+
   void VrStereoRenderer::submitHud() {
+    if (!composeHud()) {
+      if (!m_loggedHudFailure) {
+        Logger::err("VR: Failed to compose the HUD panel image");
+        m_loggedHudFailure = true;
+      }
+
+      hideHud();
+      return;
+    }
+
     // In front of the eyes and slightly below them, facing the head
     VrPose pose;
     pose.position.y = m_panelConfig.hudHeight;
     pose.position.z = -m_panelConfig.hudDistance;
 
     m_hudShown = VrD3D9Bridge::submitPanel(m_device, m_backend, VrPanelId::HudHead,
-      m_hudTexture.ptr(), pose, m_panelConfig.hudWidth, VrPanelAnchor::Head);
+      m_hudPanelTexture.ptr(), pose, m_panelConfig.hudWidth, VrPanelAnchor::Head);
 
     if (!m_hudShown && !m_loggedHudFailure) {
       Logger::err("VR: The backend rejected the HUD panel");

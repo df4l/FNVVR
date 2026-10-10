@@ -70,6 +70,7 @@ namespace dxvk {
     panel.hudDistance = config.getOption<float>("d3d9.vrHudDistance", panel.hudDistance);
     panel.hudWidth    = config.getOption<float>("d3d9.vrHudWidth",    panel.hudWidth);
     panel.hudHeight   = config.getOption<float>("d3d9.vrHudHeight",   panel.hudHeight);
+    panel.hudMessagesOffset = config.getOption<float>("d3d9.vrHudMessagesOffset", panel.hudMessagesOffset);
 
     if (auto* emulator = dynamic_cast<VrEmulatorBackend*>(backend.get())) {
       VrEmulatorKeyboard keyboard;

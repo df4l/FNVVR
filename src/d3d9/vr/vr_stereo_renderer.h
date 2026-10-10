@@ -20,8 +20,8 @@ namespace dxvk {
    * \brief Where the panels are placed
    *
    * Set by \c d3d9.vrPanelDistance, \c d3d9.vrPanelWidth,
-   * \c d3d9.vrHudDistance, \c d3d9.vrHudWidth and \c d3d9.vrHudHeight in
-   * dxvk.conf. The panel of the main menu and the loading screens covers
+   * \c d3d9.vrHudDistance, \c d3d9.vrHudWidth, \c d3d9.vrHudHeight and
+   * \c d3d9.vrHudMessagesOffset in dxvk.conf. The panel of the main menu and the loading screens covers
    * about 53 degrees horizontally. The HUD panel is wider, so that the
    * messages at its edges stay readable, and sits slightly below eye level.
    * Menus opened in game use the HUD distance and width.
@@ -37,6 +37,9 @@ namespace dxvk {
     float hudWidth    = 1.5f;
     /// Height of the HUD panel's centre relative to the eyes, in metres
     float hudHeight   = -0.15f;
+    /// How far the messages and objectives, drawn by the game in the top
+    /// left corner, are moved towards the centre of the HUD panel, in metres
+    float hudMessagesOffset = 0.25f;
   };
 
   /**
@@ -150,6 +153,7 @@ namespace dxvk {
     // left eye's interface pass
     VrHudLayers            m_hudLayers;
     Com<IDirect3DTexture9> m_hudTexture;
+    Com<IDirect3DTexture9> m_hudPanelTexture;
     Com<IDirect3DTexture9> m_menuTexture;
     InterfaceLayer m_layer = InterfaceLayer::None;
     bool   m_hudAvailable  = false;
@@ -258,6 +262,8 @@ namespace dxvk {
     void isolateHud();
 
     bool createInterfaceTextures();
+
+    bool composeHud();
 
     void submitHud();
 
