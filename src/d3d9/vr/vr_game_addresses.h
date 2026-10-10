@@ -107,6 +107,16 @@ namespace dxvk {
     constexpr uintptr_t XInputStartMenuCallSite       = 0x007D4399;
 
     /**
+     * InterfaceManager::Update shows a message box when its gamepad flag
+     * changes: sLostController when the pad goes away, sControllerOption
+     * when one appears. Both are calls to ShowMessageBox (__cdecl, the
+     * caller pops the arguments, the result is unused).
+     */
+    constexpr uintptr_t ShowMessageBox                 = 0x00703E80;
+    constexpr uintptr_t PadLostMessageCallSite         = 0x0070C5AA;
+    constexpr uintptr_t PadConnectedMessageCallSite    = 0x0070C5E2;
+
+    /**
      * isInStartMenu, __cdecl without arguments: true while the main menu is
      * shown (StartMenu exists without its in-game flag, so not the pause
      * menu). Checked against its first bytes before it is called.

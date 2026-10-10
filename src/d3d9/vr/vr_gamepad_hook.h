@@ -30,6 +30,10 @@ namespace dxvk {
    * to gamepad navigation and ignores the mouse cursor as soon as XInput
    * reports a device, and it has no setting to ignore XInput. The interface
    * checks for a gamepad on its own, so hiding also covers those calls.
+   *
+   * With VR controllers, the message boxes the game shows when a gamepad
+   * is connected or disconnected are skipped: the controllers appear and
+   * disappear with tracking.
    */
   class VrGamepadHook {
 
