@@ -3,6 +3,7 @@
 
 #include "vr_game_addresses.h"
 #include "vr_game_memory.h"
+#include "vr_game_nodes.h"
 #include "vr_menu_scenes.h"
 
 namespace dxvk {
@@ -11,7 +12,6 @@ namespace dxvk {
 
     using IsMenuActiveFn    = bool (__cdecl*)(uint32_t menuId, uint32_t unused);
     using RenderMenuSceneFn = void (__cdecl*)();
-    using GetAsNodeFn       = uintptr_t (__fastcall*)(uintptr_t object, void* unused);
 
     constexpr uint8_t PushZero[] = { 0x6A, 0x00 };
     constexpr uint8_t PushImm32  = 0x68;
@@ -39,11 +39,6 @@ namespace dxvk {
       return *reinterpret_cast<const T*>(base + offset);
     }
 
-    uintptr_t asNode(uintptr_t object) {
-      auto vtable = readField<uintptr_t>(object, 0);
-      return reinterpret_cast<GetAsNodeFn>(readField<uintptr_t>(vtable, VrGame::ObjectGetAsNodeSlot))(object, nullptr);
-    }
-
     void hideByName(uintptr_t object, const char* name, uint32_t depth, std::vector<uint32_t*>& hidden) {
       auto objectName = readField<const char*>(object, VrGame::ObjectName);
       auto flags = reinterpret_cast<uint32_t*>(object + VrGame::ObjectFlags);
@@ -56,7 +51,7 @@ namespace dxvk {
         return;
       }
 
-      uintptr_t node = asNode(object);
+      uintptr_t node = vrGameAsNode(object);
 
       if (!node || depth == MaxSceneDepth)
         return;

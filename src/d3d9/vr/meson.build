@@ -10,6 +10,7 @@ vr_src = files([
   'vr_turn_input.cpp',
   'vr_action_filter.cpp',
   'vr_menu_pointer.cpp',
+  'vr_weapon_aim.cpp',
 ])
 
 # Parts that depend on DXVK and Vulkan, only built into d3d9.dll
@@ -27,12 +28,14 @@ vr_dxvk_src = files([
   'vr_emulator_keyboard.cpp',
   'vr_game_camera.cpp',
   'vr_game_memory.cpp',
+  'vr_game_nodes.cpp',
   'vr_game_state.cpp',
   'vr_hud_layers.cpp',
   'vr_menu_scenes.cpp',
   'vr_game_resolution.cpp',
   'vr_preview_window.cpp',
   'vr_stereo_renderer.cpp',
+  'vr_weapon_hand.cpp',
 ])
 
 # Unit tests for the VR layer. They are built with the host compiler so they
@@ -50,6 +53,7 @@ if add_languages('cpp', native: true, required: false)
     'tests/test_vr_turn_input.cpp',
     'tests/test_vr_action_filter.cpp',
     'tests/test_vr_menu_pointer.cpp',
+    'tests/test_vr_weapon_aim.cpp',
   ])
 
   vr_test = executable('vr_tests', vr_test_sources, vr_src,

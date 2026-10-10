@@ -83,7 +83,8 @@ namespace dxvk {
           IDirect3DDevice9*     device,
           bool                  showPreview,
     const VrPanelConfig&        panel,
-    const VrTurnConfig&         turn) {
+    const VrTurnConfig&         turn,
+          bool                  weaponInHand) {
     if (g_stereoRenderer)
       return nullptr;
 
@@ -137,6 +138,9 @@ namespace dxvk {
       Logger::info("VR: The menu background setting was not found, menus may show a frozen image of the world");
 
     renderer->m_controls.setHeadLook(VrHeadLook::install(turn));
+
+    if (weaponInHand)
+      renderer->m_weaponHand = VrWeaponHand::install();
 
     g_stereoRenderer = renderer.get();
     return renderer;
@@ -196,6 +200,9 @@ namespace dxvk {
   void __fastcall VrStereoRenderer::placeCameraHook(
           void*                 main,
           void*                 unused) {
+    if (g_stereoRenderer && g_stereoRenderer->m_eyeView && g_stereoRenderer->m_weaponHand)
+      g_stereoRenderer->m_weaponHand->beforePlaceCamera(main, g_stereoRenderer->m_eyePosition);
+
     g_originalPlaceCamera(main, nullptr);
 
     if (g_stereoRenderer && g_stereoRenderer->m_eyeView)
@@ -282,8 +289,12 @@ namespace dxvk {
     m_gameCamera     = m_renderCamera.save();
     m_gameCameraPose = m_renderCamera.readPose();
 
+    // The game placed its first-person model for its own camera
+    VrGameCameraPose modelCamera = m_gameCameraPose;
+
     // The game turned its camera with the head already
     m_controls.adjustCamera(m_gameCameraPose);
+    updateWeaponHand(input, state, modelCamera);
 
     for (uint32_t eye = 0; eye < VrEyeCount; eye++) {
       m_eyeCopied[eye] = false;
@@ -450,9 +461,34 @@ namespace dxvk {
       ? vrComputeEyeInReference(m_reference, m_eyeView->pose)
       : VrPose();
 
-    m_renderCamera.apply(
-      vrComputeEyeCameraPose(m_gameCameraPose, eyeInReference, VrGameUnitsPerMetre),
-      vrComputeGameFrustum(m_eyeView->fov));
+    VrGameCameraPose pose = vrComputeEyeCameraPose(m_gameCameraPose, eyeInReference, VrGameUnitsPerMetre);
+    m_eyePosition = pose.position;
+
+    m_renderCamera.apply(pose, vrComputeGameFrustum(m_eyeView->fov));
+  }
+
+
+  void VrStereoRenderer::updateWeaponHand(
+    const VrInputState&         input,
+          VrGameStateKind       state,
+    const VrGameCameraPose&     gameCamera) {
+    if (!m_weaponHand)
+      return;
+
+    const VrControllerState& controller = input.controllers[uint32_t(VrHand::Right)];
+
+    if (state != VrGameStateKind::InGame || !m_hasReference || !controller.isActive) {
+      m_weaponHand->beginFrame(gameCamera, nullptr);
+      return;
+    }
+
+    // Points where the controller points, held where the controller is
+    VrGameCameraPose hand = vrComputeEyeCameraPose(m_gameCameraPose,
+      vrComputeEyeInReference(m_reference, controller.aimPose), VrGameUnitsPerMetre);
+    hand.position = vrComputeEyeCameraPose(m_gameCameraPose,
+      vrComputeEyeInReference(m_reference, controller.gripPose), VrGameUnitsPerMetre).position;
+
+    m_weaponHand->beginFrame(gameCamera, &hand);
   }
 
 
