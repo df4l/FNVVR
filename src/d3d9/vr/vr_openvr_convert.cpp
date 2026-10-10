@@ -10,7 +10,7 @@ namespace dxvk {
     // Indexed by VrAction. Must match actions.json.
     constexpr const char* ActionPaths[VrActionCount] = {
       "/actions/game/in/attack",
-      "/actions/game/in/aim",
+      "/actions/game/in/two_hand_grip",
       "/actions/game/in/activate",
       "/actions/game/in/jump",
       "/actions/game/in/reload",

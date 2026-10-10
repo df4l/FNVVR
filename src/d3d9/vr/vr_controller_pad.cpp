@@ -22,7 +22,6 @@ namespace dxvk {
 
     constexpr ActionControl GameControls[] = {
       { VrAction::Attack,   VrGameControl::Attack    },
-      { VrAction::Aim,      VrGameControl::Aim       },
       { VrAction::Activate, VrGameControl::Activate  },
       { VrAction::Jump,     VrGameControl::Jump      },
       { VrAction::Reload,   VrGameControl::ReadyItem },
