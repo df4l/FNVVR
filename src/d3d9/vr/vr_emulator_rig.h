@@ -74,7 +74,6 @@ namespace dxvk {
     VrVector3 m_position = { };
     float     m_yaw   = 0.0f;
     float     m_pitch = 0.0f;
-    bool      m_trigger[VrHandCount] = { };
 
     VrPose handPose(VrHand hand) const;
 

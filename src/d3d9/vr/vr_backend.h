@@ -179,6 +179,13 @@ namespace dxvk {
     virtual VrInputState pollInput(int64_t displayTime) = 0;
 
     /**
+     * \brief Chooses which actions the next pollInput reports
+     *
+     * Stays in effect until it is called again. The initial context is Game.
+     */
+    virtual void setInputContext(VrInputContext context) = 0;
+
+    /**
      * \brief Computes the per-eye pose and field of view
      *
      * \param [in] displayTime Predicted display time from waitFrame

@@ -45,6 +45,7 @@ if add_languages('cpp', native: true, required: false)
     files('../../util/util_matrix.cpp'),
     native              : true,
     include_directories : include_directories('../../../include/vulkan/include'),
+    cpp_args            : [ '-DVR_OPENVR_DIR="@0@"'.format(meson.current_source_dir() / 'openvr') ],
     override_options    : [ 'cpp_std=c++17' ])
 
   test('vr', vr_test)

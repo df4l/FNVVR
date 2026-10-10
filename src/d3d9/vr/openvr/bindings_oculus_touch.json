@@ -1,0 +1,214 @@
+{
+  "controller_type": "oculus_touch",
+  "name": "Fallout: New Vegas VR - Touch",
+  "description": "Default bindings: left stick moves, right stick turns, triggers attack and aim.",
+  "bindings": {
+    "/actions/game": {
+      "sources": [
+        {
+          "path": "/user/hand/left/input/joystick",
+          "mode": "joystick",
+          "inputs": {
+            "position": {
+              "output": "/actions/game/in/move"
+            }
+          }
+        },
+        {
+          "path": "/user/hand/left/input/joystick",
+          "mode": "button",
+          "inputs": {
+            "click": {
+              "output": "/actions/game/in/sneak"
+            }
+          }
+        },
+        {
+          "path": "/user/hand/right/input/joystick",
+          "mode": "joystick",
+          "inputs": {
+            "position": {
+              "output": "/actions/game/in/turn"
+            }
+          }
+        },
+        {
+          "path": "/user/hand/right/input/joystick",
+          "mode": "button",
+          "inputs": {
+            "click": {
+              "output": "/actions/game/in/vats"
+            }
+          }
+        },
+        {
+          "path": "/user/hand/right/input/trigger",
+          "mode": "trigger",
+          "inputs": {
+            "click": {
+              "output": "/actions/game/in/attack"
+            }
+          }
+        },
+        {
+          "path": "/user/hand/left/input/trigger",
+          "mode": "trigger",
+          "inputs": {
+            "click": {
+              "output": "/actions/game/in/aim"
+            }
+          }
+        },
+        {
+          "path": "/user/hand/right/input/grip",
+          "mode": "trigger",
+          "inputs": {
+            "click": {
+              "output": "/actions/game/in/grab"
+            }
+          }
+        },
+        {
+          "path": "/user/hand/right/input/a",
+          "mode": "button",
+          "inputs": {
+            "click": {
+              "output": "/actions/game/in/activate"
+            }
+          }
+        },
+        {
+          "path": "/user/hand/right/input/b",
+          "mode": "button",
+          "inputs": {
+            "click": {
+              "output": "/actions/game/in/jump"
+            }
+          }
+        },
+        {
+          "path": "/user/hand/left/input/x",
+          "mode": "button",
+          "inputs": {
+            "click": {
+              "output": "/actions/game/in/reload"
+            }
+          }
+        },
+        {
+          "path": "/user/hand/left/input/y",
+          "mode": "button",
+          "inputs": {
+            "click": {
+              "output": "/actions/game/in/pipboy"
+            }
+          }
+        },
+        {
+          "path": "/user/hand/left/input/system",
+          "mode": "button",
+          "inputs": {
+            "click": {
+              "output": "/actions/game/in/pause"
+            }
+          }
+        }
+      ],
+      "haptics": [
+        {
+          "output": "/actions/game/out/haptic_left",
+          "path": "/user/hand/left/output/haptic"
+        },
+        {
+          "output": "/actions/game/out/haptic_right",
+          "path": "/user/hand/right/output/haptic"
+        }
+      ]
+    },
+    "/actions/menu": {
+      "sources": [
+        {
+          "path": "/user/hand/left/input/joystick",
+          "mode": "joystick",
+          "inputs": {
+            "position": {
+              "output": "/actions/menu/in/navigate"
+            }
+          }
+        },
+        {
+          "path": "/user/hand/right/input/joystick",
+          "mode": "joystick",
+          "inputs": {
+            "position": {
+              "output": "/actions/menu/in/navigate"
+            }
+          }
+        },
+        {
+          "path": "/user/hand/right/input/a",
+          "mode": "button",
+          "inputs": {
+            "click": {
+              "output": "/actions/menu/in/select"
+            }
+          }
+        },
+        {
+          "path": "/user/hand/right/input/b",
+          "mode": "button",
+          "inputs": {
+            "click": {
+              "output": "/actions/menu/in/back"
+            }
+          }
+        },
+        {
+          "path": "/user/hand/left/input/system",
+          "mode": "button",
+          "inputs": {
+            "click": {
+              "output": "/actions/menu/in/back"
+            }
+          }
+        },
+        {
+          "path": "/user/hand/left/input/x",
+          "mode": "button",
+          "inputs": {
+            "click": {
+              "output": "/actions/menu/in/alternate"
+            }
+          }
+        },
+        {
+          "path": "/user/hand/left/input/y",
+          "mode": "button",
+          "inputs": {
+            "click": {
+              "output": "/actions/menu/in/option"
+            }
+          }
+        },
+        {
+          "path": "/user/hand/left/input/grip",
+          "mode": "trigger",
+          "inputs": {
+            "click": {
+              "output": "/actions/menu/in/previous"
+            }
+          }
+        },
+        {
+          "path": "/user/hand/right/input/grip",
+          "mode": "trigger",
+          "inputs": {
+            "click": {
+              "output": "/actions/menu/in/next"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

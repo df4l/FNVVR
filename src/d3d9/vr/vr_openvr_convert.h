@@ -7,24 +7,6 @@
 namespace dxvk {
 
   /**
-   * \brief Button ids of the OpenVR legacy controller state
-   *
-   * Bit positions in VRControllerState_t::ulButtonPressed, as in
-   * vr::EVRButtonId. They are repeated here so that the conversions below
-   * need no OpenVR header and can be tested on their own.
-   */
-  namespace VrOpenVrButtonId {
-    constexpr uint32_t ApplicationMenu = 1;
-    constexpr uint32_t Grip            = 2;
-    constexpr uint32_t A               = 7;
-    constexpr uint32_t Axis0           = 32;
-    constexpr uint32_t Axis1           = 33;
-  }
-
-  /// Longest haptic pulse that OpenVR accepts, in microseconds
-  constexpr uint32_t VrOpenVrMaxHapticMicroseconds = 3999;
-
-  /**
    * \brief Converts an OpenVR 3x4 row-major transform to a pose
    *
    * OpenVR uses the same axes as the rest of the VR layer (right-handed,
@@ -50,21 +32,38 @@ namespace dxvk {
   VrFov vrFovFromProjectionRaw(float left, float right, float top, float bottom);
 
   /**
-   * \brief Maps a pressed-button mask of the legacy controller state
-   *
-   * The primary button is the A button, the secondary one is the
-   * application menu button and the stick button is the press of the first
-   * axis. The legacy state has no separate menu button.
+   * \brief Paths of the OpenVR action sets, indexed by VrInputContext
    */
-  uint32_t vrButtonsFromOpenVr(uint64_t pressed);
+  constexpr const char* VrOpenVrActionSets[] = {
+    "/actions/game",
+    "/actions/menu",
+  };
 
   /**
-   * \brief Length of the haptic pulse to request from OpenVR
+   * \brief Path of a digital action in the action manifest
    *
-   * OpenVR's legacy pulse has a duration but no amplitude, so the
-   * amplitude scales the duration. The result is limited to what OpenVR
-   * accepts.
+   * Game actions are in the game set and menu actions in the menu set,
+   * see vrOpenVrActionContext.
    */
-  uint16_t vrHapticMicroseconds(float amplitude, int64_t durationNs);
+  const char* vrOpenVrActionPath(VrAction action);
+
+  /**
+   * \brief Context in which an action is read
+   */
+  VrInputContext vrOpenVrActionContext(VrAction action);
+
+  /**
+   * \brief Path of the stick action of a context
+   *
+   * \param [in] context Input context
+   * \param [in] turn \c true for the turning stick, which only exists in game
+   * \returns \c nullptr if the context has no such stick
+   */
+  const char* vrOpenVrStickPath(VrInputContext context, bool turn);
+
+  /**
+   * \brief Path of the haptic output action of a hand
+   */
+  const char* vrOpenVrHapticPath(VrHand hand);
 
 }

@@ -7,6 +7,7 @@
 
 namespace vr {
   class IVRCompositor;
+  class IVRInput;
   class IVRSystem;
   struct VRVulkanTextureData_t;
 }
@@ -26,11 +27,13 @@ namespace dxvk {
    * run time from the game folder (or the search path), so the build does not
    * depend on it.
    *
-   * Poses and buttons come from the legacy IVRSystem and IVRCompositor
-   * interfaces, which need no action manifest. This has limits compared to
-   * the action-based input: there is no separate aim pose (the aim pose equals
-   * the grip pose), the squeeze is on or off, and a haptic pulse has a
-   * duration but no amplitude.
+   * Controller poses come from IVRCompositor::WaitGetPoses (the aim pose
+   * equals the grip pose for now). Buttons and sticks are read as actions
+   * through IVRInput: the action manifest \c actions.json and the default
+   * bindings it names are loaded from the \c fnvvr folder next to
+   * d3d9.dll, see \ref VrOpenVrBackend::manifestPath. The user can change
+   * the bindings in SteamVR's controller settings. Without the manifest the
+   * headset still works, but the controllers do nothing.
    *
    * Each panel is an IVROverlay, placed in the standing tracking space or
    * relative to the headset.
@@ -65,6 +68,8 @@ namespace dxvk {
 
     VrInputState pollInput(int64_t displayTime) override;
 
+    void setInputContext(VrInputContext context) override;
+
     std::array<VrEyeView, VrEyeCount> locateViews(int64_t displayTime) override;
 
     bool submitFrame(const VrFrameSubmission& frame) override;
@@ -86,6 +91,18 @@ namespace dxvk {
     void shutdownRuntime();
 
     void pollEvents();
+
+    bool initializeInput();
+
+    void readActions(VrInputState& input);
+
+    /**
+     * \brief Path of the action manifest
+     *
+     * \c fnvvr\\actions.json in the folder that holds d3d9.dll, as a
+     * Windows path. Under Proton the runtime client converts it.
+     */
+    static std::string manifestPath();
 
     uint32_t controllerIndex(VrHand hand) const;
 
@@ -109,6 +126,20 @@ namespace dxvk {
     VrInputState                      m_poses;
     int64_t                           m_frameCounter = 0;
     int64_t                           m_periodNs     = 0;
+
+    // Action handles, see vr_openvr_convert.h for the paths
+    struct Actions {
+      uint64_t sets[2]                 = { };
+      uint64_t digital[VrActionCount]  = { };
+      uint64_t move[2]                 = { };
+      uint64_t turn                    = 0;
+      uint64_t haptic[VrHandCount]     = { };
+    };
+
+    Actions                           m_actions;
+    bool                              m_inputReady = false;
+    VrInputContext                    m_context    = VrInputContext::Game;
+    bool                              m_loggedInputError = false;
 
     // One overlay per panel, created when the panel is first shown
     std::array<Panel, VrPanelCount>   m_panels;

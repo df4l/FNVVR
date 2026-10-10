@@ -48,7 +48,9 @@ namespace dxvk {
    * \brief VR backend that simulates a headset and two controllers
    *
    * Needs no hardware and no Vulkan runtime support. Head and hands are
-   * driven by VrEmulatorInput or by a scripted head path. Submitted
+   * driven by VrEmulatorInput or by a scripted head path. The emulated
+   * triggers are the only actions: the right one attacks in game and selects
+   * in menus, the left one aims in game and goes back in menus. Submitted
    * frames are forwarded to an optional IVRFrameSink.
    *
    * Time is virtual unless \c realtime is set: every waitFrame advances
@@ -81,6 +83,8 @@ namespace dxvk {
     VrFrameTiming waitFrame() override;
 
     VrInputState pollInput(int64_t displayTime) override;
+
+    void setInputContext(VrInputContext context) override;
 
     std::array<VrEyeView, VrEyeCount> locateViews(int64_t displayTime) override;
 
@@ -136,6 +140,7 @@ namespace dxvk {
     VrSessionState    m_state = VrSessionState::Idle;
 
     VrEmulatorInput   m_pendingInput;
+    VrInputContext    m_context = VrInputContext::Game;
     std::function<VrEmulatorInput()> m_inputSource;
     std::vector<VrPoseKeyframe> m_script;
     IVRFrameSink*     m_sink = nullptr;

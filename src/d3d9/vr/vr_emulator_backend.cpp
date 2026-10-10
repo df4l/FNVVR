@@ -115,7 +115,17 @@ namespace dxvk {
     for (uint32_t i = 0; i < VrHandCount; i++)
       state.controllers[i] = m_rig.controllerState(VrHand(i));
 
+    const bool inMenu = m_context == VrInputContext::Menu;
+
+    state.hasActions = true;
+    state.actions.setPressed(inMenu ? VrAction::MenuSelect : VrAction::Attack, m_pendingInput.rightTrigger);
+    state.actions.setPressed(inMenu ? VrAction::MenuBack   : VrAction::Aim,    m_pendingInput.leftTrigger);
     return state;
+  }
+
+
+  void VrEmulatorBackend::setInputContext(VrInputContext context) {
+    m_context = context;
   }
 
 

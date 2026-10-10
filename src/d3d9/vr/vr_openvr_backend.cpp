@@ -107,6 +107,7 @@ namespace dxvk {
     vr::IVRSystem*     system     = nullptr;
     vr::IVRCompositor* compositor = nullptr;
     vr::IVROverlay*    overlay    = nullptr;
+    vr::IVRInput*      input      = nullptr;
     bool               initialized = false;
   };
 
@@ -189,8 +190,103 @@ namespace dxvk {
       m_runtime->overlay = nullptr;
     }
 
+    // Controllers need the input interface and the action manifest, the
+    // headset works without them
+    m_runtime->input = static_cast<vr::IVRInput*>(getInterface(vr::IVRInput_Version, &error));
+
+    if (error != vr::VRInitError_None || !m_runtime->input) {
+      Logger::warn(str::format("VR: The OpenVR input interface is not available, error ", int32_t(error),
+        ". The controllers will do nothing"));
+      m_runtime->input = nullptr;
+    }
+
+    m_inputReady = initializeInput();
+
     Logger::info("VR: OpenVR initialized");
     return true;
+  }
+
+
+  std::string VrOpenVrBackend::manifestPath() {
+    HMODULE module = nullptr;
+
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        reinterpret_cast<LPCWSTR>(&VrOpenVrBackend::manifestPath), &module))
+      return std::string();
+
+    std::vector<WCHAR> buffer(MAX_PATH);
+    DWORD length = 0;
+
+    while ((length = GetModuleFileNameW(module, buffer.data(), DWORD(buffer.size()))) == buffer.size())
+      buffer.resize(buffer.size() * 2);
+
+    if (!length)
+      return std::string();
+
+    std::wstring path(buffer.data(), length);
+    path.resize(path.find_last_of(L"\\/") + 1);
+    path += L"fnvvr\\actions.json";
+
+    if (GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
+      Logger::warn(str::format("VR: The action manifest ", str::fromws(path.c_str()),
+        " was not found. The controllers will do nothing"));
+      return std::string();
+    }
+
+    return str::fromws(path.c_str());
+  }
+
+
+  bool VrOpenVrBackend::initializeInput() {
+    vr::IVRInput* input = m_runtime->input;
+
+    if (!input)
+      return false;
+
+    std::string manifest = manifestPath();
+
+    if (manifest.empty())
+      return false;
+
+    vr::EVRInputError error = input->SetActionManifestPath(manifest.c_str());
+
+    if (error != vr::VRInputError_None) {
+      Logger::err(str::format("VR: SteamVR rejected the action manifest ", manifest, ", error ", int32_t(error)));
+      return false;
+    }
+
+    bool found = true;
+
+    auto action = [&] (const char* path, uint64_t& handle) {
+      vr::EVRInputError result = input->GetActionHandle(path, &handle);
+
+      if (result != vr::VRInputError_None) {
+        Logger::err(str::format("VR: The action ", path, " is unknown to SteamVR, error ", int32_t(result)));
+        found = false;
+      }
+    };
+
+    for (uint32_t i = 0; i < 2; i++) {
+      if (input->GetActionSetHandle(VrOpenVrActionSets[i], &m_actions.sets[i]) != vr::VRInputError_None) {
+        Logger::err(str::format("VR: The action set ", VrOpenVrActionSets[i], " is unknown to SteamVR"));
+        found = false;
+      }
+
+      action(vrOpenVrStickPath(VrInputContext(i), false), m_actions.move[i]);
+    }
+
+    for (uint32_t i = 0; i < VrActionCount; i++)
+      action(vrOpenVrActionPath(VrAction(i)), m_actions.digital[i]);
+
+    action(vrOpenVrStickPath(VrInputContext::Game, true), m_actions.turn);
+
+    for (uint32_t i = 0; i < VrHandCount; i++)
+      action(vrOpenVrHapticPath(VrHand(i)), m_actions.haptic[i]);
+
+    if (found)
+      Logger::info(str::format("VR: Controller actions loaded from ", manifest));
+
+    return found;
   }
 
 
@@ -379,29 +475,64 @@ namespace dxvk {
   VrInputState VrOpenVrBackend::pollInput(int64_t displayTime) {
     VrInputState input = m_poses;
 
-    if (!m_runtime || !m_runtime->system)
-      return input;
-
-    for (uint32_t i = 0; i < VrHandCount; i++) {
-      VrControllerState& controller = input.controllers[i];
-
-      if (!controller.isActive)
-        continue;
-
-      vr::VRControllerState_t state = { };
-
-      if (!m_runtime->system->GetControllerState(controllerIndex(VrHand(i)), &state, sizeof(state))) {
-        controller.isActive = false;
-        continue;
-      }
-
-      controller.trigger = state.rAxis[1].x;
-      controller.squeeze = (state.ulButtonPressed & (uint64_t(1) << VrOpenVrButtonId::Grip)) ? 1.0f : 0.0f;
-      controller.stick   = { state.rAxis[0].x, state.rAxis[0].y };
-      controller.buttons = vrButtonsFromOpenVr(state.ulButtonPressed);
-    }
+    if (m_inputReady)
+      readActions(input);
 
     return input;
+  }
+
+
+  void VrOpenVrBackend::setInputContext(VrInputContext context) {
+    m_context = context;
+  }
+
+
+  void VrOpenVrBackend::readActions(VrInputState& input) {
+    vr::IVRInput* vrInput = m_runtime->input;
+    uint32_t context = uint32_t(m_context);
+
+    vr::VRActiveActionSet_t active = { };
+    active.ulActionSet          = m_actions.sets[context];
+    active.ulRestrictedToDevice = vr::k_ulInvalidInputValueHandle;
+
+    vr::EVRInputError error = vrInput->UpdateActionState(&active, sizeof(active), 1);
+
+    if (error != vr::VRInputError_None) {
+      if (!m_loggedInputError) {
+        Logger::err(str::format("VR: Reading the controller actions failed, error ", int32_t(error)));
+        m_loggedInputError = true;
+      }
+
+      return;
+    }
+
+    // Actions only mean something while a controller drives them
+    input.hasActions = input.controllers[0].isActive || input.controllers[1].isActive;
+
+    for (uint32_t i = 0; i < VrActionCount; i++) {
+      if (uint32_t(vrOpenVrActionContext(VrAction(i))) != context)
+        continue;
+
+      vr::InputDigitalActionData_t data = { };
+
+      if (vrInput->GetDigitalActionData(m_actions.digital[i], &data, sizeof(data)) == vr::VRInputError_None)
+        input.actions.setPressed(VrAction(i), data.bActive && data.bState);
+    }
+
+    auto readStick = [vrInput] (uint64_t handle) {
+      vr::InputAnalogActionData_t data = { };
+      VrVector2 result;
+
+      if (vrInput->GetAnalogActionData(handle, &data, sizeof(data)) == vr::VRInputError_None && data.bActive)
+        result = { data.x, data.y };
+
+      return result;
+    };
+
+    input.actions.move = readStick(m_actions.move[context]);
+
+    if (m_context == VrInputContext::Game)
+      input.actions.turn = readStick(m_actions.turn);
   }
 
 
@@ -594,14 +725,17 @@ namespace dxvk {
 
 
   void VrOpenVrBackend::applyHaptic(VrHand hand, float amplitude, int64_t durationNs) {
-    if (!m_runtime || !m_runtime->system)
+    if (!m_inputReady)
       return;
 
-    uint32_t index = controllerIndex(hand);
-    uint16_t micros = vrHapticMicroseconds(amplitude, durationNs);
+    // Frequency the Touch controllers vibrate at by default
+    constexpr float FrequencyHz = 160.0f;
 
-    if (micros)
-      m_runtime->system->TriggerHapticPulse(index, 0, micros);
+    float seconds  = float(std::max<int64_t>(0, durationNs)) * 1e-9f;
+    float strength = std::max(0.0f, std::min(1.0f, amplitude));
+
+    if (seconds > 0.0f && strength > 0.0f)
+      m_runtime->input->TriggerHapticVibrationAction(m_actions.haptic[uint32_t(hand)], 0.0f, seconds, FrequencyHz, strength);
   }
 
 }
