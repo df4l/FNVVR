@@ -25,6 +25,22 @@ namespace dxvk {
       return address + size <= regionEnd;
     }
 
+    bool readCallTarget(uintptr_t site, uintptr_t* target) {
+      if (!isReadable(site, CallLength))
+        return false;
+
+      const uint8_t* code = reinterpret_cast<const uint8_t*>(site);
+
+      if (code[0] != CallOpcode)
+        return false;
+
+      int32_t displacement = 0;
+      std::memcpy(&displacement, code + 1, sizeof(displacement));
+
+      *target = site + CallLength + displacement;
+      return true;
+    }
+
   }
 
 
@@ -44,26 +60,22 @@ namespace dxvk {
   }
 
 
+  bool VrGameMemory::callsTo(
+          uintptr_t             site,
+          uintptr_t             target) {
+    uintptr_t currentTarget = 0;
+    return readCallTarget(site, &currentTarget) && currentTarget == target;
+  }
+
+
   bool VrGameMemory::redirectCall(
           uintptr_t             site,
           uintptr_t             expectedTarget,
     const void*                 newTarget) {
-    if (!isReadable(site, CallLength))
+    if (!callsTo(site, expectedTarget))
       return false;
 
     uint8_t* code = reinterpret_cast<uint8_t*>(site);
-
-    if (code[0] != CallOpcode)
-      return false;
-
-    int32_t displacement = 0;
-    std::memcpy(&displacement, code + 1, sizeof(displacement));
-
-    uintptr_t currentTarget = site + CallLength + displacement;
-
-    if (currentTarget != expectedTarget)
-      return false;
-
     DWORD oldProtect = 0;
 
     if (!VirtualProtect(code, CallLength, PAGE_EXECUTE_READWRITE, &oldProtect))

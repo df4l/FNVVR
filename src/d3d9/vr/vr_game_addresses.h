@@ -110,6 +110,58 @@ namespace dxvk {
     constexpr uintptr_t StaticMenuBackgroundReadSite = 0x0086F4D5;
     constexpr uint8_t   StaticMenuBackgroundRead[] = { 0x0F, 0xB6, 0x15, 0x28, 0xEA, 0x1D, 0x01 };
 
+    /**
+     * Menus with a 3D scene of their own (lockpicking, casino games, ...),
+     * see findings/menu-scenes.md. The game draws them in Main::Swap's menu
+     * branch, which renders the frozen menu background instead of the world
+     * and is not taken while the static background is off. That branch's
+     * dispatch function checks each menu with IsMenuActive (__cdecl, menu id
+     * and 0, returns a bool) and calls the menu's scene render (__cdecl
+     * without arguments). Each entry starts at the menu's check
+     * (push 0 / push id / call IsMenuActive / ... / call render).
+     */
+    constexpr uintptr_t IsMenuActive = 0x00702680;
+
+    struct MenuScene {
+      uintptr_t checkSite;
+      uint32_t  menuId;
+      uintptr_t render;
+    };
+
+    constexpr uintptr_t MenuSceneActiveCallOffset = 0x07;
+    constexpr uintptr_t MenuSceneRenderCallOffset = 0x16;
+
+    /** Surgery, LockPick, SlotMachine, BlackJack, Roulette, Caravan, LoveTester, SPECIALBook */
+    constexpr MenuScene MenuScenes[] = {
+      { 0x0087299C, 0x41E, 0x00709AE0 },
+      { 0x008729B7, 0x3F6, 0x00709AF0 },
+      { 0x008729D2, 0x438, 0x00709B00 },
+      { 0x008729ED, 0x439, 0x00709B10 },
+      { 0x00872A08, 0x43A, 0x00709B20 },
+      { 0x00872A23, 0x43B, 0x00709B30 },
+      { 0x00872A3E, 0x432, 0x007948D0 },
+      { 0x00872AAD, 0x424, 0x007C9CA0 },
+    };
+
+    /**
+     * Display settings (Setting objects, the value is at +4), see
+     * findings/resolution.md. The renderer setup copies iSize W and iSize H
+     * into its own globals once, at the checked site, long after the first
+     * Direct3DCreate9 (the launcher check). bFull Screen is read at run time
+     * through GetIsFullscreen, which is checked too.
+     */
+    constexpr uintptr_t SettingValue          = 0x4;
+    constexpr uintptr_t SettingSizeWidth      = 0x011C73DC;
+    constexpr uintptr_t SettingSizeHeight     = 0x011C718C;
+    constexpr uintptr_t SettingFullScreen     = 0x011C77B4;
+    constexpr uintptr_t RendererSizeReadSite  = 0x004DA730;
+    constexpr uint8_t   RendererSizeRead[] = {
+      0xB9, 0xDC, 0x73, 0x1C, 0x01, 0xE8, 0xB6, 0x5C, 0xF7, 0xFF, 0xA3, 0x7C, 0x94, 0x18, 0x01,
+      0xB9, 0x8C, 0x71, 0x1C, 0x01, 0xE8, 0xA7, 0x5C, 0xF7, 0xFF, 0xA3, 0x80, 0x94, 0x18, 0x01,
+    };
+    constexpr uintptr_t GetIsFullscreen = 0x00446E10;
+    constexpr uint8_t   GetIsFullscreenPrologue[] = { 0x55, 0x8B, 0xEC, 0xB9, 0xB4, 0x77, 0x1C, 0x01 };
+
     /** LoadingMenu*, not null while a loading screen is shown */
     constexpr uintptr_t LoadingMenu = 0x011DA0C0;
 

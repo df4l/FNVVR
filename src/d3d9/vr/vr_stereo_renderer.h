@@ -11,6 +11,7 @@
 #include "vr_game_camera.h"
 #include "vr_game_state.h"
 #include "vr_hud_layers.h"
+#include "vr_menu_scenes.h"
 #include "vr_preview_window.h"
 
 namespace dxvk {
@@ -19,8 +20,8 @@ namespace dxvk {
    * \brief Where the panels are placed
    *
    * Set by \c d3d9.vrPanelDistance, \c d3d9.vrPanelWidth,
-   * \c d3d9.vrHudDistance, \c d3d9.vrHudWidth and \c d3d9.vrHudHeight in
-   * dxvk.conf. The panel of the main menu and the loading screens covers
+   * \c d3d9.vrHudDistance, \c d3d9.vrHudWidth, \c d3d9.vrHudHeight and
+   * \c d3d9.vrHudMessagesOffset in dxvk.conf. The panel of the main menu and the loading screens covers
    * about 53 degrees horizontally. The HUD panel is wider, so that the
    * messages at its edges stay readable, and sits slightly below eye level.
    * Menus opened in game use the HUD distance and width.
@@ -36,6 +37,9 @@ namespace dxvk {
     float hudWidth    = 1.5f;
     /// Height of the HUD panel's centre relative to the eyes, in metres
     float hudHeight   = -0.15f;
+    /// How far the messages and objectives, drawn by the game in the top
+    /// left corner, are moved towards the centre of the HUD panel, in metres
+    float hudMessagesOffset = 0.25f;
   };
 
   /**
@@ -56,7 +60,9 @@ namespace dxvk {
    * is never shown, draws them alone into the panel's texture instead of the
    * backbuffer, with the other HUD groups hidden. Menus opened in game
    * (pause, dialogue, containers, ...) are drawn the same way, without the
-   * HUD, and shown on the menu panel. The Pip-Boy is not shown.
+   * HUD, and shown on the menu panel. Menus with a 3D scene of their own
+   * (lockpicking, casino games) get it drawn first, on an opaque
+   * background. The Pip-Boy is not shown.
    *
    * The main menu and the loading screens have no 3D scene. There, the game
    * draws a single frame, and the whole presented image, interface included,
@@ -147,6 +153,7 @@ namespace dxvk {
     // left eye's interface pass
     VrHudLayers            m_hudLayers;
     Com<IDirect3DTexture9> m_hudTexture;
+    Com<IDirect3DTexture9> m_hudPanelTexture;
     Com<IDirect3DTexture9> m_menuTexture;
     InterfaceLayer m_layer = InterfaceLayer::None;
     bool   m_hudAvailable  = false;
@@ -160,6 +167,12 @@ namespace dxvk {
     // world stays live and in stereo behind menus opened in game
     bool   m_menuBackgroundFound = false;
     bool   m_loggedMenuBackground = false;
+
+    // That branch of the game also draws the 3D scenes of menus such as
+    // lockpicking, so they are drawn into the menu panel instead
+    VrMenuScenes            m_menuScenes;
+    Com<IDirect3DSurface9>  m_menuDepth;
+    bool   m_menuDepthFailed = false;
 
     // Latest tracked head pose, used to place the panel
     VrPose m_headPose;
@@ -242,9 +255,15 @@ namespace dxvk {
             void*                 arg0,
             uint32_t              arg1);
 
+    void renderMenuScenes();
+
+    bool createMenuDepth();
+
     void isolateHud();
 
     bool createInterfaceTextures();
+
+    bool composeHud();
 
     void submitHud();
 

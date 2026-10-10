@@ -12,6 +12,7 @@
 #include "vr_emulator_backend.h"
 #include "vr_emulator_keyboard.h"
 #include "vr_extension_provider.h"
+#include "vr_game_space.h"
 #include "vr_gamepad_head.h"
 #include "vr_gamepad_hook.h"
 #include "vr_stereo_renderer.h"
@@ -23,11 +24,13 @@ namespace dxvk {
   static bool                      g_vrInitialized = false;
 
 
-  VrSystem::VrSystem(std::unique_ptr<IVRBackend> backend, bool showPreview, const VrPanelConfig& panel)
+  VrSystem::VrSystem(std::unique_ptr<IVRBackend> backend, bool showPreview,
+    const VrPanelConfig& panel, bool headsetResolution)
   : m_backend(std::move(backend)),
     m_extensionProvider(std::make_unique<VrExtensionProvider>(*m_backend)),
     m_showPreview(showPreview),
-    m_panelConfig(panel) { }
+    m_panelConfig(panel),
+    m_headsetResolution(headsetResolution) { }
 
 
   VrSystem::~VrSystem() {
@@ -70,6 +73,7 @@ namespace dxvk {
     panel.hudDistance = config.getOption<float>("d3d9.vrHudDistance", panel.hudDistance);
     panel.hudWidth    = config.getOption<float>("d3d9.vrHudWidth",    panel.hudWidth);
     panel.hudHeight   = config.getOption<float>("d3d9.vrHudHeight",   panel.hudHeight);
+    panel.hudMessagesOffset = config.getOption<float>("d3d9.vrHudMessagesOffset", panel.hudMessagesOffset);
 
     if (auto* emulator = dynamic_cast<VrEmulatorBackend*>(backend.get())) {
       VrEmulatorKeyboard keyboard;
@@ -93,8 +97,41 @@ namespace dxvk {
         VrGamepadHook::install(gamepad);
     }
 
-    g_vrSystem.reset(new VrSystem(std::move(backend), showPreview, panel));
+    bool headsetResolution = config.getOption<bool>("d3d9.vrHeadsetResolution", true);
+
+    g_vrSystem.reset(new VrSystem(std::move(backend), showPreview, panel, headsetResolution));
     DxvkInstance::registerExtensionProvider(g_vrSystem->m_extensionProvider.get());
+  }
+
+
+  void VrSystem::onInterfaceCreated() {
+    if (g_vrSystem)
+      g_vrSystem->chooseResolution();
+  }
+
+
+  void VrSystem::chooseResolution() {
+    if (!m_headsetResolution || m_resolutionChosen)
+      return;
+
+    m_resolutionChosen = true;
+
+    VrExtent eye = m_backend->recommendedEyeExtent();
+
+    if (!eye.width || !eye.height) {
+      Logger::warn("VR: The headset reported no eye resolution, the game keeps its own");
+      return;
+    }
+
+    VrExtent size = vrComputeGameResolution(eye, VrGameMinAspect);
+
+    if (!m_resolution.apply(size)) {
+      Logger::info("VR: The game's display settings were not found, the game keeps its own resolution");
+      return;
+    }
+
+    Logger::info(str::format("VR: The game renders at ", size.width, "x", size.height,
+      " in a window, for an eye resolution of ", eye.width, "x", eye.height));
   }
 
 
@@ -109,6 +146,9 @@ namespace dxvk {
 
 
   bool VrSystem::attachDevice(IDirect3DDevice9* device) {
+    // The renderer has read the resolution by the time the device exists
+    m_resolution.restoreSettings();
+
     if (m_hasSession)
       return true;
 

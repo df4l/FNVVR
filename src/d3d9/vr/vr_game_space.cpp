@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cmath>
 
 #include "vr_game_space.h"
@@ -42,6 +43,19 @@ namespace dxvk {
     frustum.top    = std::tan(fov.angleUp);
     frustum.bottom = std::tan(fov.angleDown);
     return frustum;
+  }
+
+
+  VrExtent vrComputeGameResolution(const VrExtent& eye, float minAspect) {
+    // The tolerance keeps an exact ratio such as 1920 * 4/3 from being
+    // rounded up by the float error of minAspect
+    uint32_t minWidth = uint32_t(std::ceil(double(eye.height) * double(minAspect) - 0.01));
+
+    VrExtent result;
+    result.width  = std::max(eye.width, minWidth);
+    result.height = eye.height;
+    result.width += result.width & 1;
+    return result;
   }
 
 }

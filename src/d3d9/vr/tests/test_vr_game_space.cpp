@@ -146,3 +146,19 @@ TEST_CASE(frustum_uses_tangents_of_the_field_of_view) {
   CHECK_NEAR(frustum.top, 1.0f, 1e-5);
   CHECK_NEAR(frustum.bottom, -1.0f, 1e-5);
 }
+
+
+TEST_CASE(narrow_eye_is_widened_to_the_interface_aspect) {
+  VrExtent size = vrComputeGameResolution({ 1832, 1920 }, VrGameMinAspect);
+
+  CHECK(size.height == 1920);
+  CHECK(size.width  == 2560);
+}
+
+
+TEST_CASE(wide_eye_keeps_its_size_and_width_is_even) {
+  VrExtent size = vrComputeGameResolution({ 2501, 1400 }, VrGameMinAspect);
+
+  CHECK(size.height == 1400);
+  CHECK(size.width  == 2502);
+}
