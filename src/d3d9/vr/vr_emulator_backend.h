@@ -96,6 +96,10 @@ namespace dxvk {
 
     void hidePanel(VrPanelId id) override;
 
+    void showPointer(VrHand hand, const VrPointerSubmission& pointer) override;
+
+    void hidePointer(VrHand hand) override;
+
     void applyHaptic(VrHand hand, float amplitude, int64_t durationNs) override;
 
     /**
@@ -128,6 +132,8 @@ namespace dxvk {
 
     bool isPanelVisible(VrPanelId id) const { return m_panelVisible[uint32_t(id)]; }
 
+    bool isPointerVisible(VrHand hand) const { return m_pointerVisible[uint32_t(hand)]; }
+
     /**
      * \brief Last haptic pulse requested for a hand, for tests
      */
@@ -154,6 +160,7 @@ namespace dxvk {
     uint32_t          m_emptyFrames = 0;
     uint32_t          m_submittedPanels = 0;
     bool              m_panelVisible[VrPanelCount] = { };
+    bool              m_pointerVisible[VrHandCount] = { };
     float             m_haptic[VrHandCount] = { };
 
     VrPose scriptedPose(int64_t timeNs) const;

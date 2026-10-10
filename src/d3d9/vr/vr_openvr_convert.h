@@ -66,4 +66,30 @@ namespace dxvk {
    */
   const char* vrOpenVrHapticPath(VrHand hand);
 
+  /**
+   * \brief Path of the action set read in every context
+   *
+   * It holds the hand poses, which are needed in game and in menus.
+   */
+  constexpr const char* VrOpenVrHandsActionSet = "/actions/hands";
+
+  /**
+   * \brief Path of the pose action a hand points with
+   */
+  const char* vrOpenVrAimPath(VrHand hand);
+
+  /**
+   * \brief Places a laser's overlay so that it faces the eye
+   *
+   * An overlay is a flat quad, so the laser is a narrow quad whose height
+   * runs along the laser and which is turned around the laser towards the
+   * eye. Without that turn it would be seen edge-on from some angles.
+   *
+   * \param [in] origin Start of the laser, which goes along its -Z axis
+   * \param [in] length Length of the laser, in metres
+   * \param [in] eye Position of the eye the laser faces
+   * \param [out] m Transform of the overlay's centre
+   */
+  void vrComputeBeamTransform(const VrPose& origin, float length, const VrVector3& eye, float m[3][4]);
+
 }

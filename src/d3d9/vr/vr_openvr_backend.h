@@ -2,6 +2,7 @@
 
 #include <array>
 #include <memory>
+#include <vector>
 
 #include "vr_backend.h"
 
@@ -80,6 +81,10 @@ namespace dxvk {
 
     void hidePanel(VrPanelId id) override;
 
+    void showPointer(VrHand hand, const VrPointerSubmission& pointer) override;
+
+    void hidePointer(VrHand hand) override;
+
     void applyHaptic(VrHand hand, float amplitude, int64_t durationNs) override;
 
   private:
@@ -119,6 +124,21 @@ namespace dxvk {
 
     void destroyPanels();
 
+    struct Pointer {
+      uint64_t handle  = 0;
+      bool     visible = false;
+      bool     failed  = false;
+    };
+
+    bool createPointer(VrHand hand);
+
+    void destroyPointers();
+
+    /**
+     * \brief Time from now until the next frame reaches the eyes, in seconds
+     */
+    float secondsToPhotons() const;
+
     std::unique_ptr<Runtime>          m_runtime;
     std::unique_ptr<VrEyeTransition>  m_transition;
     VrGraphicsBinding                 m_binding;
@@ -134,6 +154,8 @@ namespace dxvk {
       uint64_t move[2]                 = { };
       uint64_t turn[2]                 = { };
       uint64_t haptic[VrHandCount]     = { };
+      uint64_t hands                   = 0;
+      uint64_t aim[VrHandCount]        = { };
     };
 
     Actions                           m_actions;
@@ -143,6 +165,10 @@ namespace dxvk {
 
     // One overlay per panel, created when the panel is first shown
     std::array<Panel, VrPanelCount>   m_panels;
+
+    // One overlay per hand for its laser, created when it is first shown
+    std::array<Pointer, VrHandCount>  m_pointers;
+    std::vector<uint8_t>              m_pointerImage;
 
     // Each step of the first frame is logged once, so that a failure
     // inside the runtime can be located from the log

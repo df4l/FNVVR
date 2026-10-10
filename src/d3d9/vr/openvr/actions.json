@@ -13,9 +13,23 @@
     {
       "name": "/actions/menu",
       "usage": "single"
+    },
+    {
+      "name": "/actions/hands",
+      "usage": "single"
     }
   ],
   "actions": [
+    {
+      "name": "/actions/hands/in/aim_left",
+      "type": "pose",
+      "requirement": "suggested"
+    },
+    {
+      "name": "/actions/hands/in/aim_right",
+      "type": "pose",
+      "requirement": "suggested"
+    },
     {
       "name": "/actions/game/in/move",
       "type": "vector2",
@@ -142,6 +156,9 @@
       "language_tag": "en_US",
       "/actions/game": "Game",
       "/actions/menu": "Menus",
+      "/actions/hands": "Hands",
+      "/actions/hands/in/aim_left": "Left hand pointer",
+      "/actions/hands/in/aim_right": "Right hand pointer",
       "/actions/game/in/move": "Move",
       "/actions/game/in/turn": "Turn",
       "/actions/game/in/attack": "Attack",
@@ -157,15 +174,15 @@
       "/actions/game/out/haptic_left": "Left hand vibration",
       "/actions/game/out/haptic_right": "Right hand vibration",
       "/actions/menu/in/navigate": "Navigate",
-      "/actions/menu/in/secondary": "Secondary stick (lockpick screwdriver)",
+      "/actions/menu/in/secondary": "Secondary stick (lockpick screwdriver, pointer: scroll)",
       "/actions/menu/in/select": "Select",
       "/actions/menu/in/back": "Back",
       "/actions/menu/in/alternate": "Alternate action",
       "/actions/menu/in/option": "Option",
       "/actions/menu/in/previous": "Previous tab",
       "/actions/menu/in/next": "Next tab",
-      "/actions/menu/in/left_trigger": "Left trigger",
-      "/actions/menu/in/right_trigger": "Right trigger (V.A.T.S.: target the body part)"
+      "/actions/menu/in/left_trigger": "Left trigger (pointer: click)",
+      "/actions/menu/in/right_trigger": "Right trigger (pointer: click, V.A.T.S.: target the body part)"
     }
   ]
 }
