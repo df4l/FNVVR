@@ -18,9 +18,8 @@ namespace dxvk {
    *   that update the whole model is moved so that its weapon node lands
    *   on the hand, turned from the game's camera to the hand, and updated
    *   again. The first-person camera is moved to the eye, so that the model
-   *   is seen with the right parallax in each eye. The bones from each
-   *   shoulder to the wrist are then folded into the wrist, so that only
-   *   the hands are drawn.
+   *   is seen with the right parallax in each eye. The meshes skinned to
+   *   the upper arms are then culled, so that only the hands are drawn.
    * - TESObjectWEAP::Fire creates the player's projectiles from the muzzle
    *   the game animated in front of its camera. They start from the muzzle
    *   drawn in the hand instead, along the direction the hand points, with
