@@ -34,6 +34,10 @@ namespace dxvk {
     // muzzle a few levels below the weapon
     constexpr uint32_t MaxModelDepth = 16;
 
+    // How close the other controller must come to where the game holds the
+    // weapon with that hand for its grip to take the weapon
+    constexpr float TwoHandedGripDistance = 0.15f * VrGameUnitsPerMetre;
+
     VrWeaponHand* g_weaponHand = nullptr;
 
     template<typename T>
@@ -243,14 +247,21 @@ namespace dxvk {
 
   void VrWeaponHand::beginFrame(
     const VrGameCameraPose&     gameCamera,
-    const VrGameCameraPose*     hand) {
-    m_gameCamera = gameCamera;
-    m_hasHand    = hand != nullptr;
+    const VrGameCameraPose*     hand,
+    const VrGameCameraPose*     otherHand,
+          bool                  grip) {
+    m_gameCamera   = gameCamera;
+    m_hasHand      = hand != nullptr;
+    m_hasOtherHand = otherHand != nullptr;
+    m_grip         = grip;
 
     if (hand)
       m_hand = *hand;
     else
       m_hasAim = false;
+
+    if (otherHand)
+      m_otherHand = *otherHand;
   }
 
 
@@ -347,16 +358,40 @@ namespace dxvk {
       ? findObject(root, VrGame::WeaponNodeName) : nullptr;
 
     if (!weapon) {
-      m_hasAim = false;
+      m_hasAim    = false;
+      m_twoHanded = false;
       showArms(root);
       return;
+    }
+
+    // Where the game animates the weapon and the other hand, before the
+    // model is moved
+    uint8_t* otherHand = findObject(root, VrGame::LeftHandNodeName);
+    uint8_t* forearm   = otherHand ? field<uint8_t*>(otherHand, VrGame::ObjectParent) : nullptr;
+
+    VrVector3 drawnWeapon = readVector(weapon, VrGame::ObjectWorldTranslation);
+    VrVector3 drawnHand   = otherHand ? readVector(otherHand, VrGame::ObjectWorldTranslation) : drawnWeapon;
+
+    VrGameTransform drawnForearm;
+
+    if (forearm) {
+      drawnForearm.rotate    = readRotation(forearm, VrGame::ObjectWorldRotation);
+      drawnForearm.translate = readVector(forearm, VrGame::ObjectWorldTranslation);
     }
 
     VrGameCameraPose hand = m_hand;
     hand.position = hand.position - shift;
 
-    VrGameTransform rig = vrComputeRigToHand(m_gameCamera,
-      readVector(weapon, VrGame::ObjectWorldTranslation), hand);
+    VrGameTransform rig = vrComputeRigToHand(m_gameCamera, drawnWeapon, hand);
+
+    // With both hands on the weapon, it points along the line between them
+    VrVector3 support = rig.rotate * (drawnHand - drawnWeapon);
+    updateTwoHanded(forearm != nullptr, support);
+
+    if (m_twoHanded) {
+      hand = vrComputeTwoHandedPose(hand, support, m_otherHand.position - m_hand.position);
+      rig  = vrComputeRigToHand(m_gameCamera, drawnWeapon, hand);
+    }
 
     // The new world transform of the root, brought back to its parent's frame
     VrGameRotation worldRotation = rig.rotate * readRotation(root, VrGame::ObjectWorldRotation);
@@ -373,6 +408,9 @@ namespace dxvk {
     writeRotation(root, VrGame::ObjectLocalRotation, rotation);
     writeVector(root, VrGame::NodeLocalTranslate, translation);
 
+    if (forearm && m_hasOtherHand && !m_twoHanded)
+      placeOtherHand(forearm, drawnForearm, drawnHand, shift, updateData);
+
     hideArms(root);
 
     uint8_t* muzzle = findObject(weapon, VrGame::ProjectileNodeName);
@@ -382,12 +420,69 @@ namespace dxvk {
 
     // Relative to the root, which the game places at the player
     m_muzzleOffset = readVector(muzzle ? muzzle : weapon, VrGame::ObjectWorldTranslation) - drawnRoot;
-    m_aimDirection = m_hand.forward;
+    m_aimDirection = hand.forward;
     m_hasAim       = true;
 
     if (!m_loggedActive) {
       Logger::info("VR: The weapon is in the right hand");
       m_loggedActive = true;
+    }
+  }
+
+
+  void VrWeaponHand::updateTwoHanded(bool canHold, const VrVector3& support) {
+    if (!canHold || !m_hasOtherHand || !m_grip) {
+      m_twoHanded = false;
+      return;
+    }
+
+    // The grip takes the weapon when the controller comes near where the
+    // game holds it, and keeps it until it is released
+    if (!m_twoHanded)
+      m_twoHanded = vrLength(m_hand.position + support - m_otherHand.position) <= TwoHandedGripDistance;
+
+    if (m_twoHanded && !m_loggedTwoHanded) {
+      Logger::info("VR: The weapon is held with both hands");
+      m_loggedTwoHanded = true;
+    }
+  }
+
+
+  void VrWeaponHand::placeOtherHand(
+          uint8_t*              forearm,
+    const VrGameTransform&      drawnForearm,
+    const VrVector3&            drawnHand,
+    const VrVector3&            shift,
+          void*                 updateData) {
+    // Like the whole model for the weapon hand: what the game animates
+    // relative to its camera is kept relative to the controller, and the
+    // hand bone lands on it. The forearm carries the hand, and the hand's
+    // meshes only use bones below the forearm.
+    VrGameCameraPose hand = m_otherHand;
+    hand.position = hand.position - shift;
+
+    VrGameTransform rig = vrComputeRigToHand(m_gameCamera, drawnHand, hand);
+
+    VrGameRotation worldRotation = rig.rotate * drawnForearm.rotate;
+    VrVector3 worldTranslation   = rig.rotate * drawnForearm.translate + rig.translate;
+
+    ParentFrame parent = parentFrame(forearm);
+
+    VrGameRotation rotation = readRotation(forearm, VrGame::ObjectLocalRotation);
+    VrVector3 translation   = readVector(forearm, VrGame::NodeLocalTranslate);
+
+    writeRotation(forearm, VrGame::ObjectLocalRotation, vrTranspose(parent.rotate) * worldRotation);
+    writeVector(forearm, VrGame::NodeLocalTranslate, parent.toLocal(worldTranslation));
+    updateObject(forearm, updateData);
+
+    // The next eye's update starts from the game's pose again
+    writeRotation(forearm, VrGame::ObjectLocalRotation, rotation);
+    writeVector(forearm, VrGame::NodeLocalTranslate, translation);
+
+    if (!m_loggedOtherHand) {
+      auto name = field<const char*>(forearm, VrGame::ObjectName);
+      Logger::info(str::format("VR: The left hand follows its controller, moved by '", name ? name : "", "'"));
+      m_loggedOtherHand = true;
     }
   }
 

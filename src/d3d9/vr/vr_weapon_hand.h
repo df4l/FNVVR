@@ -18,8 +18,12 @@ namespace dxvk {
    *   that update the whole model is moved so that its weapon node lands
    *   on the hand, turned from the game's camera to the hand, and updated
    *   again. The first-person camera is moved to the eye, so that the model
-   *   is seen with the right parallax in each eye. The meshes skinned to
-   *   the upper arms are then culled, so that only the hands are drawn.
+   *   is seen with the right parallax in each eye. The left forearm is
+   *   then moved so that the left hand lands on the left controller, unless
+   *   the left hand holds the weapon: the weapon then points along the line
+   *   between the hands and the left hand stays where the game animates it
+   *   on the weapon. The meshes skinned to the upper arms are culled, so
+   *   that only the hands are drawn.
    * - TESObjectWEAP::Fire creates the player's projectiles from the muzzle
    *   the game animated in front of its camera. They start from the muzzle
    *   drawn in the hand instead, along the direction the hand points, with
@@ -46,10 +50,16 @@ namespace dxvk {
      *    for, before the VR layer replaced it
      * \param [in] hand Pose of the hand holding the weapon in the game world,
      *    or \c nullptr if the weapon stays where the game puts it
+     * \param [in] otherHand Pose of the other hand in the game world, or
+     *    \c nullptr if it is not tracked
+     * \param [in] grip Whether the other hand's grip on the weapon is held:
+     *    it takes the weapon once it comes near it, and lets go on release
      */
     void beginFrame(
       const VrGameCameraPose&     gameCamera,
-      const VrGameCameraPose*     hand);
+      const VrGameCameraPose*     hand,
+      const VrGameCameraPose*     otherHand,
+            bool                  grip);
 
     /**
      * \brief Called before the game places the first-person camera for an eye
@@ -68,6 +78,12 @@ namespace dxvk {
     VrGameCameraPose m_gameCamera;
     VrGameCameraPose m_hand;
     bool             m_hasHand = false;
+    VrGameCameraPose m_otherHand;
+    bool             m_hasOtherHand = false;
+    bool             m_grip = false;
+
+    // Whether the other hand holds the weapon
+    bool             m_twoHanded = false;
 
     // Set before PlaceCamera, used by the update it makes
     uint8_t*         m_main = nullptr;
@@ -83,6 +99,8 @@ namespace dxvk {
     bool             m_loggedActive = false;
     bool             m_loggedFrame  = false;
     bool             m_loggedArms   = false;
+    bool             m_loggedOtherHand = false;
+    bool             m_loggedTwoHanded = false;
 
     // Arm meshes culled by the VR layer, compared but not dereferenced
     // until they are found in the model again
@@ -100,6 +118,15 @@ namespace dxvk {
             float spreadHeading, float spreadPitch, uint32_t a15);
 
     void placeModel(uint8_t* root, void* updateData);
+
+    void updateTwoHanded(bool canHold, const VrVector3& support);
+
+    void placeOtherHand(
+            uint8_t*              forearm,
+      const VrGameTransform&      drawnForearm,
+      const VrVector3&            drawnHand,
+      const VrVector3&            shift,
+            void*                 updateData);
 
     void hideArms(uint8_t* root);
 

@@ -1,3 +1,5 @@
+#include <cmath>
+
 #include "test.h"
 
 #include "../vr_weapon_aim.h"
@@ -90,4 +92,33 @@ TEST_CASE(aim_angles_follow_game_convention) {
   // Positive pitch looks down
   VrHeadAngles down = vrComputeAimAngles({ 0.0f, 1.0f, -1.0f });
   CHECK_NEAR(down.pitch, Pi / 4.0f, 1e-5);
+}
+
+
+TEST_CASE(two_handed_pose_turns_towards_the_supporting_hand) {
+  VrGameCameraPose hand = northFacing({ 5.0f, 6.0f, 7.0f });
+
+  VrGameCameraPose turned = vrComputeTwoHandedPose(hand, { 0.0f, 20.0f, 0.0f }, { 30.0f, 0.0f, 0.0f });
+  checkVector(turned.forward, 1.0f, 0.0f, 0.0f);
+  checkVector(turned.up, 0.0f, 0.0f, 1.0f);
+  checkVector(turned.right, 0.0f, -1.0f, 0.0f);
+  checkVector(turned.position, 5.0f, 6.0f, 7.0f);
+
+  float h = std::sqrt(0.5f);
+  VrGameCameraPose raised = vrComputeTwoHandedPose(hand, { 0.0f, 20.0f, 0.0f }, { 0.0f, 10.0f, 10.0f });
+  checkVector(raised.forward, 0.0f, h, h);
+  checkVector(raised.up, 0.0f, -h, h);
+  checkVector(raised.right, 1.0f, 0.0f, 0.0f);
+}
+
+
+TEST_CASE(two_handed_pose_keeps_the_hand_when_aligned) {
+  VrGameCameraPose hand = northFacing({ 0.0f, 0.0f, 0.0f });
+
+  VrGameCameraPose same = vrComputeTwoHandedPose(hand, { 0.0f, 20.0f, -5.0f }, { 0.0f, 40.0f, -10.0f });
+  checkVector(same.forward, 0.0f, 1.0f, 0.0f);
+  checkVector(same.up, 0.0f, 0.0f, 1.0f);
+
+  VrGameCameraPose none = vrComputeTwoHandedPose(hand, { 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f });
+  checkVector(none.forward, 0.0f, 1.0f, 0.0f);
 }

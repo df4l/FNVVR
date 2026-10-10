@@ -58,6 +58,26 @@ namespace dxvk {
     const VrGameCameraPose& hand);
 
   /**
+   * \brief Turns the hand holding the weapon towards the supporting hand
+   *
+   * With both hands on the weapon, the line between the hands decides
+   * where it points. The hand is turned by the smallest rotation that
+   * brings the point where the game animates the supporting hand onto the
+   * line towards the other controller, so that the hand's roll is kept.
+   *
+   * \param [in] hand Pose of the hand holding the weapon
+   * \param [in] support Offset from \p hand to where the supporting hand
+   *    holds the weapon, with the weapon held by \p hand alone
+   * \param [in] target Offset from \p hand to the supporting hand
+   * \returns \p hand turned, or \p hand unchanged if either offset is
+   *    zero or the two point in nearly the same or opposite directions
+   */
+  VrGameCameraPose vrComputeTwoHandedPose(
+    const VrGameCameraPose& hand,
+    const VrVector3&        support,
+    const VrVector3&        target);
+
+  /**
    * \brief Heading and pitch of a direction in the game's convention
    *
    * Heading 0 faces north (+Y) and grows clockwise, pitch is positive
