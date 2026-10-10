@@ -144,6 +144,26 @@ namespace dxvk {
     };
 
     /**
+     * Lockpicking scene. LockPickMenu's setup (0x0078E1C0) attaches
+     * LockInterface01.NIF and BobbyPin01.NIF to the NiNode* held here. The
+     * lock model has a soft dark disc under its frame, a NiTriStrips named
+     * "shadow", that darkens the frozen menu background around the lock.
+     */
+    constexpr uint32_t  LockPickMenuId    = 0x3F6;
+    constexpr uintptr_t LockPickSceneRoot = 0x011DA24C;
+    constexpr char      LockPickBackdrop[] = "shadow";
+
+    /**
+     * NiObjectNET name (const char*), NiNode children (NiTArray: entries,
+     * then the used size, which may include null entries) and the
+     * GetAsNiNode vtable slot (returns this for nodes, null for geometry).
+     */
+    constexpr uintptr_t ObjectName          = 0x08;
+    constexpr uintptr_t ObjectGetAsNodeSlot = 0x0C;
+    constexpr uintptr_t NodeChildren        = 0xA0;
+    constexpr uintptr_t NodeChildCount      = 0xA6;
+
+    /**
      * Display settings (Setting objects, the value is at +4), see
      * findings/resolution.md. The renderer setup copies iSize W and iSize H
      * into its own globals once, at the checked site, long after the first

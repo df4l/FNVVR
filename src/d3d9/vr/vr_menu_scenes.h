@@ -11,7 +11,8 @@ namespace dxvk {
    * frozen menu background instead of the world. That background is turned
    * off in VR, so the game draws the world and never reaches the scenes.
    * The VR layer calls the game's own scene functions instead, for the
-   * menus that are open. See findings/menu-scenes.md.
+   * menus that are open. The dark disc the lock model has around it, meant
+   * for the frozen background, is hidden. See findings/menu-scenes.md.
    *
    * Only used on the game's main thread, while the game draws a frame.
    */
