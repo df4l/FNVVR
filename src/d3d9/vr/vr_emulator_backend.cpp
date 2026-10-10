@@ -191,6 +191,16 @@ namespace dxvk {
   }
 
 
+  void VrEmulatorBackend::showPointer(VrHand hand, const VrPointerSubmission& pointer) {
+    m_pointerVisible[uint32_t(hand)] = true;
+  }
+
+
+  void VrEmulatorBackend::hidePointer(VrHand hand) {
+    m_pointerVisible[uint32_t(hand)] = false;
+  }
+
+
   void VrEmulatorBackend::applyHaptic(VrHand hand, float amplitude, int64_t durationNs) {
     m_haptic[uint32_t(hand)] = amplitude;
   }

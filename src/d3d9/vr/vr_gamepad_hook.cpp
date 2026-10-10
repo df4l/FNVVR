@@ -30,6 +30,7 @@ namespace dxvk {
     bool g_loggedHidden = false;
 
     bool       g_controllersActive = false;
+    bool       g_cursorMode        = false;
     VrPadState g_controllerPad;
     bool       g_loggedControllers = false;
 
@@ -139,6 +140,18 @@ namespace dxvk {
       return ERROR_SUCCESS;
     }
 
+    // The interface's own check: in cursor mode the interface sees no
+    // gamepad and switches to the mouse, while the game keeps the gamepad
+    DWORD WINAPI getInterfaceStateHook(DWORD index, XINPUT_STATE* state) {
+      DWORD result = getStateHook(index, state);
+
+      if (index != 0 || !g_cursorMode || !g_controllersActive)
+        return result;
+
+      *state = XINPUT_STATE();
+      return ERROR_DEVICE_NOT_CONNECTED;
+    }
+
   }
 
 
@@ -151,15 +164,21 @@ namespace dxvk {
     // The interface checks for a gamepad on its own, so hiding one or
     // reporting the controllers has to cover those calls as well
     if (patched && (options.hidePad || options.controllers)) {
-      const uintptr_t interfaceSites[] = {
-        VrGame::XInputInterfaceUpdateCallSite,
-        VrGame::XInputInterfaceSetupCallSite,
-        VrGame::XInputStartMenuCallSite,
+      struct InterfaceSite {
+        uintptr_t   site;
+        const void* hook;
       };
 
-      for (uintptr_t site : interfaceSites) {
-        if (!VrGameMemory::redirectCall(site, VrGame::XInputGetStateThunk, reinterpret_cast<const void*>(&getStateHook)))
-          Logger::warn(str::format("VR: Gamepad check at 0x", std::hex, site, " was not found, the menu cursor may stay hidden"));
+      // InterfaceManager::Update's check decides the interface's mode each frame
+      const InterfaceSite interfaceSites[] = {
+        { VrGame::XInputInterfaceUpdateCallSite, reinterpret_cast<const void*>(&getInterfaceStateHook) },
+        { VrGame::XInputInterfaceSetupCallSite,  reinterpret_cast<const void*>(&getStateHook) },
+        { VrGame::XInputStartMenuCallSite,       reinterpret_cast<const void*>(&getStateHook) },
+      };
+
+      for (const InterfaceSite& entry : interfaceSites) {
+        if (!VrGameMemory::redirectCall(entry.site, VrGame::XInputGetStateThunk, entry.hook))
+          Logger::warn(str::format("VR: Gamepad check at 0x", std::hex, entry.site, " was not found, the menu cursor may stay hidden"));
       }
     }
 
@@ -193,6 +212,11 @@ namespace dxvk {
   void VrGamepadHook::setControllerPad(bool active, const VrPadState& pad) {
     g_controllersActive = active;
     g_controllerPad     = pad;
+  }
+
+
+  void VrGamepadHook::setCursorMode(bool enabled) {
+    g_cursorMode = enabled;
   }
 
 

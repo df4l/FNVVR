@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <sstream>
 
 #include "../../util/log/log.h"
@@ -39,6 +40,22 @@ namespace dxvk {
     // order follows the index, so the HUD is drawn over the menu panel.
     constexpr std::array<const char*, VrPanelCount> PanelOverlayKeys  = { "fnvvr.panel", "fnvvr.hud.head" };
     constexpr std::array<const char*, VrPanelCount> PanelOverlayNames = { "Fallout: New Vegas", "Fallout: New Vegas HUD" };
+
+    // Overlay key and name of each hand's laser, indexed by VrHand. Lasers
+    // are drawn over the panels.
+    constexpr std::array<const char*, VrHandCount> PointerOverlayKeys  = { "fnvvr.pointer.left", "fnvvr.pointer.right" };
+    constexpr std::array<const char*, VrHandCount> PointerOverlayNames = { "Left laser", "Right laser" };
+    constexpr uint32_t PointerSortOrder = VrPanelCount;
+
+    // The laser's image: a few texels across, with soft edges, in the
+    // amber of the Pip-Boy's screen. Its height is stretched to the
+    // laser's length with the texel aspect.
+    constexpr uint32_t PointerImageWidth  = 8;
+    constexpr uint32_t PointerImageHeight = 8;
+    constexpr float    PointerWidth       = 0.005f;
+    constexpr uint8_t  PointerColor[3]    = { 0xFF, 0xB6, 0x42 };
+    constexpr float    PointerActiveAlpha   = 0.9f;
+    constexpr float    PointerInactiveAlpha = 0.35f;
 
     VrPose poseFromOpenVr(const vr::HmdMatrix34_t& matrix) {
       return vrPoseFromMatrix34(matrix.m);
@@ -282,6 +299,14 @@ namespace dxvk {
     for (uint32_t i = 0; i < VrHandCount; i++)
       action(vrOpenVrHapticPath(VrHand(i)), m_actions.haptic[i]);
 
+    if (input->GetActionSetHandle(VrOpenVrHandsActionSet, &m_actions.hands) != vr::VRInputError_None) {
+      Logger::err(str::format("VR: The action set ", VrOpenVrHandsActionSet, " is unknown to SteamVR"));
+      found = false;
+    }
+
+    for (uint32_t i = 0; i < VrHandCount; i++)
+      action(vrOpenVrAimPath(VrHand(i)), m_actions.aim[i]);
+
     if (found)
       Logger::info(str::format("VR: Controller actions loaded from ", manifest));
 
@@ -373,6 +398,7 @@ namespace dxvk {
 
   void VrOpenVrBackend::endSession() {
     destroyPanels();
+    destroyPointers();
     m_transition = nullptr;
 
     if (m_state != VrSessionState::Idle)
@@ -490,11 +516,14 @@ namespace dxvk {
     vr::IVRInput* vrInput = m_runtime->input;
     uint32_t context = uint32_t(m_context);
 
-    vr::VRActiveActionSet_t active = { };
-    active.ulActionSet          = m_actions.sets[context];
-    active.ulRestrictedToDevice = vr::k_ulInvalidInputValueHandle;
+    // The hand poses are read in every context
+    vr::VRActiveActionSet_t active[2] = { };
+    active[0].ulActionSet          = m_actions.sets[context];
+    active[0].ulRestrictedToDevice = vr::k_ulInvalidInputValueHandle;
+    active[1].ulActionSet          = m_actions.hands;
+    active[1].ulRestrictedToDevice = vr::k_ulInvalidInputValueHandle;
 
-    vr::EVRInputError error = vrInput->UpdateActionState(&active, sizeof(active), 1);
+    vr::EVRInputError error = vrInput->UpdateActionState(active, sizeof(active[0]), 2);
 
     if (error != vr::VRInputError_None) {
       if (!m_loggedInputError) {
@@ -530,6 +559,36 @@ namespace dxvk {
 
     input.actions.move = readStick(m_actions.move[context]);
     input.actions.turn = readStick(m_actions.turn[context]);
+
+    // The aim pose is where the controller points from. Without it the
+    // controller's own pose is used, which points slightly differently.
+    float predictedSeconds = secondsToPhotons();
+
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      VrControllerState& controller = input.controllers[i];
+      vr::InputPoseActionData_t data = { };
+
+      if (controller.isActive
+       && vrInput->GetPoseActionData(m_actions.aim[i], vr::TrackingUniverseStanding, predictedSeconds,
+            &data, sizeof(data)) == vr::VRInputError_None
+       && data.bActive && data.pose.bPoseIsValid)
+        controller.aimPose = poseFromOpenVr(data.pose.mDeviceToAbsoluteTracking);
+    }
+  }
+
+
+  float VrOpenVrBackend::secondsToPhotons() const {
+    vr::IVRSystem* system = m_runtime->system;
+
+    float sinceVsync = 0.0f;
+    uint64_t frame = 0;
+    system->GetTimeSinceLastVsync(&sinceVsync, &frame);
+
+    float toPhotons = system->GetFloatTrackedDeviceProperty(
+      vr::k_unTrackedDeviceIndex_Hmd, vr::Prop_SecondsFromVsyncToPhotons_Float);
+
+    float period = float(double(m_periodNs) * 1e-9);
+    return std::max(0.0f, period - sinceVsync + toPhotons);
   }
 
 
@@ -712,6 +771,108 @@ namespace dxvk {
 
   void VrOpenVrBackend::destroyPanels() {
     for (Panel& state : m_panels) {
+      if (state.handle)
+        m_runtime->overlay->DestroyOverlay(state.handle);
+
+      state.handle  = 0;
+      state.visible = false;
+    }
+  }
+
+
+  void VrOpenVrBackend::showPointer(VrHand hand, const VrPointerSubmission& pointer) {
+    if (m_state != VrSessionState::Running || pointer.length <= 0.0f || !createPointer(hand))
+      return;
+
+    vr::IVROverlay* overlay = m_runtime->overlay;
+    Pointer& state = m_pointers[uint32_t(hand)];
+
+    vr::HmdMatrix34_t transform = { };
+    vrComputeBeamTransform(pointer.origin, pointer.length, m_poses.headPose.position, transform.m);
+
+    // The overlay is PointerWidth wide, and its height follows the image's
+    // shape and the texel aspect
+    float aspect = PointerWidth * float(PointerImageHeight) / (float(PointerImageWidth) * pointer.length);
+
+    overlay->SetOverlayTransformAbsolute(state.handle, vr::TrackingUniverseStanding, &transform);
+    overlay->SetOverlayTexelAspect(state.handle, aspect);
+    overlay->SetOverlayAlpha(state.handle, pointer.active ? PointerActiveAlpha : PointerInactiveAlpha);
+
+    if (!state.visible)
+      state.visible = overlay->ShowOverlay(state.handle) == vr::VROverlayError_None;
+  }
+
+
+  void VrOpenVrBackend::hidePointer(VrHand hand) {
+    Pointer& state = m_pointers[uint32_t(hand)];
+
+    if (!state.visible)
+      return;
+
+    m_runtime->overlay->HideOverlay(state.handle);
+    state.visible = false;
+  }
+
+
+  bool VrOpenVrBackend::createPointer(VrHand hand) {
+    Pointer& state = m_pointers[uint32_t(hand)];
+
+    if (state.handle)
+      return true;
+
+    if (state.failed || !m_runtime || !m_runtime->overlay)
+      return false;
+
+    vr::IVROverlay* overlay = m_runtime->overlay;
+    vr::VROverlayHandle_t handle = vr::k_ulOverlayHandleInvalid;
+    vr::EVROverlayError error = overlay->CreateOverlay(
+      PointerOverlayKeys[uint32_t(hand)], PointerOverlayNames[uint32_t(hand)], &handle);
+
+    if (error != vr::VROverlayError_None || handle == vr::k_ulOverlayHandleInvalid) {
+      Logger::err(str::format("VR: The overlay of the laser ", PointerOverlayKeys[uint32_t(hand)],
+        " could not be created, error ", int32_t(error)));
+      state.failed = true;
+      return false;
+    }
+
+    if (m_pointerImage.empty()) {
+      m_pointerImage.resize(PointerImageWidth * PointerImageHeight * 4);
+
+      for (uint32_t y = 0; y < PointerImageHeight; y++) {
+        for (uint32_t x = 0; x < PointerImageWidth; x++) {
+          // Opaque in the middle, fading towards both edges
+          float across = (float(x) + 0.5f) / float(PointerImageWidth) * 2.0f - 1.0f;
+          float alpha  = std::max(0.0f, 1.0f - across * across);
+
+          uint8_t* texel = &m_pointerImage[(y * PointerImageWidth + x) * 4];
+          texel[0] = PointerColor[0];
+          texel[1] = PointerColor[1];
+          texel[2] = PointerColor[2];
+          texel[3] = uint8_t(std::lround(alpha * 255.0f));
+        }
+      }
+    }
+
+    overlay->SetOverlaySortOrder(handle, PointerSortOrder);
+    overlay->SetOverlayWidthInMeters(handle, PointerWidth);
+    error = overlay->SetOverlayRaw(handle, m_pointerImage.data(), PointerImageWidth, PointerImageHeight, 4);
+
+    if (error != vr::VROverlayError_None) {
+      Logger::err(str::format("VR: The image of the laser ", PointerOverlayKeys[uint32_t(hand)],
+        " was rejected, error ", int32_t(error)));
+      overlay->DestroyOverlay(handle);
+      state.failed = true;
+      return false;
+    }
+
+    Logger::info(str::format("VR: Created the laser ", PointerOverlayKeys[uint32_t(hand)]));
+    state.handle = handle;
+    return true;
+  }
+
+
+  void VrOpenVrBackend::destroyPointers() {
+    for (Pointer& state : m_pointers) {
       if (state.handle)
         m_runtime->overlay->DestroyOverlay(state.handle);
 

@@ -100,6 +100,18 @@ namespace dxvk {
   };
 
   /**
+   * \brief Laser drawn from a controller
+   *
+   * The laser starts at \c origin and goes along its -Z axis for \c length
+   * metres. Both are in tracking space. An active laser is drawn brighter.
+   */
+  struct VrPointerSubmission {
+    VrPose origin;
+    float  length = 0.0f;
+    bool   active = false;
+  };
+
+  /**
    * \brief Abstract VR runtime
    *
    * All game-facing VR code talks to this interface. The implementation is
@@ -216,6 +228,16 @@ namespace dxvk {
     virtual bool submitPanel(VrPanelId id, const VrPanelSubmission& panel) = 0;
 
     virtual void hidePanel(VrPanelId id) = 0;
+
+    /**
+     * \brief Shows the laser of a hand, or moves it if it is shown
+     *
+     * Like panels, the laser is drawn over the stereo frames until
+     * hidePointer is called for the hand.
+     */
+    virtual void showPointer(VrHand hand, const VrPointerSubmission& pointer) = 0;
+
+    virtual void hidePointer(VrHand hand) = 0;
 
     /**
      * \brief Triggers controller vibration

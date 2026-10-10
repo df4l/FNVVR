@@ -1,7 +1,7 @@
 {
   "controller_type": "oculus_touch",
   "name": "Fallout: New Vegas VR - Touch",
-  "description": "Default bindings: left stick moves, right stick turns, triggers attack and aim, Y opens the Pip-Boy and pauses when held.",
+  "description": "Default bindings: left stick moves, right stick turns, triggers attack and aim, Y opens the Pip-Boy and pauses when held. In menus each hand points with a laser and its trigger clicks.",
   "bindings": {
     "/actions/game": {
       "sources": [
@@ -207,6 +207,18 @@
               "output": "/actions/menu/in/next"
             }
           }
+        }
+      ]
+    },
+    "/actions/hands": {
+      "poses": [
+        {
+          "output": "/actions/hands/in/aim_left",
+          "path": "/user/hand/left/pose/tip"
+        },
+        {
+          "output": "/actions/hands/in/aim_right",
+          "path": "/user/hand/right/pose/tip"
         }
       ]
     }

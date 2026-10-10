@@ -293,6 +293,47 @@ namespace dxvk {
     constexpr uintptr_t CameraWorldTranslation = 0x8C;
     constexpr uintptr_t CameraFrustum          = 0xDC;
 
+    /**
+     * Menu cursor, see findings/input.md (laser pointer).
+     *
+     * OSInputGlobals::Poll (__thiscall, no arguments) is called once per
+     * frame from Main::OnIdle_PollControls. It reads the mouse into the
+     * input object: the movement (lX, lY, lZ as int32) and the buttons
+     * (one byte each, 0x80 when down). Logical button 0 is the left one
+     * unless the buttons are swapped.
+     */
+    constexpr uintptr_t PollCallSite         = 0x0086F39E;
+    constexpr uintptr_t Poll                 = 0x00A23010;
+    constexpr uintptr_t InputMouseX          = 0x1B24;
+    constexpr uintptr_t InputMouseY          = 0x1B28;
+    constexpr uintptr_t InputMouseWheel      = 0x1B2C;
+    constexpr uintptr_t InputMouseButtons    = 0x1B30;
+    constexpr uintptr_t InputMouseSwapped    = 0x1B4C;
+
+    /**
+     * InterfaceManager::UpdateCursor (__thiscall, no arguments), called by
+     * InterfaceManager::Update while the interface is in mouse mode. It
+     * moves the cursor tile's node by the mouse movement, clamps it to the
+     * interface and derives the cursor's screen position from it. The node
+     * position is in interface units, centred: X right, Z up.
+     */
+    constexpr uintptr_t UpdateCursorCallSite = 0x0070CD31;
+    constexpr uintptr_t UpdateCursor         = 0x007118D0;
+    constexpr uintptr_t InterfaceCursorTile  = 0x28;
+    constexpr uintptr_t NodeLocalTranslate   = 0x58;
+
+    /**
+     * Size of the interface in its own units (__cdecl, returns a float):
+     * 960 high and as wide as the screen's aspect makes it, or 1280 wide
+     * and taller on a portrait screen.
+     */
+    constexpr uintptr_t InterfaceWidth  = 0x00715D40;
+    constexpr uintptr_t InterfaceHeight = 0x00715DA0;
+    constexpr uint8_t   InterfaceSizePrologue[] = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x14, 0xE8 };
+
+    /** Menus driven by the sticks, where the pointer is off */
+    constexpr uint32_t  VatsMenuId = 0x420;
+
   }
 
 }

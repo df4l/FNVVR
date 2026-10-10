@@ -72,6 +72,16 @@ namespace dxvk {
     static void setControllerPad(bool active, const VrPadState& pad);
 
     /**
+     * \brief Switches the menus to the mouse while the controllers are in use
+     *
+     * In cursor mode the interface's own gamepad check reports no gamepad,
+     * so the interface shows the cursor and follows the mouse (see
+     * VrMenuCursor), while the game itself still sees the controllers.
+     * Called once per frame, on the game's thread.
+     */
+    static void setCursorMode(bool enabled);
+
+    /**
      * \brief Returns the head input from the latest real gamepad poll
      */
     static VrEmulatorInput headInput();

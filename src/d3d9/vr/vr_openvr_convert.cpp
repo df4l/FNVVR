@@ -127,4 +127,48 @@ namespace dxvk {
       : "/actions/game/out/haptic_right";
   }
 
+
+  const char* vrOpenVrAimPath(VrHand hand) {
+    return hand == VrHand::Left
+      ? "/actions/hands/in/aim_left"
+      : "/actions/hands/in/aim_right";
+  }
+
+
+  void vrComputeBeamTransform(const VrPose& origin, float length, const VrVector3& eye, float m[3][4]) {
+    auto cross = [] (const VrVector3& a, const VrVector3& b) {
+      return VrVector3 { a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x };
+    };
+
+    auto normalize = [] (const VrVector3& v) {
+      float length = vrLength(v);
+      return length > 0.0f ? v * (1.0f / length) : v;
+    };
+
+    VrVector3 along  = normalize(vrRotate(origin.orientation, { 0.0f, 0.0f, -1.0f }));
+    VrVector3 centre = origin.position + along * (0.5f * length);
+
+    // The quad's normal is the direction to the eye, without its part
+    // along the laser. Looking along the laser, any normal will do.
+    VrVector3 toEye  = eye - centre;
+    VrVector3 normal = toEye - along * vrDot(toEye, along);
+
+    if (vrLength(normal) < 1e-4f)
+      normal = vrRotate(origin.orientation, { 0.0f, 1.0f, 0.0f });
+
+    normal = normalize(normal);
+
+    const VrVector3 columns[3] = { cross(along, normal), along, normal };
+
+    for (uint32_t c = 0; c < 3; c++) {
+      m[0][c] = columns[c].x;
+      m[1][c] = columns[c].y;
+      m[2][c] = columns[c].z;
+    }
+
+    m[0][3] = centre.x;
+    m[1][3] = centre.y;
+    m[2][3] = centre.z;
+  }
+
 }

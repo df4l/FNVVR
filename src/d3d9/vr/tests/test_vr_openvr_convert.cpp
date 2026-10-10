@@ -135,3 +135,45 @@ TEST_CASE(pose_to_matrix_is_the_inverse_of_matrix_to_pose) {
   CHECK_NEAR(actual.y, expected.y, 1e-5);
   CHECK_NEAR(actual.z, expected.z, 1e-5);
 }
+
+
+TEST_CASE(beam_runs_along_the_laser_and_faces_the_eye) {
+  VrPose origin;
+  origin.orientation = vrQuaternionFromAxisAngle({ 0.0f, 1.0f, 0.0f }, 0.5f);
+  origin.position    = { 0.2f, 1.2f, -0.3f };
+
+  VrVector3 eye = { 0.0f, 1.6f, 0.0f };
+
+  float m[3][4] = { };
+  vrComputeBeamTransform(origin, 2.0f, eye, m);
+  checkMatrix(m);
+
+  VrVector3 along  = vrRotate(origin.orientation, { 0.0f, 0.0f, -1.0f });
+  VrVector3 centre = origin.position + along;
+
+  CHECK_NEAR(m[0][3], centre.x, 1e-5);
+  CHECK_NEAR(m[1][3], centre.y, 1e-5);
+  CHECK_NEAR(m[2][3], centre.z, 1e-5);
+
+  // The quad's height (Y) runs along the laser
+  CHECK_NEAR(m[0][1], along.x, 1e-5);
+  CHECK_NEAR(m[1][1], along.y, 1e-5);
+  CHECK_NEAR(m[2][1], along.z, 1e-5);
+
+  // Its normal (Z) is across the laser, towards the eye
+  VrVector3 normal = { m[0][2], m[1][2], m[2][2] };
+  CHECK_NEAR(vrDot(normal, along), 0.0f, 1e-5);
+  CHECK(vrDot(normal, eye - centre) > 0.0f);
+}
+
+
+TEST_CASE(manifest_declares_the_hand_poses) {
+  std::ifstream file(VR_OPENVR_DIR "/actions.json");
+  std::stringstream stream;
+  stream << file.rdbuf();
+  std::string manifest = stream.str();
+
+  CHECK(manifest.find(std::string("\"") + VrOpenVrHandsActionSet + "\"") != std::string::npos);
+  CHECK(manifest.find(std::string("\"") + vrOpenVrAimPath(VrHand::Left) + "\"") != std::string::npos);
+  CHECK(manifest.find(std::string("\"") + vrOpenVrAimPath(VrHand::Right) + "\"") != std::string::npos);
+}

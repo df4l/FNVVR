@@ -15,6 +15,7 @@
 #include "vr_game_space.h"
 #include "vr_gamepad_head.h"
 #include "vr_gamepad_hook.h"
+#include "vr_menu_cursor.h"
 #include "vr_stereo_renderer.h"
 #include "vr_system.h"
 
@@ -101,8 +102,9 @@ namespace dxvk {
       gamepad.hidePad     = config.getOption<bool>("d3d9.vrHideGamepad", true);
       gamepad.controllers = config.getOption<bool>("d3d9.vrControllers", true);
 
-      if (gamepad.hidePad || gamepad.controllers)
-        VrGamepadHook::install(gamepad);
+      // The controllers point at the menu panel with the game's cursor
+      if ((gamepad.hidePad || gamepad.controllers) && VrGamepadHook::install(gamepad) && gamepad.controllers)
+        VrMenuCursor::install();
     }
 
     bool headsetResolution = config.getOption<bool>("d3d9.vrHeadsetResolution", true);
