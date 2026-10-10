@@ -534,22 +534,84 @@ namespace dxvk {
 
 
   void VrStereoRenderer::renderMenuScenes() {
-    // The scene's alpha is not known to be usable, so the panel is opaque
-    // behind it: these menus show their model on a dark background, as the
-    // game shows it on a dimmed copy of the world
-    m_device->Clear(0, nullptr, D3DCLEAR_TARGET, D3DCOLOR_ARGB(255, 0, 0, 0), 1.0f, 0);
+    // The panel stays transparent around the scene, so that the live world
+    // is seen behind it as with the other menus
+    m_device->Clear(0, nullptr, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 0, 0, 0), 1.0f, 0);
 
-    if (!createMenuDepth())
+    if (!createMenuSceneResources())
       return;
 
     m_device->SetDepthStencilSurface(m_menuDepth.ptr());
     m_device->Clear(0, nullptr, D3DCLEAR_ZBUFFER | D3DCLEAR_STENCIL, 0, 1.0f, 0);
     m_menuScenes.render();
+
+    Com<IDirect3DSurface9> usedDepth;
+    m_device->GetDepthStencilSurface(&usedDepth);
+    bool depthKept = usedDepth == m_menuDepth;
+
+    if (!depthKept && !m_loggedMenuDepthChange) {
+      Logger::warn("VR: A menu scene changed the depth buffer, it is shown on an opaque background");
+      m_loggedMenuDepthChange = true;
+    }
+
+    m_device->SetDepthStencilSurface(m_menuDepth.ptr());
+    makeMenuSceneOpaque(depthKept);
     m_device->SetDepthStencilSurface(nullptr);
   }
 
 
-  bool VrStereoRenderer::createMenuDepth() {
+  void VrStereoRenderer::makeMenuSceneOpaque(bool depthTested) {
+    // The alpha written by the scene's shaders is not usable, so it is set
+    // to one wherever the scene wrote depth, with a quad at the far plane
+    D3DSURFACE_DESC desc = { };
+    m_menuTexture->GetLevelDesc(0, &desc);
+
+    m_menuSceneState->Capture();
+
+    D3DVIEWPORT9 viewport = { 0, 0, desc.Width, desc.Height, 0.0f, 1.0f };
+    m_device->SetViewport(&viewport);
+    m_device->SetVertexShader(nullptr);
+    m_device->SetPixelShader(nullptr);
+    m_device->SetTexture(0, nullptr);
+    m_device->SetFVF(D3DFVF_XYZRHW);
+
+    m_device->SetRenderState(D3DRS_ZENABLE,           depthTested ? D3DZB_TRUE : D3DZB_FALSE);
+    m_device->SetRenderState(D3DRS_ZFUNC,             D3DCMP_GREATER);
+    m_device->SetRenderState(D3DRS_ZWRITEENABLE,      FALSE);
+    m_device->SetRenderState(D3DRS_STENCILENABLE,     FALSE);
+    m_device->SetRenderState(D3DRS_ALPHABLENDENABLE,  FALSE);
+    m_device->SetRenderState(D3DRS_ALPHATESTENABLE,   FALSE);
+    m_device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+    m_device->SetRenderState(D3DRS_FOGENABLE,         FALSE);
+    m_device->SetRenderState(D3DRS_LIGHTING,          FALSE);
+    m_device->SetRenderState(D3DRS_CULLMODE,          D3DCULL_NONE);
+    m_device->SetRenderState(D3DRS_COLORWRITEENABLE,  D3DCOLORWRITEENABLE_ALPHA);
+    m_device->SetRenderState(D3DRS_TEXTUREFACTOR,     0xFFFFFFFF);
+
+    m_device->SetTextureStageState(0, D3DTSS_COLOROP,   D3DTOP_SELECTARG1);
+    m_device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TFACTOR);
+    m_device->SetTextureStageState(0, D3DTSS_ALPHAOP,   D3DTOP_SELECTARG1);
+    m_device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TFACTOR);
+    m_device->SetTextureStageState(1, D3DTSS_COLOROP,   D3DTOP_DISABLE);
+    m_device->SetTextureStageState(1, D3DTSS_ALPHAOP,   D3DTOP_DISABLE);
+
+    // Pre-transformed vertices, offset by half a pixel to cover whole pixels
+    float right  = float(desc.Width)  - 0.5f;
+    float bottom = float(desc.Height) - 0.5f;
+    float quad[4][4] = {
+      { -0.5f,  -0.5f,  1.0f, 1.0f },
+      { right,  -0.5f,  1.0f, 1.0f },
+      { -0.5f,  bottom, 1.0f, 1.0f },
+      { right,  bottom, 1.0f, 1.0f },
+    };
+
+    m_device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, quad, sizeof(quad[0]));
+
+    m_menuSceneState->Apply();
+  }
+
+
+  bool VrStereoRenderer::createMenuSceneResources() {
     if (m_menuDepth != nullptr)
       return true;
 
@@ -560,9 +622,12 @@ namespace dxvk {
     m_menuTexture->GetLevelDesc(0, &desc);
 
     if (FAILED(m_device->CreateDepthStencilSurface(desc.Width, desc.Height, D3DFMT_D24S8,
-        D3DMULTISAMPLE_NONE, 0, TRUE, &m_menuDepth, nullptr))) {
+        D3DMULTISAMPLE_NONE, 0, TRUE, &m_menuDepth, nullptr))
+     || FAILED(m_device->CreateStateBlock(D3DSBT_ALL, &m_menuSceneState))) {
       Logger::err(str::format("VR: Failed to create the ", desc.Width, "x", desc.Height,
-        " menu depth buffer, the 3D scenes of menus are not shown in the headset"));
+        " menu depth buffer or its state block, the 3D scenes of menus are not shown in the headset"));
+      m_menuDepth = nullptr;
+      m_menuSceneState = nullptr;
       m_menuDepthFailed = true;
       return false;
     }
