@@ -61,7 +61,10 @@ namespace dxvk {
    * is never shown, draws them alone into the panel's texture instead of the
    * backbuffer, with the other HUD groups hidden. Menus opened in game
    * (pause, dialogue, containers, ...) are drawn the same way, without the
-   * HUD, and shown on the menu panel. Menus with a 3D scene of their own
+   * HUD, and shown on the menu panel. Meanwhile the right eye's pass, which
+   * the headset does not show either, draws the head HUD groups the game
+   * keeps showing (messages during a dialogue) without the menus, so the
+   * game window shows no interface then. Menus with a 3D scene of their own
    * (lockpicking, casino games) get it drawn first, on an opaque
    * background. The Pip-Boy is not shown.
    *
@@ -113,7 +116,7 @@ namespace dxvk {
     static constexpr uint32_t NoEye = ~0u;
 
     /**
-     * \brief What the left eye's interface pass draws for the headset
+     * \brief What an eye's interface pass draws for the headset
      */
     enum class InterfaceLayer {
       None,
@@ -153,14 +156,16 @@ namespace dxvk {
     VrGameStateKind     m_lastGameState = VrGameStateKind::Unknown;
 
     // HUD panel in front of the head and menus opened in game, drawn by the
-    // left eye's interface pass
+    // left eye's interface pass. While a menu is open, the right eye's pass
+    // draws the HUD elements the game still shows.
     VrHudLayers            m_hudLayers;
     Com<IDirect3DTexture9> m_hudTexture;
     Com<IDirect3DTexture9> m_hudPanelTexture;
     Com<IDirect3DTexture9> m_menuTexture;
     InterfaceLayer m_layer = InterfaceLayer::None;
     bool   m_hudAvailable  = false;
-    bool   m_layerRendered = false;
+    bool   m_hudRendered   = false;
+    bool   m_menuRendered  = false;
     bool   m_hudIsolated   = false;
     bool   m_hudShown      = false;
     bool   m_interfaceFailed = false;
@@ -259,6 +264,8 @@ namespace dxvk {
     bool copyRenderTarget(uint32_t eye);
 
     InterfaceLayer chooseLayer(VrGameStateKind state) const;
+
+    InterfaceLayer eyeLayer() const;
 
     bool renderLayer(
             void*                 interfaceManager,

@@ -37,6 +37,25 @@ namespace dxvk {
     bool isolate(const uintptr_t* keep, size_t count);
 
     /**
+     * \brief Culls every menu, the cursor and every HUD group except the given ones
+     *
+     * Draws HUD elements that the game keeps showing while a menu is
+     * open, such as the messages during a dialogue, without the menu.
+     *
+     * \param [in] keep HUDMainMenu fields of the groups to keep visible
+     * \param [in] count Number of entries in \c keep
+     * \returns \c false if the menus or the HUD were not found, nothing is culled then
+     */
+    bool isolateFromMenus(const uintptr_t* keep, size_t count);
+
+    /**
+     * \brief Checks whether isolateFromMenus can find the menus
+     */
+    bool menusFound() const {
+      return m_menusFound;
+    }
+
+    /**
      * \brief Clears the flags set by the last isolate call
      */
     void restore();
@@ -44,7 +63,10 @@ namespace dxvk {
   private:
 
     bool                    m_available = false;
+    bool                    m_menusFound = false;
     std::vector<uint32_t*>  m_culledFlags;
+
+    void cullTile(uintptr_t tile);
 
   };
 

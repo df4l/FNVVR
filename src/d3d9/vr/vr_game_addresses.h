@@ -260,6 +260,28 @@ namespace dxvk {
     constexpr uint8_t   HudQuestReminderStore[] = { 0x8B, 0x0D, 0xC0, 0x96, 0x1D, 0x01, 0x89, 0x81, 0x24, 0x01, 0x00, 0x00 };
     constexpr uint8_t   HudSubtitlesStore[]     = { 0x8B, 0x0D, 0xC0, 0x96, 0x1D, 0x01, 0x89, 0x81, 0x3C, 0x01, 0x00, 0x00 };
 
+    /**
+     * Tile of every menu, indexed by menu id minus FirstMenuId: an array of
+     * Tile* and its uint16 count. GetMenuTile (0x00A09030) reads both, which
+     * is checked at the given site (movzx ecx,[count] / cmp / jbe / mov edx,[tiles]).
+     * The HUD is menu HudMenuId.
+     */
+    constexpr uintptr_t MenuTiles       = 0x011F350C;
+    constexpr uintptr_t MenuTileCount   = 0x011F3512;
+    constexpr uint32_t  FirstMenuId     = 0x3E9;
+    constexpr uint32_t  HudMenuId       = 0x3EC;
+    constexpr uintptr_t MenuTileReadSite = 0x00A0904E;
+    constexpr uint8_t   MenuTileRead[]  = { 0x0F, 0xB7, 0x0D, 0x12, 0x35, 0x1F, 0x01, 0x3B, 0xC8,
+                                            0x76, 0x15, 0x8B, 0x15, 0x0C, 0x35, 0x1F, 0x01 };
+
+    /**
+     * InterfaceManager*, read by InterfaceManager::GetSingleton, which is
+     * checked against its bytes (push ebp / mov ebp,esp / mov eax,[pointer] / pop ebp / ret)
+     */
+    constexpr uintptr_t InterfaceManager = 0x011D8A80;
+    constexpr uintptr_t InterfaceManagerGetSingleton = 0x004B7210;
+    constexpr uint8_t   InterfaceManagerGetSingletonBytes[] = { 0x55, 0x8B, 0xEC, 0xA1, 0x80, 0x8A, 0x1D, 0x01, 0x5D, 0xC3 };
+
     /** HUDMainMenu fields holding the HUD groups shown in front of the head */
     constexpr uintptr_t HudQuestReminder = 0x124;
     constexpr uintptr_t HudMessages      = 0x134;
