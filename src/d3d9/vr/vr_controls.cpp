@@ -30,8 +30,10 @@ namespace dxvk {
     const VrPose*               reference,
           float                 dt) {
     // The actions were read in the context chosen on the previous frame
+    VrActionState actions = m_filter.update(input.actions, m_context, dt);
+
     VrGamepadHook::setControllerPad(input.hasActions,
-      vrComputePadState(input.actions, m_context, gameBindings()));
+      vrComputePadState(actions, m_context, gameBindings()));
 
     if (m_headLook) {
       VrPose head;
