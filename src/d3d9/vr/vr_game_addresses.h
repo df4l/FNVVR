@@ -143,6 +143,25 @@ namespace dxvk {
       { 0x00872AAD, 0x424, 0x007C9CA0 },
     };
 
+    /**
+     * Display settings (Setting objects, the value is at +4), see
+     * findings/resolution.md. The renderer setup copies iSize W and iSize H
+     * into its own globals once, at the checked site, long after the first
+     * Direct3DCreate9 (the launcher check). bFull Screen is read at run time
+     * through GetIsFullscreen, which is checked too.
+     */
+    constexpr uintptr_t SettingValue          = 0x4;
+    constexpr uintptr_t SettingSizeWidth      = 0x011C73DC;
+    constexpr uintptr_t SettingSizeHeight     = 0x011C718C;
+    constexpr uintptr_t SettingFullScreen     = 0x011C77B4;
+    constexpr uintptr_t RendererSizeReadSite  = 0x004DA730;
+    constexpr uint8_t   RendererSizeRead[] = {
+      0xB9, 0xDC, 0x73, 0x1C, 0x01, 0xE8, 0xB6, 0x5C, 0xF7, 0xFF, 0xA3, 0x7C, 0x94, 0x18, 0x01,
+      0xB9, 0x8C, 0x71, 0x1C, 0x01, 0xE8, 0xA7, 0x5C, 0xF7, 0xFF, 0xA3, 0x80, 0x94, 0x18, 0x01,
+    };
+    constexpr uintptr_t GetIsFullscreen = 0x00446E10;
+    constexpr uint8_t   GetIsFullscreenPrologue[] = { 0x55, 0x8B, 0xEC, 0xB9, 0xB4, 0x77, 0x1C, 0x01 };
+
     /** LoadingMenu*, not null while a loading screen is shown */
     constexpr uintptr_t LoadingMenu = 0x011DA0C0;
 

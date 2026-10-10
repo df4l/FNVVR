@@ -25,6 +25,7 @@ namespace dxvk {
     VrSystem::initialize();
 
     *ppDirect3D9Ex = ref(new D3D9InterfaceEx(Extended, pOverrideList, OverrideCount));
+    VrSystem::onInterfaceCreated();
     return D3D_OK;
   }
 }

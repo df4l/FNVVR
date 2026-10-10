@@ -5,6 +5,7 @@
 #include "../d3d9_include.h"
 
 #include "vr_backend.h"
+#include "vr_game_resolution.h"
 #include "vr_stereo_renderer.h"
 
 namespace dxvk {
@@ -36,6 +37,16 @@ namespace dxvk {
      * the first Vulkan instance is created. Calling it again has no effect.
      */
     static void initialize();
+
+    /**
+     * \brief Called after a D3D9 interface was created
+     *
+     * The VR runtime is running from then on, so the headset's resolution
+     * is known. The first call makes the game render at a resolution chosen
+     * for the headset, unless \c d3d9.vrHeadsetResolution is off. Safe to
+     * call when VR is disabled.
+     */
+    static void onInterfaceCreated();
 
     /**
      * \brief Returns the VR system, or \c nullptr when VR is disabled
@@ -76,14 +87,20 @@ namespace dxvk {
 
   private:
 
-    VrSystem(std::unique_ptr<IVRBackend> backend, bool showPreview, const VrPanelConfig& panel);
+    VrSystem(std::unique_ptr<IVRBackend> backend, bool showPreview,
+      const VrPanelConfig& panel, bool headsetResolution);
 
     std::unique_ptr<IVRBackend>          m_backend;
     std::unique_ptr<VrExtensionProvider> m_extensionProvider;
     std::unique_ptr<VrStereoRenderer>    m_stereoRenderer;
     bool                                 m_showPreview;
     VrPanelConfig                        m_panelConfig;
+    VrGameResolution                     m_resolution;
+    bool                                 m_headsetResolution;
+    bool                                 m_resolutionChosen = false;
     bool                                 m_hasSession = false;
+
+    void chooseResolution();
 
   };
 

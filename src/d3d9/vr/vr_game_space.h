@@ -79,4 +79,25 @@ namespace dxvk {
    */
   VrGameFrustum vrComputeGameFrustum(const VrFov& fov);
 
+  /**
+   * \brief Narrowest width to height ratio the game's interface is laid out for
+   *
+   * The interface is designed for 4:3 and wider screens. A headset eye is
+   * usually narrower than that.
+   */
+  constexpr float VrGameMinAspect = 4.0f / 3.0f;
+
+  /**
+   * \brief Computes the resolution the game renders at for a headset
+   *
+   * The game draws one frame per eye into its backbuffer, which is then
+   * scaled into the eye image. The height is the eye's, so that no detail
+   * is lost vertically, and the width is the eye's or more, so that the
+   * frame is at least as wide as \c minAspect allows. The width is even.
+   *
+   * \param [in] eye Recommended size of one eye's image
+   * \param [in] minAspect Narrowest width to height ratio
+   */
+  VrExtent vrComputeGameResolution(const VrExtent& eye, float minAspect);
+
 }
