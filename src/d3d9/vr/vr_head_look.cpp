@@ -22,6 +22,10 @@ namespace dxvk {
     // Sit state getter, __thiscall without arguments
     using SitStateFn  = int32_t (__fastcall*)(uint8_t* object, void* unused);
 
+    // FocusOnActor is __thiscall with three stack arguments
+    using FocusOnActorFn = void (__fastcall*)(uint8_t* player, void* unused,
+      void* actor, float blend, uint32_t skipTurn);
+
     HandleLookFn g_originalHandleLook = reinterpret_cast<HandleLookFn>(VrGame::HandleLook);
 
     VrHeadLook* g_headLook = nullptr;
@@ -79,6 +83,10 @@ namespace dxvk {
       return nullptr;
     }
 
+    if (!VrGameMemory::redirectCall(VrGame::FocusOnActorTurnCallSite,
+        VrGame::FocusOnActor, reinterpret_cast<const void*>(&VrHeadLook::focusHook)))
+      Logger::warn("VR: The dialogue camera was not found, dialogues turn the view");
+
     std::unique_ptr<VrHeadLook> headLook(new VrHeadLook(turn));
     g_headLook = headLook.get();
 
@@ -131,6 +139,21 @@ namespace dxvk {
       g_headLook->applyLook(player);
 
     return result;
+  }
+
+
+  void __fastcall VrHeadLook::focusHook(
+          uint8_t*              player,
+          void*                 unused,
+          void*                 actor,
+          float                 blend,
+          uint32_t              skipTurn) {
+    // The user turns their head towards the speaker; turning the player
+    // would turn the whole view, and the speaker with it
+    if (g_headLook && g_headLook->m_hasHead)
+      skipTurn = 1;
+
+    reinterpret_cast<FocusOnActorFn>(VrGame::FocusOnActor)(player, nullptr, actor, blend, skipTurn);
   }
 
 

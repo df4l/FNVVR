@@ -97,6 +97,16 @@ namespace dxvk {
     constexpr uintptr_t VatsCameraState = 0x011F2258;
 
     /**
+     * Call to PlayerCharacter::FocusOnActor in the dialogue menu's update,
+     * and the function: __thiscall (actor, float blend, bool skipTurn). It
+     * zooms on the speaker and, unless skipTurn is set, turns the player
+     * towards the speaker's head. This is the only call that turns, see
+     * findings/camera.md, dialogue.
+     */
+    constexpr uintptr_t FocusOnActorTurnCallSite = 0x00762F85;
+    constexpr uintptr_t FocusOnActor             = 0x00953060;
+
+    /**
      * The other calls to the same thunk. The interface keeps its own gamepad
      * flag, which hides the menu cursor: InterfaceManager::Update and the
      * InterfaceManager setup set it, and the start menu builds its entries

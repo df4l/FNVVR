@@ -24,6 +24,9 @@ namespace dxvk {
    * rotation is already in it. The eyes are placed on a level camera facing
    * the body heading instead, see \ref adjustCamera.
    *
+   * Dialogues do not turn the player towards the speaker while the head
+   * is tracked: the user looks at the speaker by turning their head.
+   *
    * The game keeps control of the heading while VATS runs, while the player
    * sits, is dead or has the look control disabled.
    */
@@ -88,6 +91,13 @@ namespace dxvk {
             uint32_t              arg1,
             void*                 moveFlags,
             uint32_t              arg3);
+
+    static void __fastcall focusHook(
+            uint8_t*              player,
+            void*                 unused,
+            void*                 actor,
+            float                 blend,
+            uint32_t              skipTurn);
 
     void applyLook(uint8_t* player);
 
