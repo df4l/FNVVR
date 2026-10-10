@@ -6,6 +6,7 @@
 #include "vr_backend.h"
 #include "vr_game_state.h"
 #include "vr_head_look.h"
+#include "vr_menu_pointer.h"
 
 namespace dxvk {
 
@@ -16,7 +17,8 @@ namespace dxvk {
    * the game (see VrGamepadHook), the head pose and the turning stick go
    * to VrHeadLook, and the backend
    * is told whether the next frame's actions are read for the game or for
-   * a menu.
+   * a menu. In menus the controllers also point at the menu panel with
+   * lasers, which drive the game's cursor (see VrMenuPointer).
    */
   class VrControls {
 
@@ -35,12 +37,15 @@ namespace dxvk {
      * \param [in] input Input returned by the backend
      * \param [in] state What the game shows
      * \param [in] reference Recenter reference, or \c nullptr if none yet
+     * \param [in] menuPanel Placement of the menu panel in tracking space,
+     *    or \c nullptr if it is not shown
      * \param [in] dt Duration of a frame in seconds
      */
     void update(
       const VrInputState&         input,
             VrGameStateKind       state,
       const VrPose*               reference,
+      const VrPanelPlacement*     menuPanel,
             float                 dt);
 
     /**
@@ -50,9 +55,16 @@ namespace dxvk {
 
   private:
 
+    VrPointerState updatePointer(
+      const VrInputState&         input,
+            VrActionState&        actions,
+      const VrPanelPlacement*     menuPanel,
+            float                 dt);
+
     IVRBackend&                 m_backend;
     std::unique_ptr<VrHeadLook> m_headLook;
     VrActionFilter              m_filter;
+    VrMenuPointer               m_pointer;
 
     // Context the backend reads the actions in, chosen one frame ahead
     VrInputContext              m_context = VrInputContext::Game;

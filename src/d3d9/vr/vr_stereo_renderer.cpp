@@ -272,7 +272,7 @@ namespace dxvk {
     }
 
     m_controls.update(input, state, m_hasReference ? &m_reference : nullptr,
-      float(timing.predictedPeriod) * 1e-9f);
+      menuPanel(), float(timing.predictedPeriod) * 1e-9f);
 
     auto views = m_backend.locateViews(timing.predictedDisplayTime);
 
@@ -331,7 +331,7 @@ namespace dxvk {
     trackHead(input);
 
     m_controls.update(input, state, m_hasReference ? &m_reference : nullptr,
-      float(timing.predictedPeriod) * 1e-9f);
+      menuPanel(), float(timing.predictedPeriod) * 1e-9f);
 
     m_backend.submitEmptyFrame(timing.predictedDisplayTime);
 
@@ -761,6 +761,7 @@ namespace dxvk {
 
     m_panelShown = VrD3D9Bridge::submitPanel(m_device, m_backend, VrPanelId::Menu,
       m_menuTexture.ptr(), m_panelPose, m_panelConfig.hudWidth, VrPanelAnchor::Room);
+    m_panelWidth = m_panelConfig.hudWidth;
 
     if (!m_panelShown && !m_loggedPanelFailure) {
       Logger::err("VR: The backend rejected the menu panel");
@@ -808,11 +809,29 @@ namespace dxvk {
 
     m_panelShown = VrD3D9Bridge::submitPanel(m_device, m_backend, VrPanelId::Menu,
       m_panelTexture.ptr(), m_panelPose, m_panelConfig.width, VrPanelAnchor::Room);
+    m_panelWidth = m_panelConfig.width;
 
     if (!m_panelShown && !m_loggedPanelFailure) {
       Logger::err("VR: The backend rejected the panel");
       m_loggedPanelFailure = true;
     }
+  }
+
+
+  const VrPanelPlacement* VrStereoRenderer::menuPanel() {
+    Com<IDirect3DSurface9> backBuffer;
+    D3DSURFACE_DESC desc = { };
+
+    if (!m_panelShown
+     || FAILED(m_device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer))
+     || FAILED(backBuffer->GetDesc(&desc)) || !desc.Width)
+      return nullptr;
+
+    // Both images of the panel are the size of the game's frame
+    m_menuPanel.pose   = m_panelPose;
+    m_menuPanel.width  = m_panelWidth;
+    m_menuPanel.height = m_panelWidth * float(desc.Height) / float(desc.Width);
+    return &m_menuPanel;
   }
 
 

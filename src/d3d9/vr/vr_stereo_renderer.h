@@ -191,6 +191,8 @@ namespace dxvk {
     Com<IDirect3DTexture9> m_panelTexture;
     Com<IDirect3DTexture9> m_panelStaging;
     VrPose m_panelPose;
+    float  m_panelWidth    = 0.0f;
+    VrPanelPlacement m_menuPanel;
     bool   m_panelShown    = false;
     bool   m_panelPlacedWithHead = false;
     bool   m_panelShowsMenu = false;
@@ -284,6 +286,11 @@ namespace dxvk {
     void updatePanel(IDirect3DSwapChain9* swapchain);
 
     void placePanel(float distance);
+
+    /**
+     * \brief Where the menu panel is, \c nullptr while it is hidden
+     */
+    const VrPanelPlacement* menuPanel();
 
     void hidePanel();
 
