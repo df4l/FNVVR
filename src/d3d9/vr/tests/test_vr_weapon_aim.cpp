@@ -122,3 +122,66 @@ TEST_CASE(two_handed_pose_keeps_the_hand_when_aligned) {
   VrGameCameraPose none = vrComputeTwoHandedPose(hand, { 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f });
   checkVector(none.forward, 0.0f, 1.0f, 0.0f);
 }
+
+
+TEST_CASE(mirrored_hand_is_the_mirror_image_of_the_hand) {
+  // Everything on the left is the right side mirrored across x = 0
+  VrGameRotation mirrorX;
+  mirrorX.m[0][0] = -1.0f;
+
+  // Mirrored bones keep right-handed axes by flipping their third axis
+  VrGameRotation flipBone;
+  flipBone.m[2][2] = -1.0f;
+
+  float c = std::cos(Pi / 6.0f);
+  float s = std::sin(Pi / 6.0f);
+
+  VrGameTransform bindRight;
+  bindRight.rotate.m[0][0] = 0.0f; bindRight.rotate.m[0][1] = -1.0f;
+  bindRight.rotate.m[1][0] = 1.0f; bindRight.rotate.m[1][1] =  0.0f;
+  bindRight.translate = { 20.0f, 5.0f, 100.0f };
+
+  VrGameTransform bindLeft;
+  bindLeft.rotate    = mirrorX * bindRight.rotate * flipBone;
+  bindLeft.translate = { -20.0f, 5.0f, 100.0f };
+
+  VrGameCameraPose right;
+  right.forward  = { 0.6f, 0.8f, 0.0f };
+  right.up       = { 0.0f, 0.0f, 1.0f };
+  right.right    = { 0.8f, -0.6f, 0.0f };
+  right.position = { 22.0f, 35.0f, 92.0f };
+
+  VrGameCameraPose left;
+  left.forward  = { -0.6f, 0.8f, 0.0f };
+  left.up       = { 0.0f, 0.0f, 1.0f };
+  left.right    = { 0.8f, 0.6f, 0.0f };
+  left.position = { -22.0f, 35.0f, 92.0f };
+
+  VrGameTransform rightBone;
+  rightBone.rotate.m[1][1] = c; rightBone.rotate.m[1][2] = -s;
+  rightBone.rotate.m[2][1] = s; rightBone.rotate.m[2][2] =  c;
+  rightBone.translate = { 25.0f, 40.0f, 90.0f };
+
+  VrGameRotation boneMirror = vrComputeBoneMirror(bindRight, bindLeft);
+  VrGameTransform leftBone  = vrComputeMirroredHand(right, rightBone, left, boneMirror);
+
+  VrGameRotation expected = mirrorX * rightBone.rotate * flipBone;
+
+  for (uint32_t i = 0; i < 3; i++) {
+    for (uint32_t j = 0; j < 3; j++)
+      CHECK_NEAR(leftBone.rotate.m[i][j], expected.m[i][j], 1e-4);
+  }
+
+  checkVector(leftBone.translate, -25.0f, 40.0f, 90.0f);
+}
+
+
+TEST_CASE(inverse_undoes_a_transform) {
+  VrGameTransform t;
+  t.rotate    = vrCameraRotation(eastFacing({ }));
+  t.translate = { 3.0f, -4.0f, 5.0f };
+
+  VrVector3 v = { 1.0f, 2.0f, 3.0f };
+  VrVector3 back = apply(vrInverse(t), apply(t, v));
+  checkVector(back, 1.0f, 2.0f, 3.0f);
+}

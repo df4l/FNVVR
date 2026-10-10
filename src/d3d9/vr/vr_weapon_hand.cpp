@@ -30,6 +30,10 @@ namespace dxvk {
     // NiObject::GetAsNiGeometry, __thiscall without arguments
     using GetAsGeometryFn = uint8_t* (__fastcall*)(uint8_t* object, void* unused);
 
+    // Process virtual function, __thiscall without arguments, returns the
+    // equipped weapon's inventory entry
+    using GetWeaponInfoFn = uint8_t* (__fastcall*)(uint8_t* process, void* unused);
+
     // The weapon node is a few levels below the skeleton's root, and the
     // muzzle a few levels below the weapon
     constexpr uint32_t MaxModelDepth = 16;
@@ -37,6 +41,16 @@ namespace dxvk {
     // How close the other controller must come to where the game holds the
     // weapon with that hand for its grip to take the weapon
     constexpr float TwoHandedGripDistance = 0.15f * VrGameUnitsPerMetre;
+
+    // How close the controllers must be for the other hand to support a
+    // one-handed weapon
+    constexpr float BracedGripDistance = 0.2f * VrGameUnitsPerMetre;
+
+    // Animation types of the game's weapons, see findings/weapon.md
+    constexpr int8_t WeaponTypePistol       = 3;
+    constexpr int8_t WeaponTypePistolEnergy = 4;
+    constexpr int8_t WeaponTypeRifle        = 5;
+    constexpr int8_t WeaponTypeLauncher     = 9;
 
     VrWeaponHand* g_weaponHand = nullptr;
 
@@ -188,6 +202,52 @@ namespace dxvk {
       return false;
     }
 
+    /**
+     * \brief Applies the inverse of a NiTransform to a point
+     */
+    VrVector3 inverseApply(const uint8_t* transform, const VrVector3& point) {
+      float scale = readField<float>(transform, VrGame::TransformScale);
+
+      if (scale == 0.0f)
+        scale = 1.0f;
+
+      return (vrTranspose(readRotation(transform, 0))
+        * (point - readVector(transform, VrGame::TransformTranslation))) * (1.0f / scale);
+    }
+
+    /**
+     * \brief Bind pose of a bone in a skin
+     *
+     * Skinning takes a vertex from the skin's root parent to the skin, then
+     * to the bone, so the bone's bind pose in the root parent's frame is
+     * the inverse of both.
+     */
+    bool findBindPose(uint8_t* skin, uint8_t* bone, VrGameTransform& pose) {
+      auto data  = field<uint8_t*>(skin, VrGame::SkinInstanceData);
+      auto bones = field<uint8_t**>(skin, VrGame::SkinInstanceBones);
+
+      if (!data || !bones)
+        return false;
+
+      auto boneData = field<uint8_t*>(data, VrGame::SkinDataBones);
+      uint32_t count = field<uint32_t>(data, VrGame::SkinDataBoneCount);
+
+      for (uint32_t i = 0; boneData && i < count; i++) {
+        if (bones[i] != bone)
+          continue;
+
+        const uint8_t* rootParentToSkin = data + VrGame::SkinDataRootParentToSkin;
+        const uint8_t* skinToBone       = boneData + i * VrGame::SkinBoneDataSize;
+
+        pose.rotate = vrTranspose(readRotation(rootParentToSkin, 0))
+                    * vrTranspose(readRotation(skinToBone, 0));
+        pose.translate = inverseApply(rootParentToSkin, inverseApply(skinToBone, VrVector3()));
+        return true;
+      }
+
+      return false;
+    }
+
     template<typename Fn>
     void forEachObject(uint8_t* object, uint32_t depth, const Fn& fn) {
       fn(object);
@@ -204,6 +264,40 @@ namespace dxvk {
         if (children[i])
           forEachObject(children[i], depth - 1, fn);
       }
+    }
+
+    /**
+     * \brief Mirror between two hand bones, from the skins that use them
+     *
+     * The two bind poses must come from skins with the same root parent,
+     * so that they are in the same frame.
+     */
+    bool findBoneMirror(uint8_t* root, uint8_t* hand, uint8_t* otherHand, VrGameRotation& mirror) {
+      VrGameTransform bindHand, bindOtherHand;
+      uint8_t* handParent      = nullptr;
+      uint8_t* otherHandParent = nullptr;
+
+      forEachObject(root, MaxModelDepth, [&] (uint8_t* object) {
+        uint8_t* geometry = asGeometry(object);
+        uint8_t* skin = geometry ? field<uint8_t*>(geometry, VrGame::GeometrySkinInstance) : nullptr;
+
+        if (!skin)
+          return;
+
+        uint8_t* parent = field<uint8_t*>(skin, VrGame::SkinInstanceRootParent);
+
+        if (!handParent && findBindPose(skin, hand, bindHand))
+          handParent = parent;
+
+        if (!otherHandParent && findBindPose(skin, otherHand, bindOtherHand))
+          otherHandParent = parent;
+      });
+
+      if (!handParent || handParent != otherHandParent)
+        return false;
+
+      mirror = vrComputeBoneMirror(bindHand, bindOtherHand);
+      return true;
     }
 
   }
@@ -259,6 +353,13 @@ namespace dxvk {
       m_hand = *hand;
     else
       m_hasAim = false;
+
+    // The grip lets go as soon as it is released, even if the model is not
+    // drawn this frame
+    if (!hand || !otherHand || !grip) {
+      m_twoHanded = false;
+      m_braced    = false;
+    }
 
     if (otherHand)
       m_otherHand = *otherHand;
@@ -360,6 +461,7 @@ namespace dxvk {
     if (!weapon) {
       m_hasAim    = false;
       m_twoHanded = false;
+      m_braced    = false;
       showArms(root);
       return;
     }
@@ -370,11 +472,15 @@ namespace dxvk {
     uint8_t* forearm   = otherHand ? field<uint8_t*>(otherHand, VrGame::ObjectParent) : nullptr;
 
     VrVector3 drawnWeapon = readVector(weapon, VrGame::ObjectWorldTranslation);
-    VrVector3 drawnHand   = otherHand ? readVector(otherHand, VrGame::ObjectWorldTranslation) : drawnWeapon;
+
+    VrGameTransform drawnHand;
+    drawnHand.translate = drawnWeapon;
 
     VrGameTransform drawnForearm;
 
     if (forearm) {
+      drawnHand.rotate       = readRotation(otherHand, VrGame::ObjectWorldRotation);
+      drawnHand.translate    = readVector(otherHand, VrGame::ObjectWorldTranslation);
       drawnForearm.rotate    = readRotation(forearm, VrGame::ObjectWorldRotation);
       drawnForearm.translate = readVector(forearm, VrGame::ObjectWorldTranslation);
     }
@@ -385,8 +491,8 @@ namespace dxvk {
     VrGameTransform rig = vrComputeRigToHand(m_gameCamera, drawnWeapon, hand);
 
     // With both hands on the weapon, it points along the line between them
-    VrVector3 support = rig.rotate * (drawnHand - drawnWeapon);
-    updateTwoHanded(forearm != nullptr, support);
+    VrVector3 support = rig.rotate * (drawnHand.translate - drawnWeapon);
+    updateGrip(weaponGrip(object), forearm != nullptr, support);
 
     if (m_twoHanded) {
       hand = vrComputeTwoHandedPose(hand, support, m_otherHand.position - m_hand.position);
@@ -408,8 +514,8 @@ namespace dxvk {
     writeRotation(root, VrGame::ObjectLocalRotation, rotation);
     writeVector(root, VrGame::NodeLocalTranslate, translation);
 
-    if (forearm && m_hasOtherHand && !m_twoHanded)
-      placeOtherHand(forearm, drawnForearm, drawnHand, shift, updateData);
+    if (forearm && m_hasOtherHand && !m_twoHanded && !m_braced)
+      placeOtherHand(root, forearm, drawnForearm, drawnHand, hand, shift, updateData);
 
     hideArms(root);
 
@@ -430,41 +536,81 @@ namespace dxvk {
   }
 
 
-  void VrWeaponHand::updateTwoHanded(bool canHold, const VrVector3& support) {
-    if (!canHold || !m_hasOtherHand || !m_grip) {
+  void VrWeaponHand::updateGrip(GripKind kind, bool canHold, const VrVector3& support) {
+    if (!canHold || !m_hasOtherHand || !m_grip || kind == GripKind::None) {
       m_twoHanded = false;
+      m_braced    = false;
       return;
     }
 
     // The grip takes the weapon when the controller comes near where the
-    // game holds it, and keeps it until it is released
-    if (!m_twoHanded)
-      m_twoHanded = vrLength(m_hand.position + support - m_otherHand.position) <= TwoHandedGripDistance;
+    // game holds it, and keeps it until it is released. The game only
+    // holds a one-handed weapon with both hands while it aims, so there
+    // the other controller only has to come near the hand.
+    if (kind == GripKind::TwoHanded) {
+      m_braced = false;
+
+      if (!m_twoHanded)
+        m_twoHanded = vrLength(m_hand.position + support - m_otherHand.position) <= TwoHandedGripDistance;
+    } else {
+      m_twoHanded = false;
+
+      if (!m_braced)
+        m_braced = vrLength(m_hand.position - m_otherHand.position) <= BracedGripDistance;
+    }
 
     if (m_twoHanded && !m_loggedTwoHanded) {
       Logger::info("VR: The weapon is held with both hands");
       m_loggedTwoHanded = true;
     }
+
+    if (m_braced && !m_loggedBraced) {
+      Logger::info("VR: The left hand supports the one-handed weapon, the game aims");
+      m_loggedBraced = true;
+    }
   }
 
 
   void VrWeaponHand::placeOtherHand(
+          uint8_t*              root,
           uint8_t*              forearm,
     const VrGameTransform&      drawnForearm,
-    const VrVector3&            drawnHand,
+    const VrGameTransform&      drawnHand,
+    const VrGameCameraPose&     hand,
     const VrVector3&            shift,
           void*                 updateData) {
-    // Like the whole model for the weapon hand: what the game animates
-    // relative to its camera is kept relative to the controller, and the
-    // hand bone lands on it. The forearm carries the hand, and the hand's
+    // The game animates the free hand anywhere, so its pose is not kept:
+    // it is held around its controller like the right hand around the
+    // other one, mirrored. The forearm carries the hand, and the hand's
     // meshes only use bones below the forearm.
-    VrGameCameraPose hand = m_otherHand;
-    hand.position = hand.position - shift;
+    uint8_t* otherHand = findObject(root, VrGame::LeftHandNodeName);
+    uint8_t* handBone  = findObject(root, VrGame::RightHandNodeName);
+    VrGameRotation boneMirror;
 
-    VrGameTransform rig = vrComputeRigToHand(m_gameCamera, drawnHand, hand);
+    if (!otherHand || !handBone || !findBoneMirror(root, handBone, otherHand, boneMirror)) {
+      if (!m_loggedMirror)
+        Logger::warn("VR: The bind pose of the hands was not found, the left hand stays where the game puts it");
 
-    VrGameRotation worldRotation = rig.rotate * drawnForearm.rotate;
-    VrVector3 worldTranslation   = rig.rotate * drawnForearm.translate + rig.translate;
+      m_loggedMirror = true;
+      return;
+    }
+
+    VrGameTransform placedHand;
+    placedHand.rotate    = readRotation(handBone, VrGame::ObjectWorldRotation);
+    placedHand.translate = readVector(handBone, VrGame::ObjectWorldTranslation);
+
+    VrGameCameraPose controller = m_otherHand;
+    controller.position = controller.position - shift;
+
+    VrGameTransform target = vrComputeMirroredHand(hand, placedHand, controller, boneMirror);
+
+    // The rigid move taking the drawn hand onto the target moves the forearm
+    VrGameTransform move;
+    move.rotate    = target.rotate * vrTranspose(drawnHand.rotate);
+    move.translate = target.translate - move.rotate * drawnHand.translate;
+
+    VrGameRotation worldRotation = move.rotate * drawnForearm.rotate;
+    VrVector3 worldTranslation   = move.rotate * drawnForearm.translate + move.translate;
 
     ParentFrame parent = parentFrame(forearm);
 
@@ -481,7 +627,8 @@ namespace dxvk {
 
     if (!m_loggedOtherHand) {
       auto name = field<const char*>(forearm, VrGame::ObjectName);
-      Logger::info(str::format("VR: The left hand follows its controller, moved by '", name ? name : "", "'"));
+      Logger::info(str::format("VR: The left hand mirrors the right hand around its controller, moved by '",
+        name ? name : "", "'"));
       m_loggedOtherHand = true;
     }
   }
@@ -571,6 +718,33 @@ namespace dxvk {
     auto vtable = readField<const uint8_t*>(process, 0);
     auto isWeaponOut = reinterpret_cast<IsWeaponOutFn>(readField<uintptr_t>(vtable, VrGame::ProcessIsWeaponOutSlot));
     return (isWeaponOut(process, nullptr) & 0xFF) != 0;
+  }
+
+
+  VrWeaponHand::GripKind VrWeaponHand::weaponGrip(const uint8_t* player) const {
+    auto process = readField<uint8_t*>(player, VrGame::ActorProcess);
+
+    if (!process)
+      return GripKind::None;
+
+    auto vtable = readField<const uint8_t*>(process, 0);
+    auto getWeaponInfo = reinterpret_cast<GetWeaponInfoFn>(readField<uintptr_t>(vtable, VrGame::ProcessWeaponInfoSlot));
+    auto entry  = getWeaponInfo(process, nullptr);
+    auto weapon = entry ? field<uint8_t*>(entry, VrGame::InventoryEntryForm) : nullptr;
+
+    if (!weapon)
+      return GripKind::None;
+
+    // Melee, thrown and placed weapons are left to the game's animation
+    int8_t type = readField<int8_t>(weapon, VrGame::WeaponAnimationType);
+
+    if (type == WeaponTypePistol || type == WeaponTypePistolEnergy)
+      return GripKind::Braced;
+
+    if (type >= WeaponTypeRifle && type <= WeaponTypeLauncher)
+      return GripKind::TwoHanded;
+
+    return GripKind::None;
   }
 
 }

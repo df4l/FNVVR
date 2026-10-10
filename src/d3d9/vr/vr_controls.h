@@ -49,6 +49,15 @@ namespace dxvk {
             float                 dt);
 
     /**
+     * \brief Presses the game's aim control from the next frame on
+     *
+     * \param [in] aim Whether VrWeaponHand wants the game to aim
+     */
+    void setGameAim(bool aim) {
+      m_gameAim = aim;
+    }
+
+    /**
      * \brief See VrHeadLook::adjustCamera
      */
     bool adjustCamera(VrGameCameraPose& pose) const;
@@ -68,6 +77,8 @@ namespace dxvk {
 
     // Context the backend reads the actions in, chosen one frame ahead
     VrInputContext              m_context = VrInputContext::Game;
+
+    bool                        m_gameAim = false;
 
   };
 

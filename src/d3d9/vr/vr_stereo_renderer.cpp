@@ -281,6 +281,10 @@ namespace dxvk {
       m_hasReference = true;
     }
 
+    // The weapon hand decided on the previous frame whether the game aims
+    if (m_weaponHand)
+      m_controls.setGameAim(m_weaponHand->wantsGameAim());
+
     m_controls.update(input, state, m_hasReference ? &m_reference : nullptr,
       menuPanel(), float(timing.predictedPeriod) * 1e-9f);
 
