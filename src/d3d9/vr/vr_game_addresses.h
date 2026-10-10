@@ -133,6 +133,10 @@ namespace dxvk {
     constexpr char ProjectileNodeName[]       = "ProjectileNode";
     constexpr char ProjectileNodeAltName[]    = "##ProjectileNode";
 
+    /** Hand bones of the first-person skeleton (strings 0x010C4C40 and 0x010C4C20) */
+    constexpr char LeftHandNodeName[]         = "Bip01 L Hand";
+    constexpr char RightHandNodeName[]        = "Bip01 R Hand";
+
     /** NiAVObject transforms: parent, local rotation (row-major 3x3) and world transform */
     constexpr uintptr_t ObjectParent          = 0x18;
     constexpr uintptr_t ObjectLocalRotation   = 0x34;

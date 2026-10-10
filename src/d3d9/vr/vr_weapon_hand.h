@@ -17,7 +17,9 @@ namespace dxvk {
    *   that update the whole model is moved so that its weapon node lands
    *   on the hand, turned from the game's camera to the hand, and updated
    *   again. The first-person camera is moved to the eye, so that the model
-   *   is seen with the right parallax in each eye.
+   *   is seen with the right parallax in each eye. The bones from each
+   *   shoulder to the wrist are then folded into the wrist, so that only
+   *   the hands are drawn.
    * - TESObjectWEAP::Fire creates the player's projectiles from the muzzle
    *   the game animated in front of its camera. They start from the muzzle
    *   drawn in the hand instead, along the direction the hand points, with
@@ -80,6 +82,7 @@ namespace dxvk {
 
     bool             m_loggedActive = false;
     bool             m_loggedFrame  = false;
+    bool             m_loggedArms   = false;
 
     static void __fastcall updateHook(
             uint8_t*              object,
@@ -93,6 +96,8 @@ namespace dxvk {
             float spreadHeading, float spreadPitch, uint32_t a15);
 
     void placeModel(uint8_t* root, void* updateData);
+
+    void hideArms(uint8_t* root);
 
     bool holdsWeapon(const uint8_t* player) const;
 
