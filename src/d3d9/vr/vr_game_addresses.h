@@ -138,6 +138,7 @@ namespace dxvk {
     constexpr uintptr_t ObjectLocalRotation   = 0x34;
     constexpr uintptr_t ObjectWorldRotation   = 0x68;
     constexpr uintptr_t ObjectWorldTranslation = 0x8C;
+    constexpr uintptr_t ObjectWorldScale      = 0x98;
 
     /** State of the VATS camera, 0 when VATS is not running */
     constexpr uintptr_t VatsCameraState = 0x011F2258;

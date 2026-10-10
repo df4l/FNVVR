@@ -79,7 +79,7 @@ namespace dxvk {
     bool             m_hasAim = false;
 
     bool             m_loggedActive = false;
-    bool             m_loggedParent = false;
+    bool             m_loggedFrame  = false;
 
     static void __fastcall updateHook(
             uint8_t*              object,

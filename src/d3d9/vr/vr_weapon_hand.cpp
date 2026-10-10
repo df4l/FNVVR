@@ -1,6 +1,7 @@
 #include <cstring>
 
 #include "../../util/log/log.h"
+#include "../../util/util_string.h"
 
 #include "vr_game_addresses.h"
 #include "vr_game_memory.h"
@@ -63,6 +64,39 @@ namespace dxvk {
 
     void writeRotation(uint8_t* object, uintptr_t offset, const VrGameRotation& r) {
       std::memcpy(object + offset, r.m, sizeof(r.m));
+    }
+
+    /**
+     * \brief World transform of a node's parent, identity without a parent
+     *
+     * A node's world transform is its parent's applied to its local one:
+     * rotation P.R * L.R, translation P.t + P.s * P.R * L.t.
+     */
+    struct ParentFrame {
+      VrGameRotation rotate;
+      VrVector3      translate;
+      float          scale = 1.0f;
+
+      VrVector3 toWorld(const VrVector3& local) const {
+        return translate + (rotate * local) * scale;
+      }
+
+      VrVector3 toLocal(const VrVector3& world) const {
+        return (vrTranspose(rotate) * (world - translate)) * (1.0f / scale);
+      }
+    };
+
+    ParentFrame parentFrame(uint8_t* object) {
+      ParentFrame frame;
+      uint8_t* parent = field<uint8_t*>(object, VrGame::ObjectParent);
+
+      if (parent) {
+        frame.rotate    = readRotation(parent, VrGame::ObjectWorldRotation);
+        frame.translate = readVector(parent, VrGame::ObjectWorldTranslation);
+        frame.scale     = field<float>(parent, VrGame::ObjectWorldScale);
+      }
+
+      return frame;
     }
 
     void updateObject(uint8_t* object, void* updateData) {
@@ -135,12 +169,13 @@ namespace dxvk {
     uint8_t* object = player();
     uint8_t* root   = object ? field<uint8_t*>(object, VrGame::PlayerFirstPersonRoot) : nullptr;
 
-    if (!root || field<uint8_t*>(root, VrGame::ObjectParent))
+    if (!root)
       return;
 
     // PlaceCamera reads the root's world position to place its camera and
-    // the lighting of the model. The previous eye left it at the origin.
-    m_rootPosition = readVector(root, VrGame::NodeLocalTranslate);
+    // the lighting of the model. The previous eye left it where the model
+    // was drawn.
+    m_rootPosition = parentFrame(root).toWorld(readVector(root, VrGame::NodeLocalTranslate));
     writeVector(root, VrGame::ObjectWorldTranslation, m_rootPosition);
   }
 
@@ -166,7 +201,8 @@ namespace dxvk {
     if (g_weaponHand && g_weaponHand->m_hasAim && object && shooter == object
      && !*reinterpret_cast<const uint32_t*>(VrGame::VatsCameraState)) {
       if (uint8_t* root = field<uint8_t*>(object, VrGame::PlayerFirstPersonRoot)) {
-        VrVector3 muzzle = readVector(root, VrGame::NodeLocalTranslate) + g_weaponHand->m_muzzleOffset;
+        VrVector3 muzzle = parentFrame(root).toWorld(readVector(root, VrGame::NodeLocalTranslate))
+                         + g_weaponHand->m_muzzleOffset;
         VrHeadAngles aim = vrComputeAimAngles(g_weaponHand->m_aimDirection);
 
         x = muzzle.x;
@@ -192,18 +228,26 @@ namespace dxvk {
     if (!object || root != field<uint8_t*>(object, VrGame::PlayerFirstPersonRoot))
       return;
 
-    if (field<uint8_t*>(root, VrGame::ObjectParent)) {
-      if (!m_loggedParent) {
-        Logger::warn("VR: The first-person model has a parent node, it stays in front of the head");
-        m_loggedParent = true;
-      }
+    // The game draws the model with the root's translation at zero, so
+    // that its camera and lights sit near the origin. Positions in the
+    // world are brought to that space by the same shift.
+    ParentFrame parent = parentFrame(root);
+    VrVector3 drawnRoot = readVector(root, VrGame::ObjectWorldTranslation);
+    VrVector3 shift     = m_rootPosition - drawnRoot;
 
-      return;
+    if (!m_loggedFrame) {
+      auto parentObject = field<uint8_t*>(root, VrGame::ObjectParent);
+      auto parentName   = parentObject ? field<const char*>(parentObject, VrGame::ObjectName) : nullptr;
+
+      Logger::info(str::format("VR: First-person model parent '", parentName ? parentName : "", "' at ",
+        parent.translate.x, ", ", parent.translate.y, ", ", parent.translate.z, " scale ", parent.scale,
+        ", drawn ", vrLength(shift), " units from the player"));
+      m_loggedFrame = true;
     }
 
-    // The game places its camera at its own eye, relative to the root
+    // The game places its camera at its own eye
     if (uint8_t* camera = field<uint8_t*>(main, VrGame::MainFirstPersonCamera))
-      writeVector(camera, VrGame::CameraWorldTranslation, m_eyePosition - m_rootPosition);
+      writeVector(camera, VrGame::CameraWorldTranslation, m_eyePosition - shift);
 
     uint8_t* weapon = m_hasHand && holdsWeapon(object)
       ? findObject(root, VrGame::WeaponNodeName) : nullptr;
@@ -214,17 +258,20 @@ namespace dxvk {
     }
 
     VrGameCameraPose hand = m_hand;
-    hand.position = hand.position - m_rootPosition;
+    hand.position = hand.position - shift;
 
     VrGameTransform rig = vrComputeRigToHand(m_gameCamera,
       readVector(weapon, VrGame::ObjectWorldTranslation), hand);
 
-    // The root is at the origin here, so its translation is the rig's own
+    // The new world transform of the root, brought back to its parent's frame
+    VrGameRotation worldRotation = rig.rotate * readRotation(root, VrGame::ObjectWorldRotation);
+    VrVector3 worldTranslation   = rig.rotate * drawnRoot + rig.translate;
+
     VrGameRotation rotation = readRotation(root, VrGame::ObjectLocalRotation);
     VrVector3 translation   = readVector(root, VrGame::NodeLocalTranslate);
 
-    writeRotation(root, VrGame::ObjectLocalRotation, rig.rotate * rotation);
-    writeVector(root, VrGame::NodeLocalTranslate, rig.rotate * translation + rig.translate);
+    writeRotation(root, VrGame::ObjectLocalRotation, vrTranspose(parent.rotate) * worldRotation);
+    writeVector(root, VrGame::NodeLocalTranslate, parent.toLocal(worldTranslation));
     updateObject(root, updateData);
 
     // PlaceCamera restores the translation itself
@@ -236,7 +283,8 @@ namespace dxvk {
     if (!muzzle)
       muzzle = findObject(weapon, VrGame::ProjectileNodeAltName);
 
-    m_muzzleOffset = readVector(muzzle ? muzzle : weapon, VrGame::ObjectWorldTranslation);
+    // Relative to the root, which the game places at the player
+    m_muzzleOffset = readVector(muzzle ? muzzle : weapon, VrGame::ObjectWorldTranslation) - drawnRoot;
     m_aimDirection = m_hand.forward;
     m_hasAim       = true;
 
