@@ -171,8 +171,10 @@ namespace dxvk {
     // That branch of the game also draws the 3D scenes of menus such as
     // lockpicking, so they are drawn into the menu panel instead
     VrMenuScenes            m_menuScenes;
-    Com<IDirect3DSurface9>  m_menuDepth;
+    Com<IDirect3DSurface9>     m_menuDepth;
+    Com<IDirect3DStateBlock9>  m_menuSceneState;
     bool   m_menuDepthFailed = false;
+    bool   m_loggedMenuDepthChange = false;
 
     // Latest tracked head pose, used to place the panel
     VrPose m_headPose;
@@ -257,7 +259,9 @@ namespace dxvk {
 
     void renderMenuScenes();
 
-    bool createMenuDepth();
+    void makeMenuSceneOpaque(bool depthTested);
+
+    bool createMenuSceneResources();
 
     void isolateHud();
 
