@@ -37,6 +37,16 @@ namespace dxvk {
             size_t                size);
 
     /**
+     * \brief Checks that a relative call instruction reaches a function
+     *
+     * \param [in] site Address of a 5-byte call (opcode E8)
+     * \param [in] target Function the call must reach
+     */
+    static bool callsTo(
+            uintptr_t             site,
+            uintptr_t             target);
+
+    /**
      * \brief Redirects a relative call instruction
      *
      * \param [in] site Address of a 5-byte call (opcode E8)

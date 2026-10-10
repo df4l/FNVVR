@@ -120,7 +120,10 @@ namespace dxvk {
     if (!renderer->m_hudAvailable)
       Logger::info("VR: The HUD layout was not found, the HUD is not shown in the headset");
 
-    renderer->m_menuBackgroundFound = VrGameMemory::matches(VrGame::StaticMenuBackgroundReadSite,
+    if (!renderer->m_menuScenes.initialize())
+      Logger::info("VR: The menu scene functions were not found, menus such as lockpicking show no 3D model in the headset");
+
+    renderer->m_menuBackgroundFound =VrGameMemory::matches(VrGame::StaticMenuBackgroundReadSite,
         VrGame::StaticMenuBackgroundRead, sizeof(VrGame::StaticMenuBackgroundRead))
       && VrGameMemory::readable(VrGame::StaticMenuBackground, 1);
 
@@ -496,7 +499,11 @@ namespace dxvk {
     m_device->GetDepthStencilSurface(&depthStencil);
     m_device->SetDepthStencilSurface(nullptr);
     m_device->SetRenderTarget(0, layerSurface.ptr());
-    m_device->Clear(0, nullptr, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 0, 0, 0), 1.0f, 0);
+
+    if (m_layer == InterfaceLayer::Menu && m_menuScenes.isAnyOpen())
+      renderMenuScenes();
+    else
+      m_device->Clear(0, nullptr, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 0, 0, 0), 1.0f, 0);
 
     // The other HUD groups were culled by isolateHud when the interface
     // was culled, which may run on a worker thread that this pass waits for
@@ -518,6 +525,44 @@ namespace dxvk {
         ? "VR: The interface pass did not cull the HUD, the HUD is not shown in the headset"
         : "VR: The interface pass changed the render target, the HUD and menus are not shown in the headset");
       m_loggedHudFailure = true;
+    }
+
+    return true;
+  }
+
+
+  void VrStereoRenderer::renderMenuScenes() {
+    // The scene's alpha is not known to be usable, so the panel is opaque
+    // behind it: these menus show their model on a dark background, as the
+    // game shows it on a dimmed copy of the world
+    m_device->Clear(0, nullptr, D3DCLEAR_TARGET, D3DCOLOR_ARGB(255, 0, 0, 0), 1.0f, 0);
+
+    if (!createMenuDepth())
+      return;
+
+    m_device->SetDepthStencilSurface(m_menuDepth.ptr());
+    m_device->Clear(0, nullptr, D3DCLEAR_ZBUFFER | D3DCLEAR_STENCIL, 0, 1.0f, 0);
+    m_menuScenes.render();
+    m_device->SetDepthStencilSurface(nullptr);
+  }
+
+
+  bool VrStereoRenderer::createMenuDepth() {
+    if (m_menuDepth != nullptr)
+      return true;
+
+    if (m_menuDepthFailed)
+      return false;
+
+    D3DSURFACE_DESC desc = { };
+    m_menuTexture->GetLevelDesc(0, &desc);
+
+    if (FAILED(m_device->CreateDepthStencilSurface(desc.Width, desc.Height, D3DFMT_D24S8,
+        D3DMULTISAMPLE_NONE, 0, TRUE, &m_menuDepth, nullptr))) {
+      Logger::err(str::format("VR: Failed to create the ", desc.Width, "x", desc.Height,
+        " menu depth buffer, the 3D scenes of menus are not shown in the headset"));
+      m_menuDepthFailed = true;
+      return false;
     }
 
     return true;

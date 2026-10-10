@@ -11,6 +11,7 @@
 #include "vr_game_camera.h"
 #include "vr_game_state.h"
 #include "vr_hud_layers.h"
+#include "vr_menu_scenes.h"
 #include "vr_preview_window.h"
 
 namespace dxvk {
@@ -56,7 +57,9 @@ namespace dxvk {
    * is never shown, draws them alone into the panel's texture instead of the
    * backbuffer, with the other HUD groups hidden. Menus opened in game
    * (pause, dialogue, containers, ...) are drawn the same way, without the
-   * HUD, and shown on the menu panel. The Pip-Boy is not shown.
+   * HUD, and shown on the menu panel. Menus with a 3D scene of their own
+   * (lockpicking, casino games) get it drawn first, on an opaque
+   * background. The Pip-Boy is not shown.
    *
    * The main menu and the loading screens have no 3D scene. There, the game
    * draws a single frame, and the whole presented image, interface included,
@@ -161,6 +164,12 @@ namespace dxvk {
     bool   m_menuBackgroundFound = false;
     bool   m_loggedMenuBackground = false;
 
+    // That branch of the game also draws the 3D scenes of menus such as
+    // lockpicking, so they are drawn into the menu panel instead
+    VrMenuScenes            m_menuScenes;
+    Com<IDirect3DSurface9>  m_menuDepth;
+    bool   m_menuDepthFailed = false;
+
     // Latest tracked head pose, used to place the panel
     VrPose m_headPose;
     bool   m_hasHeadPose   = false;
@@ -241,6 +250,10 @@ namespace dxvk {
             void*                 interfaceManager,
             void*                 arg0,
             uint32_t              arg1);
+
+    void renderMenuScenes();
+
+    bool createMenuDepth();
 
     void isolateHud();
 
