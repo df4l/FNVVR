@@ -203,6 +203,31 @@ namespace dxvk {
     }
 
     /**
+     * \brief Whether a mesh is skinned to a bone or to one below it
+     */
+    bool isSkinnedBelow(uint8_t* geometry, const uint8_t* bone) {
+      auto skin = field<uint8_t*>(geometry, VrGame::GeometrySkinInstance);
+
+      if (!skin)
+        return false;
+
+      auto data  = field<uint8_t*>(skin, VrGame::SkinInstanceData);
+      auto bones = field<uint8_t**>(skin, VrGame::SkinInstanceBones);
+
+      if (!data || !bones)
+        return false;
+
+      uint32_t count = field<uint32_t>(data, VrGame::SkinDataBoneCount);
+
+      for (uint32_t i = 0; i < count; i++) {
+        if (bones[i] && isAncestor(bone, bones[i]))
+          return true;
+      }
+
+      return false;
+    }
+
+    /**
      * \brief Applies the inverse of a NiTransform to a point
      */
     VrVector3 inverseApply(const uint8_t* transform, const VrVector3& point) {
@@ -624,6 +649,16 @@ namespace dxvk {
     // The next eye's update starts from the game's pose again
     writeRotation(forearm, VrGame::ObjectLocalRotation, rotation);
     writeVector(forearm, VrGame::NodeLocalTranslate, translation);
+
+    // A skinned mesh computes its bound from its bones when it is updated
+    // itself, and the hand's meshes are not below the forearm: without this,
+    // they are culled where the game animated the hand
+    forEachObject(root, MaxModelDepth, [forearm, updateData] (uint8_t* object) {
+      uint8_t* geometry = asGeometry(object);
+
+      if (geometry && isSkinnedBelow(geometry, forearm))
+        updateObject(geometry, updateData);
+    });
 
     if (!m_loggedOtherHand) {
       auto name = field<const char*>(forearm, VrGame::ObjectName);
