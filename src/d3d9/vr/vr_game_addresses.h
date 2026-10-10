@@ -59,6 +59,44 @@ namespace dxvk {
     constexpr uintptr_t XInputGetStateThunk = 0x009F996E;
 
     /**
+     * The game's input object (OSInputGlobals*) and its gamepad binding
+     * table: one gamepad input code per ControlCode, 0xFF when unbound.
+     * See findings/input.md.
+     */
+    constexpr uintptr_t InputGlobals             = 0x011F35CC;
+    constexpr uintptr_t InputControllerBindings  = 0x1BE8;
+
+    /** The player (PlayerCharacter**) */
+    constexpr uintptr_t Player = 0x011DEA3C;
+
+    /**
+     * Call to the player's look handler in PlayerCharacter::Update, and the
+     * handler: __thiscall with four stack arguments, returns a bool. It
+     * turns the player from the mouse or the right stick, or follows the
+     * VATS camera. See findings/input.md, motion controls.
+     */
+    constexpr uintptr_t LookCallSite = 0x0093F8D9;
+    constexpr uintptr_t HandleLook   = 0x009445B0;
+
+    /** MobileObject::SetLooking, __thiscall with a float: sets the pitch, clamped to about 89 degrees */
+    constexpr uintptr_t SetLooking = 0x00931D90;
+    constexpr uint8_t   SetLookingPrologue[] = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x10, 0x89, 0x4D, 0xF4 };
+
+    /** Virtual function table slots of the player: heading setter (__thiscall, float) and sit state getter */
+    constexpr uintptr_t SetHeadingSlot    = 0x2C4;
+    constexpr uintptr_t GetSitStateSlot   = 0x214;
+
+    /** Fields of the player: pitch and heading in radians, life state, disabled controls */
+    constexpr uintptr_t RefPitch          = 0x24;
+    constexpr uintptr_t RefHeading        = 0x2C;
+    constexpr uintptr_t ActorLifeState    = 0x108;
+    constexpr uintptr_t PlayerDisabledControls = 0x680;
+    constexpr uint8_t   ControlLook       = 0x2;
+
+    /** State of the VATS camera, 0 when VATS is not running */
+    constexpr uintptr_t VatsCameraState = 0x011F2258;
+
+    /**
      * The other calls to the same thunk. The interface keeps its own gamepad
      * flag, which hides the menu cursor: InterfaceManager::Update and the
      * InterfaceManager setup set it, and the start menu builds its entries

@@ -97,15 +97,8 @@ namespace dxvk {
     int64_t  predictedPeriod      = 0;
   };
 
-  enum class VrButton : uint32_t {
-    Primary   = 1u << 0,
-    Secondary = 1u << 1,
-    Menu      = 1u << 2,
-    Stick     = 1u << 3,
-  };
-
   /**
-   * \brief State of one hand controller
+   * \brief Pose of one hand controller
    *
    * Poses are only meaningful while isActive is true.
    */
@@ -113,23 +106,83 @@ namespace dxvk {
     bool      isActive = false;
     VrPose    gripPose;
     VrPose    aimPose;
-    float     trigger  = 0.0f;
-    float     squeeze  = 0.0f;
-    VrVector2 stick;
-    uint32_t  buttons  = 0;
+  };
 
-    bool isPressed(VrButton button) const {
-      return (buttons & uint32_t(button)) != 0;
+  /**
+   * \brief Which set of actions the controllers drive
+   *
+   * The same physical button usually means something different in game
+   * and in a menu, so the backend binds them separately. The user can
+   * change both sets of bindings in the runtime's own interface.
+   */
+  enum class VrInputContext : uint32_t {
+    Game,
+    Menu,
+  };
+
+  /**
+   * \brief Digital actions the controllers can trigger
+   *
+   * Actions are named after what they do, not after a button. The backend
+   * maps controller buttons to them, so that the bindings can be changed in
+   * the runtime. The game actions are read in the Game context and the menu
+   * actions in the Menu context.
+   */
+  enum class VrAction : uint32_t {
+    Attack,
+    Aim,
+    Activate,
+    Jump,
+    Reload,
+    Sneak,
+    PipBoy,
+    Vats,
+    Pause,
+    Grab,
+    MenuSelect,
+    MenuBack,
+    MenuAlternate,
+    MenuOption,
+    MenuPrevious,
+    MenuNext,
+  };
+
+  constexpr uint32_t VrActionCount = 16;
+
+  /**
+   * \brief State of the actions for one frame
+   *
+   * In the Game context, \c move is the locomotion stick and \c turn the
+   * turning stick. In the Menu context, \c move navigates. Stick values are
+   * in [-1, 1], +X right and +Y forward.
+   */
+  struct VrActionState {
+    uint32_t  pressed = 0;
+    VrVector2 move;
+    VrVector2 turn;
+
+    bool isPressed(VrAction action) const {
+      return (pressed & (1u << uint32_t(action))) != 0;
+    }
+
+    void setPressed(VrAction action, bool down) {
+      uint32_t bit = 1u << uint32_t(action);
+      pressed = down ? (pressed | bit) : (pressed & ~bit);
     }
   };
 
   /**
    * \brief Head and controller state sampled for one frame
+   *
+   * \c hasActions is false when the backend has no controller input, for
+   * example when no controller is connected.
    */
   struct VrInputState {
     bool              isHeadTracked = false;
     VrPose            headPose;
     std::array<VrControllerState, VrHandCount> controllers;
+    bool              hasActions = false;
+    VrActionState     actions;
   };
 
 }

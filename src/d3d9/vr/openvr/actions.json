@@ -1,0 +1,153 @@
+{
+  "default_bindings": [
+    {
+      "controller_type": "oculus_touch",
+      "binding_url": "bindings_oculus_touch.json"
+    }
+  ],
+  "action_sets": [
+    {
+      "name": "/actions/game",
+      "usage": "single"
+    },
+    {
+      "name": "/actions/menu",
+      "usage": "single"
+    }
+  ],
+  "actions": [
+    {
+      "name": "/actions/game/in/move",
+      "type": "vector2",
+      "requirement": "suggested"
+    },
+    {
+      "name": "/actions/game/in/turn",
+      "type": "vector2",
+      "requirement": "suggested"
+    },
+    {
+      "name": "/actions/game/in/attack",
+      "type": "boolean",
+      "requirement": "suggested"
+    },
+    {
+      "name": "/actions/game/in/aim",
+      "type": "boolean",
+      "requirement": "suggested"
+    },
+    {
+      "name": "/actions/game/in/activate",
+      "type": "boolean",
+      "requirement": "suggested"
+    },
+    {
+      "name": "/actions/game/in/jump",
+      "type": "boolean",
+      "requirement": "suggested"
+    },
+    {
+      "name": "/actions/game/in/reload",
+      "type": "boolean",
+      "requirement": "suggested"
+    },
+    {
+      "name": "/actions/game/in/sneak",
+      "type": "boolean",
+      "requirement": "suggested"
+    },
+    {
+      "name": "/actions/game/in/pipboy",
+      "type": "boolean",
+      "requirement": "suggested"
+    },
+    {
+      "name": "/actions/game/in/vats",
+      "type": "boolean",
+      "requirement": "suggested"
+    },
+    {
+      "name": "/actions/game/in/pause",
+      "type": "boolean",
+      "requirement": "suggested"
+    },
+    {
+      "name": "/actions/game/in/grab",
+      "type": "boolean",
+      "requirement": "suggested"
+    },
+    {
+      "name": "/actions/game/out/haptic_left",
+      "type": "vibration",
+      "requirement": "optional"
+    },
+    {
+      "name": "/actions/game/out/haptic_right",
+      "type": "vibration",
+      "requirement": "optional"
+    },
+    {
+      "name": "/actions/menu/in/navigate",
+      "type": "vector2",
+      "requirement": "suggested"
+    },
+    {
+      "name": "/actions/menu/in/select",
+      "type": "boolean",
+      "requirement": "suggested"
+    },
+    {
+      "name": "/actions/menu/in/back",
+      "type": "boolean",
+      "requirement": "suggested"
+    },
+    {
+      "name": "/actions/menu/in/alternate",
+      "type": "boolean",
+      "requirement": "suggested"
+    },
+    {
+      "name": "/actions/menu/in/option",
+      "type": "boolean",
+      "requirement": "suggested"
+    },
+    {
+      "name": "/actions/menu/in/previous",
+      "type": "boolean",
+      "requirement": "suggested"
+    },
+    {
+      "name": "/actions/menu/in/next",
+      "type": "boolean",
+      "requirement": "suggested"
+    }
+  ],
+  "localization": [
+    {
+      "language_tag": "en_US",
+      "/actions/game": "Game",
+      "/actions/menu": "Menus",
+      "/actions/game/in/move": "Move",
+      "/actions/game/in/turn": "Turn",
+      "/actions/game/in/attack": "Attack",
+      "/actions/game/in/aim": "Aim / block",
+      "/actions/game/in/activate": "Activate",
+      "/actions/game/in/jump": "Jump",
+      "/actions/game/in/reload": "Reload",
+      "/actions/game/in/sneak": "Sneak",
+      "/actions/game/in/pipboy": "Pip-Boy",
+      "/actions/game/in/vats": "V.A.T.S.",
+      "/actions/game/in/pause": "Pause menu",
+      "/actions/game/in/grab": "Grab",
+      "/actions/game/out/haptic_left": "Left hand vibration",
+      "/actions/game/out/haptic_right": "Right hand vibration",
+      "/actions/menu/in/navigate": "Navigate",
+      "/actions/menu/in/select": "Select",
+      "/actions/menu/in/back": "Back",
+      "/actions/menu/in/alternate": "Alternate action",
+      "/actions/menu/in/option": "Option",
+      "/actions/menu/in/previous": "Previous tab",
+      "/actions/menu/in/next": "Next tab"
+    }
+  ]
+}

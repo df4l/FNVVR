@@ -66,7 +66,8 @@ namespace dxvk {
 
   VrStereoRenderer::VrStereoRenderer(IVRBackend& backend, IDirect3DDevice9* device,
     bool showPreview, const VrPanelConfig& panel)
-  : m_backend(backend), m_device(device), m_showPreview(showPreview), m_panelConfig(panel) { }
+  : m_backend(backend), m_device(device), m_showPreview(showPreview), m_panelConfig(panel),
+    m_controls(backend) { }
 
 
   VrStereoRenderer::~VrStereoRenderer() {
@@ -81,7 +82,8 @@ namespace dxvk {
           IVRBackend&           backend,
           IDirect3DDevice9*     device,
           bool                  showPreview,
-    const VrPanelConfig&        panel) {
+    const VrPanelConfig&        panel,
+    const VrTurnConfig&         turn) {
     if (g_stereoRenderer)
       return nullptr;
 
@@ -131,6 +133,8 @@ namespace dxvk {
 
     if (!renderer->m_menuBackgroundFound)
       Logger::info("VR: The menu background setting was not found, menus may show a frozen image of the world");
+
+    renderer->m_controls.setHeadLook(VrHeadLook::install(turn));
 
     g_stereoRenderer = renderer.get();
     return renderer;
@@ -228,7 +232,7 @@ namespace dxvk {
     if (showsPanel(state)) {
       m_layer = InterfaceLayer::None;
       hideHud();
-      renderPanelFrame(main);
+      renderPanelFrame(main, state);
       return;
     }
 
@@ -267,10 +271,16 @@ namespace dxvk {
       m_hasReference = true;
     }
 
+    m_controls.update(input, state, m_hasReference ? &m_reference : nullptr,
+      float(timing.predictedPeriod) * 1e-9f);
+
     auto views = m_backend.locateViews(timing.predictedDisplayTime);
 
     m_gameCamera     = m_renderCamera.save();
     m_gameCameraPose = m_renderCamera.readPose();
+
+    // The game turned its camera with the head already
+    m_controls.adjustCamera(m_gameCameraPose);
 
     for (uint32_t eye = 0; eye < VrEyeCount; eye++) {
       m_eyeCopied[eye] = false;
@@ -312,12 +322,17 @@ namespace dxvk {
   }
 
 
-  void VrStereoRenderer::renderPanelFrame(void* main) {
+  void VrStereoRenderer::renderPanelFrame(void* main, VrGameStateKind state) {
     // The runtime draws the panel. The game draws one frame, which
     // onPresent copies to the panel. Waiting still paces the game to the
     // headset and provides the head pose the panel is placed with.
     VrFrameTiming timing = m_backend.waitFrame();
-    trackHead(m_backend.pollInput(timing.predictedDisplayTime));
+    VrInputState input = m_backend.pollInput(timing.predictedDisplayTime);
+    trackHead(input);
+
+    m_controls.update(input, state, m_hasReference ? &m_reference : nullptr,
+      float(timing.predictedPeriod) * 1e-9f);
+
     m_backend.submitEmptyFrame(timing.predictedDisplayTime);
 
     g_originalSwap(main, nullptr);

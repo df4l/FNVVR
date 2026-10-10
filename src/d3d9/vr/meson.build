@@ -6,6 +6,8 @@ vr_src = files([
   'vr_openvr_convert.cpp',
   'vr_virtual_gamepad.cpp',
   'vr_gamepad_head.cpp',
+  'vr_controller_pad.cpp',
+  'vr_turn_input.cpp',
 ])
 
 # Parts that depend on DXVK and Vulkan, only built into d3d9.dll
@@ -16,6 +18,8 @@ vr_dxvk_src = files([
   'vr_eye_transition.cpp',
   'vr_extension_provider.cpp',
   'vr_gamepad_hook.cpp',
+  'vr_controls.cpp',
+  'vr_head_look.cpp',
   'vr_d3d9_bridge.cpp',
   'vr_emulator_keyboard.cpp',
   'vr_game_camera.cpp',
@@ -39,12 +43,15 @@ if add_languages('cpp', native: true, required: false)
     'tests/test_vr_virtual_gamepad.cpp',
     'tests/test_vr_gamepad_head.cpp',
     'tests/test_vr_openvr_convert.cpp',
+    'tests/test_vr_controller_pad.cpp',
+    'tests/test_vr_turn_input.cpp',
   ])
 
   vr_test = executable('vr_tests', vr_test_sources, vr_src,
     files('../../util/util_matrix.cpp'),
     native              : true,
     include_directories : include_directories('../../../include/vulkan/include'),
+    cpp_args            : [ '-DVR_OPENVR_DIR="@0@"'.format(meson.current_source_dir() / 'openvr') ],
     override_options    : [ 'cpp_std=c++17' ])
 
   test('vr', vr_test)

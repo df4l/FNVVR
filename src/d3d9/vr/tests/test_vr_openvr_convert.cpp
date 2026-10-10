@@ -1,4 +1,7 @@
 #include <cmath>
+#include <fstream>
+#include <sstream>
+#include <string>
 
 #include "test.h"
 
@@ -71,23 +74,46 @@ TEST_CASE(projection_raw_is_converted_with_negated_vertical_values) {
 }
 
 
-TEST_CASE(buttons_are_mapped_from_the_pressed_mask) {
-  CHECK(vrButtonsFromOpenVr(0) == 0);
-  CHECK(vrButtonsFromOpenVr(uint64_t(1) << VrOpenVrButtonId::A) == uint32_t(VrButton::Primary));
-  CHECK(vrButtonsFromOpenVr(uint64_t(1) << VrOpenVrButtonId::ApplicationMenu) == uint32_t(VrButton::Secondary));
-  CHECK(vrButtonsFromOpenVr(uint64_t(1) << VrOpenVrButtonId::Axis0) == uint32_t(VrButton::Stick));
+TEST_CASE(action_paths_are_in_the_set_of_their_context) {
+  for (uint32_t i = 0; i < VrActionCount; i++) {
+    std::string path = vrOpenVrActionPath(VrAction(i));
+    std::string set  = VrOpenVrActionSets[uint32_t(vrOpenVrActionContext(VrAction(i)))];
 
-  // The grip and trigger are analog values, not buttons of the layer
-  CHECK(vrButtonsFromOpenVr((uint64_t(1) << VrOpenVrButtonId::Grip) | (uint64_t(1) << VrOpenVrButtonId::Axis1)) == 0);
+    CHECK(path.compare(0, set.size() + 4, set + "/in/") == 0);
+
+    for (uint32_t j = 0; j < i; j++)
+      CHECK(path != vrOpenVrActionPath(VrAction(j)));
+  }
+
+  CHECK(vrOpenVrActionContext(VrAction::Grab) == VrInputContext::Game);
+  CHECK(vrOpenVrActionContext(VrAction::MenuSelect) == VrInputContext::Menu);
+  CHECK(vrOpenVrStickPath(VrInputContext::Menu, true) == nullptr);
 }
 
 
-TEST_CASE(haptic_pulse_scales_and_is_limited) {
-  CHECK(vrHapticMicroseconds(1.0f, 2000000) == 2000);
-  CHECK(vrHapticMicroseconds(0.5f, 2000000) == 1000);
-  CHECK(vrHapticMicroseconds(1.0f, 100000000) == VrOpenVrMaxHapticMicroseconds);
-  CHECK(vrHapticMicroseconds(-1.0f, 2000000) == 0);
-  CHECK(vrHapticMicroseconds(1.0f, -5) == 0);
+TEST_CASE(manifest_declares_every_action) {
+  std::ifstream file(VR_OPENVR_DIR "/actions.json");
+  CHECK(file.good());
+
+  std::stringstream stream;
+  stream << file.rdbuf();
+  std::string manifest = stream.str();
+
+  auto declared = [&manifest] (const char* path) {
+    return manifest.find(std::string("\"") + path + "\"") != std::string::npos;
+  };
+
+  for (uint32_t i = 0; i < VrActionCount; i++)
+    CHECK(declared(vrOpenVrActionPath(VrAction(i))));
+
+  for (const char* set : VrOpenVrActionSets)
+    CHECK(declared(set));
+
+  CHECK(declared(vrOpenVrStickPath(VrInputContext::Game, false)));
+  CHECK(declared(vrOpenVrStickPath(VrInputContext::Game, true)));
+  CHECK(declared(vrOpenVrStickPath(VrInputContext::Menu, false)));
+  CHECK(declared(vrOpenVrHapticPath(VrHand::Left)));
+  CHECK(declared(vrOpenVrHapticPath(VrHand::Right)));
 }
 
 

@@ -33,9 +33,6 @@ namespace dxvk {
       + right * (input.moveRight * step)
       + forward * (input.moveForward * step)
       + VrVector3 { 0.0f, input.moveUp * step, 0.0f };
-
-    m_trigger[uint32_t(VrHand::Left)]  = input.leftTrigger;
-    m_trigger[uint32_t(VrHand::Right)] = input.rightTrigger;
   }
 
 
@@ -80,7 +77,6 @@ namespace dxvk {
     state.isActive = true;
     state.gripPose = handPose(hand);
     state.aimPose  = state.gripPose;
-    state.trigger  = m_trigger[uint32_t(hand)] ? 1.0f : 0.0f;
     return state;
   }
 

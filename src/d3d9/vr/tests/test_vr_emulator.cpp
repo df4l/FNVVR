@@ -180,8 +180,24 @@ TEST_CASE(controllers_follow_head_and_report_triggers) {
   CHECK(right.isActive);
   CHECK(left.gripPose.position.x < state.headPose.position.x);
   CHECK(right.gripPose.position.x > state.headPose.position.x);
-  CHECK_NEAR(left.trigger, 0.0f, 1e-6);
-  CHECK_NEAR(right.trigger, 1.0f, 1e-6);
+  CHECK(state.hasActions);
+  CHECK(state.actions.isPressed(VrAction::Attack));
+  CHECK(!state.actions.isPressed(VrAction::Aim));
+}
+
+
+TEST_CASE(triggers_drive_menu_actions_in_menu_context) {
+  VrEmulatorBackend backend = makeRunningBackend();
+  backend.setInputContext(VrInputContext::Menu);
+
+  VrEmulatorInput input;
+  input.leftTrigger = true;
+  backend.setInput(input);
+
+  VrInputState state = backend.pollInput(11111111);
+  CHECK(state.actions.isPressed(VrAction::MenuBack));
+  CHECK(!state.actions.isPressed(VrAction::Aim));
+  CHECK(!state.actions.isPressed(VrAction::MenuSelect));
 }
 
 

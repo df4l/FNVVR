@@ -1,4 +1,3 @@
-#include <algorithm>
 #include <cmath>
 
 #include "vr_math.h"
@@ -8,9 +7,25 @@ namespace dxvk {
 
   namespace {
 
-    bool isPressed(uint64_t mask, uint32_t id) {
-      return (mask & (uint64_t(1) << id)) != 0;
-    }
+    // Indexed by VrAction. Must match actions.json.
+    constexpr const char* ActionPaths[VrActionCount] = {
+      "/actions/game/in/attack",
+      "/actions/game/in/aim",
+      "/actions/game/in/activate",
+      "/actions/game/in/jump",
+      "/actions/game/in/reload",
+      "/actions/game/in/sneak",
+      "/actions/game/in/pipboy",
+      "/actions/game/in/vats",
+      "/actions/game/in/pause",
+      "/actions/game/in/grab",
+      "/actions/menu/in/select",
+      "/actions/menu/in/back",
+      "/actions/menu/in/alternate",
+      "/actions/menu/in/option",
+      "/actions/menu/in/previous",
+      "/actions/menu/in/next",
+    };
 
   }
 
@@ -84,28 +99,30 @@ namespace dxvk {
   }
 
 
-  uint32_t vrButtonsFromOpenVr(uint64_t pressed) {
-    uint32_t buttons = 0;
-
-    if (isPressed(pressed, VrOpenVrButtonId::A))
-      buttons |= uint32_t(VrButton::Primary);
-
-    if (isPressed(pressed, VrOpenVrButtonId::ApplicationMenu))
-      buttons |= uint32_t(VrButton::Secondary);
-
-    if (isPressed(pressed, VrOpenVrButtonId::Axis0))
-      buttons |= uint32_t(VrButton::Stick);
-
-    return buttons;
+  const char* vrOpenVrActionPath(VrAction action) {
+    return ActionPaths[uint32_t(action)];
   }
 
 
-  uint16_t vrHapticMicroseconds(float amplitude, int64_t durationNs) {
-    float strength = std::max(0.0f, std::min(1.0f, amplitude));
-    float duration = float(std::max<int64_t>(0, durationNs)) * 1e-3f;
+  VrInputContext vrOpenVrActionContext(VrAction action) {
+    return uint32_t(action) >= uint32_t(VrAction::MenuSelect)
+      ? VrInputContext::Menu
+      : VrInputContext::Game;
+  }
 
-    float micros = std::min(duration * strength, float(VrOpenVrMaxHapticMicroseconds));
-    return uint16_t(micros);
+
+  const char* vrOpenVrStickPath(VrInputContext context, bool turn) {
+    if (context == VrInputContext::Menu)
+      return turn ? nullptr : "/actions/menu/in/navigate";
+
+    return turn ? "/actions/game/in/turn" : "/actions/game/in/move";
+  }
+
+
+  const char* vrOpenVrHapticPath(VrHand hand) {
+    return hand == VrHand::Left
+      ? "/actions/game/out/haptic_left"
+      : "/actions/game/out/haptic_right";
   }
 
 }

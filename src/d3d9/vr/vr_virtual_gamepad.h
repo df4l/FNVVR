@@ -31,6 +31,10 @@ namespace dxvk {
     constexpr uint16_t DpadRight = 0x0008;
     constexpr uint16_t Start     = 0x0010;
     constexpr uint16_t Back      = 0x0020;
+    constexpr uint16_t LeftThumb = 0x0040;
+    constexpr uint16_t RightThumb = 0x0080;
+    constexpr uint16_t LeftShoulder = 0x0100;
+    constexpr uint16_t RightShoulder = 0x0200;
     constexpr uint16_t A         = 0x1000;
     constexpr uint16_t B         = 0x2000;
     constexpr uint16_t X         = 0x4000;

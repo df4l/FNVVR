@@ -29,6 +29,30 @@ namespace dxvk {
 
     bool g_loggedHidden = false;
 
+    bool       g_controllersActive = false;
+    VrPadState g_controllerPad;
+    bool       g_loggedControllers = false;
+
+    DWORD reportControllers(XINPUT_STATE* state) {
+      if (!g_loggedControllers) {
+        Logger::info("VR: The VR controllers are in use, the game sees them as a gamepad");
+        g_loggedControllers = true;
+      }
+
+      *state = XINPUT_STATE();
+      state->dwPacketNumber = ++g_packetNumber;
+
+      XINPUT_GAMEPAD& pad = state->Gamepad;
+      pad.wButtons      = g_controllerPad.buttons;
+      pad.bLeftTrigger  = g_controllerPad.leftTrigger;
+      pad.bRightTrigger = g_controllerPad.rightTrigger;
+      pad.sThumbLX      = g_controllerPad.thumbLeftX;
+      pad.sThumbLY      = g_controllerPad.thumbLeftY;
+      pad.sThumbRX      = g_controllerPad.thumbRightX;
+      pad.sThumbRY      = g_controllerPad.thumbRightY;
+      return ERROR_SUCCESS;
+    }
+
     // Also true for a key that was pressed and released since the previous
     // sample, so that a short tap is not missed
     bool isDown(int key) {
@@ -79,6 +103,9 @@ namespace dxvk {
       if (index != 0)
         return result;
 
+      if (g_options.controllers && g_controllersActive)
+        return reportControllers(state);
+
       if (g_options.hidePad) {
         if (result == ERROR_SUCCESS && !g_loggedHidden) {
           Logger::info("VR: A gamepad is connected, hiding it from the game");
@@ -117,9 +144,9 @@ namespace dxvk {
     bool patched = VrGameMemory::redirectCall(VrGame::XInputPollCallSite,
       VrGame::XInputGetStateThunk, reinterpret_cast<const void*>(&getStateHook));
 
-    // The interface checks for a gamepad on its own, so hiding one has to
-    // cover those calls as well
-    if (patched && options.hidePad) {
+    // The interface checks for a gamepad on its own, so hiding one or
+    // reporting the controllers has to cover those calls as well
+    if (patched && (options.hidePad || options.controllers)) {
       const uintptr_t interfaceSites[] = {
         VrGame::XInputInterfaceUpdateCallSite,
         VrGame::XInputInterfaceSetupCallSite,
@@ -133,7 +160,8 @@ namespace dxvk {
     }
 
     if (patched && options.hidePad)
-      Logger::info("VR: Gamepad hook installed, gamepads are hidden from the game");
+      Logger::info(str::format("VR: Gamepad hook installed, gamepads are hidden from the game",
+        options.controllers ? ", the VR controllers act as one" : ""));
     else if (patched)
       Logger::info(str::format("VR: Gamepad hook installed (virtual gamepad ", options.virtualPad ? "on" : "off",
         ", head control with LB + RB ", options.headControl ? "on" : "off", ")"));
@@ -141,6 +169,12 @@ namespace dxvk {
       Logger::info("VR: The game's gamepad polling call was not found, gamepad hook is disabled");
 
     return patched;
+  }
+
+
+  void VrGamepadHook::setControllerPad(bool active, const VrPadState& pad) {
+    g_controllersActive = active;
+    g_controllerPad     = pad;
   }
 
 

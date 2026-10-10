@@ -25,11 +25,12 @@ namespace dxvk {
 
 
   VrSystem::VrSystem(std::unique_ptr<IVRBackend> backend, bool showPreview,
-    const VrPanelConfig& panel, bool headsetResolution)
+    const VrPanelConfig& panel, const VrTurnConfig& turn, bool headsetResolution)
   : m_backend(std::move(backend)),
     m_extensionProvider(std::make_unique<VrExtensionProvider>(*m_backend)),
     m_showPreview(showPreview),
     m_panelConfig(panel),
+    m_turnConfig(turn),
     m_headsetResolution(headsetResolution) { }
 
 
@@ -75,6 +76,11 @@ namespace dxvk {
     panel.hudHeight   = config.getOption<float>("d3d9.vrHudHeight",   panel.hudHeight);
     panel.hudMessagesOffset = config.getOption<float>("d3d9.vrHudMessagesOffset", panel.hudMessagesOffset);
 
+    VrTurnConfig turn;
+    turn.smooth      = config.getOption<bool>("d3d9.vrSmoothTurn", turn.smooth);
+    turn.snapAngle   = config.getOption<float>("d3d9.vrSnapTurnAngle", turn.snapAngle);
+    turn.smoothSpeed = config.getOption<float>("d3d9.vrSmoothTurnSpeed", turn.smoothSpeed);
+
     if (auto* emulator = dynamic_cast<VrEmulatorBackend*>(backend.get())) {
       VrEmulatorKeyboard keyboard;
       emulator->setInputSource([keyboard] {
@@ -89,17 +95,19 @@ namespace dxvk {
         VrGamepadHook::install(gamepad);
     } else {
       // A headset session can come with a gamepad the player never touches
-      // (Steam's virtual controllers), which takes the mouse cursor away
+      // (Steam's virtual controllers), which takes the mouse cursor away.
+      // The VR controllers take its place while they are in use.
       VrGamepadHook::Options gamepad;
-      gamepad.hidePad = config.getOption<bool>("d3d9.vrHideGamepad", true);
+      gamepad.hidePad     = config.getOption<bool>("d3d9.vrHideGamepad", true);
+      gamepad.controllers = config.getOption<bool>("d3d9.vrControllers", true);
 
-      if (gamepad.hidePad)
+      if (gamepad.hidePad || gamepad.controllers)
         VrGamepadHook::install(gamepad);
     }
 
     bool headsetResolution = config.getOption<bool>("d3d9.vrHeadsetResolution", true);
 
-    g_vrSystem.reset(new VrSystem(std::move(backend), showPreview, panel, headsetResolution));
+    g_vrSystem.reset(new VrSystem(std::move(backend), showPreview, panel, turn, headsetResolution));
     DxvkInstance::registerExtensionProvider(g_vrSystem->m_extensionProvider.get());
   }
 
@@ -169,7 +177,7 @@ namespace dxvk {
       return false;
     }
 
-    m_stereoRenderer = VrStereoRenderer::install(*m_backend, device, m_showPreview, m_panelConfig);
+    m_stereoRenderer = VrStereoRenderer::install(*m_backend, device, m_showPreview, m_panelConfig, m_turnConfig);
     return true;
   }
 
