@@ -92,6 +92,11 @@
       "requirement": "suggested"
     },
     {
+      "name": "/actions/menu/in/secondary",
+      "type": "vector2",
+      "requirement": "optional"
+    },
+    {
       "name": "/actions/menu/in/select",
       "type": "boolean",
       "requirement": "suggested"
@@ -142,6 +147,7 @@
       "/actions/game/out/haptic_left": "Left hand vibration",
       "/actions/game/out/haptic_right": "Right hand vibration",
       "/actions/menu/in/navigate": "Navigate",
+      "/actions/menu/in/secondary": "Secondary stick (lockpick screwdriver)",
       "/actions/menu/in/select": "Select",
       "/actions/menu/in/back": "Back",
       "/actions/menu/in/alternate": "Alternate action",

@@ -96,5 +96,17 @@ TEST_CASE(menu_navigation_presses_the_dominant_dpad_direction) {
   actions.move = { -0.9f, 0.4f };
   VrPadState pad = vrComputePadState(actions, VrInputContext::Menu, nullptr);
   CHECK(pad.buttons == VrGamepadButton::DpadLeft);
-  CHECK(pad.thumbLeftX == 0);
+}
+
+
+TEST_CASE(menu_sticks_are_passed_on) {
+  VrActionState actions;
+  actions.move = { -1.0f, 0.5f };
+  actions.turn = { 0.5f, -1.0f };
+
+  VrPadState pad = vrComputePadState(actions, VrInputContext::Menu, nullptr);
+  CHECK(pad.thumbLeftX == -32767);
+  CHECK(pad.thumbLeftY == 16384);
+  CHECK(pad.thumbRightX == 16384);
+  CHECK(pad.thumbRightY == -32767);
 }

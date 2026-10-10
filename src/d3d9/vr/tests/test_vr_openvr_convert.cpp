@@ -87,7 +87,6 @@ TEST_CASE(action_paths_are_in_the_set_of_their_context) {
 
   CHECK(vrOpenVrActionContext(VrAction::Grab) == VrInputContext::Game);
   CHECK(vrOpenVrActionContext(VrAction::MenuSelect) == VrInputContext::Menu);
-  CHECK(vrOpenVrStickPath(VrInputContext::Menu, true) == nullptr);
 }
 
 
@@ -112,6 +111,7 @@ TEST_CASE(manifest_declares_every_action) {
   CHECK(declared(vrOpenVrStickPath(VrInputContext::Game, false)));
   CHECK(declared(vrOpenVrStickPath(VrInputContext::Game, true)));
   CHECK(declared(vrOpenVrStickPath(VrInputContext::Menu, false)));
+  CHECK(declared(vrOpenVrStickPath(VrInputContext::Menu, true)));
   CHECK(declared(vrOpenVrHapticPath(VrHand::Left)));
   CHECK(declared(vrOpenVrHapticPath(VrHand::Right)));
 }

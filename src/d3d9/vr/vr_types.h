@@ -153,7 +153,8 @@ namespace dxvk {
    * \brief State of the actions for one frame
    *
    * In the Game context, \c move is the locomotion stick and \c turn the
-   * turning stick. In the Menu context, \c move navigates. Stick values are
+   * turning stick. In the Menu context, \c move navigates and \c turn is
+   * the secondary stick, which some menus read directly. Stick values are
    * in [-1, 1], +X right and +Y forward.
    */
   struct VrActionState {

@@ -141,7 +141,7 @@
           "mode": "joystick",
           "inputs": {
             "position": {
-              "output": "/actions/menu/in/navigate"
+              "output": "/actions/menu/in/secondary"
             }
           }
         },
