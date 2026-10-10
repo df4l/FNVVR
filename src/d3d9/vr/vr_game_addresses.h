@@ -128,6 +128,16 @@ namespace dxvk {
     constexpr uintptr_t ActorProcess          = 0x68;
     constexpr uintptr_t ProcessIsWeaponOutSlot = 0x454;
 
+    /**
+     * Equipped weapon: the process's virtual function at this slot returns
+     * its inventory entry (HighProcess 0x008D81E0 reads +0x114), whose form
+     * is at +0x08 (0x0044DDC0). The weapon's animation type is a byte at
+     * +0xF4 (0x00446390); Fire treats 10 to 13 as thrown and placed weapons.
+     */
+    constexpr uintptr_t ProcessWeaponInfoSlot = 0x148;
+    constexpr uintptr_t InventoryEntryForm    = 0x08;
+    constexpr uintptr_t WeaponAnimationType   = 0xF4;
+
     /** Nodes of the first-person model: the weapon, under the right hand, and the muzzle in the weapon's model */
     constexpr char WeaponNodeName[]           = "Weapon";
     constexpr char ProjectileNodeName[]       = "ProjectileNode";
@@ -148,6 +158,20 @@ namespace dxvk {
     constexpr uintptr_t SkinInstanceData      = 0x08;
     constexpr uintptr_t SkinInstanceBones     = 0x14;
     constexpr uintptr_t SkinDataBoneCount     = 0x44;
+
+    /**
+     * Bind pose, read by 0x00E6FE30: the skin instance's root parent
+     * (NiAVObject*), the skin data's transform from the root parent to the
+     * skin, and its array of bone data, each starting with the transform
+     * from the skin to the bone. Transforms are NiTransform: rotation
+     * (row-major 3x3), translation, scale.
+     */
+    constexpr uintptr_t SkinInstanceRootParent = 0x10;
+    constexpr uintptr_t SkinDataRootParentToSkin = 0x0C;
+    constexpr uintptr_t SkinDataBones         = 0x40;
+    constexpr uintptr_t SkinBoneDataSize      = 0x4C;
+    constexpr uintptr_t TransformTranslation  = 0x24;
+    constexpr uintptr_t TransformScale        = 0x30;
 
     /** NiAVObject transforms: parent, local rotation (row-major 3x3) and world transform */
     constexpr uintptr_t ObjectParent          = 0x18;

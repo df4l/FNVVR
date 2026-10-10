@@ -56,6 +56,20 @@ TEST_CASE(two_hand_grip_does_not_aim) {
 }
 
 
+TEST_CASE(game_control_presses_its_binding) {
+  Bindings bindings;
+  VrPadState pad;
+
+  vrPressGameControl(pad, VrGameControl::Aim, bindings.codes);
+  CHECK(pad.leftTrigger == 0xFF);
+
+  VrPadState unbound;
+  vrPressGameControl(unbound, VrGameControl::Grab, bindings.codes);
+  vrPressGameControl(unbound, VrGameControl::Aim, nullptr);
+  CHECK(unbound.buttons == 0 && unbound.leftTrigger == 0);
+}
+
+
 TEST_CASE(unbound_controls_press_nothing) {
   Bindings bindings;
   VrActionState actions;

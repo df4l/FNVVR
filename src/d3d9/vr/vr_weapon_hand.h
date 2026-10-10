@@ -71,7 +71,23 @@ namespace dxvk {
             void*                 main,
       const VrVector3&            eyePosition);
 
+    /**
+     * \brief Whether the game's aim control should be pressed
+     *
+     * True while the other hand supports a one-handed weapon: the game
+     * only holds those with both hands while it aims.
+     */
+    bool wantsGameAim() const {
+      return m_braced;
+    }
+
   private:
+
+    enum class GripKind {
+      None,       ///< The other hand does not hold the weapon
+      TwoHanded,  ///< Held with both hands, the line between them aims
+      Braced,     ///< One-handed, supported while the game aims
+    };
 
     VrWeaponHand() = default;
 
@@ -84,6 +100,7 @@ namespace dxvk {
 
     // Whether the other hand holds the weapon
     bool             m_twoHanded = false;
+    bool             m_braced = false;
 
     // Set before PlaceCamera, used by the update it makes
     uint8_t*         m_main = nullptr;
@@ -101,6 +118,8 @@ namespace dxvk {
     bool             m_loggedArms   = false;
     bool             m_loggedOtherHand = false;
     bool             m_loggedTwoHanded = false;
+    bool             m_loggedBraced = false;
+    bool             m_loggedMirror = false;
 
     // Arm meshes culled by the VR layer, compared but not dereferenced
     // until they are found in the model again
@@ -119,12 +138,14 @@ namespace dxvk {
 
     void placeModel(uint8_t* root, void* updateData);
 
-    void updateTwoHanded(bool canHold, const VrVector3& support);
+    void updateGrip(GripKind kind, bool canHold, const VrVector3& support);
 
     void placeOtherHand(
+            uint8_t*              root,
             uint8_t*              forearm,
       const VrGameTransform&      drawnForearm,
-      const VrVector3&            drawnHand,
+      const VrGameTransform&      drawnHand,
+      const VrGameCameraPose&     hand,
       const VrVector3&            shift,
             void*                 updateData);
 
@@ -133,6 +154,8 @@ namespace dxvk {
     void showArms(uint8_t* root);
 
     bool holdsWeapon(const uint8_t* player) const;
+
+    GripKind weaponGrip(const uint8_t* player) const;
 
   };
 

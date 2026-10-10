@@ -123,11 +123,9 @@ namespace dxvk {
       return pad;
     }
 
-    if (bindings) {
-      for (const ActionControl& entry : GameControls) {
-        if (actions.isPressed(entry.action))
-          pressInput(pad, bindings[entry.control]);
-      }
+    for (const ActionControl& entry : GameControls) {
+      if (actions.isPressed(entry.action))
+        vrPressGameControl(pad, entry.control, bindings);
     }
 
     if (actions.isPressed(VrAction::Pause))
@@ -136,6 +134,15 @@ namespace dxvk {
     pad.thumbLeftX = thumbValue(actions.move.x);
     pad.thumbLeftY = thumbValue(actions.move.y);
     return pad;
+  }
+
+
+  void vrPressGameControl(
+          VrPadState&           pad,
+          uint32_t              control,
+    const uint8_t*              bindings) {
+    if (bindings && control < VrGameControl::Count)
+      pressInput(pad, bindings[control]);
   }
 
 }

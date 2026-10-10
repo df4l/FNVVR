@@ -109,6 +109,58 @@ namespace dxvk {
   }
 
 
+  VrGameTransform vrInverse(const VrGameTransform& t) {
+    VrGameTransform result;
+    result.rotate    = vrTranspose(t.rotate);
+    result.translate = (result.rotate * t.translate) * -1.0f;
+    return result;
+  }
+
+
+  VrGameRotation vrComputeBoneMirror(
+    const VrGameTransform&      bindHand,
+    const VrGameTransform&      bindOtherHand) {
+    VrVector3 normal = bindOtherHand.translate - bindHand.translate;
+    float length = vrLength(normal);
+
+    if (length <= 0.0f)
+      return VrGameRotation();
+
+    normal = normal * (1.0f / length);
+
+    // Reflection across the plane halfway between the hands
+    VrGameRotation reflection;
+    const float n[3] = { normal.x, normal.y, normal.z };
+
+    for (uint32_t i = 0; i < 3; i++) {
+      for (uint32_t j = 0; j < 3; j++)
+        reflection.m[i][j] -= 2.0f * n[i] * n[j];
+    }
+
+    return vrTranspose(bindHand.rotate) * reflection * bindOtherHand.rotate;
+  }
+
+
+  VrGameTransform vrComputeMirroredHand(
+    const VrGameCameraPose&     controller,
+    const VrGameTransform&      handBone,
+    const VrGameCameraPose&     otherController,
+    const VrGameRotation&       boneMirror) {
+    // Reflection across the controller's forward-up plane: its right axis,
+    // the last column of vrCameraRotation, is flipped
+    VrGameRotation flipRight;
+    flipRight.m[2][2] = -1.0f;
+
+    VrGameRotation mirror = vrCameraRotation(otherController) * flipRight
+                          * vrTranspose(vrCameraRotation(controller));
+
+    VrGameTransform result;
+    result.rotate    = mirror * handBone.rotate * boneMirror;
+    result.translate = otherController.position + mirror * (handBone.translate - controller.position);
+    return result;
+  }
+
+
   VrHeadAngles vrComputeAimAngles(const VrVector3& direction) {
     VrHeadAngles angles;
     float length = vrLength(direction);

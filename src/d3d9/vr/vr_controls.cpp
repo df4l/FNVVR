@@ -53,8 +53,12 @@ namespace dxvk {
     VrGamepadHook::setCursorMode(pointer.cursorActive);
     VrMenuCursor::update(pointer);
 
-    VrGamepadHook::setControllerPad(input.hasActions,
-      vrComputePadState(actions, m_context, gameBindings()));
+    VrPadState pad = vrComputePadState(actions, m_context, gameBindings());
+
+    if (m_gameAim && m_context == VrInputContext::Game)
+      vrPressGameControl(pad, VrGameControl::Aim, gameBindings());
+
+    VrGamepadHook::setControllerPad(input.hasActions, pad);
 
     if (m_headLook) {
       VrPose head;

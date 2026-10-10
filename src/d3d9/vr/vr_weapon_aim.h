@@ -78,6 +78,49 @@ namespace dxvk {
     const VrVector3&        target);
 
   /**
+   * \brief Inverse of a rigid transform
+   */
+  VrGameTransform vrInverse(const VrGameTransform& t);
+
+  /**
+   * \brief Mirror between the axes of a pair of hand bones
+   *
+   * Skeletons are built so that the left side mirrors the right side in
+   * the bind pose, but each bone keeps right-handed axes, so a mirrored
+   * bone has one of its axes flipped. The result takes the other hand's
+   * axes to the mirror image of the hand's axes.
+   *
+   * \param [in] bindHand Bind pose of the hand bone
+   * \param [in] bindOtherHand Bind pose of the other hand bone, in the same
+   *    frame as \p bindHand
+   * \returns A reflection, from the other hand bone's frame to the hand
+   *    bone's frame, or the identity if both bones are at the same place
+   */
+  VrGameRotation vrComputeBoneMirror(
+    const VrGameTransform&      bindHand,
+    const VrGameTransform&      bindOtherHand);
+
+  /**
+   * \brief Places the other hand bone as the mirror image of the hand bone
+   *
+   * The hand bone's pose relative to its controller is mirrored across the
+   * controller's forward-up plane and applied to the other controller, so
+   * that the free hand is held around its controller like the hand holding
+   * the weapon.
+   *
+   * \param [in] controller Pose of the controller of the hand
+   * \param [in] handBone World transform of the hand bone
+   * \param [in] otherController Pose of the other controller
+   * \param [in] boneMirror See vrComputeBoneMirror
+   * \returns World transform of the other hand bone, without scale
+   */
+  VrGameTransform vrComputeMirroredHand(
+    const VrGameCameraPose&     controller,
+    const VrGameTransform&      handBone,
+    const VrGameCameraPose&     otherController,
+    const VrGameRotation&       boneMirror);
+
+  /**
    * \brief Heading and pitch of a direction in the game's convention
    *
    * Heading 0 faces north (+Y) and grows clockwise, pitch is positive
