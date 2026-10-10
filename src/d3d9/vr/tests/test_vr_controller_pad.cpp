@@ -84,6 +84,20 @@ TEST_CASE(menu_actions_press_the_menu_buttons) {
 }
 
 
+TEST_CASE(menu_triggers_press_the_gamepad_triggers) {
+  VrActionState actions;
+  actions.setPressed(VrAction::MenuRightTrigger, true);
+
+  VrPadState pad = vrComputePadState(actions, VrInputContext::Menu, nullptr);
+  CHECK(pad.rightTrigger == 0xFF);
+  CHECK(pad.leftTrigger == 0);
+  CHECK(pad.buttons == 0);
+
+  actions.setPressed(VrAction::MenuLeftTrigger, true);
+  CHECK(vrComputePadState(actions, VrInputContext::Menu, nullptr).leftTrigger == 0xFF);
+}
+
+
 TEST_CASE(menu_navigation_presses_the_dominant_dpad_direction) {
   VrActionState actions;
 

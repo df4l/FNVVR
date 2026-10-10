@@ -25,6 +25,8 @@ namespace dxvk {
       "/actions/menu/in/option",
       "/actions/menu/in/previous",
       "/actions/menu/in/next",
+      "/actions/menu/in/left_trigger",
+      "/actions/menu/in/right_trigger",
     };
 
   }

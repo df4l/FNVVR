@@ -125,6 +125,16 @@
       "name": "/actions/menu/in/next",
       "type": "boolean",
       "requirement": "suggested"
+    },
+    {
+      "name": "/actions/menu/in/left_trigger",
+      "type": "boolean",
+      "requirement": "optional"
+    },
+    {
+      "name": "/actions/menu/in/right_trigger",
+      "type": "boolean",
+      "requirement": "suggested"
     }
   ],
   "localization": [
@@ -153,7 +163,9 @@
       "/actions/menu/in/alternate": "Alternate action",
       "/actions/menu/in/option": "Option",
       "/actions/menu/in/previous": "Previous tab",
-      "/actions/menu/in/next": "Next tab"
+      "/actions/menu/in/next": "Next tab",
+      "/actions/menu/in/left_trigger": "Left trigger",
+      "/actions/menu/in/right_trigger": "Right trigger (V.A.T.S.: target the body part)"
     }
   ]
 }
