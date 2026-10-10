@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 #include "vr_weapon_aim.h"
 
@@ -84,6 +85,10 @@ namespace dxvk {
     bool             m_loggedFrame  = false;
     bool             m_loggedArms   = false;
 
+    // Arm meshes culled by the VR layer, compared but not dereferenced
+    // until they are found in the model again
+    std::vector<uint8_t*> m_hiddenMeshes;
+
     static void __fastcall updateHook(
             uint8_t*              object,
             void*                 unused,
@@ -98,6 +103,8 @@ namespace dxvk {
     void placeModel(uint8_t* root, void* updateData);
 
     void hideArms(uint8_t* root);
+
+    void showArms(uint8_t* root);
 
     bool holdsWeapon(const uint8_t* player) const;
 

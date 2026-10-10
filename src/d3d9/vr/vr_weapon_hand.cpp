@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstring>
 
 #include "../../util/log/log.h"
@@ -25,6 +26,9 @@ namespace dxvk {
     // Process virtual function, __thiscall without arguments, returns a
     // bool in AL
     using IsWeaponOutFn = uint32_t (__fastcall*)(uint8_t* process, void* unused);
+
+    // NiObject::GetAsNiGeometry, __thiscall without arguments
+    using GetAsGeometryFn = uint8_t* (__fastcall*)(uint8_t* object, void* unused);
 
     // The weapon node is a few levels below the skeleton's root, and the
     // muzzle a few levels below the weapon
@@ -137,22 +141,52 @@ namespace dxvk {
     }
 
     /**
-     * \brief Folds a subtree into one point, except the hand below it
+     * \brief Bones of one arm above the forearm
      *
-     * Skinned vertices follow the world transforms of their bones when they
-     * are drawn (0x00E6FE30), so with the scale near zero the arm's vertices
-     * end up on the wrist, and the hand, whose world transform was already
-     * computed, keeps its shape. The next update rebuilds the transforms.
+     * The hand's meshes are skinned to the hand, the fingers and the
+     * forearm. Only the meshes of the sleeves and the upper arms also use
+     * the bones between the forearm and the clavicle.
      */
-    void foldBones(uint8_t* object, const uint8_t* hand, const VrVector3& wrist, uint32_t depth) {
-      // Not zero, the game inverts some world transforms
-      constexpr float FoldedScale = 1.0e-4f;
+    struct UpperArm {
+      uint8_t* top     = nullptr;
+      uint8_t* forearm = nullptr;
 
-      if (object == hand)
-        return;
+      bool contains(uint8_t* bone) const {
+        return top != forearm && isAncestor(top, bone) && !isAncestor(forearm, bone);
+      }
+    };
 
-      writeVector(object, VrGame::ObjectWorldTranslation, wrist);
-      field<float>(object, VrGame::ObjectWorldScale) = FoldedScale;
+    uint8_t* asGeometry(uint8_t* object) {
+      auto vtable = readField<const uint8_t*>(object, 0);
+      auto getAsGeometry = reinterpret_cast<GetAsGeometryFn>(readField<uintptr_t>(vtable, VrGame::ObjectGetAsGeometrySlot));
+      return getAsGeometry(object, nullptr);
+    }
+
+    bool isArmMesh(uint8_t* geometry, const UpperArm (&arms)[2]) {
+      auto skin = field<uint8_t*>(geometry, VrGame::GeometrySkinInstance);
+
+      if (!skin)
+        return false;
+
+      auto data  = field<uint8_t*>(skin, VrGame::SkinInstanceData);
+      auto bones = field<uint8_t**>(skin, VrGame::SkinInstanceBones);
+
+      if (!data || !bones)
+        return false;
+
+      uint32_t count = field<uint32_t>(data, VrGame::SkinDataBoneCount);
+
+      for (uint32_t i = 0; i < count; i++) {
+        if (bones[i] && (arms[0].contains(bones[i]) || arms[1].contains(bones[i])))
+          return true;
+      }
+
+      return false;
+    }
+
+    template<typename Fn>
+    void forEachObject(uint8_t* object, uint32_t depth, const Fn& fn) {
+      fn(object);
 
       uintptr_t node = vrGameAsNode(reinterpret_cast<uintptr_t>(object));
 
@@ -164,7 +198,7 @@ namespace dxvk {
 
       for (uint32_t i = 0; children && i < count; i++) {
         if (children[i])
-          foldBones(children[i], hand, wrist, depth - 1);
+          forEachObject(children[i], depth - 1, fn);
       }
     }
 
@@ -314,6 +348,7 @@ namespace dxvk {
 
     if (!weapon) {
       m_hasAim = false;
+      showArms(root);
       return;
     }
 
@@ -370,22 +405,59 @@ namespace dxvk {
       return;
     }
 
-    for (uint32_t i = 0; i < 2; i++) {
-      uint8_t* hand = hands[i];
-      uint8_t* arm  = armBone(hand, hands[1 - i]);
+    UpperArm arms[2];
 
-      if (arm == hand)
-        continue;
+    for (uint32_t i = 0; i < 2; i++) {
+      arms[i].top     = armBone(hands[i], hands[1 - i]);
+      arms[i].forearm = arms[i].top != hands[i] ? field<uint8_t*>(hands[i], VrGame::ObjectParent) : hands[i];
 
       if (!m_loggedArms) {
-        auto name = field<const char*>(arm, VrGame::ObjectName);
-        Logger::info(str::format("VR: Hiding the arm from '", name ? name : "", "'"));
+        auto top     = field<const char*>(arms[i].top, VrGame::ObjectName);
+        auto forearm = field<const char*>(arms[i].forearm, VrGame::ObjectName);
+        Logger::info(str::format("VR: Hiding the meshes skinned between '", top ? top : "",
+          "' and '", forearm ? forearm : "", "'"));
       }
-
-      foldBones(arm, hand, readVector(hand, VrGame::ObjectWorldTranslation), MaxModelDepth);
     }
 
+    // The meshes are culled with the first-person camera after this update
+    forEachObject(root, MaxModelDepth, [this, &arms] (uint8_t* object) {
+      uint8_t* geometry = asGeometry(object);
+
+      if (!geometry || !isArmMesh(geometry, arms))
+        return;
+
+      field<uint32_t>(geometry, VrGame::ObjectFlags) |= VrGame::ObjectFlagAppCulled;
+
+      if (std::find(m_hiddenMeshes.begin(), m_hiddenMeshes.end(), geometry) != m_hiddenMeshes.end())
+        return;
+
+      m_hiddenMeshes.push_back(geometry);
+
+      if (!m_loggedArms) {
+        auto name = field<const char*>(geometry, VrGame::ObjectName);
+        Logger::info(str::format("VR: Hiding the arm mesh '", name ? name : "", "'"));
+      }
+    });
+
+    if (!m_loggedArms && m_hiddenMeshes.empty())
+      Logger::warn("VR: No arm mesh was found, the arms stay visible");
+
     m_loggedArms = true;
+  }
+
+
+  void VrWeaponHand::showArms(uint8_t* root) {
+    if (m_hiddenMeshes.empty())
+      return;
+
+    // Meshes no longer in the model may have been freed, so only the ones
+    // still found in it are touched
+    forEachObject(root, MaxModelDepth, [this] (uint8_t* object) {
+      if (std::find(m_hiddenMeshes.begin(), m_hiddenMeshes.end(), object) != m_hiddenMeshes.end())
+        field<uint32_t>(object, VrGame::ObjectFlags) &= ~VrGame::ObjectFlagAppCulled;
+    });
+
+    m_hiddenMeshes.clear();
   }
 
 

@@ -137,6 +137,18 @@ namespace dxvk {
     constexpr char LeftHandNodeName[]         = "Bip01 L Hand";
     constexpr char RightHandNodeName[]        = "Bip01 R Hand";
 
+    /**
+     * Skinned geometry: GetAsNiGeometry vtable slot (0x00E68810 returns this
+     * in the NiTriShape vtable 0x0109D454, null for nodes), NiGeometry skin
+     * instance, and the skin instance's data and bone array. The bone count
+     * is in the skin data. See findings/weapon.md §5.
+     */
+    constexpr uintptr_t ObjectGetAsGeometrySlot = 0x18;
+    constexpr uintptr_t GeometrySkinInstance  = 0xBC;
+    constexpr uintptr_t SkinInstanceData      = 0x08;
+    constexpr uintptr_t SkinInstanceBones     = 0x14;
+    constexpr uintptr_t SkinDataBoneCount     = 0x44;
+
     /** NiAVObject transforms: parent, local rotation (row-major 3x3) and world transform */
     constexpr uintptr_t ObjectParent          = 0x18;
     constexpr uintptr_t ObjectLocalRotation   = 0x34;
