@@ -123,6 +123,8 @@ namespace dxvk {
 
     if (!renderer->m_hudAvailable)
       Logger::info("VR: The HUD layout was not found, the HUD is not shown in the headset");
+    else if (!renderer->m_hudLayers.menusFound())
+      Logger::info("VR: The menu list was not found, HUD messages are not shown while a menu is open");
 
     if (!renderer->m_menuScenes.initialize())
       Logger::info("VR: The menu scene functions were not found, menus such as lockpicking show no 3D model in the headset");
@@ -237,7 +239,8 @@ namespace dxvk {
     }
 
     m_layer = chooseLayer(state);
-    m_layerRendered = false;
+    m_hudRendered  = false;
+    m_menuRendered = false;
 
     // The panel is placed again when it switches from the whole frame to a
     // menu drawn in game
@@ -308,13 +311,13 @@ namespace dxvk {
       m_loggedFailure = true;
     }
 
-    if (m_layerRendered && m_layer == InterfaceLayer::Hud)
+    if (m_hudRendered)
       submitHud();
     else
       hideHud();
 
     // A menu keeps its last image for a frame where it was not drawn
-    if (m_layerRendered && m_layer == InterfaceLayer::Menu)
+    if (m_menuRendered)
       submitMenu();
 
     if (m_preview)
@@ -493,14 +496,28 @@ namespace dxvk {
   }
 
 
+  VrStereoRenderer::InterfaceLayer VrStereoRenderer::eyeLayer() const {
+    if (m_eye == 0)
+      return m_layer;
+
+    // The HUD that the game keeps over a menu, drawn without the menu
+    if (m_eye == 1 && m_layer == InterfaceLayer::Menu && m_hudAvailable && m_hudLayers.menusFound())
+      return InterfaceLayer::Hud;
+
+    return InterfaceLayer::None;
+  }
+
+
   bool VrStereoRenderer::renderLayer(
           void*                 interfaceManager,
           void*                 arg0,
           uint32_t              arg1) {
-    if (m_eye != 0 || m_layer == InterfaceLayer::None || !createInterfaceTextures())
+    InterfaceLayer layer = eyeLayer();
+
+    if (layer == InterfaceLayer::None || !createInterfaceTextures())
       return false;
 
-    IDirect3DTexture9* texture = m_layer == InterfaceLayer::Hud
+    IDirect3DTexture9* texture = layer == InterfaceLayer::Hud
       ? m_hudTexture.ptr() : m_menuTexture.ptr();
 
     Com<IDirect3DSurface9> layerSurface;
@@ -517,7 +534,7 @@ namespace dxvk {
     m_device->SetDepthStencilSurface(nullptr);
     m_device->SetRenderTarget(0, layerSurface.ptr());
 
-    if (m_layer == InterfaceLayer::Menu && m_menuScenes.isAnyOpen())
+    if (layer == InterfaceLayer::Menu && m_menuScenes.isAnyOpen())
       renderMenuScenes();
     else
       m_device->Clear(0, nullptr, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 0, 0, 0), 1.0f, 0);
@@ -532,12 +549,17 @@ namespace dxvk {
     bool kept = usedTarget == layerSurface;
     // Menus are shown even if the HUD could not be hidden: the game hides
     // most of it while a menu is open
-    m_layerRendered = kept && (m_hudIsolated || m_layer == InterfaceLayer::Menu);
+    bool rendered = kept && (m_hudIsolated || layer == InterfaceLayer::Menu);
+
+    if (layer == InterfaceLayer::Hud)
+      m_hudRendered = rendered;
+    else
+      m_menuRendered = rendered;
 
     m_device->SetRenderTarget(0, renderTarget.ptr());
     m_device->SetDepthStencilSurface(depthStencil.ptr());
 
-    if (!m_layerRendered && !m_loggedHudFailure) {
+    if (!rendered && !m_loggedHudFailure) {
       Logger::err(kept
         ? "VR: The interface pass did not cull the HUD, the HUD is not shown in the headset"
         : "VR: The interface pass changed the render target, the HUD and menus are not shown in the headset");
@@ -652,15 +674,20 @@ namespace dxvk {
 
 
   void VrStereoRenderer::isolateHud() {
-    // Only the left eye's interface pass goes to the panels. The flags stay
-    // set until that pass is drawn, see renderLayer. Menus are drawn
-    // without any HUD group.
-    if (m_eye != 0 || m_layer == InterfaceLayer::None || !m_hudAvailable || m_hudIsolated)
+    // The flags stay set until the eye's interface pass is drawn, see
+    // renderLayer. Menus are drawn without any HUD group, and the HUD
+    // without the menus that are open.
+    InterfaceLayer layer = eyeLayer();
+
+    if (layer == InterfaceLayer::None || !m_hudAvailable || m_hudIsolated)
       return;
 
-    m_hudIsolated = m_layer == InterfaceLayer::Hud
-      ? m_hudLayers.isolate(HeadHudGroups, std::size(HeadHudGroups))
-      : m_hudLayers.isolate(nullptr, 0);
+    if (layer == InterfaceLayer::Menu)
+      m_hudIsolated = m_hudLayers.isolate(nullptr, 0);
+    else if (m_layer == InterfaceLayer::Menu)
+      m_hudIsolated = m_hudLayers.isolateFromMenus(HeadHudGroups, std::size(HeadHudGroups));
+    else
+      m_hudIsolated = m_hudLayers.isolate(HeadHudGroups, std::size(HeadHudGroups));
   }
 
 
