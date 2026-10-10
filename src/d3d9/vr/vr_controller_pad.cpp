@@ -105,7 +105,15 @@ namespace dxvk {
           pad.buttons |= entry.button;
       }
 
-      pad.buttons |= navigateButtons(actions.move);
+      // The sticks are passed on as well, for menus that read them directly
+      // (lockpicking: the left stick turns the pin, the right one the
+      // screwdriver). The interface treats the left stick and the D-pad as
+      // one direction, so a list does not move twice.
+      pad.buttons    |= navigateButtons(actions.move);
+      pad.thumbLeftX  = thumbValue(actions.move.x);
+      pad.thumbLeftY  = thumbValue(actions.move.y);
+      pad.thumbRightX = thumbValue(actions.turn.x);
+      pad.thumbRightY = thumbValue(actions.turn.y);
       return pad;
     }
 

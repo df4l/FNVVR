@@ -33,6 +33,10 @@ namespace dxvk {
     VrPadState g_controllerPad;
     bool       g_loggedControllers = false;
 
+    // Replaces the gamepad connection message boxes. The caller pops the
+    // arguments, so ignoring them is safe.
+    void __cdecl skipMessageBox() { }
+
     DWORD reportControllers(XINPUT_STATE* state) {
       if (!g_loggedControllers) {
         Logger::info("VR: The VR controllers are in use, the game sees them as a gamepad");
@@ -156,6 +160,20 @@ namespace dxvk {
       for (uintptr_t site : interfaceSites) {
         if (!VrGameMemory::redirectCall(site, VrGame::XInputGetStateThunk, reinterpret_cast<const void*>(&getStateHook)))
           Logger::warn(str::format("VR: Gamepad check at 0x", std::hex, site, " was not found, the menu cursor may stay hidden"));
+      }
+    }
+
+    // The VR controllers come and go with tracking, and the game would show
+    // a message box each time the gamepad appears or disappears
+    if (patched && options.controllers) {
+      const uintptr_t messageSites[] = {
+        VrGame::PadLostMessageCallSite,
+        VrGame::PadConnectedMessageCallSite,
+      };
+
+      for (uintptr_t site : messageSites) {
+        if (!VrGameMemory::redirectCall(site, VrGame::ShowMessageBox, reinterpret_cast<const void*>(&skipMessageBox)))
+          Logger::warn(str::format("VR: Gamepad message at 0x", std::hex, site, " was not found, it stays enabled"));
       }
     }
 

@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "vr_action_filter.h"
 #include "vr_backend.h"
 #include "vr_game_state.h"
 #include "vr_head_look.h"
@@ -11,8 +12,9 @@ namespace dxvk {
   /**
    * \brief Hands the controller input to the game each frame
    *
-   * The actions become a gamepad state for the game (see VrGamepadHook),
-   * the head pose and the turning stick go to VrHeadLook, and the backend
+   * The actions, filtered by VrActionFilter, become a gamepad state for
+   * the game (see VrGamepadHook), the head pose and the turning stick go
+   * to VrHeadLook, and the backend
    * is told whether the next frame's actions are read for the game or for
    * a menu.
    */
@@ -50,6 +52,7 @@ namespace dxvk {
 
     IVRBackend&                 m_backend;
     std::unique_ptr<VrHeadLook> m_headLook;
+    VrActionFilter              m_filter;
 
     // Context the backend reads the actions in, chosen one frame ahead
     VrInputContext              m_context = VrInputContext::Game;

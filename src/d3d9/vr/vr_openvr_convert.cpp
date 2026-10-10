@@ -113,7 +113,7 @@ namespace dxvk {
 
   const char* vrOpenVrStickPath(VrInputContext context, bool turn) {
     if (context == VrInputContext::Menu)
-      return turn ? nullptr : "/actions/menu/in/navigate";
+      return turn ? "/actions/menu/in/secondary" : "/actions/menu/in/navigate";
 
     return turn ? "/actions/game/in/turn" : "/actions/game/in/move";
   }

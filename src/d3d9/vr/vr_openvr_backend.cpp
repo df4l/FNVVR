@@ -273,12 +273,11 @@ namespace dxvk {
       }
 
       action(vrOpenVrStickPath(VrInputContext(i), false), m_actions.move[i]);
+      action(vrOpenVrStickPath(VrInputContext(i), true),  m_actions.turn[i]);
     }
 
     for (uint32_t i = 0; i < VrActionCount; i++)
       action(vrOpenVrActionPath(VrAction(i)), m_actions.digital[i]);
-
-    action(vrOpenVrStickPath(VrInputContext::Game, true), m_actions.turn);
 
     for (uint32_t i = 0; i < VrHandCount; i++)
       action(vrOpenVrHapticPath(VrHand(i)), m_actions.haptic[i]);
@@ -530,9 +529,7 @@ namespace dxvk {
     };
 
     input.actions.move = readStick(m_actions.move[context]);
-
-    if (m_context == VrInputContext::Game)
-      input.actions.turn = readStick(m_actions.turn);
+    input.actions.turn = readStick(m_actions.turn[context]);
   }
 
 

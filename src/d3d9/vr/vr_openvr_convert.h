@@ -56,8 +56,8 @@ namespace dxvk {
    * \brief Path of the stick action of a context
    *
    * \param [in] context Input context
-   * \param [in] turn \c true for the turning stick, which only exists in game
-   * \returns \c nullptr if the context has no such stick
+   * \param [in] turn \c true for the second stick: turning in game, the
+   *    secondary stick in menus (the lockpick's screwdriver, for example)
    */
   const char* vrOpenVrStickPath(VrInputContext context, bool turn);
 

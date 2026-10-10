@@ -8,6 +8,7 @@ vr_src = files([
   'vr_gamepad_head.cpp',
   'vr_controller_pad.cpp',
   'vr_turn_input.cpp',
+  'vr_action_filter.cpp',
 ])
 
 # Parts that depend on DXVK and Vulkan, only built into d3d9.dll
@@ -45,6 +46,7 @@ if add_languages('cpp', native: true, required: false)
     'tests/test_vr_openvr_convert.cpp',
     'tests/test_vr_controller_pad.cpp',
     'tests/test_vr_turn_input.cpp',
+    'tests/test_vr_action_filter.cpp',
   ])
 
   vr_test = executable('vr_tests', vr_test_sources, vr_src,

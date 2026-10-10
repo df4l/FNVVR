@@ -132,7 +132,7 @@ namespace dxvk {
       uint64_t sets[2]                 = { };
       uint64_t digital[VrActionCount]  = { };
       uint64_t move[2]                 = { };
-      uint64_t turn                    = 0;
+      uint64_t turn[2]                 = { };
       uint64_t haptic[VrHandCount]     = { };
     };
 
