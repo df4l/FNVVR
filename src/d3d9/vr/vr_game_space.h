@@ -73,6 +73,40 @@ namespace dxvk {
           float             unitsPerMetre);
 
   /**
+   * \brief Heading and pitch of the head in the game's convention
+   *
+   * The yaw is clockwise seen from above, like the game's heading, and the
+   * pitch is positive when looking down, like the game's look angle (see
+   * findings/input.md). Both are in radians.
+   */
+  struct VrHeadAngles {
+    float yaw   = 0.0f;
+    float pitch = 0.0f;
+  };
+
+  /**
+   * \brief Computes the heading and pitch of the head
+   *
+   * Roll is ignored. Looking straight up or down gives a yaw of zero.
+   *
+   * \param [in] headInReference Head pose relative to the recenter reference
+   */
+  VrHeadAngles vrComputeHeadAngles(const VrPose& headInReference);
+
+  /**
+   * \brief Builds a level camera pose facing a game heading
+   *
+   * \param [in] heading Heading in radians, 0 north, clockwise
+   * \param [in] position Camera position in game units
+   */
+  VrGameCameraPose vrComputeBodyCameraPose(float heading, const VrVector3& position);
+
+  /**
+   * \brief Wraps an angle into [0, 2 pi), the range of the game's heading
+   */
+  float vrWrapHeading(float angle);
+
+  /**
    * \brief Converts a field of view into a game frustum
    *
    * An asymmetric field of view gives an asymmetric frustum.

@@ -162,3 +162,58 @@ TEST_CASE(wide_eye_keeps_its_size_and_width_is_even) {
   CHECK(size.height == 1400);
   CHECK(size.width  == 2502);
 }
+
+
+TEST_CASE(head_angles_follow_the_game_conventions) {
+  // Looking ahead
+  VrHeadAngles ahead = vrComputeHeadAngles(VrPose());
+  CHECK_NEAR(ahead.yaw, 0.0f, 1e-6);
+  CHECK_NEAR(ahead.pitch, 0.0f, 1e-6);
+
+  // Turning the head right is a positive (clockwise) heading change
+  VrPose right;
+  right.orientation = vrQuaternionFromAxisAngle({ 0.0f, 1.0f, 0.0f }, -0.5f);
+  CHECK_NEAR(vrComputeHeadAngles(right).yaw, 0.5f, 1e-5);
+
+  // Looking up is a negative pitch in the game
+  VrPose up;
+  up.orientation = vrQuaternionFromAxisAngle({ 1.0f, 0.0f, 0.0f }, 0.3f);
+  VrHeadAngles upAngles = vrComputeHeadAngles(up);
+  CHECK_NEAR(upAngles.pitch, -0.3f, 1e-5);
+  CHECK_NEAR(upAngles.yaw, 0.0f, 1e-5);
+
+  // Roll does not change the heading
+  VrPose roll;
+  roll.orientation = vrQuaternionFromAxisAngle({ 0.0f, 0.0f, 1.0f }, 0.4f);
+  CHECK_NEAR(vrComputeHeadAngles(roll).yaw, 0.0f, 1e-5);
+}
+
+
+TEST_CASE(body_camera_faces_the_heading) {
+  VrGameCameraPose north = vrComputeBodyCameraPose(0.0f, { 1.0f, 2.0f, 3.0f });
+  CHECK_NEAR(north.forward.y, 1.0f, 1e-6);
+  CHECK_NEAR(north.right.x, 1.0f, 1e-6);
+  CHECK_NEAR(north.up.z, 1.0f, 1e-6);
+  CHECK_NEAR(north.position.z, 3.0f, 1e-6);
+
+  VrGameCameraPose east = vrComputeBodyCameraPose(1.5707964f, { });
+  CHECK_NEAR(east.forward.x, 1.0f, 1e-6);
+  CHECK_NEAR(east.right.y, -1.0f, 1e-6);
+
+  // Same handedness as the game camera: right = forward x up
+  VrVector3 cross = {
+    east.forward.y * east.up.z - east.forward.z * east.up.y,
+    east.forward.z * east.up.x - east.forward.x * east.up.z,
+    east.forward.x * east.up.y - east.forward.y * east.up.x,
+  };
+  CHECK_NEAR(cross.x, east.right.x, 1e-6);
+  CHECK_NEAR(cross.y, east.right.y, 1e-6);
+}
+
+
+TEST_CASE(heading_wraps_into_one_turn) {
+  CHECK_NEAR(vrWrapHeading(-0.5f), 6.2831853f - 0.5f, 1e-5);
+  CHECK_NEAR(vrWrapHeading(7.0f), 7.0f - 6.2831853f, 1e-5);
+  CHECK_NEAR(vrWrapHeading(1.0f), 1.0f, 1e-6);
+  CHECK(vrWrapHeading(-1e-9f) < 6.2831853f);
+}

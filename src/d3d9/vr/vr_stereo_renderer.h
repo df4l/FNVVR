@@ -8,6 +8,7 @@
 #include "../../util/com/com_pointer.h"
 
 #include "vr_backend.h"
+#include "vr_controls.h"
 #include "vr_game_camera.h"
 #include "vr_game_state.h"
 #include "vr_hud_layers.h"
@@ -82,13 +83,15 @@ namespace dxvk {
      * \param [in] device D3D9 device the game renders with
      * \param [in] showPreview Show both eyes in a window of their own
      * \param [in] panel Placement of the panel for menus and loading screens
+     * \param [in] turn How the turning stick turns the player
      * \returns \c nullptr if the executable is not the supported version
      */
     static std::unique_ptr<VrStereoRenderer> install(
             IVRBackend&           backend,
             IDirect3DDevice9*     device,
             bool                  showPreview,
-      const VrPanelConfig&        panel);
+      const VrPanelConfig&        panel,
+      const VrTurnConfig&         turn);
 
     /**
      * \brief Called when the game presents, before the image is shown
@@ -176,6 +179,9 @@ namespace dxvk {
     bool   m_menuDepthFailed = false;
     bool   m_loggedMenuDepthChange = false;
 
+    // Controller input for the game, and the head driving the player's look
+    VrControls          m_controls;
+
     // Latest tracked head pose, used to place the panel
     VrPose m_headPose;
     bool   m_hasHeadPose   = false;
@@ -231,7 +237,7 @@ namespace dxvk {
 
     void disableStaticMenuBackground();
 
-    void renderPanelFrame(void* main);
+    void renderPanelFrame(void* main, VrGameStateKind state);
 
     void trackHead(const VrInputState& input);
 

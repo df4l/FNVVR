@@ -36,6 +36,47 @@ namespace dxvk {
   }
 
 
+  VrHeadAngles vrComputeHeadAngles(const VrPose& headInReference) {
+    // Forward is -Z, right is +X and up is +Y in the reference frame
+    VrVector3 forward = vrRotate(headInReference.orientation, { 0.0f, 0.0f, -1.0f });
+
+    VrHeadAngles angles;
+    angles.pitch = -std::asin(std::clamp(forward.y, -1.0f, 1.0f));
+
+    if (std::abs(forward.x) + std::abs(forward.z) > 1e-6f)
+      angles.yaw = std::atan2(forward.x, -forward.z);
+
+    return angles;
+  }
+
+
+  VrGameCameraPose vrComputeBodyCameraPose(float heading, const VrVector3& position) {
+    // Heading 0 faces north (+Y) and grows clockwise, towards east (+X)
+    float s = std::sin(heading);
+    float c = std::cos(heading);
+
+    VrGameCameraPose pose;
+    pose.forward  = { s, c, 0.0f };
+    pose.up       = { 0.0f, 0.0f, 1.0f };
+    pose.right    = { c, -s, 0.0f };
+    pose.position = position;
+    return pose;
+  }
+
+
+  float vrWrapHeading(float angle) {
+    constexpr float FullTurn = 6.2831853f;
+
+    float wrapped = std::fmod(angle, FullTurn);
+
+    if (wrapped < 0.0f)
+      wrapped += FullTurn;
+
+    // Rounding can bring a small negative angle up to exactly a full turn
+    return wrapped < FullTurn ? wrapped : 0.0f;
+  }
+
+
   VrGameFrustum vrComputeGameFrustum(const VrFov& fov) {
     VrGameFrustum frustum;
     frustum.left   = std::tan(fov.angleLeft);

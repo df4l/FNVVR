@@ -1,5 +1,6 @@
 #pragma once
 
+#include "vr_controller_pad.h"
 #include "vr_emulator_rig.h"
 
 namespace dxvk {
@@ -21,6 +22,10 @@ namespace dxvk {
    * With a real gamepad the same hook also reads its state to drive the
    * emulated head, see \ref VrGamepadHead.
    *
+   * With VR controllers, the hook reports the gamepad state the controllers
+   * produce (see \ref vrComputePadState) while they are in use, instead of
+   * a real or virtual gamepad.
+   *
    * It can also hide every gamepad from the game. The game switches its menus
    * to gamepad navigation and ignores the mouse cursor as soon as XInput
    * reports a device, and it has no setting to ignore XInput. The interface
@@ -37,6 +42,8 @@ namespace dxvk {
       bool headControl = false;
       /// Report no gamepad even if one is connected
       bool hidePad     = false;
+      /// Report the state of the VR controllers while they are in use
+      bool controllers = false;
     };
 
     /**
@@ -46,6 +53,19 @@ namespace dxvk {
      * \returns \c true if the call matched and was redirected
      */
     static bool install(const Options& options);
+
+    /**
+     * \brief Sets the gamepad state of the VR controllers
+     *
+     * Called once per frame, on the game's thread. Only has an effect if
+     * the hook was installed with \c controllers.
+     *
+     * \param [in] active Whether the controllers are in use. While they
+     *    are, the game is in gamepad mode, so keyboard and mouse controls
+     *    are ignored in game.
+     * \param [in] pad State to report
+     */
+    static void setControllerPad(bool active, const VrPadState& pad);
 
     /**
      * \brief Returns the head input from the latest real gamepad poll
