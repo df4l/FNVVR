@@ -132,6 +132,10 @@ namespace dxvk {
     bool             m_loggedMirror = false;
     bool             m_loggedSnapAim = false;
 
+    // Measurement of the free left hand's pose, temporary
+    const uint8_t*   m_measuredWeapon = nullptr;
+    uint32_t         m_measureCalls   = 0;
+
     // Arm meshes culled by the VR layer, compared but not dereferenced
     // until they are found in the model again
     std::vector<uint8_t*> m_hiddenMeshes;
@@ -166,6 +170,11 @@ namespace dxvk {
       const VrGameCameraPose&     hand,
       const VrVector3&            shift,
             void*                 updateData);
+
+    void measureOtherHand(
+            uint8_t*              otherHand,
+      const VrGameTransform&      target,
+      const VrGameCameraPose&     controller);
 
     void hideArms(uint8_t* root);
 

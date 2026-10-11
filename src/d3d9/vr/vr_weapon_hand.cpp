@@ -692,6 +692,8 @@ namespace dxvk {
 
     VrGameTransform target = vrComputeMirroredHand(hand, placedHand, controller, boneMirror);
 
+    measureOtherHand(otherHand, target, controller);
+
     // The rigid move taking the drawn hand onto the target moves the forearm
     VrGameTransform move;
     move.rotate    = target.rotate * vrTranspose(drawnHand.rotate);
@@ -729,6 +731,64 @@ namespace dxvk {
         name ? name : "", "'"));
       m_loggedOtherHand = true;
     }
+  }
+
+
+  void VrWeaponHand::measureOtherHand(
+          uint8_t*              otherHand,
+    const VrGameTransform&      target,
+    const VrGameCameraPose&     controller) {
+    uint8_t* object  = player();
+    uint8_t* process = object ? readField<uint8_t*>(object, VrGame::ActorProcess) : nullptr;
+
+    if (!process)
+      return;
+
+    auto vtable = readField<const uint8_t*>(process, 0);
+    auto getWeaponInfo = reinterpret_cast<GetWeaponInfoFn>(readField<uintptr_t>(vtable, VrGame::ProcessWeaponInfoSlot));
+    auto entry  = getWeaponInfo(process, nullptr);
+    auto weapon = entry ? field<uint8_t*>(entry, VrGame::InventoryEntryForm) : nullptr;
+
+    if (!weapon)
+      return;
+
+    if (weapon != m_measuredWeapon) {
+      m_measuredWeapon = weapon;
+      m_measureCalls   = 0;
+    }
+
+    // Two samples a few seconds apart, once the draw animation is over
+    uint32_t call = ++m_measureCalls;
+
+    if (call != 600 && call != 1800)
+      return;
+
+    auto format = [] (const VrGameRotation& r) {
+      return str::format(r.m[0][0], " ", r.m[0][1], " ", r.m[0][2], " ",
+                         r.m[1][0], " ", r.m[1][1], " ", r.m[1][2], " ",
+                         r.m[2][0], " ", r.m[2][1], " ", r.m[2][2]);
+    };
+
+    VrGameRotation frame = vrCameraRotation(controller);
+    VrGameRotation rotation = vrTranspose(frame) * target.rotate;
+    VrVector3 offset = vrTranspose(frame) * (target.translate - controller.position);
+
+    Logger::info(str::format("VR measure: weapon ", reinterpret_cast<uintptr_t>(weapon),
+      " type ", int32_t(readField<int8_t>(weapon, VrGame::WeaponAnimationType)), " sample ", call == 600 ? 1 : 2));
+    Logger::info(str::format("VR measure: hand rotation ", format(rotation)));
+    Logger::info(str::format("VR measure: hand offset ", offset.x, " ", offset.y, " ", offset.z));
+
+    forEachObject(otherHand, MaxModelDepth, [otherHand, &format] (uint8_t* bone) {
+      if (bone == otherHand || !vrGameAsNode(reinterpret_cast<uintptr_t>(bone)))
+        return;
+
+      auto name = field<const char*>(bone, VrGame::ObjectName);
+      VrVector3 translate = readVector(bone, VrGame::NodeLocalTranslate);
+
+      Logger::info(str::format("VR measure: bone '", name ? name : "", "' rotation ",
+        format(readRotation(bone, VrGame::ObjectLocalRotation)),
+        " translate ", translate.x, " ", translate.y, " ", translate.z));
+    });
   }
 
 
