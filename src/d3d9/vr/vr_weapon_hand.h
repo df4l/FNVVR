@@ -127,6 +127,10 @@ namespace dxvk {
     bool             m_loggedFrame  = false;
     bool             m_loggedArms   = false;
     bool             m_loggedOtherHand = false;
+
+    // Measurement of the forearm's pose, temporary
+    const uint8_t*   m_measuredWeapon = nullptr;
+    uint32_t         m_measureCalls   = 0;
     bool             m_loggedTwoHanded = false;
     bool             m_loggedBraced = false;
     bool             m_loggedSnapAim = false;
@@ -156,6 +160,8 @@ namespace dxvk {
     void placeModel(uint8_t* root, void* updateData);
 
     void updateGrip(GripKind kind, bool canHold, const VrVector3& support);
+
+    void measureForearm(uint8_t* forearm, uint8_t* otherHand);
 
     void placeOtherHand(
             uint8_t*              root,

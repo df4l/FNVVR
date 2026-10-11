@@ -676,6 +676,8 @@ namespace dxvk {
     // hand, and the hand's meshes only use bones below the forearm.
     uint8_t* forearm = field<uint8_t*>(otherHand, VrGame::ObjectParent);
 
+    measureForearm(forearm, otherHand);
+
     VrGameCameraPose controller = m_otherHand;
     controller.position = controller.position - shift;
 
@@ -747,6 +749,68 @@ namespace dxvk {
         name ? name : "", "'"));
       m_loggedOtherHand = true;
     }
+  }
+
+
+  void VrWeaponHand::measureForearm(uint8_t* forearm, uint8_t* otherHand) {
+    uint8_t* object  = player();
+    uint8_t* process = object ? readField<uint8_t*>(object, VrGame::ActorProcess) : nullptr;
+
+    if (!process)
+      return;
+
+    auto vtable = readField<const uint8_t*>(process, 0);
+    auto getWeaponInfo = reinterpret_cast<GetWeaponInfoFn>(readField<uintptr_t>(vtable, VrGame::ProcessWeaponInfoSlot));
+    auto entry  = getWeaponInfo(process, nullptr);
+    auto weapon = entry ? field<uint8_t*>(entry, VrGame::InventoryEntryForm) : nullptr;
+
+    if (!weapon)
+      return;
+
+    if (weapon != m_measuredWeapon) {
+      m_measuredWeapon = weapon;
+      m_measureCalls   = 0;
+    }
+
+    // Two samples a few seconds apart, once the draw animation is over
+    uint32_t call = ++m_measureCalls;
+
+    if (call != 600 && call != 1800)
+      return;
+
+    auto format = [] (const VrGameRotation& r) {
+      return str::format(r.m[0][0], " ", r.m[0][1], " ", r.m[0][2], " ",
+                         r.m[1][0], " ", r.m[1][1], " ", r.m[1][2], " ",
+                         r.m[2][0], " ", r.m[2][1], " ", r.m[2][2]);
+    };
+
+    Logger::info(str::format("VR measure: weapon ", reinterpret_cast<uintptr_t>(weapon),
+      " type ", int32_t(readField<int8_t>(weapon, VrGame::WeaponAnimationType)), " sample ", call == 600 ? 1 : 2));
+
+    // Everything below the upper arm except the fingers, measured before
+    uint8_t* upperArm = field<uint8_t*>(forearm, VrGame::ObjectParent);
+
+    if (!upperArm)
+      return;
+
+    forEachObject(upperArm, MaxModelDepth, [upperArm, otherHand, &format] (uint8_t* bone) {
+      if (bone == upperArm || !vrGameAsNode(reinterpret_cast<uintptr_t>(bone)))
+        return;
+
+      for (uint8_t* p = field<uint8_t*>(bone, VrGame::ObjectParent); p && p != upperArm; p = field<uint8_t*>(p, VrGame::ObjectParent)) {
+        if (p == otherHand)
+          return;
+      }
+
+      auto name   = field<const char*>(bone, VrGame::ObjectName);
+      auto parent = field<uint8_t*>(bone, VrGame::ObjectParent);
+      auto parentName = parent ? field<const char*>(parent, VrGame::ObjectName) : nullptr;
+      VrVector3 translate = readVector(bone, VrGame::NodeLocalTranslate);
+
+      Logger::info(str::format("VR measure: bone '", name ? name : "", "' parent '", parentName ? parentName : "",
+        "' rotation ", format(readRotation(bone, VrGame::ObjectLocalRotation)),
+        " translate ", translate.x, " ", translate.y, " ", translate.z));
+    });
   }
 
 
