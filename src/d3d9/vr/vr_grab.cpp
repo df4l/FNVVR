@@ -275,6 +275,37 @@ namespace dxvk {
   }
 
 
+  bool vrGrabAtChest(
+    const VrGameCameraPose&     head,
+    const VrVector3&            hand,
+    const VrGrabChestZone&      zone) {
+    // The heading, defined when the player looks straight up or down, as
+    // for the holsters
+    VrVector3 forward = {
+      head.forward.x - head.forward.z * head.up.x,
+      head.forward.y - head.forward.z * head.up.y,
+      0.0f };
+
+    float length = vrLength(forward);
+
+    if (length < 1e-4f)
+      return false;
+
+    forward = forward * (1.0f / length);
+
+    // The game's world is right-handed with Z up
+    VrVector3 right  = { forward.y, -forward.x, 0.0f };
+    VrVector3 offset = (hand - head.position) * (1.0f / VrGameUnitsPerMetre);
+
+    float ahead = vrDot(offset, forward);
+    float side  = vrDot(offset, right);
+
+    return -offset.z >= zone.belowMin && -offset.z <= zone.belowMax
+        && ahead <= zone.ahead && -ahead <= zone.behind
+        && std::abs(side) <= zone.side;
+  }
+
+
   float vrGrabPullSpeed(float mass) {
     constexpr float MinScale = 0.35f;
 

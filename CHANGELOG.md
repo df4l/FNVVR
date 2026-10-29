@@ -14,6 +14,8 @@
   following the controller, and comes back smoothly when it lets go.
 - **Fingers closed on the held object**: each finger closes until it meets the object and the palm turns towards
   it; a finger the player raises stays raised.
+- **Put an item away at the chest**: letting go of a held item against the chest puts it in the inventory, as if
+  picked up with the activation button (stealing, scripts and sounds included).
 
 ### Fixes
 

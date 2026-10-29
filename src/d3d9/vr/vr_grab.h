@@ -263,6 +263,34 @@ namespace dxvk {
   };
 
   /**
+   * \brief Where a held object is let go of to put it in the inventory, in
+   *    metres in the head's frame, the head's heading only
+   *
+   * The chest: below the head, a little in front of it, not far to either
+   * side. Mostly clear of the right hip holster (VrHolsterZones), which a
+   * release does not use anyway.
+   */
+  struct VrGrabChestZone {
+    float belowMin = 0.15f;
+    float belowMax = 0.50f;
+    float behind   = 0.10f;
+    float ahead    = 0.35f;
+    float side     = 0.22f;
+  };
+
+  /**
+   * \brief Whether a hand is at the chest
+   *
+   * \param [in] head Head pose in the game world (Z up)
+   * \param [in] hand Hand position in the game world
+   * \param [in] zone Extent of the chest
+   */
+  bool vrGrabAtChest(
+    const VrGameCameraPose&     head,
+    const VrVector3&            hand,
+    const VrGrabChestZone&      zone);
+
+  /**
    * \brief What a hand does with its grip in a frame
    */
   struct VrGrabHandInput {

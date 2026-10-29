@@ -489,3 +489,29 @@ TEST_CASE(grab_hand_glue_blends_on_and_off) {
 
   CHECK_NEAR(glue.update(nullptr, step).translation.x, 0.0f, 1e-6f);
 }
+
+
+TEST_CASE(grab_chest_is_below_the_head_in_front) {
+  VrGameCameraPose head;
+  head.forward  = { 0.0f, 1.0f, 0.0f };
+  head.up       = { 0.0f, 0.0f, 1.0f };
+  head.right    = { 1.0f, 0.0f, 0.0f };
+  head.position = { 100.0f, 200.0f, 120.0f };
+
+  auto at = [&head] (float right, float ahead, float below) {
+    VrVector3 hand = head.position + VrVector3 { right, ahead, -below } * VrGameUnitsPerMetre;
+    return vrGrabAtChest(head, hand, VrGrabChestZone());
+  };
+
+  CHECK(at(0.0f, 0.1f, 0.3f));
+  CHECK(at(-0.15f, 0.0f, 0.4f));
+  CHECK(!at(0.0f, 0.5f, 0.3f));
+  CHECK(!at(0.0f, 0.1f, 0.05f));
+  CHECK(!at(0.0f, 0.1f, 0.8f));
+  CHECK(!at(0.35f, 0.1f, 0.3f));
+
+  // Looking down, the chest is still where the heading says
+  head.forward = { 0.0f, 0.3f, -0.95f };
+  head.up      = { 0.0f, 0.95f, 0.3f };
+  CHECK(at(0.0f, 0.1f, 0.3f));
+}

@@ -17,6 +17,8 @@ namespace dxvk {
   struct VrPhysicsGrabEvents {
     std::array<bool, VrHandCount> grabbed  = { };
     std::array<bool, VrHandCount> released = { };
+    /// Let go of at the chest and put in the inventory
+    std::array<bool, VrHandCount> stored   = { };
   };
 
   /**
@@ -60,6 +62,10 @@ namespace dxvk {
    * The object's own group comes back once it was let go and is clear of
    * the player.
    *
+   * An item let go of at the chest goes into the inventory, through the
+   * game's own activation by the player, as if it had been picked up
+   * from the world.
+   *
    * As with the game's grab, the object's OnGrab and OnRelease script
    * blocks run, guards see it taken and its new position is saved. The
    * game's IsPlayerGrabbedRef does not know about it.
@@ -88,13 +94,15 @@ namespace dxvk {
      * \param [in] grip The hand's grip is held
      * \param [in] free The hand may hold an object
      * \param [in] aimed The hand named the game's activation target
+     * \param [in] chest The hand is at the chest (vrGrabAtChest)
      */
     void setHand(
             VrHand                hand,
       const VrGameCameraPose*     pose,
             bool                  grip,
             bool                  free,
-            bool                  aimed);
+            bool                  aimed,
+            bool                  chest);
 
     /**
      * \brief Whether a hand holds an object
@@ -153,6 +161,7 @@ namespace dxvk {
       bool             grip    = false;
       bool             free    = false;
       bool             aimed   = false;
+      bool             chest   = false;
     };
 
     /**
@@ -245,6 +254,8 @@ namespace dxvk {
     bool     m_loggedSpring  = false;
     bool     m_loggedNoGroup = false;
     uint32_t m_loggedFits    = 0;
+    uint32_t m_loggedStores  = 0;
+    bool     m_canStore      = false;
 
     void update(uint8_t* player, float dt);
 
@@ -255,6 +266,10 @@ namespace dxvk {
     void updateCorrection(uint8_t* player, VrHand hand, Held& held, const VrGameCameraPose& pose);
 
     void fitFingers(uint8_t* player, VrHand hand, Held& held, const VrGameCameraPose& drawn);
+
+    bool storable(const Held& held, VrHand hand) const;
+
+    void store(uint8_t* player, VrHand hand, Held& held);
 
     bool grab(uint8_t* player, VrHand hand, const VrGameCameraPose& pose);
 

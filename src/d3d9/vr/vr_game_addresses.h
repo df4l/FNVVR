@@ -2383,6 +2383,22 @@ namespace dxvk {
      * reference and the player) and RemoveExtra (__thiscall, type 0x7C).
      */
     constexpr uintptr_t SetActionFlag              = 0x005AC750;
+
+    /**
+     * Putting a held object in the inventory, see findings/grab.md §17:
+     * TESObjectREFR::Activate (__thiscall: action reference, bool, bound
+     * object, count; returns bool in AL, ret 0x10), the game's activation
+     * with its scripts, ownership and pick-up of items. The reference's base
+     * object is at +0x20; the form types that go into an inventory.
+     */
+    constexpr uintptr_t RefActivate                = 0x00573170;
+    constexpr uint8_t   RefActivatePrologue[]      = {
+      0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x38, 0x01, 0x00, 0x00, 0xA1, 0xBC, 0x16, 0x1C, 0x01, 0x33, 0xC5,
+    };
+    constexpr uintptr_t RefBaseForm                = 0x20;
+    constexpr uint8_t   InventoryFormTypes[]       = {
+      0x18, 0x19, 0x1A, 0x1D, 0x1E, 0x1F, 0x28, 0x29, 0x2E, 0x2F, 0x31, 0x67, 0x6C, 0x73, 0x74,
+    };
     constexpr uintptr_t RefExtraData               = 0x44;
     constexpr uint32_t  ActionOnGrab               = 0x80000;
     constexpr uint32_t  ActionOnRelease            = 0x100000;

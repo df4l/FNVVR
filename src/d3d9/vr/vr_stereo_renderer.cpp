@@ -725,7 +725,7 @@ namespace dxvk {
     // Nor held
     if (m_physicsGrab) {
       for (uint32_t i = 0; i < VrHandCount; i++)
-        m_physicsGrab->setHand(VrHand(i), nullptr, false, false, false);
+        m_physicsGrab->setHand(VrHand(i), nullptr, false, false, false, false);
     }
 
     if (m_npcGaze)
@@ -1172,10 +1172,21 @@ namespace dxvk {
     for (uint32_t i = 0; i < VrHandCount; i++)
       m_physicsGrab->setFingerRig(VrHand(i), m_weaponHand ? m_weaponHand->fingerRig(VrHand(i)) : nullptr);
 
+    // A held item let go of at the chest goes into the inventory
+    bool chestRight = false;
+    bool chestLeft  = false;
+
+    if (inGame && m_hasHeadPose) {
+      VrGameCameraPose head = vrComputeEyeCameraPose(m_gameCameraPose,
+        vrComputeEyeInReference(m_reference, m_headPose), VrGameUnitsPerMetre);
+      chestRight = right.isActive && vrGrabAtChest(head, rightHand.position, VrGrabChestZone());
+      chestLeft  = left.isActive  && vrGrabAtChest(head, leftHand.position, VrGrabChestZone());
+    }
+
     m_physicsGrab->setHand(VrHand::Right, inGame && right.isActive ? &rightHand : nullptr,
-      input.actions.isPressed(VrAction::Grab), rightFree, aimedRight);
+      input.actions.isPressed(VrAction::Grab), rightFree, aimedRight, chestRight);
     m_physicsGrab->setHand(VrHand::Left, inGame && left.isActive ? &leftHand : nullptr,
-      input.actions.isPressed(VrAction::TwoHandGrip), leftFree, aimedLeft);
+      input.actions.isPressed(VrAction::TwoHandGrip), leftFree, aimedLeft, chestLeft);
 
     // What the player's last update did
     VrPhysicsGrabEvents events = m_physicsGrab->takeEvents();
@@ -1183,6 +1194,8 @@ namespace dxvk {
     for (uint32_t i = 0; i < VrHandCount; i++) {
       if (events.grabbed[i])
         m_backend.applyHaptic(VrHand(i), GrabHaptic, GrabHapticDuration);
+      else if (events.stored[i])
+        m_backend.applyHaptic(VrHand(i), GrabHaptic * 2.0f, GrabHapticDuration * 2.0f);
       else if (events.released[i])
         m_backend.applyHaptic(VrHand(i), ReleaseHaptic, GrabHapticDuration);
     }
