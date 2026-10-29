@@ -1,9 +1,21 @@
 # Changelog
 
-## Unreleased
+## v0.10.0 (2026-10-29, since v0.9.0 `a617e18`)
 
 ### Physics grab
 
+- **Hold objects with the hands**: a free hand that touches an object (bottles, cans, clutter, weapons and items
+  lying around, ...) holds it while its grip is pressed and lets it go with the grip, with Havok physics: the object
+  collides, falls and can be thrown. The left hand grabs when it is off the weapon and not busy with a grenade or a
+  reload, the right hand only with the weapon holstered. The game's own grab is no longer on the grip; the Pip-Boy
+  light at the wrist still is. The objects' OnGrab and OnRelease scripts run as with the game's grab.
+- **Pull from a distance**: when the hand touches nothing, the grip pulls into the hand the object whose prompt is
+  shown at that hand's fingertip.
+- **Weight**: each hand pushes with a fixed force, so heavy objects follow and come to the hand more slowly than light
+  ones. An object held while walking stays in the hand instead of trailing behind it.
+- **Both hands**: a hand that touches the object the other hand holds holds it too.
+- **Corpses**: a dead body is held by the limb the hand touches and the rest of the ragdoll follows. Corpses are not
+  pulled from a distance; the living are never grabbed.
 - **Held objects turn with the hand**: an object held in one hand keeps the angle it had when grabbed and turns as
   the wrist turns, about the point held, instead of hanging from it. Heavy objects turn more slowly. Held in both
   hands, it follows the line between them. Corpses still hang from the limb held.
@@ -29,6 +41,10 @@
   VR instead of freezing on the empty clip.
 - **Throwing spear**: held in the hand as the throw holds it, point forward, instead of as a cane, so it no longer
   turns around when it leaves the hand.
+- **Thrown weapons fly where the hand throws them**: the direction and speed of every throw come from the controller's
+  own motion; spears flew 10 to 35 degrees above the swing.
+- **Laser beams**: the beams of laser weapons (Gatling laser, ...) leave the muzzle of the weapon in the hand and stay
+  on it until they fade, as flames do; at a Gatling laser's rate several beams followed the head.
 
 ### Feedback
 
@@ -218,3 +234,120 @@ new action and move the grip.
 ### Fixes
 
 - The Settings list is now sized for all its entries; the sixth entry was cut off.
+
+## v0.6.0 (2026-10-16, since v0.5.0 `f1344df`)
+
+### Melee
+
+- **Physical swing**: a melee weapon hits what it touches, with a swing fast enough; small movements or bumping into
+  someone do not count. The body part hit is the one the blade touched.
+- **Block** by holding the weapon across the front of the face.
+- **Two-handed melee weapons** take the left hand on the handle, as rifles do.
+- **Powered weapons** (chainsaws, Ripper, Thermic Lance, ...): holding the trigger runs them; touching the enemy with
+  the blade hits.
+- **Power attacks**: holding the trigger charges a ring beside the right hand; once full, the next hit is a power
+  attack. It costs action points, more for heavier weapons.
+
+### HUD
+
+- Experience gained and the "LEVEL UP" message are shown with the other messages; the radiation meter in the same
+  corner.
+
+### Pip-Boy
+
+- **Settings > VR > Pip-Boy size**: up to twice as big while open, back to normal once closed.
+
+### Comfort
+
+- No third person camera after standing still for a while.
+- Kill cams stay in first person, in slow motion.
+- NPCs look the player in the eyes, at the real head height.
+
+## v0.5.0 (2026-10-15, since v0.4.0 `163cfde`)
+
+### Interaction
+
+- Objects and people are picked with the hands: each hand casts its own ray, the hand that finds a target gets the
+  prompt and activates with its own button (A right, X left). The head no longer picks while the controllers are
+  tracked.
+- **Pip-Boy light**: the right hand at the left wrist and the right grip switch it on or off; the Pip-Boy does not
+  open while the hand is at the wrist.
+
+### Performance and frame pacing
+
+- OpenVR frames are handed to the compositor explicitly (explicit timing, `PostPresentHandoff`).
+- The game thread no longer waits for the GPU before handing the eye images to OpenVR.
+- Shadow maps are drawn once per frame for both eyes.
+- The game's frame step comes from a precise clock and Havok steps once per frame (both off when New Vegas Tick Fix is
+  present).
+- Frames paced by the headset are presented without the desktop monitor's vertical sync.
+
+### Developer option
+
+- `d3d9.vrDeveloperMode = True` gives god mode and one of every playable weapon (DLCs included) after each loading
+  screen. Off by default.
+
+### Fixes
+
+- Cut or square shadows in the right eye; square shapes on the water (water reflections are no longer shared between
+  eyes).
+
+## v0.4.0 (2026-10-14, since v0.3.0 `4f668da`)
+
+### HUD on the hands
+
+- Health bar and compass on the back of the right hand, action points and ammunition (type, weapon condition) just
+  below; shown only while the back of the right hand faces the eyes.
+- The interaction prompt floats above the fingertip of the hand nearest the target. At the left hand, X uses the object
+  or talks (and does not reload).
+
+### Aiming
+
+- Shots leave along the barrel drawn in the hand instead of the controller's axis.
+- The game's auto-aim is skipped outside V.A.T.S.; the bullet spread is no longer applied twice.
+
+**Bindings** changed.
+
+## v0.3.0 (2026-10-13, since v0.2.0 `8cb6864`)
+
+### Image
+
+- Fixed the "fisheye" (Quest 2 over Link, Quest 3): the vertical field of view of the eye image was mixed up.
+- Meshes no longer disappear at the sides of the view in dialogues, menus and with the Pip-Boy open.
+
+### Settings
+
+- New **Settings > VR** page (main menu and pause menu): snap or smooth turning and the smooth turning speed. Choices
+  are saved in `fnvvr/vr_options.ini` and override `dxvk.conf`, which is never rewritten.
+
+### Controls and Pip-Boy
+
+- A short tap of Y opens the wait menu; holding Y opens the pause menu.
+- The Pip-Boy opens and closes right away (no arm animation), no longer reopens in a loop, and its button icons are
+  drawn correctly.
+
+### Weapon, menus and dialogues
+
+- The weapon stays drawn (no draw or holster animation, holding reload no longer holsters it); furniture can be used
+  with it drawn.
+- Arms and weapon are hidden while the lasers point at a menu (except in V.A.T.S.).
+- The dialogue panel sits between the head and the speaker's head.
+
+## v0.2.0 (2026-10-12, since v0.1.0 `f30ff99`)
+
+- **Pip-Boy** opens when the left forearm is looked at and closes when the gaze leaves it; holding Y pauses.
+- **Sky**: the sky dome is centred on each eye and the sun glare faces the eye.
+- **Menus and cutscenes**: character creation on the menu panel over the live world; controllers read during movies
+  so intros can be skipped; the new game wake-up follows the head's yaw.
+- **Logs**: `FalloutNV_d3d9.log` next to the game executable, level set with `dxvk.logLevel`, headset geometry logged.
+
+## v0.1.0 (2026-10-11)
+
+First public build.
+
+- Stereo rendering through OpenVR (SteamVR), one game frame per eye.
+- Main menu, in-game menus, messages, objectives and subtitles on panels in front of the head.
+- Laser pointer for the menu panels, V.A.T.S. and lockpicking.
+- Motion controls: Touch buttons and sticks mapped to the game's gamepad, snap or smooth turn, weapon in the right
+  hand, two-handed grip, left hand tracked by its controller.
+- Pip-Boy on the left forearm.
