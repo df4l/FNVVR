@@ -110,6 +110,7 @@ vr_dxvk_src = files([
   'vr_quick_wheel.cpp',
   'vr_ammo_label.cpp',
   'vr_physics_grab.cpp',
+  'vr_hand_body.cpp',
 ])
 
 # Unit tests for the VR layer. They are built with the host compiler so they
@@ -151,6 +152,7 @@ if add_languages('cpp', native: true, required: false)
     'tests/test_vr_quick_wheel.cpp',
     'tests/test_vr_grab.cpp',
     'tests/test_vr_grab_fingers.cpp',
+    'tests/test_vr_hand_body.cpp',
   ])
 
   vr_test = executable('vr_tests', vr_test_sources, vr_src,

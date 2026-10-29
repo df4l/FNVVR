@@ -422,4 +422,69 @@ namespace dxvk {
    */
   float vrGrabPullSpeed(float mass);
 
+  /**
+   * \brief How a hand's body moves in the next Havok step
+   */
+  struct VrHandBodyStep {
+    /// Velocity that brings the body to the hand in the step
+    VrVector3 velocity;
+    /// The hand moved further than a hand can: the body is moved there
+    /// at once, without pushing what lies on the way
+    bool      warp = false;
+  };
+
+  /**
+   * \brief Moves a hand's keyframed body to the hand
+   *
+   * A keyframed body moves at the velocity it is given and pushes the
+   * bodies it meets, so the body is given the velocity that brings it to
+   * the hand by the end of the step. A move faster than a hand goes, the
+   * player turning or being moved, is a jump.
+   *
+   * \param [in] body Where the body is
+   * \param [in] hand Where the hand is
+   * \param [in] dt Time of the step, in seconds
+   * \param [in] maxSpeed Fastest a hand goes, same units per second
+   */
+  VrHandBodyStep vrHandBodyStep(
+    const VrVector3&            body,
+    const VrVector3&            hand,
+          float                 dt,
+          float                 maxSpeed);
+
+  /**
+   * \brief Decides when a hand's body pushes objects
+   *
+   * The body pushes once the hand has been free for a moment: not while
+   * the grip closes on an object, which the body would push away from
+   * the fingers, nor right after the hand let something go, which the
+   * body would still be inside of.
+   */
+  class VrHandBodyGate {
+
+  public:
+
+    /// Time the hand stays free before its body pushes, in seconds
+    constexpr static float SettleTime = 0.3f;
+
+    /**
+     * \param [in] free The hand is tracked, free and its grip open
+     * \param [in] dt Time since the previous update, in seconds
+     * \returns Whether the body pushes
+     */
+    bool update(bool free, float dt);
+
+    /**
+     * \brief Waits the settle time again
+     */
+    void reset() {
+      m_time = 0.0f;
+    }
+
+  private:
+
+    float m_time = 0.0f;
+
+  };
+
 }

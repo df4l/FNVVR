@@ -6,6 +6,7 @@
 
 #include "vr_grab.h"
 #include "vr_grab_fingers.h"
+#include "vr_hand_body.h"
 #include "vr_types.h"
 
 namespace dxvk {
@@ -61,6 +62,8 @@ namespace dxvk {
    * ragdoll's own group.
    * The object's own group comes back once it was let go and is clear of
    * the player.
+   *
+   * A free hand pushes objects with a keyframed sphere (VrHandBodies).
    *
    * An item let go of at the chest goes into the inventory, through the
    * game's own activation by the player, as if it had been picked up
@@ -244,6 +247,7 @@ namespace dxvk {
     float     m_gravity          = 0.0f;
     VrVector3 m_playerPosition;
     VrVector3 m_lead;
+    VrVector3 m_playerStep;
     bool      m_hasPlayerPosition = false;
     float     m_leadLogTime       = 0.0f;
 
@@ -256,6 +260,8 @@ namespace dxvk {
     uint32_t m_loggedFits    = 0;
     uint32_t m_loggedStores  = 0;
     bool     m_canStore      = false;
+
+    std::unique_ptr<VrHandBodies> m_handBodies;
 
     void update(uint8_t* player, float dt);
 
@@ -301,10 +307,16 @@ namespace dxvk {
 
     void restoreFilters(uint8_t* player);
 
+    void updateHandBodies(uint8_t* player, float dt);
+
     static void __fastcall physicsGrabHook(
             uint8_t*              player,
             void*                 unused,
             float                 dt);
+
+    static void __fastcall notInControlHook(
+            uint8_t*              player,
+            void*                 unused);
 
   };
 

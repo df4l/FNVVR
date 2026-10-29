@@ -16,6 +16,8 @@
   it; a finger the player raises stays raised.
 - **Put an item away at the chest**: letting go of a held item against the chest puts it in the inventory, as if
   picked up with the activation button (stealing, scripts and sounds included).
+- **Hands push objects**: a free hand with its grip open pushes bottles, cans, clutter and corpses it moves
+  into, without grabbing them.
 
 ### Fixes
 
