@@ -1107,6 +1107,19 @@ namespace dxvk {
     constexpr uintptr_t ScenePassCallSite        = 0x00870E18;
     constexpr uintptr_t FirstPersonPassCallSite  = 0x00870F74;
     constexpr uintptr_t DrawWorldFirstPerson     = 0x00875110;
+
+    /**
+     * The first-person render starts by clearing the depth buffer:
+     * ClearBuffer (__thiscall on the renderer: NiRect<float>* rect, flags;
+     * ret 8) with flag 4, CLEAR_ZBUFFER, called at this site. Both passes
+     * use the world camera's near and far planes (SceneGraph::SetCameraFOV
+     * sets the same ones for either field of view) and the same render
+     * target, so without the clear the model is tested against the world's
+     * depth. See findings/grab.md §14.
+     */
+    constexpr uintptr_t FirstPersonDepthClearSite = 0x008751C6;
+    constexpr uintptr_t RendererClearBuffer       = 0x007148C0;
+    constexpr uint32_t  ClearDepthBuffer          = 4;
     constexpr uintptr_t ImageSpacePassCallSite   = 0x008710E4;
     constexpr uintptr_t DrawWorldImageSpace      = 0x00875FD0;
     constexpr uintptr_t MultiThreadedRendering   = 0x011F94B4;
