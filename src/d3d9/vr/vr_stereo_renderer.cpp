@@ -937,14 +937,18 @@ namespace dxvk {
     const VrControllerState& right = input.controllers[uint32_t(VrHand::Right)];
     const VrControllerState& left  = input.controllers[uint32_t(VrHand::Left)];
 
-    for (uint32_t i = 0; i < VrHandCount; i++) {
-      const VrControllerState& controller = input.controllers[i];
-      m_weaponHand->setFingers(VrHand(i), controller.isActive && controller.hasFingers ? &controller.fingerCurl : nullptr);
-    }
-
-    // A hand that holds an object is drawn on it
+    // A hand that holds an object is drawn on it, its fingers closed on it
     std::array<VrGrabCorrection, VrHandCount> glue;
     bool holds = state == VrGameStateKind::InGame && m_physicsGrab;
+
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      const VrControllerState& controller = input.controllers[i];
+      const VrFingerCurls* tracked = controller.isActive && controller.hasFingers ? &controller.fingerCurl : nullptr;
+
+      VrFingerCurls curls;
+      bool posed = m_grabFingers[i].update(tracked, holds ? m_physicsGrab->heldFingers(VrHand(i)) : nullptr, dt, curls);
+      m_weaponHand->setFingers(VrHand(i), posed ? &curls : nullptr);
+    }
 
     for (uint32_t i = 0; i < VrHandCount; i++)
       glue[i] = m_grabGlue[i].update(holds ? m_physicsGrab->handCorrection(VrHand(i)) : nullptr, dt);
@@ -1164,6 +1168,9 @@ namespace dxvk {
     // the target stays the game's until its next pick, after this frame
     bool aimedRight = m_handPick && m_handPick->pickedWithHands() && m_handPick->hand() == VrHand::Right;
     bool aimedLeft  = m_handPick && m_handPick->pickedWithHands() && m_handPick->hand() == VrHand::Left;
+
+    for (uint32_t i = 0; i < VrHandCount; i++)
+      m_physicsGrab->setFingerRig(VrHand(i), m_weaponHand ? m_weaponHand->fingerRig(VrHand(i)) : nullptr);
 
     m_physicsGrab->setHand(VrHand::Right, inGame && right.isActive ? &rightHand : nullptr,
       input.actions.isPressed(VrAction::Grab), rightFree, aimedRight);

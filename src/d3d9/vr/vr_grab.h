@@ -192,6 +192,11 @@ namespace dxvk {
     VrVector3 rotation;
     /// Move of the hand, after the turn, in game units
     VrVector3 translation;
+    /// Turn of the palm towards what the hand touched, axis times angle in
+    /// the hand's frame (vrPointToHand), about the held point
+    VrVector3 palm;
+    /// The held point, in the hand's frame
+    VrVector3 pivot;
   };
 
   /**
@@ -219,6 +224,9 @@ namespace dxvk {
 
   /**
    * \brief A hand moved and turned by a correction
+   *
+   * The hand is first moved and turned onto what it holds, then its palm
+   * turned about the held point, which stays where it is.
    */
   VrGameCameraPose vrGrabCorrectHand(const VrGameCameraPose& hand, const VrGrabCorrection& correction);
 

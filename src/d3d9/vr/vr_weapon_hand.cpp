@@ -1020,6 +1020,8 @@ namespace dxvk {
     m_hasRoundPort = false;
     m_hasLock      = false;
 
+    readFingerRigs(root);
+
     if (m_mode == VrFirstPersonMode::Hidden) {
       m_hasAim    = false;
       m_hasBlade  = false;
@@ -1311,6 +1313,46 @@ namespace dxvk {
     if (!m_loggedActive) {
       Logger::info("VR: The weapon is in the right hand");
       m_loggedActive = true;
+    }
+  }
+
+
+  void VrWeaponHand::readFingerRigs(uint8_t* root) {
+    for (uint32_t h = 0; h < VrHandCount; h++) {
+      if (m_hasFingerRig[h])
+        continue;
+
+      VrHand side = VrHand(h);
+      uint8_t* hand = findObject(root, side == VrHand::Left ? VrGame::LeftHandNodeName : VrGame::RightHandNodeName);
+
+      if (!hand)
+        continue;
+
+      // The bones' translations and scales do not change, only their
+      // rotations, and the free hand's bone has a fixed pose
+      VrFingerRig& rig = m_fingerRigs[h];
+      rig.hand  = side == VrHand::Left ? FreeHandPose : vrMirrorHandPose(FreeHandPose);
+      rig.scale = field<float>(hand, VrGame::ObjectWorldScale);
+      uint32_t found = 0;
+
+      forEachObject(hand, MaxModelDepth, [&rig, &found, side] (uint8_t* object) {
+        auto name = field<const char*>(object, VrGame::ObjectName);
+        VrHand boneSide;
+        uint32_t index;
+
+        if (!name || !vrFindFingerBone(name, boneSide, index) || boneSide != side)
+          return;
+
+        rig.translate[index] = readVector(object, VrGame::NodeLocalTranslate);
+        rig.boneScale[index] = field<float>(object, VrGame::ObjectLocalScale);
+        found += 1;
+      });
+
+      m_hasFingerRig[h] = found == VrFingerBoneCount && rig.scale > 0.0f;
+
+      if (m_hasFingerRig[h])
+        Logger::info(str::format("VR: The ", side == VrHand::Left ? "left" : "right",
+          " hand's finger bones were read for fitting the fingers on held objects"));
     }
   }
 

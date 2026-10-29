@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "vr_game_nodes.h"
+#include "vr_grab_fingers.h"
 #include "vr_magazine.h"
 #include "vr_melee.h"
 #include "vr_pipboy_size.h"
@@ -219,6 +220,15 @@ namespace dxvk {
     void setFingers(VrHand hand, const VrFingerCurls* curls) {
       m_hasFingers[uint32_t(hand)]  = curls != nullptr;
       m_fingerCurls[uint32_t(hand)] = curls ? *curls : VrFingerCurls();
+    }
+
+    /**
+     * \brief A free hand's finger bones, read from the first-person model
+     *
+     * \returns \c nullptr until the model was drawn with that hand
+     */
+    const VrFingerRig* fingerRig(VrHand hand) const {
+      return m_hasFingerRig[uint32_t(hand)] ? &m_fingerRigs[uint32_t(hand)] : nullptr;
     }
 
     /**
@@ -687,6 +697,8 @@ namespace dxvk {
 
     std::array<VrFingerCurls, VrHandCount> m_fingerCurls = { };
     std::array<bool, VrHandCount>          m_hasFingers  = { };
+    std::array<VrFingerRig, VrHandCount>   m_fingerRigs;
+    std::array<bool, VrHandCount>          m_hasFingerRig = { };
     bool             m_grip = false;
     VrFirstPersonMode m_mode = VrFirstPersonMode::Hands;
 
@@ -1078,6 +1090,8 @@ namespace dxvk {
     void placeModel(uint8_t* root, void* updateData);
 
     void placePipBoyArm(uint8_t* root, const VrVector3& shift, void* updateData);
+
+    void readFingerRigs(uint8_t* root);
 
     void placeFreeHands(uint8_t* root, const VrVector3& drawnRoot, const VrVector3& shift, void* updateData);
 

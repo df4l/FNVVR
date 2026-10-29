@@ -207,7 +207,14 @@ namespace dxvk {
     }
 
     VrGrabCorrection lerp(const VrGrabCorrection& a, const VrGrabCorrection& b, float t) {
-      return { a.rotation + (b.rotation - a.rotation) * t, a.translation + (b.translation - a.translation) * t };
+      auto mix = [t] (const VrVector3& x, const VrVector3& y) { return x + (y - x) * t; };
+
+      VrGrabCorrection result;
+      result.rotation    = mix(a.rotation, b.rotation);
+      result.translation = mix(a.translation, b.translation);
+      result.palm        = mix(a.palm, b.palm);
+      result.pivot       = mix(a.pivot, b.pivot);
+      return result;
     }
 
   }
@@ -236,6 +243,19 @@ namespace dxvk {
     result.up       = rotate(correction.rotation, hand.up);
     result.right    = rotate(correction.rotation, hand.right);
     result.position = hand.position + correction.translation;
+
+    // The palm's turn, from the hand's frame to the world
+    VrVector3 palm = result.forward * correction.palm.x + result.up * correction.palm.y
+      + result.right * correction.palm.z;
+
+    if (vrLength(palm) > 1e-6f) {
+      VrVector3 pivot = vrPointFromHand(result, correction.pivot);
+      result.forward  = rotate(palm, result.forward);
+      result.up       = rotate(palm, result.up);
+      result.right    = rotate(palm, result.right);
+      result.position = pivot + rotate(palm, result.position - pivot);
+    }
+
     return result;
   }
 

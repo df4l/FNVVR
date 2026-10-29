@@ -84,10 +84,14 @@ namespace dxvk {
     // second squared: a quick turn of the wrist
     constexpr float MaxTurnAcceleration = 300.0f;
 
+    // Largest turn of the drawn palm towards the point a hand touched
+    constexpr float MaxPalmTurn = 0.6f;
+
     constexpr uint32_t MaxLoggedGrabs  = 50;
     constexpr uint32_t MaxLoggedMisses = 20;
     constexpr uint32_t MaxLoggedLosses = 20;
     constexpr uint32_t MaxLoggedLeads  = 10;
+    constexpr uint32_t MaxLoggedFits   = 20;
 
     template<typename T>
     T readField(const uint8_t* base, uintptr_t offset) {
@@ -427,7 +431,7 @@ namespace dxvk {
 
         if (moveTarget(held, input.pose)) {
           updateTurn(hand, held, input.pose);
-          updateCorrection(hand, held, input.pose);
+          updateCorrection(player, hand, held, input.pose);
         } else {
           if (m_loggedLosses < MaxLoggedLosses) {
             Logger::info(str::format("VR: The ", handName(hand), " hand let go of ", hexId(held.refId),
@@ -469,6 +473,17 @@ namespace dxvk {
       held.grab.pull(pose, best.point, vrGrabPullSpeed(best.mass));
     else
       held.grab.hold(pose, best.point);
+
+    // The palm turns towards the surface touched; a pulled object comes
+    // to the hand's centre
+    held.palm   = VrVector3();
+    held.fitted = false;
+
+    if (!best.pulled && m_hasRig[uint32_t(hand)]) {
+      VrVector3 palm = vrPalmDirection(m_rigs[uint32_t(hand)], hand, pose);
+      VrVector3 turn = vrPalmTurn(palm, pose.position, best.point, MaxPalmTurn);
+      held.palm = { vrDot(turn, pose.forward), vrDot(turn, pose.up), vrDot(turn, pose.right) };
+    }
 
     if (m_loggedGrabs < MaxLoggedGrabs) {
       uint32_t hands = handsOn(held.body);
@@ -833,7 +848,7 @@ namespace dxvk {
   }
 
 
-  void VrPhysicsGrab::updateCorrection(VrHand hand, const Held& held, const VrGameCameraPose& pose) {
+  void VrPhysicsGrab::updateCorrection(uint8_t* player, VrHand hand, Held& held, const VrGameCameraPose& pose) {
     // A pulled object is on its way to the hand
     if (held.grab.pulling())
       return;
@@ -847,7 +862,63 @@ namespace dxvk {
 
     Correction& correction = m_corrections[uint32_t(hand)];
     correction.value = vrGrabHandCorrection(pose, held.grab.offset(), point, held.turning ? &onBody : nullptr);
+    correction.value.palm  = held.palm;
+    correction.value.pivot = held.grab.offset();
     correction.valid = true;
+
+    // Once, where the hand keeps the object
+    if (!held.fitted && m_hasRig[uint32_t(hand)])
+      fitFingers(player, hand, held, vrGrabCorrectHand(pose, correction.value));
+  }
+
+
+  void VrPhysicsGrab::fitFingers(uint8_t* player, VrHand hand, Held& held, const VrGameCameraPose& drawn) {
+    uint8_t* world = nullptr;
+
+    if (!referenceWorld(player, &world) || !world)
+      return;
+
+    uint32_t playerFilter = 0;
+    reinterpret_cast<GetFilterFn>(VrGame::GetCollisionFilter)(player, nullptr, &playerFilter);
+
+    // As the probe: the held body has the player's group
+    uint32_t group     = playerFilter >> VrGame::FilterGroupShift;
+    uint32_t rayFilter = (group << VrGame::FilterGroupShift) | VrGame::LayerItemPick;
+    uint32_t rays = 0;
+
+    auto ray = [world, rayFilter, &rays] (const VrVector3& from, const VrVector3& to) {
+      alignas(16) uint8_t pick[VrGame::PickDataSize];
+      VrVector3 length = to - from;
+      rays += 1;
+
+      reinterpret_cast<PickConstructFn>(VrGame::PickDataConstruct)(pick, nullptr);
+      reinterpret_cast<PickSetFilterFn>(VrGame::PickDataSetFilter)(pick, nullptr, rayFilter);
+      reinterpret_cast<PickSetPointFn>(VrGame::PickDataSetFrom)(pick, nullptr, &from);
+      reinterpret_cast<PickSetPointFn>(VrGame::PickDataSetLength)(pick, nullptr, &length);
+
+      return virtualFunction<PickObjectFn>(world, VrGame::WorldPickObjectSlot)(world, nullptr, pick);
+    };
+
+    showGroupedBodies(true);
+    held.fingers = vrFitFingers(m_rigs[uint32_t(hand)], hand, drawn, ray);
+    showGroupedBodies(false);
+    held.fitted = true;
+
+    if (m_loggedFits < MaxLoggedFits) {
+      const VrFingerCurls& c = held.fingers;
+      Logger::info(str::format("VR: The ", handName(hand), " hand's fingers close on ", hexId(held.refId),
+        " to ", c[0], " ", c[1], " ", c[2], " ", c[3], " ", c[4], " (thumb to little finger) with ", rays,
+        " rays, the palm turned ", int32_t(vrLength(held.palm) * 57.29578f), " degrees towards it"));
+      m_loggedFits++;
+    }
+  }
+
+
+  void VrPhysicsGrab::setFingerRig(VrHand hand, const VrFingerRig* rig) {
+    m_hasRig[uint32_t(hand)] = rig != nullptr;
+
+    if (rig)
+      m_rigs[uint32_t(hand)] = *rig;
   }
 
 

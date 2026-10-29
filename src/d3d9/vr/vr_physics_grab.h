@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "vr_grab.h"
+#include "vr_grab_fingers.h"
 #include "vr_types.h"
 
 namespace dxvk {
@@ -121,6 +122,29 @@ namespace dxvk {
       return correction.valid ? &correction.value : nullptr;
     }
 
+    /**
+     * \brief Gives a hand's finger bones, to fit the fingers on what it
+     *    grabs
+     *
+     * \param [in] hand The hand
+     * \param [in] rig Its finger bones, or \c nullptr if not known; copied
+     */
+    void setFingerRig(VrHand hand, const VrFingerRig* rig);
+
+    /**
+     * \brief How far each finger of a hand closes on what it holds
+     *
+     * Fitted once the hand holds the object where it keeps it
+     * (vrFitFingers), with the hand drawn as handCorrection places it.
+     *
+     * \returns \c nullptr while the hand holds nothing, pulls an object
+     *    or its fingers are not known
+     */
+    const VrFingerCurls* heldFingers(VrHand hand) const {
+      const Held& held = m_hands[uint32_t(hand)];
+      return m_corrections[uint32_t(hand)].valid && held.fitted ? &held.fingers : nullptr;
+    }
+
   private:
 
     struct HandInput {
@@ -158,6 +182,12 @@ namespace dxvk {
       bool       turning = false;
       /// The spring's callback array before the turn callback was added
       std::array<uint32_t, 3> callbacks = { };
+      /// Turn of the drawn palm towards the point touched, in the hand's
+      /// frame (VrGrabCorrection::palm)
+      VrVector3     palm;
+      /// How far each finger closes on the object, once fitted
+      VrFingerCurls fingers = { };
+      bool          fitted  = false;
     };
 
     /**
@@ -195,6 +225,8 @@ namespace dxvk {
     std::array<HandInput, VrHandCount> m_input;
     std::array<Held, VrHandCount>      m_hands;
     std::array<Correction, VrHandCount> m_corrections;
+    std::array<VrFingerRig, VrHandCount> m_rigs;
+    std::array<bool, VrHandCount>        m_hasRig = { };
     std::vector<Released>              m_released;
     VrPhysicsGrabEvents                m_events;
 
@@ -212,6 +244,7 @@ namespace dxvk {
     uint32_t m_loggedLeads   = 0;
     bool     m_loggedSpring  = false;
     bool     m_loggedNoGroup = false;
+    uint32_t m_loggedFits    = 0;
 
     void update(uint8_t* player, float dt);
 
@@ -219,7 +252,9 @@ namespace dxvk {
 
     void updateHand(uint8_t* player, VrHand hand, float dt);
 
-    void updateCorrection(VrHand hand, const Held& held, const VrGameCameraPose& pose);
+    void updateCorrection(uint8_t* player, VrHand hand, Held& held, const VrGameCameraPose& pose);
+
+    void fitFingers(uint8_t* player, VrHand hand, Held& held, const VrGameCameraPose& drawn);
 
     bool grab(uint8_t* player, VrHand hand, const VrGameCameraPose& pose);
 

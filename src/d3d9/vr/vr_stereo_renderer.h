@@ -403,6 +403,9 @@ namespace dxvk {
     // Keeps each drawn hand on the object it holds
     std::array<VrGrabHandGlue, VrHandCount> m_grabGlue;
 
+    // Closes each drawn hand's fingers on the object it holds
+    std::array<VrGrabFingerBlend, VrHandCount> m_grabFingers;
+
     // Makes the parts of the weapon the reload needs worked glow
     std::unique_ptr<VrPartHighlight> m_partHighlight;
 
