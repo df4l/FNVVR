@@ -386,4 +386,38 @@ namespace dxvk {
     return vrPointFromHand(hand, m_offset);
   }
 
+
+  VrHandBodyStep vrHandBodyStep(
+    const VrVector3&            body,
+    const VrVector3&            hand,
+          float                 dt,
+          float                 maxSpeed) {
+    VrHandBodyStep step;
+
+    if (!(dt > 0.0f)) {
+      step.warp = true;
+      return step;
+    }
+
+    VrVector3 velocity = (hand - body) * (1.0f / dt);
+
+    if (!(vrLength(velocity) <= maxSpeed))
+      step.warp = true;
+    else
+      step.velocity = velocity;
+
+    return step;
+  }
+
+
+  bool VrHandBodyGate::update(bool free, float dt) {
+    if (!free) {
+      m_time = 0.0f;
+      return false;
+    }
+
+    m_time = std::fmin(m_time + std::fmax(dt, 0.0f), SettleTime);
+    return m_time >= SettleTime;
+  }
+
 }

@@ -2408,6 +2408,63 @@ namespace dxvk {
     constexpr uintptr_t RemoveExtra                = 0x00410140;
     constexpr uint8_t   ExtraGuarded               = 0x7C;
 
+    /**
+     * A keyframed sphere per hand that pushes objects, made as
+     * Explosion::Init3D and PlayerCharacter::SetParentCell make bodies of
+     * their own (findings/grab.md §18): bhkSphereShape's constructor
+     * (__thiscall: radius, whether it is in game units; 0x14 bytes from
+     * NiNew) and its material (MT_SKIN), bhkRigidBodyCinfo's constructor
+     * (__thiscall, 0xE0 bytes, 16-aligned) with the filter at +0x00 and
+     * again at +0x20 (the hkpRigidBodyCinfo), SetShape (__thiscall, the
+     * bhkShape), the position (hkVector4, Havok units) and the motion
+     * type, its destructor (__thiscall), and bhkRigidBody's constructor
+     * (__thiscall, the info; 0x1C bytes from NiNew), whose vtable is
+     * checked. bhkRigidBody's vtable: Add (the bhkWorld), Remove and
+     * SetPosition (an hkVector4, Havok units). NiPointer assignment
+     * (SpringAssign) is the same for every NiRefObject.
+     */
+    constexpr uintptr_t SphereShapeConstruct       = 0x0056E950;
+    constexpr uint8_t   SphereShapeConstructPrologue[] = { 0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x58, 0x73, 0xEF, 0x00, 0x64, 0xA1 };
+    constexpr size_t    SphereShapeSize            = 0x14;
+    constexpr uintptr_t ShapeMaterial              = 0x10;
+    constexpr uint32_t  MaterialSkin               = 7;
+    constexpr uintptr_t BodyInfoConstruct          = 0x00C8F510;
+    constexpr uint8_t   BodyInfoConstructPrologue[] = { 0x6A, 0xFF, 0x68, 0xD8, 0x24, 0xF3, 0x00, 0x64, 0xA1, 0x00, 0x00, 0x00 };
+    constexpr uintptr_t BodyInfoDestruct           = 0x0056D730;
+    constexpr uint8_t   BodyInfoDestructPrologue[] = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x4D, 0xFC, 0xE8, 0x41 };
+    constexpr uintptr_t BodyInfoSetShape           = 0x0056F110;
+    constexpr uint8_t   BodyInfoSetShapePrologue[] = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x4D, 0x08, 0xE8, 0x31 };
+    constexpr size_t    BodyInfoSize               = 0xE0;
+    constexpr uintptr_t BodyInfoFilter             = 0x00;
+    constexpr uintptr_t BodyInfoHavokFilter        = 0x20;
+    constexpr uintptr_t BodyInfoPosition           = 0x30;
+    constexpr uintptr_t BodyInfoMotionType         = 0xD4;
+    constexpr uintptr_t RigidBodyConstruct         = 0x0056D380;
+    constexpr uint8_t   RigidBodyConstructPrologue[] = { 0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x63, 0x71, 0xEF, 0x00, 0x64, 0xA1 };
+    constexpr size_t    RigidBodySize              = 0x1C;
+    constexpr uintptr_t RigidBodyVtable            = 0x010301B4;
+    constexpr uintptr_t RigidBodyAddSlot           = 0x9C;
+    constexpr uintptr_t RigidBodyRemoveSlot        = 0xA0;
+    constexpr uintptr_t RigidBodySetPositionSlot   = 0xDC;
+
+    /**
+     * bhkCollisionFilter (findings/grab.md §18): layer L_DEBRIS_SMALL,
+     * which meets static, clutter, props, debris and corpses but not
+     * projectiles, triggers, water, the item and line of sight picks or
+     * character controllers; and the filter's "no collision" bit, tested
+     * before anything else.
+     */
+    constexpr uint32_t  LayerDebrisSmall           = 19;
+    constexpr uint32_t  FilterNoCollision          = 0x4000;
+
+    /**
+     * PlayerCharacter::Update calls ForceGrenadeHold (__thiscall) on every
+     * frame the player is not in control, where it does not reach
+     * HandlePhysicsGrab.
+     */
+    constexpr uintptr_t NotInControlCallSite       = 0x0093F954;
+    constexpr uintptr_t ForceGrenadeHold           = 0x009481D0;
+
   }
 
 }

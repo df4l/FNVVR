@@ -18,6 +18,9 @@ namespace dxvk {
     // PlayerCharacter::HandlePhysicsGrab, __thiscall with the frame time
     using HandlePhysicsGrabFn = void (__fastcall*)(uint8_t* player, void* unused, float dt);
 
+    // PlayerCharacter::ForceGrenadeHold, __thiscall
+    using ForceGrenadeHoldFn  = void (__fastcall*)(uint8_t* player, void* unused);
+
     using PickConstructFn    = void* (__fastcall*)(void* pick, void* unused);
     using PickSetFilterFn    = void (__fastcall*)(void* pick, void* unused, uint32_t filter);
     using PickSetPointFn     = void (__fastcall*)(void* pick, void* unused, const VrVector3* point);
@@ -317,10 +320,22 @@ namespace dxvk {
     grab->m_canStore = VrGameMemory::matches(VrGame::RefActivate,
       VrGame::RefActivatePrologue, sizeof(VrGame::RefActivatePrologue));
 
+    // The spheres are only made where they can be stopped while the
+    // player is not in control
+    grab->m_handBodies = VrHandBodies::create();
+
+    if (grab->m_handBodies && !VrGameMemory::redirectCall(VrGame::NotInControlCallSite,
+        VrGame::ForceGrenadeHold, reinterpret_cast<const void*>(&VrPhysicsGrab::notInControlHook)))
+      grab->m_handBodies.reset();
+
     Logger::info("VR: Each free hand holds what it touches or pulls what it points at with its grip");
     Logger::info(grab->m_canStore
       ? "VR: Items let go of at the chest go into the inventory"
       : "VR: The game's activation was not found, items let go of at the chest fall");
+
+    if (!grab->m_handBodies)
+      Logger::info("VR: The game's rigid bodies were not found, the hands do not push objects");
+
     return grab;
   }
 
@@ -362,6 +377,16 @@ namespace dxvk {
   }
 
 
+  void __fastcall VrPhysicsGrab::notInControlHook(
+          uint8_t*              player,
+          void*                 unused) {
+    reinterpret_cast<ForceGrenadeHoldFn>(VrGame::ForceGrenadeHold)(player, nullptr);
+
+    if (g_physicsGrab && g_physicsGrab->m_handBodies)
+      g_physicsGrab->m_handBodies->stop();
+  }
+
+
   void VrPhysicsGrab::update(uint8_t* player, float dt) {
     // The scale is set when the game starts Havok
     if (!(havokScale() > 0.0f))
@@ -373,6 +398,25 @@ namespace dxvk {
       updateHand(player, VrHand(i), dt);
 
     restoreFilters(player);
+    updateHandBodies(player, dt);
+  }
+
+
+  void VrPhysicsGrab::updateHandBodies(uint8_t* player, float dt) {
+    if (!m_handBodies)
+      return;
+
+    // The hands are those of the frame drawn last, the step moves the
+    // player again
+    VrVector3 lead = vrGrabLead(m_playerStep, StaleFrames);
+
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      const HandInput& input = m_input[i];
+      VrVector3 position = input.pose.position + lead;
+      bool free = input.free && !input.grip && !m_hands[i].grab.holding();
+
+      m_handBodies->update(player, VrHand(i), input.tracked ? &position : nullptr, free, dt);
+    }
   }
 
 
@@ -382,6 +426,7 @@ namespace dxvk {
 
     m_playerPosition    = position;
     m_hasPlayerPosition = true;
+    m_playerStep        = step;
     m_lead = vrGrabLead(step, StaleFrames + vrGrabSpringLagSteps(m_spring));
 
     if (!m_hands[0].grab.holding() && !m_hands[1].grab.holding())
