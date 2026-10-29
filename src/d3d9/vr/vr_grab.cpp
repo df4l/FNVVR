@@ -173,6 +173,88 @@ namespace dxvk {
   }
 
 
+  VrGrabFrame vrGrabFrameInverse(const VrGrabFrame& local) {
+    return {
+      { local.x.x, local.y.x, local.z.x },
+      { local.x.y, local.y.y, local.z.y },
+      { local.x.z, local.y.z, local.z.z },
+    };
+  }
+
+
+  namespace {
+
+    // What the physics update a frame earlier leaves out
+    constexpr float SettleDistance = 0.03f * VrGameUnitsPerMetre;
+    constexpr float SettleAngle    = 0.15f;
+
+    VrVector3 beyond(const VrVector3& v, float settle) {
+      float length = vrLength(v);
+
+      if (!(length > settle))
+        return VrVector3();
+
+      return v * ((length - settle) / length);
+    }
+
+    VrVector3 rotate(const VrVector3& rotation, const VrVector3& v) {
+      float angle = vrLength(rotation);
+
+      if (!(angle > 1e-6f))
+        return v;
+
+      return vrRotate(vrQuaternionFromAxisAngle(rotation * (1.0f / angle), angle), v);
+    }
+
+    VrGrabCorrection lerp(const VrGrabCorrection& a, const VrGrabCorrection& b, float t) {
+      return { a.rotation + (b.rotation - a.rotation) * t, a.translation + (b.translation - a.translation) * t };
+    }
+
+  }
+
+
+  VrGrabCorrection vrGrabHandCorrection(
+    const VrGameCameraPose&     hand,
+    const VrVector3&            offset,
+    const VrVector3&            point,
+    const VrGrabFrame*          onBody) {
+    VrGrabCorrection correction;
+
+    if (onBody)
+      correction.rotation = beyond(vrGrabRotationBetween(vrGrabHandFrame(hand), *onBody), SettleAngle);
+
+    // The hand turned the same way still holds the point at its offset
+    VrVector3 turned = rotate(correction.rotation, vrPointFromHand(hand, offset) - hand.position);
+    correction.translation = beyond(point - turned - hand.position, SettleDistance);
+    return correction;
+  }
+
+
+  VrGameCameraPose vrGrabCorrectHand(const VrGameCameraPose& hand, const VrGrabCorrection& correction) {
+    VrGameCameraPose result;
+    result.forward  = rotate(correction.rotation, hand.forward);
+    result.up       = rotate(correction.rotation, hand.up);
+    result.right    = rotate(correction.rotation, hand.right);
+    result.position = hand.position + correction.translation;
+    return result;
+  }
+
+
+  VrGrabCorrection VrGrabHandGlue::update(const VrGrabCorrection* target, float dt) {
+    bool holding = target != nullptr;
+
+    if (holding != m_holding) {
+      m_from    = m_last;
+      m_blend   = 0.0f;
+      m_holding = holding;
+    }
+
+    m_blend = std::min(m_blend + dt / BlendTime, 1.0f);
+    m_last  = lerp(m_from, holding ? *target : VrGrabCorrection(), m_blend);
+    return m_last;
+  }
+
+
   float vrGrabPullSpeed(float mass) {
     constexpr float MinScale = 0.35f;
 

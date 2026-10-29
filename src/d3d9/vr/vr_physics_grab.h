@@ -107,6 +107,20 @@ namespace dxvk {
      */
     VrPhysicsGrabEvents takeEvents();
 
+    /**
+     * \brief How a hand is drawn to stay on what it holds
+     *
+     * From the player's last update (vrGrabHandCorrection): the held point,
+     * and the body's rotation while the hand turns it, keep their place in
+     * the drawn hand when the object is blocked or lags behind.
+     *
+     * \returns \c nullptr while the hand holds nothing or pulls an object
+     */
+    const VrGrabCorrection* handCorrection(VrHand hand) const {
+      const Correction& correction = m_corrections[uint32_t(hand)];
+      return correction.valid ? &correction.value : nullptr;
+    }
+
   private:
 
     struct HandInput {
@@ -171,10 +185,16 @@ namespace dxvk {
       bool      corpse   = false;
     };
 
+    struct Correction {
+      VrGrabCorrection value;
+      bool             valid = false;
+    };
+
     VrPhysicsGrab() = default;
 
     std::array<HandInput, VrHandCount> m_input;
     std::array<Held, VrHandCount>      m_hands;
+    std::array<Correction, VrHandCount> m_corrections;
     std::vector<Released>              m_released;
     VrPhysicsGrabEvents                m_events;
 
@@ -198,6 +218,8 @@ namespace dxvk {
     void updateLead(uint8_t* player, float dt);
 
     void updateHand(uint8_t* player, VrHand hand, float dt);
+
+    void updateCorrection(VrHand hand, const Held& held, const VrGameCameraPose& pose);
 
     bool grab(uint8_t* player, VrHand hand, const VrGameCameraPose& pose);
 

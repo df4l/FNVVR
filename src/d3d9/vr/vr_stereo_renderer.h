@@ -400,6 +400,9 @@ namespace dxvk {
     // World objects held with the hands
     std::unique_ptr<VrPhysicsGrab> m_physicsGrab;
 
+    // Keeps each drawn hand on the object it holds
+    std::array<VrGrabHandGlue, VrHandCount> m_grabGlue;
+
     // Makes the parts of the weapon the reload needs worked glow
     std::unique_ptr<VrPartHighlight> m_partHighlight;
 

@@ -178,6 +178,83 @@ namespace dxvk {
           float                 maxAcceleration);
 
   /**
+   * \brief A hand's rotation in the frame of what it holds, from the held
+   *    body's rotation in the hand's frame
+   */
+  VrGrabFrame vrGrabFrameInverse(const VrGrabFrame& local);
+
+  /**
+   * \brief How far the drawn hand is moved from the controller to stay on
+   *    what it holds
+   */
+  struct VrGrabCorrection {
+    /// Turn of the hand's axes, axis times angle in radians, in the world
+    VrVector3 rotation;
+    /// Move of the hand, after the turn, in game units
+    VrVector3 translation;
+  };
+
+  /**
+   * \brief Where a hand is drawn so that it stays on what it holds
+   *
+   * The held point and, when the hand turns the body, the body's rotation
+   * keep their place in the hand: the hand is turned by the rotation from
+   * its own to the one it has on the body, then moved so that the held
+   * point is where it is on the body. The correction is taken from the
+   * physics update, a frame before the hand is drawn, so a little of it is
+   * left out: small corrections are springs settling and the hand moving,
+   * only what goes beyond them (a blocked or slow object) moves the hand.
+   *
+   * \param [in] hand The hand in the game world
+   * \param [in] offset The held point in the hand's frame (vrPointToHand)
+   * \param [in] point The held point on the body, in the game world
+   * \param [in] onBody The hand's rotation on the body, or \c nullptr to
+   *    keep the hand's own
+   */
+  VrGrabCorrection vrGrabHandCorrection(
+    const VrGameCameraPose&     hand,
+    const VrVector3&            offset,
+    const VrVector3&            point,
+    const VrGrabFrame*          onBody);
+
+  /**
+   * \brief A hand moved and turned by a correction
+   */
+  VrGameCameraPose vrGrabCorrectHand(const VrGameCameraPose& hand, const VrGrabCorrection& correction);
+
+  /**
+   * \brief Brings the drawn hand onto what it holds and back to the
+   *    controller smoothly
+   *
+   * The correction follows the physics update's while the hand holds, and
+   * blends over a short time when the hand starts or stops being kept on
+   * an object, so that the hand does not jump.
+   */
+  class VrGrabHandGlue {
+
+  public:
+
+    /// Time to blend the hand onto or off an object, in seconds
+    constexpr static float BlendTime = 0.12f;
+
+    /**
+     * \param [in] target The correction that keeps the hand on what it
+     *    holds, or \c nullptr when it holds nothing
+     * \param [in] dt Time since the previous frame, in seconds
+     * \returns The correction to draw the hand with
+     */
+    VrGrabCorrection update(const VrGrabCorrection* target, float dt);
+
+  private:
+
+    VrGrabCorrection m_from;
+    VrGrabCorrection m_last;
+    float            m_blend   = 1.0f;
+    bool             m_holding = false;
+
+  };
+
+  /**
    * \brief What a hand does with its grip in a frame
    */
   struct VrGrabHandInput {
@@ -277,6 +354,13 @@ namespace dxvk {
      * \brief Where the held point belongs for a hand pose
      */
     VrVector3 target(const VrGameCameraPose& hand) const;
+
+    /**
+     * \brief The held point in the hand's frame
+     */
+    const VrVector3& offset() const {
+      return m_offset;
+    }
 
   private:
 

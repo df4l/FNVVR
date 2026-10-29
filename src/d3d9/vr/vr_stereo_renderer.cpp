@@ -942,6 +942,13 @@ namespace dxvk {
       m_weaponHand->setFingers(VrHand(i), controller.isActive && controller.hasFingers ? &controller.fingerCurl : nullptr);
     }
 
+    // A hand that holds an object is drawn on it
+    std::array<VrGrabCorrection, VrHandCount> glue;
+    bool holds = state == VrGameStateKind::InGame && m_physicsGrab;
+
+    for (uint32_t i = 0; i < VrHandCount; i++)
+      glue[i] = m_grabGlue[i].update(holds ? m_physicsGrab->handCorrection(VrHand(i)) : nullptr, dt);
+
     if (state == VrGameStateKind::PipBoy && m_hasReference && left.isActive) {
       VrGameCameraPose otherHand = handInGame(left);
       m_weaponHand->beginFrame(gameCamera, nullptr, &otherHand, false, VrFirstPersonMode::PipBoy, dt);
@@ -962,8 +969,8 @@ namespace dxvk {
       return;
     }
 
-    VrGameCameraPose hand      = handInGame(right);
-    VrGameCameraPose otherHand = handInGame(left);
+    VrGameCameraPose hand      = vrGrabCorrectHand(handInGame(right), glue[uint32_t(VrHand::Right)]);
+    VrGameCameraPose otherHand = vrGrabCorrectHand(handInGame(left), glue[uint32_t(VrHand::Left)]);
 
     VrFirstPersonMode mode = m_weaponDrawn && m_weaponDrawn->playerHolstered()
       ? VrFirstPersonMode::FreeHands

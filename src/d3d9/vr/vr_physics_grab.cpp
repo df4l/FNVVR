@@ -389,6 +389,7 @@ namespace dxvk {
   void VrPhysicsGrab::updateHand(uint8_t* player, VrHand hand, float dt) {
     Held& held = m_hands[uint32_t(hand)];
     const HandInput& input = m_input[uint32_t(hand)];
+    m_corrections[uint32_t(hand)].valid = false;
 
     // The object was unloaded, taken or moved out of the world
     if (held.grab.holding() && !stillHeld(held)) {
@@ -426,6 +427,7 @@ namespace dxvk {
 
         if (moveTarget(held, input.pose)) {
           updateTurn(hand, held, input.pose);
+          updateCorrection(hand, held, input.pose);
         } else {
           if (m_loggedLosses < MaxLoggedLosses) {
             Logger::info(str::format("VR: The ", handName(hand), " hand let go of ", hexId(held.refId),
@@ -828,6 +830,24 @@ namespace dxvk {
     turn.local  = held.local;
     turn.spring = m_spring;
     turn.maxAcceleration = MaxTurnAcceleration * strength;
+  }
+
+
+  void VrPhysicsGrab::updateCorrection(VrHand hand, const Held& held, const VrGameCameraPose& pose) {
+    // A pulled object is on its way to the hand
+    if (held.grab.pulling())
+      return;
+
+    VrVector3 point = bodyPointToWorld(held.body, held.local) * (1.0f / havokScale());
+
+    VrGrabFrame onBody;
+
+    if (held.turning)
+      onBody = vrGrabFrameFromLocal(bodyFrame(held.body), vrGrabFrameInverse(held.frame));
+
+    Correction& correction = m_corrections[uint32_t(hand)];
+    correction.value = vrGrabHandCorrection(pose, held.grab.offset(), point, held.turning ? &onBody : nullptr);
+    correction.valid = true;
   }
 
 
