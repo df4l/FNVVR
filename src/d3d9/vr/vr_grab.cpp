@@ -87,6 +87,92 @@ namespace dxvk {
   }
 
 
+  VrGrabFrame vrGrabHandFrame(const VrGameCameraPose& hand) {
+    return { hand.forward, hand.up, hand.right };
+  }
+
+
+  VrGrabFrame vrGrabFrameToLocal(const VrGrabFrame& parent, const VrGrabFrame& frame) {
+    auto toLocal = [&parent] (const VrVector3& axis) {
+      return VrVector3 { vrDot(axis, parent.x), vrDot(axis, parent.y), vrDot(axis, parent.z) };
+    };
+
+    return { toLocal(frame.x), toLocal(frame.y), toLocal(frame.z) };
+  }
+
+
+  VrGrabFrame vrGrabFrameFromLocal(const VrGrabFrame& parent, const VrGrabFrame& local) {
+    auto fromLocal = [&parent] (const VrVector3& axis) {
+      return parent.x * axis.x + parent.y * axis.y + parent.z * axis.z;
+    };
+
+    return { fromLocal(local.x), fromLocal(local.y), fromLocal(local.z) };
+  }
+
+
+  VrVector3 vrGrabRotationBetween(const VrGrabFrame& from, const VrGrabFrame& to) {
+    // m = to · fromᵀ, the rotation from one frame to the other
+    const float t[3][3] = { { to.x.x, to.x.y, to.x.z }, { to.y.x, to.y.y, to.y.z }, { to.z.x, to.z.y, to.z.z } };
+    const float f[3][3] = { { from.x.x, from.x.y, from.x.z }, { from.y.x, from.y.y, from.y.z }, { from.z.x, from.z.y, from.z.z } };
+    float m[3][3];
+
+    for (uint32_t r = 0; r < 3; r++) {
+      for (uint32_t c = 0; c < 3; c++)
+        m[r][c] = t[0][r] * f[0][c] + t[1][r] * f[1][c] + t[2][r] * f[2][c];
+    }
+
+    // Quaternion of the matrix from its largest component
+    VrQuaternion q;
+    float trace = m[0][0] + m[1][1] + m[2][2];
+
+    if (trace > 0.0f) {
+      float s = 2.0f * std::sqrt(trace + 1.0f);
+      q = { (m[2][1] - m[1][2]) / s, (m[0][2] - m[2][0]) / s, (m[1][0] - m[0][1]) / s, 0.25f * s };
+    } else if (m[0][0] > m[1][1] && m[0][0] > m[2][2]) {
+      float s = 2.0f * std::sqrt(1.0f + m[0][0] - m[1][1] - m[2][2]);
+      q = { 0.25f * s, (m[0][1] + m[1][0]) / s, (m[0][2] + m[2][0]) / s, (m[2][1] - m[1][2]) / s };
+    } else if (m[1][1] > m[2][2]) {
+      float s = 2.0f * std::sqrt(1.0f + m[1][1] - m[0][0] - m[2][2]);
+      q = { (m[0][1] + m[1][0]) / s, 0.25f * s, (m[1][2] + m[2][1]) / s, (m[0][2] - m[2][0]) / s };
+    } else {
+      float s = 2.0f * std::sqrt(1.0f + m[2][2] - m[0][0] - m[1][1]);
+      q = { (m[0][2] + m[2][0]) / s, (m[1][2] + m[2][1]) / s, 0.25f * s, (m[1][0] - m[0][1]) / s };
+    }
+
+    // The shortest way round
+    if (q.w < 0.0f)
+      q = { -q.x, -q.y, -q.z, -q.w };
+
+    VrVector3 v = { q.x, q.y, q.z };
+    float sine = vrLength(v);
+
+    if (!(sine > 1e-6f))
+      return v * 2.0f;
+
+    return v * (2.0f * std::atan2(sine, q.w) / sine);
+  }
+
+
+  VrVector3 vrGrabTurnStep(
+    const VrGrabSpringConstants& spring,
+    const VrVector3&            angularVelocity,
+    const VrVector3&            error,
+          float                 dt,
+          float                 maxAcceleration) {
+    if (!(dt > 0.0f))
+      return VrVector3();
+
+    VrVector3 change = error * (spring.elasticity / dt) - angularVelocity * spring.damping;
+    float length = vrLength(change);
+    float limit  = maxAcceleration * dt;
+
+    if (length > limit)
+      change = change * (limit / length);
+
+    return change;
+  }
+
+
   float vrGrabPullSpeed(float mass) {
     constexpr float MinScale = 0.35f;
 

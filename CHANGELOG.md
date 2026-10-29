@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Physics grab
+
+- **Held objects turn with the hand**: an object held in one hand keeps the angle it had when grabbed and turns as
+  the wrist turns, about the point held, instead of hanging from it. Heavy objects turn more slowly. Held in both
+  hands, it follows the line between them. Corpses still hang from the limb held.
+
 ### Fixes
 
 - **Chairs and benches**: sitting down and getting up work again. The game shows the third person while the player

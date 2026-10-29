@@ -1,6 +1,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <mutex>
 
 #include "../../util/log/log.h"
 #include "../../util/util_string.h"
@@ -46,6 +47,8 @@ namespace dxvk {
     using GetActivateRefFn   = uint8_t* (__cdecl*)();
     using Get3DFn            = uint8_t* (__fastcall*)(uint8_t* ref, void* unused);
     using FindCollisionFn    = uint8_t* (__cdecl*)(uint8_t* object);
+    using SetVelocityFn      = void (__fastcall*)(uint8_t* body, void* unused, const float* velocity);
+    using SpringCallbackFn   = void (__cdecl*)(uint8_t* action, const uint8_t* stepInfo, const void* impulse);
 
     static_assert(sizeof(VrVector3) == 12, "The game's NiPoint3 is three floats");
 
@@ -76,6 +79,10 @@ namespace dxvk {
     // How often the lead is logged while the player moves
     constexpr float LeadLogInterval = 5.0f;
     constexpr float LeadLogMinSpeed = 1.0f * VrGameUnitsPerMetre;
+
+    // Fastest a hand turns a body of up to VrGrabLightMass, in radians per
+    // second squared: a quick turn of the wrist
+    constexpr float MaxTurnAcceleration = 300.0f;
 
     constexpr uint32_t MaxLoggedGrabs  = 50;
     constexpr uint32_t MaxLoggedMisses = 20;
@@ -173,6 +180,74 @@ namespace dxvk {
       reinterpret_cast<SpringAssignFn>(VrGame::SpringAssign)(&spring, nullptr, nullptr);
     }
 
+    VrVector3 cross(const VrVector3& a, const VrVector3& b) {
+      return { a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x };
+    }
+
+    VrGrabFrame bodyFrame(const uint8_t* body) {
+      return {
+        readField<VrVector3>(body, VrGame::BodyRotation + 0x00),
+        readField<VrVector3>(body, VrGame::BodyRotation + 0x10),
+        readField<VrVector3>(body, VrGame::BodyRotation + 0x20) };
+    }
+
+    void setVelocity(uint8_t* body, uintptr_t setter, const VrVector3& velocity) {
+      alignas(16) const float value[4] = { velocity.x, velocity.y, velocity.z, 0.0f };
+      reinterpret_cast<SetVelocityFn>(setter)(body, nullptr, value);
+    }
+
+    /**
+     * \brief Where a hand turns the body of its spring
+     *
+     * Written on the main thread, read by the turn callback on the thread
+     * that steps Havok.
+     */
+    struct Turn {
+      uint8_t*    action = nullptr;
+      VrGrabFrame target;
+      /// Point held, in the body's frame, Havok units
+      VrVector3   local;
+      VrGrabSpringConstants spring;
+      float       maxAcceleration = 0.0f;
+    };
+
+    std::mutex                       g_turnLock;
+    std::array<Turn, VrHandCount>    g_turns;
+
+    /**
+     * \brief Turns a held body towards its hand, after each step of its
+     *    spring (hkpMouseSpringAction's applied callback)
+     */
+    void __cdecl turnHeldBody(uint8_t* action, const uint8_t* stepInfo, const void*) {
+      std::lock_guard<std::mutex> lock(g_turnLock);
+
+      for (const Turn& turn : g_turns) {
+        if (turn.action != action)
+          continue;
+
+        uint8_t* body = readField<uint8_t*>(action, VrGame::SpringActionBody);
+        float dt = readField<float>(stepInfo, VrGame::StepInfoDeltaTime);
+
+        if (!body)
+          return;
+
+        VrVector3 angular = readField<VrVector3>(body, VrGame::BodyAngularVelocity);
+        VrVector3 change  = vrGrabTurnStep(turn.spring, angular,
+          vrGrabRotationBetween(bodyFrame(body), turn.target), dt, turn.maxAcceleration);
+
+        // About the point held, which the spring keeps in the hand, rather
+        // than the centre of mass
+        VrVector3 arm = readField<VrVector3>(body, VrGame::BodyCentreOfMass) - bodyPointToWorld(body, turn.local);
+        VrVector3 linear = readField<VrVector3>(body, VrGame::BodyLinearVelocity) + cross(change, arm);
+
+        setVelocity(body, VrGame::BodySetAngularVelocity, angular + change);
+        setVelocity(body, VrGame::BodySetLinearVelocity, linear);
+        return;
+      }
+    }
+
+    const SpringCallbackFn g_turnCallbacks[] = { &turnHeldBody };
+
     std::string hexId(uint32_t id) {
       char text[16];
       std::snprintf(text, sizeof(text), "%08X", id);
@@ -214,6 +289,12 @@ namespace dxvk {
         VrGame::SpringConstructPrologue, sizeof(VrGame::SpringConstructPrologue))
       && VrGameMemory::matches(VrGame::SpringSetTarget,
         VrGame::SpringSetTargetPrologue, sizeof(VrGame::SpringSetTargetPrologue))
+      && VrGameMemory::matches(VrGame::SpringCallbackLoop,
+        VrGame::SpringCallbackLoopBytes, sizeof(VrGame::SpringCallbackLoopBytes))
+      && VrGameMemory::matches(VrGame::BodySetLinearVelocity,
+        VrGame::BodySetVelocityPrologue, sizeof(VrGame::BodySetVelocityPrologue))
+      && VrGameMemory::matches(VrGame::BodySetAngularVelocity,
+        VrGame::BodySetVelocityPrologue, sizeof(VrGame::BodySetVelocityPrologue))
       && VrGameMemory::readable(VrGame::HavokScale, sizeof(float))
       && VrGameMemory::callsTo(VrGame::PhysicsGrabCallSite, VrGame::HandlePhysicsGrab);
 
@@ -340,7 +421,12 @@ namespace dxvk {
         break;
 
       case VrGrabRequest::None:
-        if (held.grab.holding() && !moveTarget(held, input.pose)) {
+        if (!held.grab.holding())
+          break;
+
+        if (moveTarget(held, input.pose)) {
+          updateTurn(hand, held, input.pose);
+        } else {
           if (m_loggedLosses < MaxLoggedLosses) {
             Logger::info(str::format("VR: The ", handName(hand), " hand let go of ", hexId(held.refId),
               ", held too far from the hand"));
@@ -391,7 +477,8 @@ namespace dxvk {
         " cm from the hand's centre", best.corpse ? ", a limb of a corpse" : "",
         hands > 1 ? ", with the other hand" : "",
         ", up to ", m_gravity > 0.0f ? acceleration / m_gravity : acceleration, m_gravity > 0.0f ? " g" : "",
-        held.grouped || best.corpse ? "" : ", still colliding with the player"));
+        held.grouped || best.corpse ? "" : ", still colliding with the player",
+        best.corpse ? "" : ", turned with the hand"));
       m_loggedGrabs++;
     }
 
@@ -579,6 +666,11 @@ namespace dxvk {
     held.ref   = ref;
     held.refId = readField<uint32_t>(ref, VrGame::FormId);
     held.mass  = candidate.mass;
+    held.corpse = candidate.corpse;
+    held.turning = false;
+
+    if (!held.corpse)
+      addTurn(held);
 
     // The other hand took the body already, the game saw it taken
     if (shared) {
@@ -696,9 +788,68 @@ namespace dxvk {
   }
 
 
+  void VrPhysicsGrab::addTurn(Held& held) {
+    uint8_t* action = springAction(held.spring);
+
+    for (uint32_t i = 0; i < held.callbacks.size(); i++)
+      held.callbacks[i] = readField<uint32_t>(action, VrGame::SpringActionCallbacks + 4 * i);
+
+    // Not the action's to free; Havok steps after the player's update
+    writeField(action, VrGame::SpringActionCallbacks, reinterpret_cast<uintptr_t>(g_turnCallbacks));
+    writeField(action, VrGame::SpringActionCallbacks + 0x8, VrGame::HavokArrayForeignStorage | 1u);
+    writeField(action, VrGame::SpringActionCallbacks + 0x4, 1u);
+  }
+
+
+  void VrPhysicsGrab::updateTurn(VrHand hand, Held& held, const VrGameCameraPose& pose) {
+    bool turning = !held.corpse && handsOn(held.body) == 1;
+
+    if (!turning) {
+      stopTurn(hand, held);
+      return;
+    }
+
+    VrGrabFrame handFrame = vrGrabHandFrame(pose);
+
+    // Grabbed, or the other hand let go: the rotation the body has now
+    if (!held.turning)
+      held.frame = vrGrabFrameToLocal(handFrame, bodyFrame(held.body));
+
+    held.turning = true;
+
+    float strength = m_fullAcceleration > 0.0f
+      ? vrGrabMaxAcceleration(held.mass, 1, m_fullAcceleration, m_gravity) / m_fullAcceleration
+      : 1.0f;
+
+    std::lock_guard<std::mutex> lock(g_turnLock);
+    Turn& turn = g_turns[uint32_t(hand)];
+    turn.action = springAction(held.spring);
+    turn.target = vrGrabFrameFromLocal(handFrame, held.frame);
+    turn.local  = held.local;
+    turn.spring = m_spring;
+    turn.maxAcceleration = MaxTurnAcceleration * strength;
+  }
+
+
+  void VrPhysicsGrab::stopTurn(VrHand hand, Held& held) {
+    held.turning = false;
+
+    std::lock_guard<std::mutex> lock(g_turnLock);
+    g_turns[uint32_t(hand)].action = nullptr;
+  }
+
+
   void VrPhysicsGrab::release(Held& held) {
     if (!held.spring)
       return;
+
+    VrHand hand = &held == &m_hands[0] ? VrHand(0) : VrHand(1);
+    stopTurn(hand, held);
+
+    if (uint8_t* action = springAction(held.spring); action && !held.corpse) {
+      for (uint32_t i = 0; i < held.callbacks.size(); i++)
+        writeField(action, VrGame::SpringActionCallbacks + 4 * i, held.callbacks[i]);
+    }
 
     const Held& other = &held == &m_hands[0] ? m_hands[1] : m_hands[0];
     bool shared = other.grab.holding() && other.body == held.body;

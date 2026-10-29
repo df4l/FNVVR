@@ -1,3 +1,5 @@
+#include <cmath>
+
 #include "test.h"
 
 #include "../vr_grab.h"
@@ -313,4 +315,105 @@ TEST_CASE(grab_lead_follows_the_player_but_not_a_teleport) {
   // Moved by a load door or a teleport
   VrVector3 jump = { 0.0f, 5.0f * VrGameUnitsPerMetre, 0.0f };
   CHECK_NEAR(vrLength(vrGrabLead(jump, 4.0f)), 0.0f, 1e-6f);
+}
+
+
+namespace {
+
+  VrGrabFrame rotateFrame(const VrGrabFrame& frame, const VrVector3& rotation) {
+    float angle = vrLength(rotation);
+
+    if (!(angle > 0.0f))
+      return frame;
+
+    VrQuaternion q = vrQuaternionFromAxisAngle(rotation, angle);
+    return { vrRotate(q, frame.x), vrRotate(q, frame.y), vrRotate(q, frame.z) };
+  }
+
+}
+
+
+TEST_CASE(grab_rotation_between_frames_is_axis_times_angle) {
+  constexpr float Pi = 3.14159265f;
+  VrGrabFrame identity;
+
+  CHECK_NEAR(vrLength(vrGrabRotationBetween(identity, identity)), 0.0f, 1e-5f);
+
+  VrVector3 quarter = vrGrabRotationBetween(identity, rotateFrame(identity, { 0.0f, 0.0f, Pi / 2.0f }));
+  CHECK_NEAR(quarter.x, 0.0f, 1e-4f);
+  CHECK_NEAR(quarter.y, 0.0f, 1e-4f);
+  CHECK_NEAR(quarter.z, Pi / 2.0f, 1e-4f);
+
+  // Turned the other way from the other frame
+  VrGrabFrame tilted = rotateFrame(identity, { 0.3f, -0.5f, 0.2f });
+  VrVector3 back = vrGrabRotationBetween(tilted, identity);
+  VrGrabFrame returned = rotateFrame(tilted, back);
+  CHECK_NEAR(vrLength(returned.x - identity.x), 0.0f, 1e-4f);
+  CHECK_NEAR(vrLength(returned.y - identity.y), 0.0f, 1e-4f);
+
+  // Half a turn, where the trace is lowest
+  VrVector3 half = vrGrabRotationBetween(identity, rotateFrame(identity, { Pi, 0.0f, 0.0f }));
+  CHECK_NEAR(vrLength(half), Pi, 1e-3f);
+  CHECK_NEAR(std::fabs(half.x), Pi, 1e-3f);
+}
+
+
+TEST_CASE(grab_object_keeps_its_rotation_in_the_hand) {
+  VrGrabFrame body = rotateFrame(VrGrabFrame(), { 0.4f, 0.1f, -0.7f });
+  VrGrabFrame north = vrGrabHandFrame(northHand({ }));
+  VrGrabFrame east  = vrGrabHandFrame(eastHand({ }));
+
+  VrGrabFrame local = vrGrabFrameToLocal(north, body);
+  VrGrabFrame same  = vrGrabFrameFromLocal(north, local);
+  CHECK_NEAR(vrLength(same.x - body.x), 0.0f, 1e-5f);
+  CHECK_NEAR(vrLength(same.z - body.z), 0.0f, 1e-5f);
+
+  // The hand turned a quarter to the right, so did the object
+  VrGrabFrame turned = vrGrabFrameFromLocal(east, local);
+  VrVector3 rotation = vrGrabRotationBetween(body, turned);
+  CHECK_NEAR(rotation.x, 0.0f, 1e-4f);
+  CHECK_NEAR(rotation.y, 0.0f, 1e-4f);
+  CHECK_NEAR(rotation.z, -1.5707963f, 1e-4f);
+}
+
+
+TEST_CASE(grab_turn_settles_on_the_hand_without_spinning) {
+  constexpr float Step = 1.0f / 60.0f;
+
+  VrGrabSpringConstants spring;
+  spring.damping       = 0.5f;
+  spring.elasticity    = 0.2f;
+  spring.objectDamping = 0.9f;
+
+  VrGrabFrame target = rotateFrame(VrGrabFrame(), { 1.2f, -1.0f, 0.8f });
+  VrGrabFrame body;
+  VrVector3 omega;
+  float largest = vrLength(vrGrabRotationBetween(body, target));
+  float error = largest;
+
+  for (uint32_t i = 0; i < 60; i++) {
+    // applyAction damps the body before the callbacks run
+    omega = omega * spring.objectDamping;
+    omega = omega + vrGrabTurnStep(spring, omega, vrGrabRotationBetween(body, target), Step, 300.0f);
+    body  = rotateFrame(body, omega * Step);
+
+    float next = vrLength(vrGrabRotationBetween(body, target));
+    CHECK(next <= largest + 1e-3f);
+    error = next;
+  }
+
+  CHECK(error < 0.02f);
+}
+
+
+TEST_CASE(grab_turn_is_limited_by_the_hands_strength) {
+  VrGrabSpringConstants spring;
+  spring.damping    = 0.5f;
+  spring.elasticity = 0.2f;
+
+  VrVector3 change = vrGrabTurnStep(spring, VrVector3(), { 0.0f, 3.0f, 0.0f }, 0.01f, 50.0f);
+  CHECK_NEAR(vrLength(change), 0.5f, 1e-4f);
+  CHECK(change.y > 0.0f);
+
+  CHECK_NEAR(vrLength(vrGrabTurnStep(spring, { 1.0f, 0.0f, 0.0f }, { }, 0.0f, 50.0f)), 0.0f, 1e-6f);
 }
