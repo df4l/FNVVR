@@ -725,7 +725,7 @@ namespace dxvk {
     // Nor held
     if (m_physicsGrab) {
       for (uint32_t i = 0; i < VrHandCount; i++)
-        m_physicsGrab->setHand(VrHand(i), nullptr, false, false, false);
+        m_physicsGrab->setHand(VrHand(i), nullptr, false, false, false, false);
     }
 
     if (m_npcGaze)
@@ -937,10 +937,21 @@ namespace dxvk {
     const VrControllerState& right = input.controllers[uint32_t(VrHand::Right)];
     const VrControllerState& left  = input.controllers[uint32_t(VrHand::Left)];
 
+    // A hand that holds an object is drawn on it, its fingers closed on it
+    std::array<VrGrabCorrection, VrHandCount> glue;
+    bool holds = state == VrGameStateKind::InGame && m_physicsGrab;
+
     for (uint32_t i = 0; i < VrHandCount; i++) {
       const VrControllerState& controller = input.controllers[i];
-      m_weaponHand->setFingers(VrHand(i), controller.isActive && controller.hasFingers ? &controller.fingerCurl : nullptr);
+      const VrFingerCurls* tracked = controller.isActive && controller.hasFingers ? &controller.fingerCurl : nullptr;
+
+      VrFingerCurls curls;
+      bool posed = m_grabFingers[i].update(tracked, holds ? m_physicsGrab->heldFingers(VrHand(i)) : nullptr, dt, curls);
+      m_weaponHand->setFingers(VrHand(i), posed ? &curls : nullptr);
     }
+
+    for (uint32_t i = 0; i < VrHandCount; i++)
+      glue[i] = m_grabGlue[i].update(holds ? m_physicsGrab->handCorrection(VrHand(i)) : nullptr, dt);
 
     if (state == VrGameStateKind::PipBoy && m_hasReference && left.isActive) {
       VrGameCameraPose otherHand = handInGame(left);
@@ -962,8 +973,8 @@ namespace dxvk {
       return;
     }
 
-    VrGameCameraPose hand      = handInGame(right);
-    VrGameCameraPose otherHand = handInGame(left);
+    VrGameCameraPose hand      = vrGrabCorrectHand(handInGame(right), glue[uint32_t(VrHand::Right)]);
+    VrGameCameraPose otherHand = vrGrabCorrectHand(handInGame(left), glue[uint32_t(VrHand::Left)]);
 
     VrFirstPersonMode mode = m_weaponDrawn && m_weaponDrawn->playerHolstered()
       ? VrFirstPersonMode::FreeHands
@@ -1158,10 +1169,24 @@ namespace dxvk {
     bool aimedRight = m_handPick && m_handPick->pickedWithHands() && m_handPick->hand() == VrHand::Right;
     bool aimedLeft  = m_handPick && m_handPick->pickedWithHands() && m_handPick->hand() == VrHand::Left;
 
+    for (uint32_t i = 0; i < VrHandCount; i++)
+      m_physicsGrab->setFingerRig(VrHand(i), m_weaponHand ? m_weaponHand->fingerRig(VrHand(i)) : nullptr);
+
+    // A held item let go of at the chest goes into the inventory
+    bool chestRight = false;
+    bool chestLeft  = false;
+
+    if (inGame && m_hasHeadPose) {
+      VrGameCameraPose head = vrComputeEyeCameraPose(m_gameCameraPose,
+        vrComputeEyeInReference(m_reference, m_headPose), VrGameUnitsPerMetre);
+      chestRight = right.isActive && vrGrabAtChest(head, rightHand.position, VrGrabChestZone());
+      chestLeft  = left.isActive  && vrGrabAtChest(head, leftHand.position, VrGrabChestZone());
+    }
+
     m_physicsGrab->setHand(VrHand::Right, inGame && right.isActive ? &rightHand : nullptr,
-      input.actions.isPressed(VrAction::Grab), rightFree, aimedRight);
+      input.actions.isPressed(VrAction::Grab), rightFree, aimedRight, chestRight);
     m_physicsGrab->setHand(VrHand::Left, inGame && left.isActive ? &leftHand : nullptr,
-      input.actions.isPressed(VrAction::TwoHandGrip), leftFree, aimedLeft);
+      input.actions.isPressed(VrAction::TwoHandGrip), leftFree, aimedLeft, chestLeft);
 
     // What the player's last update did
     VrPhysicsGrabEvents events = m_physicsGrab->takeEvents();
@@ -1169,6 +1194,8 @@ namespace dxvk {
     for (uint32_t i = 0; i < VrHandCount; i++) {
       if (events.grabbed[i])
         m_backend.applyHaptic(VrHand(i), GrabHaptic, GrabHapticDuration);
+      else if (events.stored[i])
+        m_backend.applyHaptic(VrHand(i), GrabHaptic * 2.0f, GrabHapticDuration * 2.0f);
       else if (events.released[i])
         m_backend.applyHaptic(VrHand(i), ReleaseHaptic, GrabHapticDuration);
     }

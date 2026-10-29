@@ -1,9 +1,11 @@
+#include <algorithm>
 #include <cmath>
 
 #include "test.h"
 
 #include "../vr_grab.h"
 #include "../vr_math.h"
+#include "../vr_melee.h"
 
 using namespace dxvk;
 
@@ -416,4 +418,100 @@ TEST_CASE(grab_turn_is_limited_by_the_hands_strength) {
   CHECK(change.y > 0.0f);
 
   CHECK_NEAR(vrLength(vrGrabTurnStep(spring, { 1.0f, 0.0f, 0.0f }, { }, 0.0f, 50.0f)), 0.0f, 1e-6f);
+}
+
+
+TEST_CASE(grab_hand_stays_on_a_blocked_object) {
+  VrGrabHand grab;
+  grab.hold(northHand({ 0.0f, 0.0f, 0.0f }), { 0.0f, 10.0f, 0.0f });
+
+  // The object stayed while the controller went on
+  VrGameCameraPose moved = northHand({ 50.0f, 0.0f, 0.0f });
+  VrVector3 point = { 0.0f, 10.0f, 0.0f };
+
+  VrGrabCorrection correction = vrGrabHandCorrection(moved, grab.offset(), point, nullptr);
+  VrGameCameraPose drawn = vrGrabCorrectHand(moved, correction);
+  CHECK(vrLength(vrPointFromHand(drawn, grab.offset()) - point) < 0.031f * VrGameUnitsPerMetre);
+  CHECK_NEAR(vrLength(drawn.forward - moved.forward), 0.0f, 1e-6f);
+
+  // A spring settling a centimetre away leaves the hand at the controller
+  VrGameCameraPose settling = northHand({ 0.01f * VrGameUnitsPerMetre, 0.0f, 0.0f });
+  correction = vrGrabHandCorrection(settling, grab.offset(), point, nullptr);
+  CHECK_NEAR(vrLength(correction.translation), 0.0f, 1e-6f);
+}
+
+
+TEST_CASE(grab_hand_turns_with_a_blocked_object) {
+  VrGrabHand grab;
+  grab.hold(northHand({ 0.0f, 0.0f, 0.0f }), { 0.0f, 10.0f, 0.0f });
+
+  // The hand turned a quarter, the object it turns did not
+  VrGrabFrame onBody = vrGrabHandFrame(northHand({ }));
+  VrGameCameraPose turned = eastHand({ 0.0f, 0.0f, 0.0f });
+  VrVector3 point = { 0.0f, 10.0f, 0.0f };
+
+  VrGrabCorrection correction = vrGrabHandCorrection(turned, grab.offset(), point, &onBody);
+  VrGameCameraPose drawn = vrGrabCorrectHand(turned, correction);
+
+  float angle = std::acos(std::min(vrDot(drawn.forward, { 0.0f, 1.0f, 0.0f }), 1.0f));
+  CHECK(angle < 0.16f);
+  CHECK(vrLength(vrPointFromHand(drawn, grab.offset()) - point) < 0.031f * VrGameUnitsPerMetre);
+  CHECK_NEAR(vrDot(drawn.forward, drawn.up), 0.0f, 1e-5f);
+
+  // The hand's rotation on the body, back from the body's in the hand
+  VrGrabFrame body = rotateFrame(VrGrabFrame(), { 0.2f, 0.9f, -0.4f });
+  VrGrabFrame hand = vrGrabHandFrame(eastHand({ }));
+  VrGrabFrame inHand = vrGrabFrameToLocal(hand, body);
+  VrGrabFrame back = vrGrabFrameFromLocal(body, vrGrabFrameInverse(inHand));
+  CHECK_NEAR(vrLength(back.x - hand.x), 0.0f, 1e-5f);
+  CHECK_NEAR(vrLength(back.y - hand.y), 0.0f, 1e-5f);
+}
+
+
+TEST_CASE(grab_hand_glue_blends_on_and_off) {
+  VrGrabHandGlue glue;
+  VrGrabCorrection target;
+  target.translation = { 12.0f, 0.0f, 0.0f };
+
+  float step = VrGrabHandGlue::BlendTime / 4.0f;
+  CHECK_NEAR(glue.update(&target, step).translation.x, 3.0f, 1e-4f);
+
+  for (uint32_t i = 0; i < 4; i++)
+    glue.update(&target, step);
+
+  CHECK_NEAR(glue.update(&target, step).translation.x, 12.0f, 1e-4f);
+
+  // Let go: back to the controller over the same time
+  CHECK_NEAR(glue.update(nullptr, step).translation.x, 9.0f, 1e-4f);
+
+  for (uint32_t i = 0; i < 4; i++)
+    glue.update(nullptr, step);
+
+  CHECK_NEAR(glue.update(nullptr, step).translation.x, 0.0f, 1e-6f);
+}
+
+
+TEST_CASE(grab_chest_is_below_the_head_in_front) {
+  VrGameCameraPose head;
+  head.forward  = { 0.0f, 1.0f, 0.0f };
+  head.up       = { 0.0f, 0.0f, 1.0f };
+  head.right    = { 1.0f, 0.0f, 0.0f };
+  head.position = { 100.0f, 200.0f, 120.0f };
+
+  auto at = [&head] (float right, float ahead, float below) {
+    VrVector3 hand = head.position + VrVector3 { right, ahead, -below } * VrGameUnitsPerMetre;
+    return vrGrabAtChest(head, hand, VrGrabChestZone());
+  };
+
+  CHECK(at(0.0f, 0.1f, 0.3f));
+  CHECK(at(-0.15f, 0.0f, 0.4f));
+  CHECK(!at(0.0f, 0.5f, 0.3f));
+  CHECK(!at(0.0f, 0.1f, 0.05f));
+  CHECK(!at(0.0f, 0.1f, 0.8f));
+  CHECK(!at(0.35f, 0.1f, 0.3f));
+
+  // Looking down, the chest is still where the heading says
+  head.forward = { 0.0f, 0.3f, -0.95f };
+  head.up      = { 0.0f, 0.95f, 0.3f };
+  CHECK(at(0.0f, 0.1f, 0.3f));
 }

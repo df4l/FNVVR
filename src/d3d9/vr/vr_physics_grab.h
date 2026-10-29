@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "vr_grab.h"
+#include "vr_grab_fingers.h"
 #include "vr_types.h"
 
 namespace dxvk {
@@ -16,6 +17,8 @@ namespace dxvk {
   struct VrPhysicsGrabEvents {
     std::array<bool, VrHandCount> grabbed  = { };
     std::array<bool, VrHandCount> released = { };
+    /// Let go of at the chest and put in the inventory
+    std::array<bool, VrHandCount> stored   = { };
   };
 
   /**
@@ -59,6 +62,10 @@ namespace dxvk {
    * The object's own group comes back once it was let go and is clear of
    * the player.
    *
+   * An item let go of at the chest goes into the inventory, through the
+   * game's own activation by the player, as if it had been picked up
+   * from the world.
+   *
    * As with the game's grab, the object's OnGrab and OnRelease script
    * blocks run, guards see it taken and its new position is saved. The
    * game's IsPlayerGrabbedRef does not know about it.
@@ -87,13 +94,15 @@ namespace dxvk {
      * \param [in] grip The hand's grip is held
      * \param [in] free The hand may hold an object
      * \param [in] aimed The hand named the game's activation target
+     * \param [in] chest The hand is at the chest (vrGrabAtChest)
      */
     void setHand(
             VrHand                hand,
       const VrGameCameraPose*     pose,
             bool                  grip,
             bool                  free,
-            bool                  aimed);
+            bool                  aimed,
+            bool                  chest);
 
     /**
      * \brief Whether a hand holds an object
@@ -107,6 +116,43 @@ namespace dxvk {
      */
     VrPhysicsGrabEvents takeEvents();
 
+    /**
+     * \brief How a hand is drawn to stay on what it holds
+     *
+     * From the player's last update (vrGrabHandCorrection): the held point,
+     * and the body's rotation while the hand turns it, keep their place in
+     * the drawn hand when the object is blocked or lags behind.
+     *
+     * \returns \c nullptr while the hand holds nothing or pulls an object
+     */
+    const VrGrabCorrection* handCorrection(VrHand hand) const {
+      const Correction& correction = m_corrections[uint32_t(hand)];
+      return correction.valid ? &correction.value : nullptr;
+    }
+
+    /**
+     * \brief Gives a hand's finger bones, to fit the fingers on what it
+     *    grabs
+     *
+     * \param [in] hand The hand
+     * \param [in] rig Its finger bones, or \c nullptr if not known; copied
+     */
+    void setFingerRig(VrHand hand, const VrFingerRig* rig);
+
+    /**
+     * \brief How far each finger of a hand closes on what it holds
+     *
+     * Fitted once the hand holds the object where it keeps it
+     * (vrFitFingers), with the hand drawn as handCorrection places it.
+     *
+     * \returns \c nullptr while the hand holds nothing, pulls an object
+     *    or its fingers are not known
+     */
+    const VrFingerCurls* heldFingers(VrHand hand) const {
+      const Held& held = m_hands[uint32_t(hand)];
+      return m_corrections[uint32_t(hand)].valid && held.fitted ? &held.fingers : nullptr;
+    }
+
   private:
 
     struct HandInput {
@@ -115,6 +161,7 @@ namespace dxvk {
       bool             grip    = false;
       bool             free    = false;
       bool             aimed   = false;
+      bool             chest   = false;
     };
 
     /**
@@ -144,6 +191,12 @@ namespace dxvk {
       bool       turning = false;
       /// The spring's callback array before the turn callback was added
       std::array<uint32_t, 3> callbacks = { };
+      /// Turn of the drawn palm towards the point touched, in the hand's
+      /// frame (VrGrabCorrection::palm)
+      VrVector3     palm;
+      /// How far each finger closes on the object, once fitted
+      VrFingerCurls fingers = { };
+      bool          fitted  = false;
     };
 
     /**
@@ -171,10 +224,18 @@ namespace dxvk {
       bool      corpse   = false;
     };
 
+    struct Correction {
+      VrGrabCorrection value;
+      bool             valid = false;
+    };
+
     VrPhysicsGrab() = default;
 
     std::array<HandInput, VrHandCount> m_input;
     std::array<Held, VrHandCount>      m_hands;
+    std::array<Correction, VrHandCount> m_corrections;
+    std::array<VrFingerRig, VrHandCount> m_rigs;
+    std::array<bool, VrHandCount>        m_hasRig = { };
     std::vector<Released>              m_released;
     VrPhysicsGrabEvents                m_events;
 
@@ -192,12 +253,23 @@ namespace dxvk {
     uint32_t m_loggedLeads   = 0;
     bool     m_loggedSpring  = false;
     bool     m_loggedNoGroup = false;
+    uint32_t m_loggedFits    = 0;
+    uint32_t m_loggedStores  = 0;
+    bool     m_canStore      = false;
 
     void update(uint8_t* player, float dt);
 
     void updateLead(uint8_t* player, float dt);
 
     void updateHand(uint8_t* player, VrHand hand, float dt);
+
+    void updateCorrection(uint8_t* player, VrHand hand, Held& held, const VrGameCameraPose& pose);
+
+    void fitFingers(uint8_t* player, VrHand hand, Held& held, const VrGameCameraPose& drawn);
+
+    bool storable(const Held& held, VrHand hand) const;
+
+    void store(uint8_t* player, VrHand hand, Held& held);
 
     bool grab(uint8_t* player, VrHand hand, const VrGameCameraPose& pose);
 

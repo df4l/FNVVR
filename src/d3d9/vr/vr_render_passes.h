@@ -11,13 +11,15 @@
 namespace dxvk {
 
   /**
-   * \brief Which render passes are drawn once for both eyes
+   * \brief How the game's render passes are drawn per eye
    *
-   * Set by \c d3d9.vrShareShadows.
+   * Set by \c d3d9.vrShareShadows and \c d3d9.vrHandsDepthTest.
    */
   struct VrRenderPassConfig {
     /// Shadow maps are drawn for the left eye only and reused by the right
     bool shareShadows = true;
+    /// The hands and the weapon are hidden by the world in front of them
+    bool handsDepthTest = true;
   };
 
   /**
@@ -37,6 +39,12 @@ namespace dxvk {
    * The main loop's calls to the shadow and water passes, the scene, the
    * first-person model and the image space effects are redirected and
    * timed; a summary per eye is logged every few hundred frames.
+   *
+   * The game clears the depth buffer before it draws the first-person
+   * model, so the arms and the weapon are drawn over everything. In VR
+   * they sit at the controllers in the world, so the clear is skipped: an
+   * object held in the hand hides the fingers behind it, and a wall hides
+   * a hand pushed into it.
    *
    * Only used on the game's main thread.
    */
@@ -114,6 +122,9 @@ namespace dxvk {
 
     static uintptr_t __fastcall imageSpaceHook(void* main, void* unused,
       uintptr_t a, uintptr_t b, uintptr_t c, uintptr_t d);
+
+    static void __fastcall firstPersonClearHook(void* renderer, void* unused,
+      const void* rect, uint32_t flags);
 
   };
 

@@ -7,6 +7,15 @@
 - **Held objects turn with the hand**: an object held in one hand keeps the angle it had when grabbed and turns as
   the wrist turns, about the point held, instead of hanging from it. Heavy objects turn more slowly. Held in both
   hands, it follows the line between them. Corpses still hang from the limb held.
+- **Hands hidden by the world in front of them**: the arms and the weapon are no longer drawn over everything; a
+  held object hides the fingers behind it and a wall hides a hand pushed into it (`d3d9.vrHandsDepthTest`, on by
+  default).
+- **Hand on the held object**: when a held object is blocked or lags behind, the drawn hand stays on it instead of
+  following the controller, and comes back smoothly when it lets go.
+- **Fingers closed on the held object**: each finger closes until it meets the object and the palm turns towards
+  it; a finger the player raises stays raised.
+- **Put an item away at the chest**: letting go of a held item against the chest puts it in the inventory, as if
+  picked up with the activation button (stealing, scripts and sounds included).
 
 ### Fixes
 

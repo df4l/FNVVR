@@ -13,6 +13,7 @@ namespace dxvk {
 
   namespace {
 
+    using ClearFn = void (__fastcall*)(void* renderer, void* unused, const void* rect, uint32_t flags);
     using PassFn  = uintptr_t (__fastcall*)(void* main, void* unused);
     using Pass4Fn = uintptr_t (__fastcall*)(void* main, void* unused,
       uintptr_t a, uintptr_t b, uintptr_t c, uintptr_t d);
@@ -109,6 +110,15 @@ namespace dxvk {
       reinterpret_cast<const void*>(&VrRenderPasses::firstPersonHook), "first-person");
     redirect(VrGame::ImageSpacePassCallSite, VrGame::DrawWorldImageSpace,
       reinterpret_cast<const void*>(&VrRenderPasses::imageSpaceHook), "image space");
+
+    if (used.handsDepthTest) {
+      used.handsDepthTest = VrGameMemory::redirectCall(VrGame::FirstPersonDepthClearSite,
+        VrGame::RendererClearBuffer, reinterpret_cast<const void*>(&VrRenderPasses::firstPersonClearHook));
+
+      Logger::info(used.handsDepthTest
+        ? "VR: The hands and the weapon are hidden by the world in front of them"
+        : "VR: The depth clear of the first-person render was not found, the hands are drawn over the world");
+    }
 
     if (used.shareShadows)
       Logger::info("VR: Shadow maps are drawn once per frame for both eyes");
@@ -278,6 +288,17 @@ namespace dxvk {
 
     return g_renderPasses->runPass(VrRenderPass::ImageSpace,
       [&] { return original(main, nullptr, a, b, c, d); });
+  }
+
+
+  void __fastcall VrRenderPasses::firstPersonClearHook(void* renderer, void* unused,
+      const void* rect, uint32_t flags) {
+    // The world's depth stays for the first-person model
+    if (g_renderPasses && g_renderPasses->m_config.handsDepthTest)
+      flags &= ~VrGame::ClearDepthBuffer;
+
+    if (flags)
+      game<ClearFn>(VrGame::RendererClearBuffer)(renderer, nullptr, rect, flags);
   }
 
 }

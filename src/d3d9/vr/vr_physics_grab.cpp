@@ -44,6 +44,7 @@ namespace dxvk {
     using NotifyGuardsFn     = void (__fastcall*)(void* extraData, void* unused, uint8_t* ref, uint8_t* player);
     using RemoveExtraFn      = void (__fastcall*)(void* extraData, void* unused, uint8_t type);
     using FormByIdFn         = uint8_t* (__cdecl*)(uint32_t id);
+    using RefActivateFn      = bool (__fastcall*)(uint8_t* ref, void* unused, uint8_t* actor, bool flag, void* object, int32_t count);
     using GetActivateRefFn   = uint8_t* (__cdecl*)();
     using Get3DFn            = uint8_t* (__fastcall*)(uint8_t* ref, void* unused);
     using FindCollisionFn    = uint8_t* (__cdecl*)(uint8_t* object);
@@ -84,10 +85,15 @@ namespace dxvk {
     // second squared: a quick turn of the wrist
     constexpr float MaxTurnAcceleration = 300.0f;
 
+    // Largest turn of the drawn palm towards the point a hand touched
+    constexpr float MaxPalmTurn = 0.6f;
+
     constexpr uint32_t MaxLoggedGrabs  = 50;
     constexpr uint32_t MaxLoggedMisses = 20;
     constexpr uint32_t MaxLoggedLosses = 20;
     constexpr uint32_t MaxLoggedLeads  = 10;
+    constexpr uint32_t MaxLoggedFits   = 20;
+    constexpr uint32_t MaxLoggedStores = 20;
 
     template<typename T>
     T readField(const uint8_t* base, uintptr_t offset) {
@@ -308,7 +314,13 @@ namespace dxvk {
     std::unique_ptr<VrPhysicsGrab> grab(new VrPhysicsGrab());
     g_physicsGrab = grab.get();
 
+    grab->m_canStore = VrGameMemory::matches(VrGame::RefActivate,
+      VrGame::RefActivatePrologue, sizeof(VrGame::RefActivatePrologue));
+
     Logger::info("VR: Each free hand holds what it touches or pulls what it points at with its grip");
+    Logger::info(grab->m_canStore
+      ? "VR: Items let go of at the chest go into the inventory"
+      : "VR: The game's activation was not found, items let go of at the chest fall");
     return grab;
   }
 
@@ -318,12 +330,14 @@ namespace dxvk {
     const VrGameCameraPose*     pose,
           bool                  grip,
           bool                  free,
-          bool                  aimed) {
+          bool                  aimed,
+          bool                  chest) {
     HandInput& input = m_input[uint32_t(hand)];
     input.tracked = pose != nullptr;
     input.grip    = grip;
     input.free    = free;
     input.aimed   = aimed;
+    input.chest   = chest;
 
     if (pose)
       input.pose = *pose;
@@ -389,6 +403,7 @@ namespace dxvk {
   void VrPhysicsGrab::updateHand(uint8_t* player, VrHand hand, float dt) {
     Held& held = m_hands[uint32_t(hand)];
     const HandInput& input = m_input[uint32_t(hand)];
+    m_corrections[uint32_t(hand)].valid = false;
 
     // The object was unloaded, taken or moved out of the world
     if (held.grab.holding() && !stillHeld(held)) {
@@ -415,6 +430,12 @@ namespace dxvk {
         break;
 
       case VrGrabRequest::Release:
+        // The grip opened at the chest
+        if (input.chest && input.tracked && input.free && !input.grip && storable(held, hand)) {
+          store(player, hand, held);
+          break;
+        }
+
         release(held);
         held.grab.drop();
         m_events.released[uint32_t(hand)] = true;
@@ -426,6 +447,7 @@ namespace dxvk {
 
         if (moveTarget(held, input.pose)) {
           updateTurn(hand, held, input.pose);
+          updateCorrection(player, hand, held, input.pose);
         } else {
           if (m_loggedLosses < MaxLoggedLosses) {
             Logger::info(str::format("VR: The ", handName(hand), " hand let go of ", hexId(held.refId),
@@ -467,6 +489,17 @@ namespace dxvk {
       held.grab.pull(pose, best.point, vrGrabPullSpeed(best.mass));
     else
       held.grab.hold(pose, best.point);
+
+    // The palm turns towards the surface touched; a pulled object comes
+    // to the hand's centre
+    held.palm   = VrVector3();
+    held.fitted = false;
+
+    if (!best.pulled && m_hasRig[uint32_t(hand)]) {
+      VrVector3 palm = vrPalmDirection(m_rigs[uint32_t(hand)], hand, pose);
+      VrVector3 turn = vrPalmTurn(palm, pose.position, best.point, MaxPalmTurn);
+      held.palm = { vrDot(turn, pose.forward), vrDot(turn, pose.up), vrDot(turn, pose.right) };
+    }
 
     if (m_loggedGrabs < MaxLoggedGrabs) {
       uint32_t hands = handsOn(held.body);
@@ -828,6 +861,132 @@ namespace dxvk {
     turn.local  = held.local;
     turn.spring = m_spring;
     turn.maxAcceleration = MaxTurnAcceleration * strength;
+  }
+
+
+  void VrPhysicsGrab::updateCorrection(uint8_t* player, VrHand hand, Held& held, const VrGameCameraPose& pose) {
+    // A pulled object is on its way to the hand
+    if (held.grab.pulling())
+      return;
+
+    VrVector3 point = bodyPointToWorld(held.body, held.local) * (1.0f / havokScale());
+
+    VrGrabFrame onBody;
+
+    if (held.turning)
+      onBody = vrGrabFrameFromLocal(bodyFrame(held.body), vrGrabFrameInverse(held.frame));
+
+    Correction& correction = m_corrections[uint32_t(hand)];
+    correction.value = vrGrabHandCorrection(pose, held.grab.offset(), point, held.turning ? &onBody : nullptr);
+    correction.value.palm  = held.palm;
+    correction.value.pivot = held.grab.offset();
+    correction.valid = true;
+
+    // Once, where the hand keeps the object
+    if (!held.fitted && m_hasRig[uint32_t(hand)])
+      fitFingers(player, hand, held, vrGrabCorrectHand(pose, correction.value));
+  }
+
+
+  void VrPhysicsGrab::fitFingers(uint8_t* player, VrHand hand, Held& held, const VrGameCameraPose& drawn) {
+    uint8_t* world = nullptr;
+
+    if (!referenceWorld(player, &world) || !world)
+      return;
+
+    uint32_t playerFilter = 0;
+    reinterpret_cast<GetFilterFn>(VrGame::GetCollisionFilter)(player, nullptr, &playerFilter);
+
+    // As the probe: the held body has the player's group
+    uint32_t group     = playerFilter >> VrGame::FilterGroupShift;
+    uint32_t rayFilter = (group << VrGame::FilterGroupShift) | VrGame::LayerItemPick;
+    uint32_t rays = 0;
+
+    auto ray = [world, rayFilter, &rays] (const VrVector3& from, const VrVector3& to) {
+      alignas(16) uint8_t pick[VrGame::PickDataSize];
+      VrVector3 length = to - from;
+      rays += 1;
+
+      reinterpret_cast<PickConstructFn>(VrGame::PickDataConstruct)(pick, nullptr);
+      reinterpret_cast<PickSetFilterFn>(VrGame::PickDataSetFilter)(pick, nullptr, rayFilter);
+      reinterpret_cast<PickSetPointFn>(VrGame::PickDataSetFrom)(pick, nullptr, &from);
+      reinterpret_cast<PickSetPointFn>(VrGame::PickDataSetLength)(pick, nullptr, &length);
+
+      return virtualFunction<PickObjectFn>(world, VrGame::WorldPickObjectSlot)(world, nullptr, pick);
+    };
+
+    showGroupedBodies(true);
+    held.fingers = vrFitFingers(m_rigs[uint32_t(hand)], hand, drawn, ray);
+    showGroupedBodies(false);
+    held.fitted = true;
+
+    if (m_loggedFits < MaxLoggedFits) {
+      const VrFingerCurls& c = held.fingers;
+      Logger::info(str::format("VR: The ", handName(hand), " hand's fingers close on ", hexId(held.refId),
+        " to ", c[0], " ", c[1], " ", c[2], " ", c[3], " ", c[4], " (thumb to little finger) with ", rays,
+        " rays, the palm turned ", int32_t(vrLength(held.palm) * 57.29578f), " degrees towards it"));
+      m_loggedFits++;
+    }
+  }
+
+
+  bool VrPhysicsGrab::storable(const Held& held, VrHand hand) const {
+    if (!m_canStore || held.corpse || !held.ref)
+      return false;
+
+    // Not while the other hand still holds it
+    const Held& other = m_hands[uint32_t(hand) ^ 1u];
+
+    if (other.grab.holding() && other.body == held.body)
+      return false;
+
+    if (reinterpret_cast<FormByIdFn>(VrGame::FormById)(held.refId) != held.ref)
+      return false;
+
+    uint8_t* base = readField<uint8_t*>(held.ref, VrGame::RefBaseForm);
+
+    if (!base)
+      return false;
+
+    uint8_t type = readField<uint8_t>(base, VrGame::FormType);
+
+    for (uint8_t item : VrGame::InventoryFormTypes) {
+      if (type == item)
+        return true;
+    }
+
+    return false;
+  }
+
+
+  void VrPhysicsGrab::store(uint8_t* player, VrHand hand, Held& held) {
+    uint8_t* ref   = held.ref;
+    uint32_t refId = held.refId;
+
+    // Let go first: picking the item up takes its reference out of the world
+    release(held);
+    held.grab.drop();
+
+    bool taken = reinterpret_cast<RefActivateFn>(VrGame::RefActivate)(ref, nullptr, player, false, nullptr, 1);
+
+    if (taken)
+      m_events.stored[uint32_t(hand)] = true;
+    else
+      m_events.released[uint32_t(hand)] = true;
+
+    if (m_loggedStores < MaxLoggedStores) {
+      Logger::info(str::format("VR: The ", handName(hand), " hand let go of ", hexId(refId), " at the chest, ",
+        taken ? "the game picked it up" : "the game's activation refused it, it falls"));
+      m_loggedStores++;
+    }
+  }
+
+
+  void VrPhysicsGrab::setFingerRig(VrHand hand, const VrFingerRig* rig) {
+    m_hasRig[uint32_t(hand)] = rig != nullptr;
+
+    if (rig)
+      m_rigs[uint32_t(hand)] = *rig;
   }
 
 
