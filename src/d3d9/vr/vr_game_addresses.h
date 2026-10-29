@@ -2328,6 +2328,29 @@ namespace dxvk {
      */
     constexpr uintptr_t SpringActionMaxForce       = 0x48;
     constexpr uintptr_t WorldGravity               = 0x10;
+
+    /**
+     * Turning a held body (findings/grab.md §13): the action's body, its
+     * hkArray of callbacks (+0x54 data, +0x58 size, +0x5C capacity with
+     * bit 31 "storage not the array's to free"), called by applyAction
+     * after the impulse as __cdecl (action, hkStepInfo, impulse); the
+     * loop is checked so that a different build is not trusted. The step's
+     * time at hkStepInfo +0x08. A body's linear and angular velocities
+     * (hkpMotion +0xD0 and +0xE0) and the game's setters (__thiscall, an
+     * hkVector4, ret 4: wake the body and call the motion's virtual
+     * setter unless the velocity is unchanged).
+     */
+    constexpr uintptr_t SpringActionBody           = 0x18;
+    constexpr uintptr_t SpringActionCallbacks      = 0x54;
+    constexpr uint32_t  HavokArrayForeignStorage   = 0x80000000u;
+    constexpr uintptr_t SpringCallbackLoop         = 0x00CBB4B0;
+    constexpr uint8_t   SpringCallbackLoopBytes[]  = { 0x8B, 0x4E, 0x54, 0x8B, 0x04, 0xB9, 0x8D, 0x54, 0x24, 0x20, 0x52, 0x53, 0x56, 0xFF, 0xD0 };
+    constexpr uintptr_t StepInfoDeltaTime          = 0x08;
+    constexpr uintptr_t BodyLinearVelocity         = 0x1B0;
+    constexpr uintptr_t BodyAngularVelocity        = 0x1C0;
+    constexpr uintptr_t BodySetLinearVelocity      = 0x005616D0;
+    constexpr uintptr_t BodySetAngularVelocity     = 0x00561800;
+    constexpr uint8_t   BodySetVelocityPrologue[]  = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0x89, 0x4D, 0xFC, 0x51, 0xD9, 0x05 };
     constexpr uintptr_t SpringAddSlot              = 0x9C;
     constexpr uintptr_t SpringRemoveSlot           = 0xA0;
     constexpr uintptr_t SpringSetTarget            = 0x008C5D90;

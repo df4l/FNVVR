@@ -35,6 +35,13 @@ namespace dxvk {
    * from a distance. A hand that touches the object the other hand holds
    * holds it too, with a second spring on the same body.
    *
+   * A body held by one hand also turns with the hand: a callback of its
+   * spring sets the body's angular velocity towards the rotation it had in
+   * the hand when grabbed, about the point held (vrGrabTurnStep). A body
+   * held by both hands is turned by the two springs, and takes its
+   * rotation in the hand again when one lets go. A corpse's limb is left to
+   * its ragdoll.
+   *
    * A hand pushes with a fixed force (vrGrabMaxAcceleration), shared by
    * both hands on one body, so heavy objects follow and come more slowly
    * than light ones. The springs keep less of the game's damping, which
@@ -130,6 +137,13 @@ namespace dxvk {
       uint32_t   filter  = 0;
       uint32_t   groupedFilter = 0;
       bool       grouped = false;
+      /// A limb of a dead actor's ragdoll
+      bool       corpse  = false;
+      /// The body's rotation in the hand's frame, while the hand turns it
+      VrGrabFrame frame;
+      bool       turning = false;
+      /// The spring's callback array before the turn callback was added
+      std::array<uint32_t, 3> callbacks = { };
     };
 
     /**
@@ -204,6 +218,12 @@ namespace dxvk {
     bool stillHeld(const Held& held) const;
 
     bool moveTarget(Held& held, const VrGameCameraPose& pose);
+
+    void addTurn(Held& held);
+
+    void updateTurn(VrHand hand, Held& held, const VrGameCameraPose& pose);
+
+    void stopTurn(VrHand hand, Held& held);
 
     void release(Held& held);
 

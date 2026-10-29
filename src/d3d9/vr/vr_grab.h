@@ -120,6 +120,64 @@ namespace dxvk {
   VrVector3 vrGrabLead(const VrVector3& playerStep, float frames);
 
   /**
+   * \brief A rotation, as the directions of its three axes
+   *
+   * Havok's rotation matrices store the same three columns. Right-handed:
+   * x × y = z.
+   */
+  struct VrGrabFrame {
+    VrVector3 x = { 1.0f, 0.0f, 0.0f };
+    VrVector3 y = { 0.0f, 1.0f, 0.0f };
+    VrVector3 z = { 0.0f, 0.0f, 1.0f };
+  };
+
+  /**
+   * \brief A hand's rotation: forward, up and right, the axes of
+   *    vrPointToHand
+   */
+  VrGrabFrame vrGrabHandFrame(const VrGameCameraPose& hand);
+
+  /**
+   * \brief A rotation expressed in a parent's frame
+   */
+  VrGrabFrame vrGrabFrameToLocal(const VrGrabFrame& parent, const VrGrabFrame& frame);
+
+  /**
+   * \brief A rotation given in a parent's frame, back in the world
+   */
+  VrGrabFrame vrGrabFrameFromLocal(const VrGrabFrame& parent, const VrGrabFrame& local);
+
+  /**
+   * \brief The shortest rotation that turns one frame into another
+   *
+   * \returns Rotation axis times angle in radians, in the world
+   */
+  VrVector3 vrGrabRotationBetween(const VrGrabFrame& from, const VrGrabFrame& to);
+
+  /**
+   * \brief Change of a held body's angular velocity in a physics step
+   *
+   * Turns the body towards the hand's rotation as the mouse spring moves
+   * its point towards the hand: the same damping and elasticity, applied
+   * to the angle left instead of the distance, after the spring's object
+   * damping. The change is limited to what the hands can give the body in
+   * the step.
+   *
+   * \param [in] spring The spring's constants
+   * \param [in] angularVelocity The body's angular velocity, radians per second
+   * \param [in] error Rotation left to the hand's, axis times angle
+   * \param [in] dt The step's time, in seconds
+   * \param [in] maxAcceleration Strongest angular acceleration, radians
+   *    per second squared
+   */
+  VrVector3 vrGrabTurnStep(
+    const VrGrabSpringConstants& spring,
+    const VrVector3&            angularVelocity,
+    const VrVector3&            error,
+          float                 dt,
+          float                 maxAcceleration);
+
+  /**
    * \brief What a hand does with its grip in a frame
    */
   struct VrGrabHandInput {
