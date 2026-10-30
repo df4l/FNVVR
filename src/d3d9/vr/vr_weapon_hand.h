@@ -986,6 +986,7 @@ namespace dxvk {
     bool             m_loggedActive = false;
     bool             m_loggedFrame  = false;
     bool             m_loggedArms   = false;
+    uint32_t         m_loggedBodyMeshes = 0;
     bool             m_loggedOtherHand = false;
     bool             m_loggedTwoHanded = false;
     bool             m_loggedTwoHandedMelee = false;
@@ -1418,7 +1419,12 @@ namespace dxvk {
       const VrVector3&            drawnWeapon,
       const VrGameRotation&       weaponRotation);
 
-    void hide(uint8_t* object, bool log);
+    /**
+     * \brief Culls an object of the model until showArms
+     *
+     * \returns \c true if the object was not hidden yet
+     */
+    bool hide(uint8_t* object, bool log);
 
     void show(uint8_t* object);
 
