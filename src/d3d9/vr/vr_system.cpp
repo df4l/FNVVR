@@ -13,6 +13,7 @@
 #include "../../util/util_string.h"
 
 #include "vr_backend_factory.h"
+#include "vr_crash_log.h"
 #include "vr_d3d9_bridge.h"
 #include "vr_emulator_backend.h"
 #include "vr_emulator_keyboard.h"
@@ -129,6 +130,8 @@ namespace dxvk {
     }
 
     Logger::info(str::format("VR: Using backend '", backend->name(), "'"));
+
+    VrCrashLog::install();
 
     // The emulator has no headset to look through, so it shows a window by default
     bool showPreview = config.getOption<bool>("d3d9.vrPreviewWindow", name == "emulator");
