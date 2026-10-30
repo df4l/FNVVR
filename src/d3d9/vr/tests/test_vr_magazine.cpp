@@ -453,6 +453,60 @@ TEST_CASE(magazine_hold_needs_the_hand_to_carry_it) {
 }
 
 
+TEST_CASE(magazine_pushed_in_upside_down_is_turned_upright) {
+  // Hand bone turned a quarter about the controller's forward: its x axis
+  // along the controller's up
+  VrGameRotation hand;
+  hand.m[0][0] = 0.0f; hand.m[0][1] = -1.0f; hand.m[0][2] = 0.0f;
+  hand.m[1][0] = 1.0f; hand.m[1][1] =  0.0f; hand.m[1][2] = 0.0f;
+  hand.m[2][0] = 0.0f; hand.m[2][1] =  0.0f; hand.m[2][2] = 1.0f;
+
+  VrVector3 up        = { 0.0f, 1.0f, 0.0f };
+  VrVector3 insertion = { 0.0f, 0.0f, 1.0f };
+  VrVector3 centre    = { 0.0f, 0.0f, 2.0f };
+
+  // The end that goes in along the hand's -x: down in the controller
+  VrGameTransform inHand;
+  inHand.rotate.m[0][0] = 0.0f; inHand.rotate.m[0][1] = 0.0f; inHand.rotate.m[0][2] = -1.0f;
+  inHand.rotate.m[1][0] = 0.0f; inHand.rotate.m[1][1] = 1.0f; inHand.rotate.m[1][2] =  0.0f;
+  inHand.rotate.m[2][0] = 1.0f; inHand.rotate.m[2][1] = 0.0f; inHand.rotate.m[2][2] =  0.0f;
+  inHand.translate = { 3.0f, 1.0f, 0.0f };
+
+  VrVector3 middle = inHand.translate + inHand.rotate * centre;
+
+  float angle = 0.0f;
+  CHECK(vrUprightMagazineHold(hand, up, insertion, centre, inHand, angle));
+  CHECK(std::abs(angle - 3.14159265f) < 1e-3f);
+
+  VrVector3 top = hand * (inHand.rotate * insertion);
+  CHECK(vrDot(top, up) > 0.999f);
+
+  VrVector3 turnedMiddle = inHand.translate + inHand.rotate * centre;
+  CHECK(vrLength(turnedMiddle - middle) < 1e-4f);
+}
+
+
+TEST_CASE(magazine_pushed_in_upright_is_kept) {
+  VrGameRotation hand;
+  VrVector3 up        = { 0.0f, 1.0f, 0.0f };
+  VrVector3 insertion = { 0.0f, 1.0f, 0.0f };
+
+  // Tilted forward by 60 degrees: still pointing up
+  VrGameTransform inHand;
+  float c = 0.5f, s = 0.8660254f;
+  inHand.rotate.m[0][0] = c;    inHand.rotate.m[0][1] = -s;   inHand.rotate.m[0][2] = 0.0f;
+  inHand.rotate.m[1][0] = s;    inHand.rotate.m[1][1] = c;    inHand.rotate.m[1][2] = 0.0f;
+  inHand.rotate.m[2][0] = 0.0f; inHand.rotate.m[2][1] = 0.0f; inHand.rotate.m[2][2] = 1.0f;
+  inHand.translate = { 1.0f, 2.0f, 3.0f };
+
+  VrGameTransform before = inHand;
+  float angle = 0.0f;
+  CHECK(!vrUprightMagazineHold(hand, up, insertion, VrVector3 { 0.0f, 1.0f, 0.0f }, inHand, angle));
+  CHECK(std::abs(angle - 1.0471976f) < 1e-3f);
+  CHECK(vrLength(inHand.translate - before.translate) == 0.0f);
+}
+
+
 TEST_CASE(rack_parts_are_found_by_keyword) {
   CHECK(vrClassifyWeaponPart("##Slide") == VrWeaponPartKind::Rack);
   CHECK(vrClassifyWeaponPart("##nmBar") == VrWeaponPartKind::Rack);

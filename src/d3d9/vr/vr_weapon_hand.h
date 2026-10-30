@@ -823,6 +823,12 @@ namespace dxvk {
     VrGameTransform  m_pinchInHand;
     bool             m_hasPinch = false;
 
+    // A magazine the reload animation never carries, turned upright in
+    // the left hand (vrUprightMagazineHold): in the hand bone's frame, in
+    // units of the hand's scale
+    VrGameTransform  m_uprightInHand;
+    bool             m_turnedUpright = false;
+
     // Rack part of the weapon in the hand: how the hand holds it, where it
     // is home in the right hand's frame, the way back and its length, and
     // its rack part the name was logged for, compared but not dereferenced
@@ -1300,7 +1306,10 @@ namespace dxvk {
      *    the hand holds it
      */
     const VrGameTransform& magazineInHand() const {
-      return m_pinched && m_hasPinch ? m_pinchInHand : m_reloadAnimation.magazineInHand;
+      if (m_pinched && m_hasPinch)
+        return m_pinchInHand;
+
+      return m_turnedUpright ? m_uprightInHand : m_reloadAnimation.magazineInHand;
     }
 
     /**

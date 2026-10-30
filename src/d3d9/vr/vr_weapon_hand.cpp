@@ -2378,6 +2378,20 @@ namespace dxvk {
     if (m_pinched && m_hasReloadAnimation && leftHand && handScale > 0.0f)
       pinchRound(leftHand, centre, scale / handScale);
 
+    // A magazine the animation never carries is held as the hand pushes
+    // it in, which may be upside down
+    bool pushedIn = m_hasReloadAnimation && !m_reloadAnimation.carried && !m_pinched
+      && action == ActionKind::None && leftHand && handScale > 0.0f;
+    float uprightAngle = 0.0f;
+    m_turnedUpright = false;
+
+    if (pushedIn) {
+      VrVector3 insertion = vrTranspose(m_reloadAnimation.place.rotate) * m_reloadAnimation.axis * -1.0f;
+      m_uprightInHand = m_reloadAnimation.magazineInHand;
+      m_turnedUpright = vrUprightMagazineHold(FreeHandPose.rotate, ControllerUp, insertion,
+        centre * (scale / handScale), m_uprightInHand, uprightAngle);
+    }
+
     const VrGameTransform& inHand = magazineInHand();
 
     if (m_hasReloadAnimation && leftHand) {
@@ -2402,6 +2416,12 @@ namespace dxvk {
       } else {
         Logger::info(str::format(round ? "VR: The weapon is loaded round by round with '" : "VR: The weapon's magazine is '",
           name ? name : "", "'"));
+      }
+
+      if (pushedIn) {
+        Logger::info(str::format("VR: The new magazine is held as the reload animation pushes it in, the end that goes in ",
+          uprightAngle * 57.2957795f, " degrees from the left controller's up",
+          m_turnedUpright ? ": turned upright" : ""));
       }
       m_loggedMagazine = true;
     }
