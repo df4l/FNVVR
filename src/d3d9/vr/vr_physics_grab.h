@@ -65,6 +65,10 @@ namespace dxvk {
    *
    * A free hand pushes objects with a keyframed sphere (VrHandBodies).
    *
+   * As the player moves to a cell with another world, held objects are
+   * let go of and the spheres leave the old world, before the game may
+   * unload it.
+   *
    * An item let go of at the chest goes into the inventory, through the
    * game's own activation by the player, as if it had been picked up
    * from the world.
@@ -309,6 +313,8 @@ namespace dxvk {
 
     void updateHandBodies(uint8_t* player, float dt);
 
+    void leaveCell(uint8_t* cell);
+
     static void __fastcall physicsGrabHook(
             uint8_t*              player,
             void*                 unused,
@@ -317,6 +323,11 @@ namespace dxvk {
     static void __fastcall notInControlHook(
             uint8_t*              player,
             void*                 unused);
+
+    static void __fastcall setParentCellHook(
+            uint8_t*              player,
+            void*                 unused,
+            uint8_t*              cell);
 
   };
 
