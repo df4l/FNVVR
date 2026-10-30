@@ -216,6 +216,16 @@ namespace dxvk {
     }
 
     /**
+     * \brief Turns the pushing spheres of the free hands on or off
+     *
+     * \param [in] enabled Off, the hands no longer push objects
+     */
+    void setHandPush(bool enabled) {
+      if (m_physicsGrab)
+        m_physicsGrab->setHandPush(enabled);
+    }
+
+    /**
      * \brief Changes how the player sneaks
      *
      * Called from the game's options page, on the game's thread.

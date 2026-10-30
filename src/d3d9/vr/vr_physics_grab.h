@@ -124,6 +124,15 @@ namespace dxvk {
     VrPhysicsGrabEvents takeEvents();
 
     /**
+     * \brief Turns the pushing spheres of the free hands on or off
+     *
+     * \param [in] enabled Off, the hands no longer push objects
+     */
+    void setHandPush(bool enabled) {
+      m_handPush = enabled;
+    }
+
+    /**
      * \brief How a hand is drawn to stay on what it holds
      *
      * From the player's last update (vrGrabHandCorrection): the held point,
@@ -264,6 +273,8 @@ namespace dxvk {
     uint32_t m_loggedFits    = 0;
     uint32_t m_loggedStores  = 0;
     bool     m_canStore      = false;
+    bool     m_handPush      = true;
+    bool     m_loggedNoPush  = false;
 
     std::unique_ptr<VrHandBodies> m_handBodies;
 

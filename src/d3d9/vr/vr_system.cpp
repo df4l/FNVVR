@@ -220,6 +220,7 @@ namespace dxvk {
       timer, passes, developer, swing));
     g_vrSystem->m_pipBoyScale = options.pipBoyScale;
     g_vrSystem->m_manualReload = options.manualReload;
+    g_vrSystem->m_handPush = config.getOption<bool>("d3d9.vrHandPush", true);
     g_vrSystem->m_sneakConfig.physical = options.physicalSneak;
     g_vrSystem->m_sneakConfig.crouch   = crouch;
     DxvkInstance::registerExtensionProvider(g_vrSystem->m_extensionProvider.get());
@@ -328,6 +329,7 @@ namespace dxvk {
     if (m_stereoRenderer) {
       m_stereoRenderer->setPipBoyScale(m_pipBoyScale);
       m_stereoRenderer->setManualReload(m_manualReload);
+      m_stereoRenderer->setHandPush(m_handPush);
       m_stereoRenderer->setSneakConfig(m_sneakConfig);
     }
 

@@ -453,6 +453,16 @@ namespace dxvk {
     if (!m_handBodies)
       return;
 
+    if (!m_handPush) {
+      m_handBodies->leaveWorld(nullptr);
+
+      if (!m_loggedNoPush) {
+        Logger::info("VR: The hands do not push objects (d3d9.vrHandPush)");
+        m_loggedNoPush = true;
+      }
+      return;
+    }
+
     // The hands are those of the frame drawn last, the step moves the
     // player again
     VrVector3 lead = vrGrabLead(m_playerStep, StaleFrames);
