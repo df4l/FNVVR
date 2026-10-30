@@ -22,6 +22,7 @@
 #include "vr_gamepad_head.h"
 #include "vr_gamepad_hook.h"
 #include "vr_menu_cursor.h"
+#include "vr_openxr_probe.h"
 #include "vr_options_file.h"
 #include "vr_options_menu.h"
 #include "vr_stereo_renderer.h"
@@ -120,6 +121,13 @@ namespace dxvk {
 
     if (name == "off" || name.empty())
       return;
+
+    // Until the OpenXR backend exists, its name only checks the runtime
+    if (name == "openxr") {
+      vrProbeOpenXr();
+      Logger::warn("VR: The OpenXR backend is not implemented yet, VR is disabled");
+      return;
+    }
 
     std::unique_ptr<IVRBackend> backend = vrCreateBackend(name);
 

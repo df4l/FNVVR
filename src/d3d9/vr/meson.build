@@ -52,6 +52,8 @@ vr_dxvk_src = files([
   'vr_system.cpp',
   'vr_backend_factory.cpp',
   'vr_openvr_backend.cpp',
+  'vr_openxr_loader.cpp',
+  'vr_openxr_probe.cpp',
   'vr_eye_transition.cpp',
   'vr_extension_provider.cpp',
   'vr_gamepad_hook.cpp',
