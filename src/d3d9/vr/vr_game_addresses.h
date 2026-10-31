@@ -2533,6 +2533,22 @@ namespace dxvk {
     constexpr uint8_t   MotionDynamic                = 1;
 
     /**
+     * The reaction's work while it runs (findings/grab.md §19.4):
+     * bhkRagdollController::DoRagdollAnim calls DoRagdollFeedback
+     * (__thiscall, no argument; it slerps the drawn pose of the feedback
+     * bones towards the ragdoll's and ends the reaction once its timer
+     * expires) only when the INI setting bRagdollFeedback:RagdollAnim is
+     * set (Setting object, bool at SettingValue), which Fallout_default.ini
+     * turns off. The call right after it, UpdateDebugLines(2) (__thiscall,
+     * one argument), always runs, before SetSGPoseLocalSpace.
+     */
+    constexpr uintptr_t RagdollDoFeedback            = 0x00C7C870;
+    constexpr uintptr_t RagdollDoFeedbackCallSite    = 0x00C7D7CE;
+    constexpr uintptr_t RagdollUpdateDebugLines      = 0x00C7CB50;
+    constexpr uintptr_t RagdollFeedbackPoseCallSite  = 0x00C7D7D7;
+    constexpr uintptr_t RagdollFeedbackSetting       = 0x01267C54;
+
+    /**
      * NPC reactions to the player (findings/grab.md §19.3):
      * ProcessLists::CommentOnPlayerAction (0x00977CB0) makes the actor the
      * player aims at say the topic TESTopic::GetTopic(DT_TOPIC, 8) (__cdecl)

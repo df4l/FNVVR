@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -44,7 +45,10 @@ namespace dxvk {
    * so that the limb is a dynamic body the game drives towards the
    * animation, which the hand's spring pulls against; the limb is let go
    * of once the game ends the reaction (knocked down, out of the bone
-   * level of detail). The actor reacts to being grabbed (VrNpcReaction). A hand that touches the object the other hand holds
+   * level of detail). The game only draws the reaction (the drawn limbs
+   * follow the ragdoll's) and ends it when its INI setting
+   * bRagdollFeedback is on, which it is not by default: for the actors
+   * the hands took, that part runs here then, until the reaction ends. The actor reacts to being grabbed (VrNpcReaction). A hand that touches the object the other hand holds
    * holds it too, with a second spring on the same body.
    *
    * A body held by one hand also turns with the hand: a callback of its
@@ -314,6 +318,25 @@ namespace dxvk {
     bool           m_npcLimbs    = false;
     uint32_t       m_loggedLimbs = 0;
 
+    /**
+     * \brief A living actor taken by a hand whose hit reaction runs here
+     *
+     * Kept after the hand lets go, until the reaction ends.
+     */
+    struct Driven {
+      uint8_t* actor = nullptr;
+      uint32_t refId = 0;
+    };
+
+    // Both hands' actors and two let go of
+    constexpr static uint32_t MaxDriven = 4;
+
+    bool                           m_drivesFeedback = false;
+    std::array<Driven, MaxDriven>  m_driven;
+    // Their ragdoll controllers, read by feedbackPoseHook on the thread
+    // that animates the actors
+    std::array<std::atomic<uint8_t*>, MaxDriven> m_drivenRagdolls = { };
+
     void update(uint8_t* player, float dt);
 
     void updateLead(uint8_t* player, float dt);
@@ -352,6 +375,14 @@ namespace dxvk {
 
     bool keepReaction(const Held& held) const;
 
+    bool canHoldLiving() const;
+
+    void driveReaction(uint8_t* actor);
+
+    void updateDriven();
+
+    bool drives(const uint8_t* ragdoll) const;
+
     void addTurn(Held& held);
 
     void updateTurn(VrHand hand, Held& held, const VrGameCameraPose& pose);
@@ -379,6 +410,11 @@ namespace dxvk {
             uint8_t*              player,
             void*                 unused,
             uint8_t*              cell);
+
+    static void __fastcall feedbackPoseHook(
+            uint8_t*              ragdoll,
+            void*                 unused,
+            uint32_t              stage);
 
   };
 
