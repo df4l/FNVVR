@@ -52,7 +52,7 @@ meson test -C build.32 --print-errorlogs
 
 1. Copy `build.32/src/d3d9/d3d9.dll` into the game directory, next to `FalloutNV.exe`.
 2. Copy `dxvk.conf` next to the executable and set `d3d9.vrBackend` (`off`, `emulator` or `openvr`).
-3. Copy `src/d3d9/vr/openvr/*.json` into `fnvvr/` in the game directory. These are the SteamVR action manifest and default bindings.
+3. Copy `src/d3d9/vr/openvr/*.json` into `fnvvr/` in the game directory. These are the SteamVR action manifest and default bindings for the Oculus Touch and Steam Frame controllers (see [Steam Frame controls](docs/FRAME_CONTROLS.md)).
 4. Set the Steam launch options to `WINEDLLOVERRIDES="d3d9=n,b" %command%`.
 5. Start SteamVR with the headset connected before starting the game.
 
@@ -87,6 +87,10 @@ Useful environment variables:
 ## Upstream DXVK
 
 The rest of the DXVK documentation (HUD, device filters, shader cache, debugging modes) still applies to the core that remains in this fork, and is maintained upstream at [doitsujin/dxvk](https://github.com/doitsujin/dxvk). This fork does not follow upstream's releases; merge from upstream only deliberately.
+
+## Credits
+
+- Steam Frame controller bindings and control reference: Madison ([astromaddie/FNVVR](https://github.com/astromaddie/FNVVR)).
 
 ## Licence
 
