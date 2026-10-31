@@ -325,6 +325,7 @@ namespace dxvk {
     constexpr uintptr_t ProcessWeaponInfoSlot = 0x148;
     constexpr uintptr_t InventoryEntryForm    = 0x08;
     constexpr uintptr_t WeaponAnimationType   = 0xF4;
+    constexpr int32_t   WeaponTypeHandToHand       = 0;
 
     /**
      * Animation sequences, see findings/weapon.md. Every sequence an actor

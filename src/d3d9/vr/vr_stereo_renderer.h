@@ -568,6 +568,8 @@ namespace dxvk {
 
     void updateMeleeSwing(const VrInputState& input, VrGameStateKind state, float dt);
 
+    void updatePunches(const VrInputState& input, VrGameStateKind state, float dt);
+
     void updateHandThrow(const VrInputState& input, VrGameStateKind state, float dt);
 
     void updateManualReload(const VrInputState& input, VrGameStateKind state, float dt);

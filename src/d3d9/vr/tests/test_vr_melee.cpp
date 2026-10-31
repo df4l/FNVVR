@@ -299,3 +299,20 @@ TEST_CASE(melee_guard_holds_through_short_exits) {
   guard.update(true, true, 0.01f);
   CHECK(!guard.guarding());
 }
+
+
+TEST_CASE(melee_fist_needs_four_closed_fingers) {
+  CHECK(vrIsFist({ 0.0f, 0.9f, 1.0f, 1.0f, 1.0f }));
+  CHECK(vrIsFist({ 1.0f, 0.7f, 0.7f, 0.7f, 0.7f }));
+  CHECK(!vrIsFist({ 1.0f, 0.0f, 1.0f, 1.0f, 1.0f }));
+  CHECK(!vrIsFist({ 1.0f, 1.0f, 1.0f, 0.3f, 1.0f }));
+}
+
+
+TEST_CASE(melee_fist_strikes_ahead_of_the_grip) {
+  VrGameCameraPose hand = northFacing({ 0.0f, 0.0f, 0.0f });
+  VrSegment fist = vrBladeInWorld(hand, vrFistBlade());
+
+  checkVector(fist.a, 0.0f, 0.0f, 0.0f);
+  CHECK(fist.b.y > 0.05f * M && fist.b.y < 0.15f * M);
+}

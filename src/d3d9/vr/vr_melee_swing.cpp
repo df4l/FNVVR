@@ -272,7 +272,7 @@ namespace dxvk {
     if (!hadBlade || !m_swing.swinging())
       return result;
 
-    uint32_t swingHits = hitActors(player, previous, current, false, power);
+    uint32_t swingHits = hitActors(player, m_swing, previous, current, false, power);
     result.count += swingHits;
     result.power  = swingHits && power;
 
@@ -286,9 +286,58 @@ namespace dxvk {
   }
 
 
+  std::array<uint32_t, VrHandCount> VrMeleeSwing::updateFists(
+    const std::array<VrFistInput, VrHandCount>& fists,
+          bool                  out,
+    const VrGameCameraPose&     body,
+          float                 dt) {
+    std::array<uint32_t, VrHandCount> counts = { };
+
+    auto player = *reinterpret_cast<uint8_t* const*>(VrGame::Player);
+    m_fistsOut = out && player;
+
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      const VrFistInput& fist = fists[i];
+
+      if (!m_fistsOut || !fist.hand || !fist.closed) {
+        m_hasFist[i] = false;
+        m_fistSwings[i].reset();
+        continue;
+      }
+
+      // As the blade: the fist of the previous frame, moved with the body
+      VrSegment previous = {
+        vrPointFromHand(body, m_fists[i].a),
+        vrPointFromHand(body, m_fists[i].b) };
+      bool hadFist = m_hasFist[i];
+
+      VrSegment current = vrBladeInWorld(*fist.hand, vrFistBlade());
+
+      m_fists[i]   = { vrPointToHand(body, current.a), vrPointToHand(body, current.b) };
+      m_hasFist[i] = true;
+      m_fistSwings[i].update(m_fists[i].b, dt);
+
+      if (!hadFist || !m_fistSwings[i].swinging())
+        continue;
+
+      // The game's unarmed attack, never a power attack: the trigger is
+      // the fist's index
+      counts[i] = hitActors(player, m_fistSwings[i], previous, current, false, false);
+
+      if (counts[i] && m_loggedPunches < MaxLoggedHits) {
+        Logger::info(str::format("VR: The ", i == uint32_t(VrHand::Left) ? "left" : "right", " fist punched at ",
+          m_fistSwings[i].speed(), " m/s and hit ", counts[i], counts[i] > 1 ? " actors" : " actor"));
+        m_loggedPunches++;
+      }
+    }
+
+    return counts;
+  }
+
+
   uint32_t VrMeleeSwing::hitWithMotor(uint8_t* player, const VrSegment& blade) {
     // The blade where it is now, however slowly it moves
-    uint32_t count = hitActors(player, blade, blade, true, false);
+    uint32_t count = hitActors(player, m_swing, blade, blade, true, false);
 
     if (count && m_loggedMotorHits < MaxLoggedHits) {
       Logger::info(str::format("VR: The running automatic melee weapon hit ", count,
@@ -300,7 +349,8 @@ namespace dxvk {
   }
 
 
-  uint32_t VrMeleeSwing::hitActors(uint8_t* player, const VrSegment& from, const VrSegment& to, bool motor, bool power) {
+  uint32_t VrMeleeSwing::hitActors(uint8_t* player, VrSwingTracker& swing, const VrSegment& from, const VrSegment& to,
+      bool motor, bool power) {
     auto actors = *reinterpret_cast<const uintptr_t* const*>(VrGame::ProcessActors);
     auto end    = *reinterpret_cast<const uint32_t*>(VrGame::ProcessHighEnd);
 
@@ -315,7 +365,7 @@ namespace dxvk {
 
       // The running weapon hits at the game's pace, a swing once per target
       if (!actor || actor == reinterpret_cast<uintptr_t>(player)
-       || (!motor && m_swing.hasHit(reinterpret_cast<void*>(actor))))
+       || (!motor && swing.hasHit(reinterpret_cast<void*>(actor))))
         continue;
 
       auto vtable = readField<uintptr_t>(actor, 0);
@@ -328,7 +378,7 @@ namespace dxvk {
       if (!findContact(actor, from, to, contact))
         continue;
 
-      m_swing.addHit(reinterpret_cast<void*>(actor));
+      swing.addHit(reinterpret_cast<void*>(actor));
 
       // The game asks for the limb while it computes the hit, see setTargetedLimb
       m_contact = contact;
@@ -507,7 +557,7 @@ namespace dxvk {
           (m_dealt.flags & VrGame::HitFlagSneakAttack) ? ", sneak attack" : "")
       : std::string();
 
-    Logger::info(str::format("VR: The blade hit ", limb, damage,
+    Logger::info(str::format("VR: The hit struck ", limb, damage,
       ", health ", health, " of ", baseHealth, " left",
       dead ? ", the target is dead" : ""));
     m_loggedDamage++;
