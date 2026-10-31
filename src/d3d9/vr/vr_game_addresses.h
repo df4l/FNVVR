@@ -330,7 +330,7 @@ namespace dxvk {
     /**
      * The player's process is a HighProcess. Its table, and the function in
      * the slot above (ProcessWeaponInfoSlot): Actor::CombatHit (call at
-     * 0x00899D94) and Actor::ObjectHit (0x008AE701) take the attacker's
+     * 0x00899D94) and Actor::ObjectHit (0x008AE705) take the attacker's
      * weapon from it, and use the game's fists when it gives none
      * (findings/melee.md §15).
      */
