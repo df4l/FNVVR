@@ -11,6 +11,36 @@
   `fnvvr\no_large_address_prompt.txt` to get it back). Players who already used the 4GB Patcher, GOG players and
   Linux (Proton) players see nothing.
 
+### Steam Frame
+
+- **Native Steam Frame controller bindings** (by Madison, from [astromaddie/FNVVR](https://github.com/astromaddie/FNVVR)):
+  SteamVR no longer remaps the Touch bindings to the Frame controllers, which put X and Y on the left D-pad. The
+  same actions are bound to the Frame's own buttons: X (reload, alternate) and Y (pause, wait, option) are on the
+  right controller with A and B. The controls are listed in [docs/FRAME_CONTROLS.md](docs/FRAME_CONTROLS.md). Copy
+  the new `bindings_frame_controller.json` into `fnvvr/` with the other JSON files.
+
+### Fixes
+
+- **Crash entering buildings**: v0.10.0 could crash about one time in two when entering or leaving a building. The
+  invisible spheres that let the hands push objects were added to the new place while the game was still loading it,
+  and stayed in the old one after the game unloaded it; held objects are now let go of and the spheres taken out when
+  the player moves to another place, and none is made while it loads.
+- **Armour pieces beside the player**: with the NCR armours (and other outfits that add pieces of their own to the
+  first-person body), legs, belts and pouches no longer float next to the player.
+
+### Options and diagnostics
+
+- **`d3d9.vrHandPush`** (on by default): set it to `False` in `dxvk.conf` to turn off the hands pushing objects, for
+  a player whose game still crashes with them.
+- **Crash details in the log**: when the game crashes, the d3d9 log ends with the exception, the module and offset
+  where it happened, the registers and the return addresses on the stack. The game and any crash logger still handle
+  the crash as before. Please attach this log to crash reports.
+
+### Known issues
+
+- **Varmint rifle magazine**: during the manual reload the new magazine is still held upside down and outside the
+  hand, despite an attempt to turn it upright. The Service rifle is not affected.
+
 ## v0.10.0 (2026-10-29, since v0.9.0 `a617e18`)
 
 ### Physics grab
