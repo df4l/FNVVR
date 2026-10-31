@@ -24,7 +24,9 @@ namespace dxvk {
    * of the last VR frame, as the grab's springs are. While the player is
    * not in control, that update is not reached: the spheres are stopped
    * from the update's other branch (stop), else they would go on at their
-   * last velocity.
+   * last velocity. As the player moves to another cell with a world of
+   * its own, the spheres leave the old world (leaveWorld); while the new
+   * world loads, none is made.
    *
    * Only used on the game's main thread, while Havok does not step.
    */
@@ -66,6 +68,19 @@ namespace dxvk {
      * \brief Stops both spheres, which stop pushing
      */
     void stop();
+
+    /**
+     * \brief Takes the spheres out of any world but one, and lets them go
+     *
+     * Called as the player moves to another cell, before the game may
+     * unload the old cell's world. The spheres are made again in the
+     * player's world at the next update.
+     *
+     * \param [in] world The hkpWorld the spheres may stay in, or
+     *    \c nullptr for none
+     * \returns \c true if a sphere was let go of
+     */
+    bool leaveWorld(const uint8_t* world);
 
   private:
 

@@ -823,6 +823,12 @@ namespace dxvk {
     VrGameTransform  m_pinchInHand;
     bool             m_hasPinch = false;
 
+    // A magazine the reload animation never carries, turned upright in
+    // the left hand (vrUprightMagazineHold): in the hand bone's frame, in
+    // units of the hand's scale
+    VrGameTransform  m_uprightInHand;
+    bool             m_turnedUpright = false;
+
     // Rack part of the weapon in the hand: how the hand holds it, where it
     // is home in the right hand's frame, the way back and its length, and
     // its rack part the name was logged for, compared but not dereferenced
@@ -986,6 +992,7 @@ namespace dxvk {
     bool             m_loggedActive = false;
     bool             m_loggedFrame  = false;
     bool             m_loggedArms   = false;
+    uint32_t         m_loggedBodyMeshes = 0;
     bool             m_loggedOtherHand = false;
     bool             m_loggedTwoHanded = false;
     bool             m_loggedTwoHandedMelee = false;
@@ -1299,7 +1306,10 @@ namespace dxvk {
      *    the hand holds it
      */
     const VrGameTransform& magazineInHand() const {
-      return m_pinched && m_hasPinch ? m_pinchInHand : m_reloadAnimation.magazineInHand;
+      if (m_pinched && m_hasPinch)
+        return m_pinchInHand;
+
+      return m_turnedUpright ? m_uprightInHand : m_reloadAnimation.magazineInHand;
     }
 
     /**
@@ -1418,7 +1428,12 @@ namespace dxvk {
       const VrVector3&            drawnWeapon,
       const VrGameRotation&       weaponRotation);
 
-    void hide(uint8_t* object, bool log);
+    /**
+     * \brief Culls an object of the model until showArms
+     *
+     * \returns \c true if the object was not hidden yet
+     */
+    bool hide(uint8_t* object, bool log);
 
     void show(uint8_t* object);
 

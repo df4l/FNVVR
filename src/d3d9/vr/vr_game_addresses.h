@@ -2465,6 +2465,23 @@ namespace dxvk {
     constexpr uintptr_t NotInControlCallSite       = 0x0093F954;
     constexpr uintptr_t ForceGrenadeHold           = 0x009481D0;
 
+    /**
+     * bhkWorld::IsBatchingAdds (__thiscall, findings/grab.md §18.5): while
+     * a cell loads, the world queues the bodies added to it and adds them
+     * later, so a body just added is not in the world yet.
+     */
+    constexpr uintptr_t WorldIsBatchingAdds        = 0x00930C50;
+    constexpr uint8_t   WorldIsBatchingAddsBytes[] = {
+      0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x45, 0xFC, 0x33, 0xC9, 0x3B, 0x48, 0x18 };
+
+    /**
+     * PlayerCharacter::SetParentCell(TESObjectCELL*) (__thiscall, virtual):
+     * the player moves to another cell, possibly with another bhkWorld; the
+     * game moves its camera sphere there (findings/grab.md §18.5).
+     */
+    constexpr uintptr_t PlayerSetParentCellSlot    = 0x0108AC64;
+    constexpr uintptr_t PlayerSetParentCell        = 0x0094CAE0;
+
   }
 
 }

@@ -20,6 +20,7 @@ namespace dxvk {
 
     // PlayerCharacter::ForceGrenadeHold, __thiscall
     using ForceGrenadeHoldFn  = void (__fastcall*)(uint8_t* player, void* unused);
+    using SetParentCellFn     = void (__fastcall*)(uint8_t* player, void* unused, uint8_t* cell);
 
     using PickConstructFn    = void* (__fastcall*)(void* pick, void* unused);
     using PickSetFilterFn    = void (__fastcall*)(void* pick, void* unused, uint32_t filter);
@@ -328,6 +329,13 @@ namespace dxvk {
         VrGame::ForceGrenadeHold, reinterpret_cast<const void*>(&VrPhysicsGrab::notInControlHook)))
       grab->m_handBodies.reset();
 
+    // Nor without leaving the old world as the player changes cell
+    if (!VrGameMemory::redirectVirtual(VrGame::PlayerSetParentCellSlot, VrGame::PlayerSetParentCell,
+        reinterpret_cast<const void*>(&VrPhysicsGrab::setParentCellHook))) {
+      Logger::warn("VR: The player's change of cell was not found, held objects and the hands' spheres may stay in an unloaded world");
+      grab->m_handBodies.reset();
+    }
+
     Logger::info("VR: Each free hand holds what it touches or pulls what it points at with its grip");
     Logger::info(grab->m_canStore
       ? "VR: Items let go of at the chest go into the inventory"
@@ -387,6 +395,45 @@ namespace dxvk {
   }
 
 
+  void __fastcall VrPhysicsGrab::setParentCellHook(
+          uint8_t*              player,
+          void*                 unused,
+          uint8_t*              cell) {
+    if (g_physicsGrab)
+      g_physicsGrab->leaveCell(cell);
+
+    reinterpret_cast<SetParentCellFn>(VrGame::PlayerSetParentCell)(player, nullptr, cell);
+  }
+
+
+  void VrPhysicsGrab::leaveCell(uint8_t* cell) {
+    uint8_t* world = cell ? reinterpret_cast<GetPartFn>(VrGame::CellGetWorld)(cell, nullptr) : nullptr;
+    uint8_t* hkWorld = world ? readField<uint8_t*>(world, VrGame::RefObjectHavok) : nullptr;
+
+    // Exterior cells share one world: crossing them changes nothing
+    bool released = false;
+
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      Held& held = m_hands[i];
+
+      if (!held.grab.holding() || (hkWorld && held.body && havokWorld(held.body) == hkWorld))
+        continue;
+
+      release(held);
+      held.grab.drop();
+      m_events.released[i] = true;
+      released = true;
+    }
+
+    bool spheres = m_handBodies && m_handBodies->leaveWorld(hkWorld);
+
+    if (released || spheres) {
+      Logger::info(str::format("VR: The player moves to ", hkWorld ? "another physics world" : "no cell",
+        released ? ", held objects are let go of" : "", spheres ? ", the hands' spheres leave the old world" : ""));
+    }
+  }
+
+
   void VrPhysicsGrab::update(uint8_t* player, float dt) {
     // The scale is set when the game starts Havok
     if (!(havokScale() > 0.0f))
@@ -405,6 +452,16 @@ namespace dxvk {
   void VrPhysicsGrab::updateHandBodies(uint8_t* player, float dt) {
     if (!m_handBodies)
       return;
+
+    if (!m_handPush) {
+      m_handBodies->leaveWorld(nullptr);
+
+      if (!m_loggedNoPush) {
+        Logger::info("VR: The hands do not push objects (d3d9.vrHandPush)");
+        m_loggedNoPush = true;
+      }
+      return;
+    }
 
     // The hands are those of the frame drawn last, the step moves the
     // player again

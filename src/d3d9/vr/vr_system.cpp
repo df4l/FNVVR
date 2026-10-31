@@ -13,6 +13,7 @@
 #include "../../util/util_string.h"
 
 #include "vr_backend_factory.h"
+#include "vr_crash_log.h"
 #include "vr_d3d9_bridge.h"
 #include "vr_emulator_backend.h"
 #include "vr_emulator_keyboard.h"
@@ -130,6 +131,8 @@ namespace dxvk {
 
     Logger::info(str::format("VR: Using backend '", backend->name(), "'"));
 
+    VrCrashLog::install();
+
     // The emulator has no headset to look through, so it shows a window by default
     bool showPreview = config.getOption<bool>("d3d9.vrPreviewWindow", name == "emulator");
 
@@ -220,6 +223,7 @@ namespace dxvk {
       timer, passes, developer, swing));
     g_vrSystem->m_pipBoyScale = options.pipBoyScale;
     g_vrSystem->m_manualReload = options.manualReload;
+    g_vrSystem->m_handPush = config.getOption<bool>("d3d9.vrHandPush", true);
     g_vrSystem->m_sneakConfig.physical = options.physicalSneak;
     g_vrSystem->m_sneakConfig.crouch   = crouch;
     DxvkInstance::registerExtensionProvider(g_vrSystem->m_extensionProvider.get());
@@ -328,6 +332,7 @@ namespace dxvk {
     if (m_stereoRenderer) {
       m_stereoRenderer->setPipBoyScale(m_pipBoyScale);
       m_stereoRenderer->setManualReload(m_manualReload);
+      m_stereoRenderer->setHandPush(m_handPush);
       m_stereoRenderer->setSneakConfig(m_sneakConfig);
     }
 

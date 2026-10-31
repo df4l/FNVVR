@@ -975,6 +975,38 @@ namespace dxvk {
           size_t                count);
 
   /**
+   * \brief Turns a magazine the hand would hold upside down upright
+   *
+   * Some reload animations never carry the new magazine in the left hand
+   * (vrFindMagazineHold): it is then held as the hand pushes it into the
+   * weapon, which can leave it upside down in the player's hand (the
+   * varmint rifle's 2hrreloadm). If the end of the magazine that goes
+   * into the weapon points down in the controller's frame, the magazine
+   * is turned about its centre by the least rotation that points that
+   * end along the controller's up.
+   *
+   * \param [in] handInController The hand bone's rotation in the
+   *    controller's frame
+   * \param [in] up The controller's up, in its frame
+   * \param [in] insertion Direction the magazine goes into the weapon
+   *    along, in the magazine's frame
+   * \param [in] centre The magazine's centre in its frame, in units of
+   *    the hand's scale
+   * \param [in,out] inHand The magazine in the hand bone's frame, turned
+   *    if it points down
+   * \param [out] angle The angle, in radians, between the end that goes
+   *    in and the controller's up before any turn
+   * \returns \c true if the magazine was turned
+   */
+  bool vrUprightMagazineHold(
+    const VrGameRotation&       handInController,
+    const VrVector3&            up,
+    const VrVector3&            insertion,
+    const VrVector3&            centre,
+          VrGameTransform&      inHand,
+          float&                angle);
+
+  /**
    * \brief How the game's reload animation pulls the rack part back
    */
   struct VrRackMotion {

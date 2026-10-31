@@ -65,6 +65,10 @@ namespace dxvk {
    *
    * A free hand pushes objects with a keyframed sphere (VrHandBodies).
    *
+   * As the player moves to a cell with another world, held objects are
+   * let go of and the spheres leave the old world, before the game may
+   * unload it.
+   *
    * An item let go of at the chest goes into the inventory, through the
    * game's own activation by the player, as if it had been picked up
    * from the world.
@@ -118,6 +122,15 @@ namespace dxvk {
      * \brief What the hands grabbed and let go of since the previous call
      */
     VrPhysicsGrabEvents takeEvents();
+
+    /**
+     * \brief Turns the pushing spheres of the free hands on or off
+     *
+     * \param [in] enabled Off, the hands no longer push objects
+     */
+    void setHandPush(bool enabled) {
+      m_handPush = enabled;
+    }
 
     /**
      * \brief How a hand is drawn to stay on what it holds
@@ -260,6 +273,8 @@ namespace dxvk {
     uint32_t m_loggedFits    = 0;
     uint32_t m_loggedStores  = 0;
     bool     m_canStore      = false;
+    bool     m_handPush      = true;
+    bool     m_loggedNoPush  = false;
 
     std::unique_ptr<VrHandBodies> m_handBodies;
 
@@ -309,6 +324,8 @@ namespace dxvk {
 
     void updateHandBodies(uint8_t* player, float dt);
 
+    void leaveCell(uint8_t* cell);
+
     static void __fastcall physicsGrabHook(
             uint8_t*              player,
             void*                 unused,
@@ -317,6 +334,11 @@ namespace dxvk {
     static void __fastcall notInControlHook(
             uint8_t*              player,
             void*                 unused);
+
+    static void __fastcall setParentCellHook(
+            uint8_t*              player,
+            void*                 unused,
+            uint8_t*              cell);
 
   };
 

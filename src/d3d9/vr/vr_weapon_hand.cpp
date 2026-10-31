@@ -115,6 +115,9 @@ namespace dxvk {
     // under 20 cm away
     constexpr float MagazineHandReach = 0.3f;
 
+    /// Meshes of the body hidden that are named in the log, at most
+    constexpr uint32_t MaxLoggedBodyMeshes = 32;
+
     // How far out along its way in a round enters the loading port, in
     // metres, and the part of the time to its place it takes to get there
     // from the fingers
@@ -313,6 +316,64 @@ namespace dxvk {
       }
 
       return false;
+    }
+
+    /**
+     * \brief The model's node that holds a bone of its skeleton: the
+     *    skeleton's root bone
+     */
+    uint8_t* skeletonRoot(const uint8_t* root, uint8_t* bone) {
+      while (uint8_t* parent = field<uint8_t*>(bone, VrGame::ObjectParent)) {
+        if (parent == root)
+          return bone;
+
+        bone = parent;
+      }
+
+      return nullptr;
+    }
+
+    /**
+     * \brief Whether a mesh belongs to the body, away from the arms
+     *
+     * The game's first-person camera never sees the body, which the VR
+     * layer moves with the hands: some outfits add pieces of their own to
+     * the first-person model (legs, belts, pouches, a face wrap; the NCR
+     * armours). A skinned mesh is the body's when none of its bones is a
+     * hand's or a forearm's and one lies outside both arms; another mesh
+     * when it hangs from the skeleton outside both arms, the weapon aside.
+     * The hands and what they hold stay.
+     */
+    bool isBodyMesh(uint8_t* geometry, const UpperArm (&arms)[2], const uint8_t* skeleton, const uint8_t* weapon) {
+      auto skin = field<uint8_t*>(geometry, VrGame::GeometrySkinInstance);
+
+      if (!skin) {
+        return skeleton && isAncestor(skeleton, geometry)
+          && !isAncestor(arms[0].top, geometry) && !isAncestor(arms[1].top, geometry)
+          && !(weapon && isAncestor(weapon, geometry));
+      }
+
+      auto data  = field<uint8_t*>(skin, VrGame::SkinInstanceData);
+      auto bones = field<uint8_t**>(skin, VrGame::SkinInstanceBones);
+
+      if (!data || !bones)
+        return false;
+
+      uint32_t count = field<uint32_t>(data, VrGame::SkinDataBoneCount);
+      bool outside = false;
+
+      for (uint32_t i = 0; i < count; i++) {
+        if (!bones[i])
+          continue;
+
+        if (isAncestor(arms[0].forearm, bones[i]) || isAncestor(arms[1].forearm, bones[i]))
+          return false;
+
+        if (!isAncestor(arms[0].top, bones[i]) && !isAncestor(arms[1].top, bones[i]))
+          outside = true;
+      }
+
+      return outside;
     }
 
     /**
@@ -2317,6 +2378,20 @@ namespace dxvk {
     if (m_pinched && m_hasReloadAnimation && leftHand && handScale > 0.0f)
       pinchRound(leftHand, centre, scale / handScale);
 
+    // A magazine the animation never carries is held as the hand pushes
+    // it in, which may be upside down
+    bool pushedIn = m_hasReloadAnimation && !m_reloadAnimation.carried && !m_pinched
+      && action == ActionKind::None && leftHand && handScale > 0.0f;
+    float uprightAngle = 0.0f;
+    m_turnedUpright = false;
+
+    if (pushedIn) {
+      VrVector3 insertion = vrTranspose(m_reloadAnimation.place.rotate) * m_reloadAnimation.axis * -1.0f;
+      m_uprightInHand = m_reloadAnimation.magazineInHand;
+      m_turnedUpright = vrUprightMagazineHold(FreeHandPose.rotate, ControllerUp, insertion,
+        centre * (scale / handScale), m_uprightInHand, uprightAngle);
+    }
+
     const VrGameTransform& inHand = magazineInHand();
 
     if (m_hasReloadAnimation && leftHand) {
@@ -2341,6 +2416,12 @@ namespace dxvk {
       } else {
         Logger::info(str::format(round ? "VR: The weapon is loaded round by round with '" : "VR: The weapon's magazine is '",
           name ? name : "", "'"));
+      }
+
+      if (pushedIn) {
+        Logger::info(str::format("VR: The new magazine is held as the reload animation pushes it in, the end that goes in ",
+          uprightAngle * 57.2957795f, " degrees from the left controller's up",
+          m_turnedUpright ? ": turned upright" : ""));
       }
       m_loggedMagazine = true;
     }
@@ -2642,17 +2723,24 @@ namespace dxvk {
         && !isSkinnedBelow(geometry, arms[0].forearm);
     };
 
+    uint8_t* skeleton = skeletonRoot(root, arms[0].top);
+    uint8_t* weaponNode = findObject(root, VrGame::WeaponNodeName);
+
     // The meshes are culled with the first-person camera after this update
-    forEachObject(root, MaxModelDepth, [this, &arms, &isRightHandMesh] (uint8_t* object) {
+    forEachObject(root, MaxModelDepth, [this, &arms, &isRightHandMesh, skeleton, weaponNode] (uint8_t* object) {
       uint8_t* geometry = asGeometry(object);
 
       if (!geometry)
         return;
 
-      if (isArmMesh(geometry, arms))
+      if (isArmMesh(geometry, arms)) {
         hide(geometry, !m_loggedArms);
-      else if (isRightHandMesh(geometry))
+      } else if (isBodyMesh(geometry, arms, skeleton, weaponNode)) {
+        if (hide(geometry, m_loggedBodyMeshes < MaxLoggedBodyMeshes))
+          m_loggedBodyMeshes++;
+      } else if (isRightHandMesh(geometry)) {
         hide(geometry, !m_loggedRightHand);
+      }
     });
 
     if (rightHand) {
@@ -2681,19 +2769,19 @@ namespace dxvk {
   }
 
 
-  void VrWeaponHand::hide(uint8_t* object, bool log) {
+  bool VrWeaponHand::hide(uint8_t* object, bool log) {
     uint32_t& flags = field<uint32_t>(object, VrGame::ObjectFlags);
     bool hidden = std::find(m_hiddenObjects.begin(), m_hiddenObjects.end(), object) != m_hiddenObjects.end();
 
     // An object the game culls itself is left to the game, so that it is
     // not shown again when the VR layer lets go of it
     if (!hidden && (flags & VrGame::ObjectFlagAppCulled))
-      return;
+      return false;
 
     flags |= VrGame::ObjectFlagAppCulled;
 
     if (hidden)
-      return;
+      return false;
 
     m_hiddenObjects.push_back(object);
 
@@ -2701,6 +2789,8 @@ namespace dxvk {
       auto name = field<const char*>(object, VrGame::ObjectName);
       Logger::info(str::format("VR: Hiding '", name ? name : "", "'"));
     }
+
+    return true;
   }
 
 
