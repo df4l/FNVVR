@@ -2529,6 +2529,10 @@ namespace dxvk {
      * HitMe only starts it when the ragdoll's animation (+0x41) and the
      * feedback (+0x28D) are enabled, the actor is conscious and its
      * process's sit state is 0. +0x28E tells whether it runs.
+     * It asks Havok for MOTION_DYNAMIC (1), which a body never keeps: it
+     * becomes MOTION_SPHERE_INERTIA (2), MOTION_BOX_INERTIA (3) or
+     * MOTION_THIN_BOX_INERTIA (6), the types bhkRigidBody::IsMotionTypeDynamic
+     * (0x00C8CCE0) accepts.
      */
     constexpr uintptr_t ActorRagdollController       = 0xAC;
     constexpr uintptr_t RagdollAnimEnabled           = 0x41;
@@ -2541,6 +2545,8 @@ namespace dxvk {
     /// BaseProcess::GetSitSleepState, virtual, __thiscall
     constexpr uintptr_t ProcessSitSleepStateSlot     = 0x4BC;
     constexpr uint8_t   MotionDynamic                = 1;
+    constexpr uint8_t   MotionBoxInertia             = 3;
+    constexpr uint8_t   MotionThinBoxInertia         = 6;
 
     /**
      * The reaction's work while it runs (findings/grab.md §19.4):

@@ -278,6 +278,28 @@ namespace dxvk {
       return hand == VrHand::Left ? "left" : "right";
     }
 
+    /**
+     * \brief Whether a body is simulated, as bhkRigidBody::IsMotionTypeDynamic
+     *
+     * A body asked to be MOTION_DYNAMIC takes one of the inertia types.
+     */
+    bool isDynamic(const uint8_t* body) {
+      uint8_t motion = readField<uint8_t>(body, VrGame::BodyMotionType);
+
+      return (motion >= VrGame::MotionDynamic && motion <= VrGame::MotionBoxInertia)
+          || motion == VrGame::MotionThinBoxInertia;
+    }
+
+    /**
+     * \brief Name of the node a body belongs to, as a skeleton's bone
+     */
+    const char* bodyNodeName(uint8_t* body) {
+      uint8_t* object = reinterpret_cast<ObjectForBodyFn>(VrGame::CollisionObjectForBody)(body);
+      uint8_t* scene  = object ? readField<uint8_t*>(object, VrGame::CollisionSceneObject) : nullptr;
+      const char* name = scene ? readField<const char*>(scene, VrGame::ObjectName) : nullptr;
+      return name ? name : "?";
+    }
+
   }
 
 
@@ -664,7 +686,8 @@ namespace dxvk {
 
       Logger::info(str::format("VR: The ", handName(hand), best.pulled ? " hand pulls " : " hand holds ",
         hexId(held.refId), " (", held.mass, " kg), ", int32_t(best.distance * 100.0f / VrGameUnitsPerMetre),
-        " cm from the hand's centre", !best.limb ? "" : held.living ? ", a limb of a living actor" : ", a limb of a corpse",
+        " cm from the hand's centre", !best.limb ? std::string() : str::format(", the limb '", bodyNodeName(held.body),
+          held.living ? "' of a living actor" : "' of a corpse"),
         held.living && !gameRunsFeedback() ? " whose hit reaction the VR layer runs" : "",
         hands > 1 ? ", with the other hand" : "",
         ", up to ", m_gravity > 0.0f ? acceleration / m_gravity : acceleration, m_gravity > 0.0f ? " g" : "",
@@ -908,8 +931,7 @@ namespace dxvk {
 
     uint8_t* ragdoll = readField<uint8_t*>(held.ref, VrGame::ActorRagdollController);
 
-    if (!ragdoll || !readField<bool>(ragdoll, VrGame::RagdollFeedbackActive)
-     || readField<uint8_t>(held.body, VrGame::BodyMotionType) != VrGame::MotionDynamic)
+    if (!ragdoll || !readField<bool>(ragdoll, VrGame::RagdollFeedbackActive) || !isDynamic(held.body))
       return false;
 
     reinterpret_cast<SetFeedbackActiveFn>(VrGame::RagdollSetFeedbackActive)(ragdoll, nullptr, true);
@@ -936,13 +958,13 @@ namespace dxvk {
       if (started)
         driveReaction(ref);
 
-      if (!started || readField<uint8_t>(body, VrGame::BodyMotionType) != VrGame::MotionDynamic
-       || !(inverseMass > 0.0f)) {
+      if (!started || !isDynamic(body) || !(inverseMass > 0.0f)) {
         if (m_loggedLimbs < MaxLoggedMisses) {
           Logger::info(str::format("VR: The ", handName(hand), " hand touches ",
             hexId(readField<uint32_t>(ref, VrGame::FormId)), started
-              ? ", a living actor's limb that follows its animation"
-              : ", a living actor whose hit reaction cannot start now"));
+              ? str::format(", a living actor's limb that follows its animation ('", bodyNodeName(body),
+                  "', motion type ", uint32_t(readField<uint8_t>(body, VrGame::BodyMotionType)), ")")
+              : std::string(", a living actor whose hit reaction cannot start now")));
           m_loggedLimbs++;
         }
         return false;
