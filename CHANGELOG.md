@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### 4 GB of memory
+
+- **4 GB patch offered in the main menu**: on Windows, when the game is limited to 2 GB of memory and
+  `FalloutNV.exe` is an unmodified Steam executable, the main menu asks once per start whether to let it use 4 GB.
+  "Use 4 GB" changes `FalloutNV.exe` exactly as the FNV 4GB Patcher does (the original is kept as
+  `FalloutNV_backup.exe`) and takes effect at the next start; "Don't ask again" stops the question (delete
+  `fnvvr\no_large_address_prompt.txt` to get it back). Players who already used the 4GB Patcher, GOG players and
+  Linux (Proton) players see nothing.
+
 ## v0.10.0 (2026-10-29, since v0.9.0 `a617e18`)
 
 ### Physics grab

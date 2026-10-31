@@ -41,6 +41,7 @@ vr_src = files([
   'vr_quick_wheel_image.cpp',
   'vr_grab.cpp',
   'vr_grab_fingers.cpp',
+  'vr_large_address_patch.cpp',
 ])
 
 # Parts that depend on DXVK and Vulkan, only built into d3d9.dll
@@ -112,6 +113,7 @@ vr_dxvk_src = files([
   'vr_physics_grab.cpp',
   'vr_hand_body.cpp',
   'vr_crash_log.cpp',
+  'vr_large_address.cpp',
 ])
 
 # Unit tests for the VR layer. They are built with the host compiler so they
@@ -154,6 +156,7 @@ if add_languages('cpp', native: true, required: false)
     'tests/test_vr_grab.cpp',
     'tests/test_vr_grab_fingers.cpp',
     'tests/test_vr_hand_body.cpp',
+    'tests/test_vr_large_address.cpp',
   ])
 
   vr_test = executable('vr_tests', vr_test_sources, vr_src,

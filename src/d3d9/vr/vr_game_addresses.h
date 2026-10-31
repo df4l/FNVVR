@@ -2482,6 +2482,32 @@ namespace dxvk {
     constexpr uintptr_t PlayerSetParentCellSlot    = 0x0108AC64;
     constexpr uintptr_t PlayerSetParentCell        = 0x0094CAE0;
 
+    /**
+     * Message box on the main menu (findings/laa.md "In-game prompt"):
+     * - StartMenu::DoIdle calls StartMenu::MainMenuIdle (__thiscall, returns
+     *   false in the pause menu) on every frame at MainMenuIdleCallSite;
+     * - StartMenu flags (StartMenuFlags): the initial load's pre-fade, the
+     *   fade-in of the main menu and the "loading content" message;
+     * - MessageMenuGlobal: MessageMenu*, null while no message box is open;
+     * - ShowMessageBox (above): __cdecl (text, icon, title, callback, value
+     *   of the first button, type, alpha, width, buttons..., null). A button
+     *   click stores the first button's value plus the button's index, then
+     *   calls the callback (__cdecl, no argument);
+     * - GetMessageMenuResult: __cdecl, returns that value and clears it.
+     */
+    constexpr uintptr_t MainMenuIdleCallSite         = 0x007CFA8C;
+    constexpr uintptr_t MainMenuIdle                 = 0x007D5830;
+    constexpr uint32_t  StartMenuFadeIn              = 0x10;
+    constexpr uint32_t  StartMenuContentMessage      = 0x400;
+    constexpr uint32_t  StartMenuPreFade             = 0x80000;
+    constexpr uintptr_t MessageMenuGlobal            = 0x011DA4F0;
+    constexpr uint32_t  MessageBoxStartMenuType      = 0x12;
+    constexpr uintptr_t GetMessageMenuResult         = 0x00703FA0;
+    constexpr uint8_t   GetMessageMenuResultPrologue[] = {
+      0x55, 0x8B, 0xEC, 0x51, 0xE8, 0x67, 0x32, 0xDB, 0xFF, 0x8A, 0x80, 0xE4, 0x00, 0x00, 0x00 };
+    constexpr uint8_t   ShowMessageBoxPrologue[]     = {
+      0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0xE8, 0x85, 0x33, 0xDB, 0xFF };
+
   }
 
 }
