@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -129,6 +130,18 @@ namespace dxvk {
      * \brief What the hands grabbed and let go of since the previous call
      */
     VrPhysicsGrabEvents takeEvents();
+
+    /**
+     * \brief Gives work to do in each update of the player
+     *
+     * Run after the hands' springs, while Havok is idle, on the game's
+     * main thread.
+     *
+     * \param [in] task Called with the PlayerCharacter and the frame time
+     */
+    void setPlayerUpdateTask(std::function<void (uint8_t*, float)> task) {
+      m_playerUpdateTask = std::move(task);
+    }
 
     /**
      * \brief Gives what makes a grabbed living actor react
@@ -297,6 +310,7 @@ namespace dxvk {
     std::unique_ptr<VrHandBodies> m_handBodies;
 
     VrNpcReaction* m_npcReaction = nullptr;
+    std::function<void (uint8_t*, float)> m_playerUpdateTask;
     bool           m_npcLimbs    = false;
     uint32_t       m_loggedLimbs = 0;
 

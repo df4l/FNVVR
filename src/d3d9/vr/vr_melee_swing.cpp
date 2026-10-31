@@ -276,6 +276,10 @@ namespace dxvk {
     result.count += swingHits;
     result.power  = swingHits && power;
 
+    // A swing that touched no actor may still hit an object
+    if (!swingHits && m_objectHit)
+      m_objectHit->strike(0, previous, current, power);
+
     if (swingHits && m_loggedHits < MaxLoggedHits) {
       Logger::info(str::format("VR: Melee swing at ", m_swing.speed(), " m/s hit ", swingHits,
         swingHits > 1 ? " actors" : " actor", power ? " with a power attack" : ""));
@@ -323,6 +327,9 @@ namespace dxvk {
       // The game's unarmed attack, never a power attack: the trigger is
       // the fist's index
       counts[i] = hitActors(player, m_fistSwings[i], previous, current, false, false);
+
+      if (!counts[i] && m_objectHit)
+        m_objectHit->strike(1 + i, previous, current, false);
 
       if (counts[i] && m_loggedPunches < MaxLoggedHits) {
         Logger::info(str::format("VR: The ", i == uint32_t(VrHand::Left) ? "left" : "right", " fist punched at ",

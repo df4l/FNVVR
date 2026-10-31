@@ -116,6 +116,7 @@ vr_dxvk_src = files([
   'vr_crash_log.cpp',
   'vr_large_address.cpp',
   'vr_npc_reaction.cpp',
+  'vr_melee_object_hit.cpp',
 ])
 
 # Unit tests for the VR layer. They are built with the host compiler so they

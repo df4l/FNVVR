@@ -456,6 +456,9 @@ namespace dxvk {
 
     restoreFilters(player);
     updateHandBodies(player, dt);
+
+    if (m_playerUpdateTask)
+      m_playerUpdateTask(player, dt);
   }
 
 

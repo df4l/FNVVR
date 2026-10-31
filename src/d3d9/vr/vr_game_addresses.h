@@ -2576,6 +2576,27 @@ namespace dxvk {
     constexpr uint32_t  AvAggression                 = 0;
     constexpr uint32_t  AvConfidence                 = 1;
 
+    /**
+     * Melee hits on objects (findings/melee.md §14): Actor::ObjectHit(bool
+     * power) (__thiscall, ret 4), which MeleeAttack calls for the player
+     * when no actor is in reach, casts a shape from Actor::GetEyeVector
+     * (call at ObjectHitEyeCallSite: __thiscall, position, direction,
+     * third person, ret 0xC) and pushes the body hit along the weapon's
+     * motion: from BaseProcess::GetWeaponLastPos (virtual, no argument)
+     * to Actor::GetWeaponPosition(NiPoint3* out, bool) (call at
+     * ObjectHitWeaponCallSite, __thiscall, ret 8, returns out), both in the
+     * frame of the actor's root node. Then impact sound, decal, particles
+     * and the OnHit / OnHitWith script blocks.
+     */
+    constexpr uintptr_t ActorObjectHit               = 0x008AE660;
+    constexpr uint8_t   ActorObjectHitPrologue[]     = {
+      0x53, 0x8B, 0xDC, 0x83, 0xEC, 0x08, 0x83, 0xE4, 0xF0, 0x83, 0xC4, 0x04, 0x55, 0x8B, 0x6B, 0x04 };
+    constexpr uintptr_t ActorGetEyeVector            = 0x008AFF80;
+    constexpr uintptr_t ObjectHitEyeCallSite         = 0x008AE7E2;
+    constexpr uintptr_t ActorGetWeaponPosition       = 0x008A5340;
+    constexpr uintptr_t ObjectHitWeaponCallSite      = 0x008AEBCD;
+    constexpr uintptr_t ProcessWeaponLastPosSlot     = 0x460;
+
   }
 
 }

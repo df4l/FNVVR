@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "vr_melee.h"
+#include "vr_melee_object_hit.h"
 
 namespace dxvk {
 
@@ -126,6 +127,15 @@ namespace dxvk {
     }
 
     /**
+     * \brief Gives what hits world objects
+     *
+     * \param [in] objectHit Not owned, or \c nullptr: only actors are hit
+     */
+    void setObjectHit(VrMeleeObjectHit* objectHit) {
+      m_objectHit = objectHit;
+    }
+
+    /**
      * \brief Whether holding the trigger charges a power attack
      *
      * Only for a melee weapon swung with the hand: the trigger closes the
@@ -197,6 +207,8 @@ namespace dxvk {
     std::array<VrSegment, VrHandCount>      m_fists;
     std::array<bool, VrHandCount>           m_hasFist = { };
     bool           m_fistsOut = false;
+
+    VrMeleeObjectHit* m_objectHit = nullptr;
 
     uint32_t       m_loggedHits = 0;
     uint32_t       m_loggedPunches = 0;

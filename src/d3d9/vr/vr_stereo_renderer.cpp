@@ -354,6 +354,21 @@ namespace dxvk {
         Logger::info("VR: The game's comments on the player's actions were not found, grabbed actors do not react");
 
       renderer->m_physicsGrab->setNpcReaction(renderer->m_npcReaction.get());
+
+      // Objects are struck while Havok is idle, in the player's update
+      if (renderer->m_meleeSwing) {
+        renderer->m_meleeObjectHit = VrMeleeObjectHit::install();
+
+        if (renderer->m_meleeObjectHit) {
+          VrMeleeObjectHit* objectHit = renderer->m_meleeObjectHit.get();
+          renderer->m_meleeSwing->setObjectHit(objectHit);
+          renderer->m_physicsGrab->setPlayerUpdateTask([objectHit] (uint8_t* player, float dt) {
+            objectHit->run(player, dt);
+          });
+        } else {
+          Logger::info("VR: The game's melee hits on objects were not found, swings only hit actors");
+        }
+      }
     } else
       Logger::info("VR: The game's grab was not found, the right grip grabs as the game's grab key");
 
