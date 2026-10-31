@@ -7,6 +7,7 @@
 #include "vr_grab.h"
 #include "vr_grab_fingers.h"
 #include "vr_hand_body.h"
+#include "vr_npc_reaction.h"
 #include "vr_types.h"
 
 namespace dxvk {
@@ -33,18 +34,24 @@ namespace dxvk {
    * the hand. When the hand touches nothing, the press pulls the object
    * the hand points at, the game's activation target named by this hand
    * (VrHandActivatePick), by its centre of mass into the hand's centre.
-   * Objects too heavy for the game's grab, fixed and keyframed bodies, and
-   * living actors are not held. A corpse is held by the limb a hand
-   * touches, its ragdoll's constraints bring the rest; it is not pulled
-   * from a distance. A hand that touches the object the other hand holds
+   * Objects too heavy for the game's grab, and fixed and keyframed bodies
+   * are not held. A corpse is held by the limb a hand touches, its
+   * ragdoll's constraints bring the rest; it is not pulled from a
+   * distance. A living actor is held by a limb of its hit reaction
+   * ("ragdoll feedback", findings/grab.md §19): the reaction is started
+   * when the hand closes on the actor and kept running while it holds,
+   * so that the limb is a dynamic body the game drives towards the
+   * animation, which the hand's spring pulls against; the limb is let go
+   * of once the game ends the reaction (knocked down, out of the bone
+   * level of detail). The actor reacts to being grabbed (VrNpcReaction). A hand that touches the object the other hand holds
    * holds it too, with a second spring on the same body.
    *
    * A body held by one hand also turns with the hand: a callback of its
    * spring sets the body's angular velocity towards the rotation it had in
    * the hand when grabbed, about the point held (vrGrabTurnStep). A body
    * held by both hands is turned by the two springs, and takes its
-   * rotation in the hand again when one lets go. A corpse's limb is left to
-   * its ragdoll.
+   * rotation in the hand again when one lets go. An actor's limb is left
+   * to its ragdoll.
    *
    * A hand pushes with a fixed force (vrGrabMaxAcceleration), shared by
    * both hands on one body, so heavy objects follow and come more slowly
@@ -58,7 +65,7 @@ namespace dxvk {
    * grab, with the hands the VR frame gave last. While a hand holds an
    * object, the object's collision group is the player's: it neither
    * pushes nor hurts the player and keeps colliding with everything else.
-   * Not a corpse's limb, which collides with the other limbs by its
+   * Not an actor's limb, which collides with the other limbs by its
    * ragdoll's own group.
    * The object's own group comes back once it was let go and is clear of
    * the player.
@@ -122,6 +129,15 @@ namespace dxvk {
      * \brief What the hands grabbed and let go of since the previous call
      */
     VrPhysicsGrabEvents takeEvents();
+
+    /**
+     * \brief Gives what makes a grabbed living actor react
+     *
+     * \param [in] reaction Not owned, or \c nullptr for no reaction
+     */
+    void setNpcReaction(VrNpcReaction* reaction) {
+      m_npcReaction = reaction;
+    }
 
     /**
      * \brief Turns the pushing spheres of the free hands on or off
@@ -200,8 +216,9 @@ namespace dxvk {
       uint32_t   filter  = 0;
       uint32_t   groupedFilter = 0;
       bool       grouped = false;
-      /// A limb of a dead actor's ragdoll
-      bool       corpse  = false;
+      /// A limb of an actor's ragdoll, and whether the actor lives
+      bool       limb    = false;
+      bool       living  = false;
       /// The body's rotation in the hand's frame, while the hand turns it
       VrGrabFrame frame;
       bool       turning = false;
@@ -236,8 +253,9 @@ namespace dxvk {
       float     mass     = 0.0f;
       /// Pulled from where the hand points rather than touched
       bool      pulled   = false;
-      /// A limb of a dead actor's ragdoll
-      bool      corpse   = false;
+      /// A limb of an actor's ragdoll, and whether the actor lives
+      bool      limb     = false;
+      bool      living   = false;
     };
 
     struct Correction {
@@ -278,6 +296,10 @@ namespace dxvk {
 
     std::unique_ptr<VrHandBodies> m_handBodies;
 
+    VrNpcReaction* m_npcReaction = nullptr;
+    bool           m_npcLimbs    = false;
+    uint32_t       m_loggedLimbs = 0;
+
     void update(uint8_t* player, float dt);
 
     void updateLead(uint8_t* player, float dt);
@@ -311,6 +333,10 @@ namespace dxvk {
     bool stillHeld(const Held& held) const;
 
     bool moveTarget(Held& held, const VrGameCameraPose& pose);
+
+    bool startReaction(uint8_t* actor) const;
+
+    bool keepReaction(const Held& held) const;
 
     void addTurn(Held& held);
 

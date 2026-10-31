@@ -346,9 +346,15 @@ namespace dxvk {
 
     renderer->m_physicsGrab = VrPhysicsGrab::install();
 
-    if (renderer->m_physicsGrab)
+    if (renderer->m_physicsGrab) {
       renderer->m_controls.setGrabByHands(true);
-    else
+      renderer->m_npcReaction = VrNpcReaction::install();
+
+      if (!renderer->m_npcReaction)
+        Logger::info("VR: The game's comments on the player's actions were not found, grabbed actors do not react");
+
+      renderer->m_physicsGrab->setNpcReaction(renderer->m_npcReaction.get());
+    } else
       Logger::info("VR: The game's grab was not found, the right grip grabs as the game's grab key");
 
     if (renderer->m_manualReload && renderer->m_weaponHand) {

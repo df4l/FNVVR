@@ -2508,6 +2508,73 @@ namespace dxvk {
     constexpr uint8_t   ShowMessageBoxPrologue[]     = {
       0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0xE8, 0x85, 0x33, 0xDB, 0xFF };
 
+    /**
+     * A living actor's limb held by a hand (findings/grab.md §19): the
+     * actor's bhkRagdollController (Actor +0xAC) and its hit reaction
+     * ("ragdoll feedback"), which Actor::HitMe starts with
+     * SetRagdollFeedbackActive(true) (__thiscall, one byte argument): the
+     * bones of the race's feedback list become dynamic bodies driven
+     * towards the animation, for fFeedbackTimeMS (3000) from the last call.
+     * HitMe only starts it when the ragdoll's animation (+0x41) and the
+     * feedback (+0x28D) are enabled, the actor is conscious and its
+     * process's sit state is 0. +0x28E tells whether it runs.
+     */
+    constexpr uintptr_t ActorRagdollController       = 0xAC;
+    constexpr uintptr_t RagdollAnimEnabled           = 0x41;
+    constexpr uintptr_t RagdollFeedbackEnabled       = 0x28D;
+    constexpr uintptr_t RagdollFeedbackActive        = 0x28E;
+    constexpr uintptr_t RagdollSetFeedbackActive     = 0x00C7B6A0;
+    constexpr uintptr_t RagdollSetFeedbackActiveCallSite = 0x0089CB0B;
+    constexpr uintptr_t ActorIsUnconscious           = 0x00437BD0;
+    constexpr uintptr_t ActorIsUnconsciousCallSite   = 0x0089CA82;
+    /// BaseProcess::GetSitSleepState, virtual, __thiscall
+    constexpr uintptr_t ProcessSitSleepStateSlot     = 0x4BC;
+    constexpr uint8_t   MotionDynamic                = 1;
+
+    /**
+     * NPC reactions to the player (findings/grab.md §19.3):
+     * ProcessLists::CommentOnPlayerAction (0x00977CB0) makes the actor the
+     * player aims at say the topic TESTopic::GetTopic(DT_TOPIC, 8) (__cdecl)
+     * through Actor::StartGreetingPlayer(topic) (__thiscall), after
+     * Actor::CanSpeak, IsInCombat, ShouldSkipFallOutBehavior(4) and
+     * IsPlayerTeammate (__thiscall), and sets the shared comment timer
+     * (ProcessLists +0x154) to fCommentOnPlayerActionsTimer. The call sites
+     * are those of CommentOnPlayerAction.
+     */
+    constexpr uintptr_t TopicGetTopic                = 0x0061A2D0;
+    constexpr uintptr_t TopicGetTopicCallSite        = 0x00978137;
+    constexpr uintptr_t ActorStartGreetingPlayer     = 0x008BC3D0;
+    constexpr uintptr_t ActorStartGreetingPlayerCallSite = 0x00978149;
+    constexpr uintptr_t ActorCanSpeak                = 0x00884480;
+    constexpr uintptr_t ActorCanSpeakCallSite        = 0x00977D4B;
+    constexpr uintptr_t ActorIsInCombat              = 0x00493BB0;
+    constexpr uintptr_t ActorIsInCombatCallSite      = 0x00977D73;
+    constexpr uintptr_t ActorSkipsBehavior           = 0x008A78F0;
+    constexpr uintptr_t ActorSkipsBehaviorCallSite   = 0x00977D84;
+    constexpr uintptr_t ActorIsPlayerTeammate        = 0x00566950;
+    constexpr uintptr_t ActorIsPlayerTeammateCallSite = 0x00977D93;
+    constexpr uintptr_t ProcessListsSingleton        = 0x011E0E80;
+    constexpr uintptr_t ProcessListsCommentTimer     = 0x154;
+    constexpr uintptr_t CommentOnPlayerActionsTimerSetting = 0x011D0174;
+    constexpr uint32_t  DialogueTypeTopic            = 0;
+    constexpr uint32_t  TopicPlayerAiming            = 8;
+    constexpr uint32_t  BehaviorReactToPlayerActions = 4;
+    constexpr uint32_t  SitSleepSleeping             = 9;
+
+    /**
+     * Going into combat with the player as the script command StartCombat
+     * does (Script::StartCombatFunction, 0x005C1750): Actor::IsGuard
+     * (virtual) gives the aggressor flag, then BaseProcess::EnterCombat
+     * (virtual, __thiscall, 13 stack arguments: actor, target, then the
+     * flags 1, 1, 0, 0, 0, aggressor, 0, 1, 0, 1, 0). Aggression and
+     * Confidence are actor values 0 and 1 (ACTOR_AGGRESSION,
+     * ACTOR_CONFIDENCE: Aggressive 1, Foolhardy 4).
+     */
+    constexpr uintptr_t ActorIsGuardSlot             = 0x304;
+    constexpr uintptr_t ProcessEnterCombatSlot       = 0x33C;
+    constexpr uint32_t  AvAggression                 = 0;
+    constexpr uint32_t  AvConfidence                 = 1;
+
   }
 
 }

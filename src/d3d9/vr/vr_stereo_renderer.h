@@ -407,6 +407,9 @@ namespace dxvk {
     // Reloading with the hands
     std::unique_ptr<VrManualReload> m_manualReload;
 
+    // What a grabbed living actor does, used by m_physicsGrab
+    std::unique_ptr<VrNpcReaction> m_npcReaction;
+
     // World objects held with the hands
     std::unique_ptr<VrPhysicsGrab> m_physicsGrab;
 
