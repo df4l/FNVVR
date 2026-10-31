@@ -117,7 +117,7 @@ namespace dxvk {
   }
 
 
-  void VrMeleeObjectHit::strike(uint32_t striker, const VrSegment& from, const VrSegment& to, bool power) {
+  void VrMeleeObjectHit::strike(uint32_t striker, const VrSegment& from, const VrSegment& to, bool power, bool bare) {
     if (striker >= StrikerCount)
       return;
 
@@ -125,6 +125,7 @@ namespace dxvk {
     strike.from    = from;
     strike.to      = to;
     strike.power   = power;
+    strike.bare    = bare;
     strike.pending = true;
   }
 
@@ -207,8 +208,15 @@ namespace dxvk {
       m_direction = motion * (1.0f / vrLength(motion));
       m_eye       = point - m_direction * CastBack;
 
+      // A bare fist pushes and sounds as the game's fists
       m_running = true;
-      bool hit = reinterpret_cast<ObjectHitFn>(VrGame::ActorObjectHit)(player, nullptr, strike.power ? 1 : 0);
+      bool hit = false;
+
+      {
+        VrBareHand::Strike bareStrike(strike.bare ? m_bareHand : nullptr, player);
+        hit = reinterpret_cast<ObjectHitFn>(VrGame::ActorObjectHit)(player, nullptr, strike.power ? 1 : 0);
+      }
+
       m_running = false;
 
       strike.lastBody = body;

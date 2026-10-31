@@ -328,6 +328,16 @@ namespace dxvk {
     constexpr int32_t   WeaponTypeHandToHand       = 0;
 
     /**
+     * The player's process is a HighProcess. Its table, and the function in
+     * the slot above (ProcessWeaponInfoSlot): Actor::CombatHit (call at
+     * 0x00899D94) and Actor::ObjectHit (0x008AE701) take the attacker's
+     * weapon from it, and use the game's fists when it gives none
+     * (findings/melee.md §15).
+     */
+    constexpr uintptr_t HighProcessVtable           = 0x01087864;
+    constexpr uintptr_t HighProcessCurrentWeapon    = 0x008D81E0;
+
+    /**
      * Animation sequences, see findings/weapon.md. Every sequence an actor
      * plays starts in AnimData::MorphOrBlendToSequence (__thiscall on
      * AnimData with three stack arguments: sequence, 16-bit group ID,

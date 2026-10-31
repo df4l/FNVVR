@@ -1444,13 +1444,27 @@ namespace dxvk {
     if (!m_meleeSwing)
       return;
 
-    // Unarmed: no weapon, or a hand-to-hand weapon, drawn
     int32_t type = -1;
-    VrWeaponDrawn::equippedWeapon(type);
+    bool equipped = VrWeaponDrawn::equippedWeapon(type) != nullptr;
 
-    bool out = state == VrGameStateKind::InGame && m_hasReference && input.hasActions
-      && m_weaponDrawn && !m_weaponDrawn->playerHolstered()
-      && (type < 0 || type == VrGame::WeaponTypeHandToHand);
+    bool inGame = state == VrGameStateKind::InGame && m_hasReference && input.hasActions && m_weaponDrawn;
+    bool holstered = m_weaponDrawn && m_weaponDrawn->playerHolstered();
+    bool wornOnFist = type == VrGame::WeaponTypeHandToHand;
+
+    // Unarmed, the right fist takes the place of the game's attack: no
+    // weapon, or a hand-to-hand weapon, drawn
+    bool out = inGame && !holstered && (type < 0 || wornOnFist);
+
+    // Any free hand punches: the right one unless it holds the weapon, the
+    // left one whatever the right holds. Only the right fist wears a
+    // hand-to-hand weapon; a fist without it hits bare.
+    std::array<bool, VrHandCount> punches = { };
+    punches[uint32_t(VrHand::Right)] = out || (inGame && holstered);
+    punches[uint32_t(VrHand::Left)]  = inGame;
+
+    std::array<bool, VrHandCount> bare = { };
+    bare[uint32_t(VrHand::Right)] = equipped && (holstered || !wornOnFist);
+    bare[uint32_t(VrHand::Left)]  = equipped;
 
     // A hand busy elsewhere does not punch; one holding an object does
     // not either, the object is swung instead
@@ -1458,7 +1472,8 @@ namespace dxvk {
     busy[uint32_t(VrHand::Right)] = m_rightHandAtPipBoy || m_holster.atHolster()
       || (m_quickWheel && m_quickWheel->isOpen());
     busy[uint32_t(VrHand::Left)] = (m_handThrow && m_handThrow->throwsWithHand())
-      || (m_manualReload && m_manualReload->leftHandBusy());
+      || (m_manualReload && m_manualReload->leftHandBusy())
+      || (m_weaponHand && m_weaponHand->leftHandOnWeapon());
 
     const VrAction grips[VrHandCount] = { VrAction::TwoHandGrip, VrAction::Grab };
     static_assert(uint32_t(VrHand::Left) == 0, "Grip actions are listed left hand first");
@@ -1466,10 +1481,10 @@ namespace dxvk {
     std::array<VrGameCameraPose, VrHandCount> poses;
     std::array<VrFistInput, VrHandCount> fists;
 
-    for (uint32_t i = 0; i < VrHandCount && out; i++) {
+    for (uint32_t i = 0; i < VrHandCount; i++) {
       const VrControllerState& controller = input.controllers[i];
 
-      if (!controller.isActive || busy[i] || (m_physicsGrab && m_physicsGrab->holds(VrHand(i))))
+      if (!punches[i] || !controller.isActive || busy[i] || (m_physicsGrab && m_physicsGrab->holds(VrHand(i))))
         continue;
 
       poses[i] = handInGame(controller);
@@ -1477,6 +1492,7 @@ namespace dxvk {
       fists[i].closed = controller.hasFingers
         ? vrIsFist(controller.fingerCurl)
         : input.actions.isPressed(grips[i]);
+      fists[i].bare   = bare[i];
     }
 
     std::array<uint32_t, VrHandCount> hits = m_meleeSwing->updateFists(fists, out, m_gameCameraPose, dt);

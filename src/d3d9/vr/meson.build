@@ -73,6 +73,7 @@ vr_dxvk_src = files([
   'vr_game_state.cpp',
   'vr_hud_layers.cpp',
   'vr_melee_swing.cpp',
+  'vr_bare_hand.cpp',
   'vr_power_attack_rules.cpp',
   'vr_charge_ring.cpp',
   'vr_console_screen.cpp',

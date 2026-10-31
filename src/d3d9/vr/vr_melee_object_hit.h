@@ -3,6 +3,7 @@
 #include <array>
 #include <memory>
 
+#include "vr_bare_hand.h"
 #include "vr_melee.h"
 
 namespace dxvk {
@@ -49,8 +50,19 @@ namespace dxvk {
      * \param [in] from Striker on the previous frame, in the game world
      * \param [in] to Striker in this frame, in the game world
      * \param [in] power Whether a hit is a power attack
+     * \param [in] bare Whether the striker is a bare fist, which hits as
+     *    if the player had no weapon (VrBareHand)
      */
-    void strike(uint32_t striker, const VrSegment& from, const VrSegment& to, bool power);
+    void strike(uint32_t striker, const VrSegment& from, const VrSegment& to, bool power, bool bare);
+
+    /**
+     * \brief Gives what hides the weapon from bare fists
+     *
+     * \param [in] bareHand Not owned, or \c nullptr
+     */
+    void setBareHand(VrBareHand* bareHand) {
+      m_bareHand = bareHand;
+    }
 
     /**
      * \brief Casts the strikes given since the last run
@@ -68,6 +80,7 @@ namespace dxvk {
       VrSegment from;
       VrSegment to;
       bool      power   = false;
+      bool      bare    = false;
       bool      pending = false;
       /// Body hit last, and the time since, so a body is hit once per swing
       const void* lastBody = nullptr;
@@ -77,6 +90,8 @@ namespace dxvk {
     VrMeleeObjectHit() = default;
 
     std::array<Strike, StrikerCount> m_strikes;
+
+    VrBareHand* m_bareHand = nullptr;
 
     // The cast and the weapon's motion of the ObjectHit being run
     bool      m_running = false;

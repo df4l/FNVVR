@@ -4,6 +4,7 @@
 #include <atomic>
 #include <memory>
 
+#include "vr_bare_hand.h"
 #include "vr_melee.h"
 #include "vr_melee_object_hit.h"
 
@@ -28,6 +29,11 @@ namespace dxvk {
     const VrGameCameraPose* hand = nullptr;
     /// The hand's fingers make a fist (vrIsFist)
     bool closed = false;
+    /// The fist holds none of the player's weapon (the other hand holds
+    /// it, or it is holstered): it strikes as the game's unarmed attack,
+    /// see VrBareHand. False for the fist wearing the hand-to-hand weapon
+    /// drawn, and without a weapon equipped.
+    bool bare   = false;
   };
 
   /**
@@ -56,9 +62,12 @@ namespace dxvk {
    * however slowly it moves, instead of the actor the game would pick in
    * front of the head. See findings/melee.md §11.
    *
-   * Unarmed (no weapon or a hand-to-hand weapon drawn), each hand closed
-   * in a fist punches what its knuckles touch the same way, with the
-   * game's unarmed damage (findings/melee.md §13).
+   * A free hand closed in a fist punches what its knuckles touch the same
+   * way (findings/melee.md §13, §15): the right one when it holds no
+   * weapon, the left one whatever the right holds. A bare fist deals the
+   * game's unarmed hit, the weapon equipped hidden from the game while it
+   * strikes (VrBareHand); the fist wearing a hand-to-hand weapon deals the
+   * weapon's.
    *
    * Only used on the game's main thread.
    */
@@ -101,9 +110,10 @@ namespace dxvk {
     /**
      * \brief Follows the fists for a frame and punches what they touch
      *
-     * \param [in] fists Each hand
-     * \param [in] out Whether the player fights unarmed: no weapon or a
-     *    hand-to-hand weapon drawn
+     * \param [in] fists Each hand, with no pose for a hand that does not
+     *    punch now
+     * \param [in] out Whether the right fist takes the place of the game's
+     *    attack: no weapon or a hand-to-hand weapon drawn
      * \param [in] body Pose the eyes and hands are placed on in the game
      *    world, which moves and turns with the player
      * \param [in] dt Time since the previous frame, in seconds
@@ -133,6 +143,9 @@ namespace dxvk {
      */
     void setObjectHit(VrMeleeObjectHit* objectHit) {
       m_objectHit = objectHit;
+
+      if (objectHit)
+        objectHit->setBareHand(m_bareHand.get());
     }
 
     /**
@@ -154,8 +167,8 @@ namespace dxvk {
 
   private:
 
-    VrMeleeSwing(const VrSwingConfig& config, bool motorFound)
-    : m_swing(config), m_motorFound(motorFound),
+    VrMeleeSwing(const VrSwingConfig& config, bool motorFound, std::unique_ptr<VrBareHand> bareHand)
+    : m_swing(config), m_motorFound(motorFound), m_bareHand(std::move(bareHand)),
       m_fistSwings({ VrSwingTracker(config), VrSwingTracker(config) }) { }
 
     /**
@@ -174,6 +187,10 @@ namespace dxvk {
 
     // Whether the game's melee hits can be taken over, see meleeAttackHook
     bool           m_motorFound = false;
+
+    // Hides the weapon from bare fists' hits, or null: bare fists do not
+    // punch while a weapon is equipped
+    std::unique_ptr<VrBareHand> m_bareHand;
 
     /**
      * \brief What the game computed for the hit being dealt, for the log
@@ -215,11 +232,12 @@ namespace dxvk {
     uint32_t       m_loggedGuards = 0;
     uint32_t       m_loggedDamage = 0;
     uint32_t       m_loggedMotorHits = 0;
+    bool           m_loggedUncovered = false;
 
     void logDealt(uintptr_t actor);
 
     uint32_t hitActors(uint8_t* player, VrSwingTracker& swing, const VrSegment& from, const VrSegment& to,
-      bool motor, bool power);
+      bool motor, bool power, bool bare);
 
     uint32_t hitWithMotor(uint8_t* player, const VrSegment& blade);
 
