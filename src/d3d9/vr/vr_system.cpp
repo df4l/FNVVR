@@ -22,6 +22,7 @@
 #include "vr_game_space.h"
 #include "vr_gamepad_head.h"
 #include "vr_gamepad_hook.h"
+#include "vr_large_address.h"
 #include "vr_menu_cursor.h"
 #include "vr_options_file.h"
 #include "vr_options_menu.h"
@@ -234,6 +235,8 @@ namespace dxvk {
     }, [] {
       VrGameConsole::requestOpen();
     });
+
+    VrLargeAddress::install();
   }
 
 
