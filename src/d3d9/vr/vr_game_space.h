@@ -118,6 +118,23 @@ namespace dxvk {
   VrGameCameraPose vrComputeBodyCameraPose(float heading, const VrVector3& position);
 
   /**
+   * \brief Levels the camera of V.A.T.S. for a head that keeps its yaw
+   *
+   * The eyes add the head's yaw and pitch to the camera they are placed on.
+   * V.A.T.S. turns the camera to its target, wherever the head is turned in
+   * the room: on its own, the target would be seen at the head's yaw away
+   * from where the player looks. Taking away the yaw the head had when
+   * V.A.T.S. began puts the target in front of that head, and the tilt
+   * of the game's camera is left to the player's own head.
+   *
+   * \param [in] game Camera pose the game computed
+   * \param [in] headYaw Yaw of the head when V.A.T.S. began, see
+   *    vrComputeHeadAngles
+   * \returns A level camera at the same position
+   */
+  VrGameCameraPose vrComputeVatsCameraPose(const VrGameCameraPose& game, float headYaw);
+
+  /**
    * \brief Moves a point as if a body standing on a pivot turned
    *
    * The game turns the player's whole skeleton around the player's position

@@ -65,6 +65,44 @@ TEST_CASE(eye_offset_follows_a_rotated_base_camera) {
 }
 
 
+TEST_CASE(vats_target_stays_in_front_of_a_head_turned_in_the_room) {
+  // The game turned its camera to a target to the east, looking down at it,
+  // and the player's head had been turned 90 degrees to the left of the
+  // reference when V.A.T.S. began
+  float pitch = 0.3f;
+
+  VrGameCameraPose game;
+  game.forward  = { std::cos(pitch), 0.0f, -std::sin(pitch) };
+  game.up       = { std::sin(pitch), 0.0f, std::cos(pitch) };
+  game.right    = { 0.0f, -1.0f, 0.0f };
+  game.position = { 1.0f, 2.0f, 3.0f };
+
+  VrPose head;
+  head.orientation = vrQuaternionFromAxisAngle({ 0.0f, 1.0f, 0.0f }, Pi / 2.0f);
+
+  float yaw = vrComputeHeadAngles(head).yaw;
+  CHECK_NEAR(yaw, -Pi / 2.0f, 1e-4);
+
+  VrGameCameraPose base = vrComputeVatsCameraPose(game, yaw);
+  VrGameCameraPose eye  = vrComputeEyeCameraPose(base, head, 1.0f);
+
+  // That head sees the target's heading, with the horizon level
+  checkVector(eye.forward, 1.0f, 0.0f, 0.0f);
+  checkVector(eye.up, 0.0f, 0.0f, 1.0f);
+  checkVector(base.position, 1.0f, 2.0f, 3.0f);
+}
+
+
+TEST_CASE(vats_camera_looking_straight_down_keeps_its_heading) {
+  VrGameCameraPose game;
+  game.forward = { 0.0f, 0.0f, -1.0f };
+  game.up      = { 1.0f, 0.0f, 0.0f };
+  game.right   = { 0.0f, -1.0f, 0.0f };
+
+  checkVector(vrComputeVatsCameraPose(game, 0.0f).forward, 1.0f, 0.0f, 0.0f);
+}
+
+
 TEST_CASE(turning_the_head_left_turns_the_camera_left) {
   VrPose eye;
   eye.orientation = vrQuaternionFromAxisAngle({ 0.0f, 1.0f, 0.0f }, Pi * 0.5f);
