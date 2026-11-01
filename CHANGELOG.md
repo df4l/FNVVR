@@ -36,10 +36,13 @@
   where it happened, the registers and the return addresses on the stack. The game and any crash logger still handle
   the crash as before. Please attach this log to crash reports.
 
-### Known issues
-
-- **Varmint rifle magazine**: during the manual reload the new magazine is still held upside down and outside the
-  hand, despite an attempt to turn it upright. The Service rifle is not affected.
+- **V.A.T.S. looking the wrong way** ([#9](https://github.com/df4l/FNVVR/issues/9)): V.A.T.S. could point away from
+  the target, up to the opposite direction, depending on how the player stood in the room. The target is now in
+  front of the head when V.A.T.S. starts, and the horizon stays level: look up or down at the target with the head.
+- **Varmint rifle magazine**: the new magazine is held between the fingers, feed end up, and no longer upside down
+  beside the hand.
+- **No sound with the window in the background** ([#8](https://github.com/df4l/FNVVR/issues/8)): sound effects and
+  voices keep playing when the game's window does not have the focus, as when it is started from the headset.
 
 ## v0.10.0 (2026-10-29, since v0.9.0 `a617e18`)
 

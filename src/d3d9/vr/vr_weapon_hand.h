@@ -1302,6 +1302,14 @@ namespace dxvk {
     void pinchRound(uint8_t* otherHand, const VrVector3& centre, float scale);
 
     /**
+     * \brief Where the left hand's thumb and index finger meet, in its
+     *    bone's frame, its fingers posed as in the reload animation
+     *
+     * \returns \c false if the hand has no such fingers
+     */
+    bool pinchPoint(uint8_t* otherHand, VrVector3& point);
+
+    /**
      * \brief The magazine, or round, in the left hand bone's frame while
      *    the hand holds it
      */

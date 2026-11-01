@@ -215,7 +215,8 @@ namespace dxvk {
 
 
   bool VrControls::updateCamera(VrGameCameraPose& pose, float dt) {
-    bool adjusted = m_headLook && m_headLook->adjustCamera(pose);
+    bool vats = m_headLook && m_headLook->adjustVatsCamera(pose);
+    bool adjusted = !vats && m_headLook && m_headLook->adjustCamera(pose);
 
     // Only a camera that follows the head is measured: not in V.A.T.S.,
     // on furniture or when dead, where it is not raised either
@@ -226,11 +227,14 @@ namespace dxvk {
         m_sneak->adjustCamera(pose);
     }
 
-    return adjusted;
+    return vats || adjusted;
   }
 
 
   bool VrControls::adjustCamera(VrGameCameraPose& pose) const {
+    if (m_headLook && m_headLook->adjustVatsCamera(pose))
+      return true;
+
     bool adjusted = m_headLook && m_headLook->adjustCamera(pose);
 
     if (adjusted && m_sneak)

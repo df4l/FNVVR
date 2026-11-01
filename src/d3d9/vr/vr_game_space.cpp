@@ -74,6 +74,16 @@ namespace dxvk {
   }
 
 
+  VrGameCameraPose vrComputeVatsCameraPose(const VrGameCameraPose& game, float headYaw) {
+    // Looking straight up or down, the camera's up tells the heading
+    VrVector3 facing = std::abs(game.forward.x) + std::abs(game.forward.y) > 1e-3f
+      ? game.forward
+      : game.up * (game.forward.z > 0.0f ? -1.0f : 1.0f);
+
+    return vrComputeBodyCameraPose(std::atan2(facing.x, facing.y) - headYaw, game.position);
+  }
+
+
   VrVector3 vrTurnAroundPivot(const VrVector3& point, const VrVector3& pivot, float headingChange) {
     float s = std::sin(headingChange);
     float c = std::cos(headingChange);

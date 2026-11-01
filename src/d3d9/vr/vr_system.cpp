@@ -23,6 +23,7 @@
 #include "vr_gamepad_head.h"
 #include "vr_gamepad_hook.h"
 #include "vr_large_address.h"
+#include "vr_sound_focus.h"
 #include "vr_menu_cursor.h"
 #include "vr_options_file.h"
 #include "vr_options_menu.h"
@@ -237,6 +238,7 @@ namespace dxvk {
     });
 
     VrLargeAddress::install();
+    VrSoundFocus::install();
   }
 
 

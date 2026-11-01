@@ -103,6 +103,16 @@ namespace dxvk {
     if (m_hasHead)
       m_head = vrComputeHeadAngles(*headInReference);
 
+    bool vatsRunning = *reinterpret_cast<const uint32_t*>(VrGame::VatsCameraState) != 0;
+
+    if (vatsRunning && !m_vatsRunning) {
+      m_vatsHeadYaw = m_head.yaw;
+      Logger::info(str::format("VR: V.A.T.S. begins with the head turned ", m_vatsHeadYaw * 180.0f / Pi,
+        " degrees in the room, its target is kept in front of it"));
+    }
+
+    m_vatsRunning = vatsRunning;
+
     if (m_active)
       m_pendingTurn += m_turn.update(turnStick, dt);
     else
@@ -131,6 +141,15 @@ namespace dxvk {
       angleDifference(m_bodyHeading, m_writtenHeading));
 
     pose = vrComputeBodyCameraPose(m_bodyHeading, position);
+    return true;
+  }
+
+
+  bool VrHeadLook::adjustVatsCamera(VrGameCameraPose& pose) const {
+    if (!m_vatsRunning || !m_hasHead)
+      return false;
+
+    pose = vrComputeVatsCameraPose(pose, m_vatsHeadYaw);
     return true;
   }
 

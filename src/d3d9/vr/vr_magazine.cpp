@@ -737,6 +737,25 @@ namespace dxvk {
   }
 
 
+  bool vrMagazineSwingsIn(const VrVector3& axis) {
+    // More than this along the weapon's y axis, it slides straight down
+    constexpr float Straight = 0.85f;
+    return axis.y < 0.0f && axis.y > -Straight * vrLength(axis);
+  }
+
+
+  VrGameTransform vrMagazineHeldAsInWeapon(
+    const VrGameRotation&       handInController,
+    const VrGameRotation&       inWeapon,
+    const VrVector3&            centre,
+    const VrVector3&            point) {
+    VrGameTransform inHand;
+    inHand.rotate    = vrTranspose(handInController) * inWeapon;
+    inHand.translate = point - inHand.rotate * centre;
+    return inHand;
+  }
+
+
   bool vrFindRackMotion(
     const VrMagazineSample*     samples,
           size_t                count,

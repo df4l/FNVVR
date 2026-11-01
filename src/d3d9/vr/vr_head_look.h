@@ -77,6 +77,17 @@ namespace dxvk {
     bool adjustCamera(VrGameCameraPose& pose) const;
 
     /**
+     * \brief Keeps the target of V.A.T.S. in front of the head
+     *
+     * While V.A.T.S. runs the game turns the camera by itself: see
+     * vrComputeVatsCameraPose.
+     *
+     * \param [in,out] pose Camera pose the game computed
+     * \returns \c true if V.A.T.S. runs and the pose was changed
+     */
+    bool adjustVatsCamera(VrGameCameraPose& pose) const;
+
+    /**
      * \brief Actor the dialogue focused on since the last call
      *
      * The dialogue menu focuses on its speaker at each of its updates,
@@ -99,6 +110,10 @@ namespace dxvk {
     VrHeadAngles m_head;
     bool         m_hasHead     = false;
     float        m_pendingTurn = 0.0f;
+
+    // The head's yaw when V.A.T.S. began, while it runs
+    bool         m_vatsRunning = false;
+    float        m_vatsHeadYaw = 0.0f;
 
     // What the last player update wrote, while the head drives the look
     bool         m_active         = false;

@@ -100,6 +100,21 @@ namespace dxvk {
             uintptr_t             expectedTarget,
       const void*                 newTarget);
 
+    /**
+     * \brief Replaces bytes of the game's code
+     *
+     * \param [in] site Address of the bytes
+     * \param [in] expected Bytes that must currently be there
+     * \param [in] replacement Bytes to store instead
+     * \param [in] size Number of bytes
+     * \returns \c true if the bytes matched and were replaced
+     */
+    static bool replaceCode(
+            uintptr_t             site,
+      const uint8_t*              expected,
+      const uint8_t*              replacement,
+            size_t                size);
+
   };
 
 }

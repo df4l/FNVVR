@@ -1864,20 +1864,31 @@ namespace dxvk {
   }
 
 
-  void VrWeaponHand::pinchRound(uint8_t* otherHand, const VrVector3& centre, float scale) {
+  bool VrWeaponHand::pinchPoint(uint8_t* otherHand, VrVector3& point) {
     uint8_t* thumb = findObject(otherHand, PinchThumbBone);
     uint8_t* index = findObject(otherHand, PinchIndexBone);
 
     VrVector3 thumbPoint, indexPoint;
-    m_hasPinch = thumb && index
-      && boneInHand(otherHand, thumb, &m_reloadAnimation.fingers, thumbPoint)
-      && boneInHand(otherHand, index, &m_reloadAnimation.fingers, indexPoint);
+
+    if (!thumb || !index
+     || !boneInHand(otherHand, thumb, &m_reloadAnimation.fingers, thumbPoint)
+     || !boneInHand(otherHand, index, &m_reloadAnimation.fingers, indexPoint))
+      return false;
+
+    point = (thumbPoint + indexPoint) * 0.5f;
+    return true;
+  }
+
+
+  void VrWeaponHand::pinchRound(uint8_t* otherHand, const VrVector3& centre, float scale) {
+    VrVector3 point;
+    m_hasPinch = pinchPoint(otherHand, point);
 
     if (!m_hasPinch)
       return;
 
     m_pinchInHand.rotate    = m_reloadAnimation.magazineInHand.rotate;
-    m_pinchInHand.translate = (thumbPoint + indexPoint) * 0.5f - m_pinchInHand.rotate * centre * scale;
+    m_pinchInHand.translate = point - m_pinchInHand.rotate * centre * scale;
   }
 
 
@@ -2359,8 +2370,14 @@ namespace dxvk {
     // middle of the weapon
     VrVector3 axis;
 
+    // A magazine the animation swings in from the side comes straight out
+    // from under the weapon in the hand
+    bool swungIn = m_hasReloadAnimation && !m_reloadAnimation.carried && !m_pinched
+      && action == ActionKind::None && vrMagazineSwingsIn(m_reloadAnimation.axis);
+
     if (m_hasReloadAnimation) {
-      axis = readRotation(weapon, VrGame::ObjectWorldRotation) * m_reloadAnimation.axis;
+      axis = readRotation(weapon, VrGame::ObjectWorldRotation)
+        * (swungIn ? VrVector3 { 0.0f, -1.0f, 0.0f } : m_reloadAnimation.axis);
     } else if (auto weaponBound = field<const uint8_t*>(weapon, VrGame::ObjectWorldBound)) {
       axis = well - readVector(weaponBound, 0);
     }
@@ -2385,7 +2402,18 @@ namespace dxvk {
     float uprightAngle = 0.0f;
     m_turnedUpright = false;
 
-    if (pushedIn) {
+    if (pushedIn && swungIn) {
+      // The animation's hold is taken halfway through its swing, 10 cm to
+      // the side of the hand and turned with the swing
+      VrVector3 heldCentre = centre * (scale / handScale);
+      const VrGameTransform& animated = m_reloadAnimation.magazineInHand;
+      VrVector3 point = animated.translate + animated.rotate * heldCentre;
+
+      pinchPoint(leftHand, point);
+
+      m_uprightInHand = vrMagazineHeldAsInWeapon(FreeHandPose.rotate, m_reloadAnimation.place.rotate, heldCentre, point);
+      m_turnedUpright = true;
+    } else if (pushedIn) {
       VrVector3 insertion = vrTranspose(m_reloadAnimation.place.rotate) * m_reloadAnimation.axis * -1.0f;
       m_uprightInHand = m_reloadAnimation.magazineInHand;
       m_turnedUpright = vrUprightMagazineHold(FreeHandPose.rotate, ControllerUp, insertion,
@@ -2418,7 +2446,9 @@ namespace dxvk {
           name ? name : "", "'"));
       }
 
-      if (pushedIn) {
+      if (pushedIn && swungIn) {
+        Logger::info("VR: The reload animation swings the magazine in from the side, the new magazine is held between the fingers as it sits in the weapon");
+      } else if (pushedIn) {
         Logger::info(str::format("VR: The new magazine is held as the reload animation pushes it in, the end that goes in ",
           uprightAngle * 57.2957795f, " degrees from the left controller's up",
           m_turnedUpright ? ": turned upright" : ""));

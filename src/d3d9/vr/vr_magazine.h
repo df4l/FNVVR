@@ -1007,6 +1007,38 @@ namespace dxvk {
           float&                angle);
 
   /**
+   * \brief Whether a reload animation swings its magazine in from the side
+   *
+   * The way in of a magazine under the weapon is close to the weapon's y
+   * axis. The varmint rifle's animation brings its magazine in along a
+   * diagonal instead, which says nothing of how it sits in the weapon.
+   *
+   * \param [in] axis Direction it comes out along, in the weapon's frame
+   */
+  bool vrMagazineSwingsIn(const VrVector3& axis);
+
+  /**
+   * \brief Holds a magazine as it sits in a weapon held like the controller
+   *
+   * The magazine takes in the left controller's frame the pose it has in
+   * the weapon's: its feed end up and its front forward, as the player will
+   * bring it to the weapon. The controller's frame and the weapon's both
+   * have their axes forward, up and right.
+   *
+   * \param [in] handInController The left hand bone in the controller's frame
+   * \param [in] inWeapon The magazine's rotation in the weapon's frame
+   * \param [in] centre The magazine's centre in its frame, in units of
+   *    the hand's scale
+   * \param [in] point Where its centre is held, in the hand bone's frame
+   * \returns The magazine in the hand bone's frame
+   */
+  VrGameTransform vrMagazineHeldAsInWeapon(
+    const VrGameRotation&       handInController,
+    const VrGameRotation&       inWeapon,
+    const VrVector3&            centre,
+    const VrVector3&            point);
+
+  /**
    * \brief How the game's reload animation pulls the rack part back
    */
   struct VrRackMotion {
