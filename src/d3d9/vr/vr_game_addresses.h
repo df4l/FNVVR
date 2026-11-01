@@ -2542,8 +2542,6 @@ namespace dxvk {
     constexpr uintptr_t RagdollSetFeedbackActiveCallSite = 0x0089CB0B;
     constexpr uintptr_t ActorIsUnconscious           = 0x00437BD0;
     constexpr uintptr_t ActorIsUnconsciousCallSite   = 0x0089CA82;
-    /// BaseProcess::GetSitSleepState, virtual, __thiscall
-    constexpr uintptr_t ProcessSitSleepStateSlot     = 0x4BC;
     constexpr uint8_t   MotionDynamic                = 1;
     constexpr uint8_t   MotionBoxInertia             = 3;
     constexpr uint8_t   MotionThinBoxInertia         = 6;

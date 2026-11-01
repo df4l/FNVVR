@@ -236,6 +236,10 @@ namespace dxvk {
       /// A limb of an actor's ragdoll, and whether the actor lives
       bool       limb    = false;
       bool       living  = false;
+      /// Seconds in the hand, and how far the point held strayed from the
+      /// hand's target, game units
+      float      heldTime = 0.0f;
+      float      furthest = 0.0f;
       /// The body's rotation in the hand's frame, while the hand turns it
       VrGrabFrame frame;
       bool       turning = false;
@@ -317,6 +321,7 @@ namespace dxvk {
     std::function<void (uint8_t*, float)> m_playerUpdateTask;
     bool           m_npcLimbs    = false;
     uint32_t       m_loggedLimbs = 0;
+    uint32_t       m_loggedLivingReleases = 0;
 
     /**
      * \brief A living actor taken by a hand whose hit reaction runs here

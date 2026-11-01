@@ -55,7 +55,6 @@ namespace dxvk {
     using SetVelocityFn      = void (__fastcall*)(uint8_t* body, void* unused, const float* velocity);
     using SpringCallbackFn   = void (__cdecl*)(uint8_t* action, const uint8_t* stepInfo, const void* impulse);
     using ActorTestFn        = bool (__fastcall*)(uint8_t* actor, void* unused);
-    using SitStateFn         = uint32_t (__fastcall*)(uint8_t* process, void* unused);
     using SetFeedbackActiveFn = void (__fastcall*)(uint8_t* ragdoll, void* unused, bool active);
     using DoFeedbackFn        = void (__fastcall*)(uint8_t* ragdoll, void* unused);
     using DebugLinesFn        = void (__fastcall*)(uint8_t* ragdoll, void* unused, uint32_t stage);
@@ -277,6 +276,28 @@ namespace dxvk {
     const char* handName(VrHand hand) {
       return hand == VrHand::Left ? "left" : "right";
     }
+
+    // What keeps an actor's hit reaction from starting, null if nothing: the
+    // conditions of Actor::HitMe, except its refusal of sitting and sleeping
+    // actors, whose arms a hand holds as anyone else's
+    const char* reactionObstacle(uint8_t* actor) {
+      uint8_t* ragdoll = readField<uint8_t*>(actor, VrGame::ActorRagdollController);
+
+      if (!ragdoll)
+        return "it has no ragdoll";
+
+      if (!readField<bool>(ragdoll, VrGame::RagdollAnimEnabled))
+        return "its ragdoll does not follow its animation";
+
+      if (!readField<bool>(ragdoll, VrGame::RagdollFeedbackEnabled))
+        return "its reaction is disabled";
+
+      if (reinterpret_cast<ActorTestFn>(VrGame::ActorIsUnconscious)(actor, nullptr))
+        return "it is unconscious";
+
+      return nullptr;
+    }
+
 
     /**
      * \brief Whether a body is simulated, as bhkRigidBody::IsMotionTypeDynamic
@@ -605,6 +626,14 @@ namespace dxvk {
           break;
         }
 
+        if (held.living && m_loggedLivingReleases < MaxLoggedGrabs) {
+          Logger::info(str::format("VR: The ", handName(hand), " hand let go of the limb '", bodyNodeName(held.body),
+            "' of ", hexId(held.refId), " after ", held.heldTime, " s, up to ",
+            int32_t(held.furthest * 100.0f / VrGameUnitsPerMetre), " cm from the hand",
+            input.free ? "" : ", no longer free"));
+          m_loggedLivingReleases++;
+        }
+
         release(held);
         held.grab.drop();
         m_events.released[uint32_t(hand)] = true;
@@ -613,6 +642,8 @@ namespace dxvk {
       case VrGrabRequest::None:
         if (!held.grab.holding())
           break;
+
+        held.heldTime += dt;
 
         if (held.living && !keepReaction(held)) {
           if (m_loggedLosses < MaxLoggedLosses) {
@@ -833,18 +864,11 @@ namespace dxvk {
 
 
   bool VrPhysicsGrab::startReaction(uint8_t* actor) const {
-    uint8_t* ragdoll = readField<uint8_t*>(actor, VrGame::ActorRagdollController);
-    uint8_t* process = readField<uint8_t*>(actor, VrGame::ActorProcess);
-
-    // The conditions under which Actor::HitMe starts it
-    if (!ragdoll || !process
-     || !readField<bool>(ragdoll, VrGame::RagdollAnimEnabled)
-     || !readField<bool>(ragdoll, VrGame::RagdollFeedbackEnabled)
-     || reinterpret_cast<ActorTestFn>(VrGame::ActorIsUnconscious)(actor, nullptr)
-     || virtualFunction<SitStateFn>(process, VrGame::ProcessSitSleepStateSlot)(process, nullptr) != 0)
+    if (reactionObstacle(actor))
       return false;
 
     // Started, or its timer started again
+    uint8_t* ragdoll = readField<uint8_t*>(actor, VrGame::ActorRagdollController);
     reinterpret_cast<SetFeedbackActiveFn>(VrGame::RagdollSetFeedbackActive)(ragdoll, nullptr, true);
     return readField<bool>(ragdoll, VrGame::RagdollFeedbackActive);
   }
@@ -960,11 +984,14 @@ namespace dxvk {
 
       if (!started || !isDynamic(body) || !(inverseMass > 0.0f)) {
         if (m_loggedLimbs < MaxLoggedMisses) {
+          const char* obstacle = reactionObstacle(ref);
+
           Logger::info(str::format("VR: The ", handName(hand), " hand touches ",
             hexId(readField<uint32_t>(ref, VrGame::FormId)), started
               ? str::format(", a living actor's limb that follows its animation ('", bodyNodeName(body),
                   "', motion type ", uint32_t(readField<uint8_t>(body, VrGame::BodyMotionType)), ")")
-              : std::string(", a living actor whose hit reaction cannot start now")));
+              : str::format(", a living actor whose hit reaction cannot start: ",
+                  obstacle ? obstacle : "it ended at once")));
           m_loggedLimbs++;
         }
         return false;
@@ -1023,6 +1050,8 @@ namespace dxvk {
     held.limb   = candidate.limb;
     held.living = candidate.living;
     held.turning = false;
+    held.heldTime = 0.0f;
+    held.furthest = 0.0f;
 
     if (!held.limb)
       addTurn(held);
@@ -1136,7 +1165,10 @@ namespace dxvk {
     VrVector3 target = held.grab.target(pose) + m_lead;
     VrVector3 point  = bodyPointToWorld(held.body, held.local) * (1.0f / havokScale());
 
-    if (vrLength(point - target) > MaxStretch)
+    float distance = vrLength(point - target);
+    held.furthest = std::max(held.furthest, distance);
+
+    if (distance > MaxStretch)
       return false;
 
     // A second hand on the body, or one let go, changes its strength
