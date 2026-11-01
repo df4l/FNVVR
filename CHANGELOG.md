@@ -19,9 +19,9 @@
   such line attacks at once, unless one of its factions idolizes you. Handled for too long or too roughly, any actor
   ends up assaulting you, which is a crime, except companions and factions that idolize you.
 
-### Fists and melee
+### Unarmed combat and melee
 
-- **Punch with your fists**: a free bare hand closed in a fist (or with its grip held, without finger tracking) punches
+- **Unarmed combat, punch with your fists**: a free bare hand closed in a fist (or with its grip held, without finger tracking) punches
   the actors it reaches at the melee hit speed, with the game's unarmed damage. The left fist punches with a pistol or
   a machete in the right hand, the right fist with the weapon holstered. Only the hand wearing a hand-to-hand weapon
   (Power Fist, ...) deals that weapon's hit.
