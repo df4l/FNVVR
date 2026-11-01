@@ -21,6 +21,11 @@ namespace dxvk {
     constexpr float GuardMaxHeight    = 0.30f;
     constexpr float GuardMaxSideways  = 0.40f;
 
+    // Fist, see vrFistBlade and vrIsFist: knuckles about 8 cm ahead of the
+    // grip's centre, and how far each finger closes on the grip or trigger
+    constexpr float FistReach = 0.10f * VrGameUnitsPerMetre;
+    constexpr float FistCurl  = 0.6f;
+
     VrVector3 lerp(const VrVector3& a, const VrVector3& b, float t) {
       return a + (b - a) * t;
     }
@@ -66,6 +71,24 @@ namespace dxvk {
 
   VrSegment vrBladeInWorld(const VrGameCameraPose& hand, const VrBlade& blade) {
     return { vrPointFromHand(hand, blade.base), vrPointFromHand(hand, blade.tip) };
+  }
+
+
+  VrBlade vrFistBlade() {
+    VrBlade blade;
+    blade.base = { };
+    blade.tip  = { FistReach, 0.0f, 0.0f };
+    return blade;
+  }
+
+
+  bool vrIsFist(const VrFingerCurls& curls) {
+    for (uint32_t i = 1; i < VrFingerCount; i++) {
+      if (curls[i] < FistCurl)
+        return false;
+    }
+
+    return true;
   }
 
 

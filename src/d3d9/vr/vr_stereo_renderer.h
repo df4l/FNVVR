@@ -407,6 +407,13 @@ namespace dxvk {
     // Reloading with the hands
     std::unique_ptr<VrManualReload> m_manualReload;
 
+    // What a grabbed living actor does, used by m_physicsGrab
+    std::unique_ptr<VrNpcReaction> m_npcReaction;
+
+    // Melee hits on world objects, used by m_meleeSwing and run by
+    // m_physicsGrab
+    std::unique_ptr<VrMeleeObjectHit> m_meleeObjectHit;
+
     // World objects held with the hands
     std::unique_ptr<VrPhysicsGrab> m_physicsGrab;
 
@@ -564,6 +571,8 @@ namespace dxvk {
     void updateNpcGaze();
 
     void updateMeleeSwing(const VrInputState& input, VrGameStateKind state, float dt);
+
+    void updatePunches(const VrInputState& input, VrGameStateKind state, float dt);
 
     void updateHandThrow(const VrInputState& input, VrGameStateKind state, float dt);
 

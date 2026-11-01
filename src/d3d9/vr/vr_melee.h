@@ -81,6 +81,24 @@ namespace dxvk {
   VrSegment vrBladeInWorld(const VrGameCameraPose& hand, const VrBlade& blade);
 
   /**
+   * \brief The part of a fist that strikes, as a blade in the hand's frame
+   *
+   * From the grip's centre forwards past the knuckles; the capsules around
+   * the bones it is tested against give it its thickness.
+   */
+  VrBlade vrFistBlade();
+
+  /**
+   * \brief Whether a hand's fingers make a fist
+   *
+   * The index, middle, ring and little fingers are closed; the thumb may
+   * rest anywhere (findings/melee.md §13).
+   *
+   * \param [in] curls Finger curls, 0 straight to 1 closed
+   */
+  bool vrIsFist(const VrFingerCurls& curls);
+
+  /**
    * \brief Closest points of two segments
    */
   struct VrSegmentClosest {

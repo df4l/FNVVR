@@ -346,9 +346,30 @@ namespace dxvk {
 
     renderer->m_physicsGrab = VrPhysicsGrab::install();
 
-    if (renderer->m_physicsGrab)
+    if (renderer->m_physicsGrab) {
       renderer->m_controls.setGrabByHands(true);
-    else
+      renderer->m_npcReaction = VrNpcReaction::install();
+
+      if (!renderer->m_npcReaction)
+        Logger::info("VR: The game's comments on the player's actions were not found, grabbed actors do not react");
+
+      renderer->m_physicsGrab->setNpcReaction(renderer->m_npcReaction.get());
+
+      // Objects are struck while Havok is idle, in the player's update
+      if (renderer->m_meleeSwing) {
+        renderer->m_meleeObjectHit = VrMeleeObjectHit::install();
+
+        if (renderer->m_meleeObjectHit) {
+          VrMeleeObjectHit* objectHit = renderer->m_meleeObjectHit.get();
+          renderer->m_meleeSwing->setObjectHit(objectHit);
+          renderer->m_physicsGrab->setPlayerUpdateTask([objectHit] (uint8_t* player, float dt) {
+            objectHit->run(player, dt);
+          });
+        } else {
+          Logger::info("VR: The game's melee hits on objects were not found, swings only hit actors");
+        }
+      }
+    } else
       Logger::info("VR: The game's grab was not found, the right grip grabs as the game's grab key");
 
     if (renderer->m_manualReload && renderer->m_weaponHand) {
@@ -637,6 +658,7 @@ namespace dxvk {
     updateManualReload(input, state, dt);
     updateAmmoChoice(input, state);
     updateMeleeSwing(input, state, dt);
+    updatePunches(input, state, dt);
     updateHandThrow(input, state, dt);
     updatePhysicsGrab(input, state);
     updateHandPick(input, state);
@@ -1192,7 +1214,7 @@ namespace dxvk {
     VrPhysicsGrabEvents events = m_physicsGrab->takeEvents();
 
     for (uint32_t i = 0; i < VrHandCount; i++) {
-      if (events.grabbed[i])
+      if (events.grabbed[i] || events.shoved[i])
         m_backend.applyHaptic(VrHand(i), GrabHaptic, GrabHapticDuration);
       else if (events.stored[i])
         m_backend.applyHaptic(VrHand(i), GrabHaptic * 2.0f, GrabHapticDuration * 2.0f);
@@ -1415,6 +1437,73 @@ namespace dxvk {
   }
 
 
+  void VrStereoRenderer::updatePunches(
+    const VrInputState&         input,
+          VrGameStateKind       state,
+          float                 dt) {
+    if (!m_meleeSwing)
+      return;
+
+    int32_t type = -1;
+    bool equipped = VrWeaponDrawn::equippedWeapon(type) != nullptr;
+
+    bool inGame = state == VrGameStateKind::InGame && m_hasReference && input.hasActions && m_weaponDrawn;
+    bool holstered = m_weaponDrawn && m_weaponDrawn->playerHolstered();
+    bool wornOnFist = type == VrGame::WeaponTypeHandToHand;
+
+    // Unarmed, the right fist takes the place of the game's attack: no
+    // weapon, or a hand-to-hand weapon, drawn
+    bool out = inGame && !holstered && (type < 0 || wornOnFist);
+
+    // Any free hand punches: the right one unless it holds the weapon, the
+    // left one whatever the right holds. Only the right fist wears a
+    // hand-to-hand weapon; a fist without it hits bare.
+    std::array<bool, VrHandCount> punches = { };
+    punches[uint32_t(VrHand::Right)] = out || (inGame && holstered);
+    punches[uint32_t(VrHand::Left)]  = inGame;
+
+    std::array<bool, VrHandCount> bare = { };
+    bare[uint32_t(VrHand::Right)] = equipped && (holstered || !wornOnFist);
+    bare[uint32_t(VrHand::Left)]  = equipped;
+
+    // A hand busy elsewhere does not punch; one holding an object does
+    // not either, the object is swung instead
+    std::array<bool, VrHandCount> busy = { };
+    busy[uint32_t(VrHand::Right)] = m_rightHandAtPipBoy || m_holster.atHolster()
+      || (m_quickWheel && m_quickWheel->isOpen());
+    busy[uint32_t(VrHand::Left)] = (m_handThrow && m_handThrow->throwsWithHand())
+      || (m_manualReload && m_manualReload->leftHandBusy())
+      || (m_weaponHand && m_weaponHand->leftHandOnWeapon());
+
+    const VrAction grips[VrHandCount] = { VrAction::TwoHandGrip, VrAction::Grab };
+    static_assert(uint32_t(VrHand::Left) == 0, "Grip actions are listed left hand first");
+
+    std::array<VrGameCameraPose, VrHandCount> poses;
+    std::array<VrFistInput, VrHandCount> fists;
+
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      const VrControllerState& controller = input.controllers[i];
+
+      if (!punches[i] || !controller.isActive || busy[i] || (m_physicsGrab && m_physicsGrab->holds(VrHand(i))))
+        continue;
+
+      poses[i] = handInGame(controller);
+      fists[i].hand   = &poses[i];
+      fists[i].closed = controller.hasFingers
+        ? vrIsFist(controller.fingerCurl)
+        : input.actions.isPressed(grips[i]);
+      fists[i].bare   = bare[i];
+    }
+
+    std::array<uint32_t, VrHandCount> hits = m_meleeSwing->updateFists(fists, out, m_gameCameraPose, dt);
+
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      if (hits[i])
+        m_backend.applyHaptic(VrHand(i), MeleeHitHaptic, MeleeHapticDuration);
+    }
+  }
+
+
   void VrStereoRenderer::updateHandThrow(
     const VrInputState&         input,
           VrGameStateKind       state,
@@ -1471,7 +1560,7 @@ namespace dxvk {
           int32_t&              cost) {
     // Only melee weapons swung with the hand charge: the trigger runs
     // automatic ones and fires the others
-    bool swung = m_meleeSwing->swingsWithHand();
+    bool swung = m_meleeSwing->chargesWithTrigger();
     bool held  = swung && input.hasActions && input.actions.isPressed(VrAction::Attack);
     bool lacksActionPoints = false;
     bool allowed = held && m_powerRules && m_powerRules->allowed(cost, lacksActionPoints);

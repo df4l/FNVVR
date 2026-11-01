@@ -212,7 +212,16 @@ namespace dxvk {
     else
       Logger::warn("VR: The game's melee hits could not be patched, automatic melee weapons are only swung");
 
-    std::unique_ptr<VrMeleeSwing> swing(new VrMeleeSwing(config, motorFound));
+    // Without it, a bare fist would deal the hit of the weapon in the other
+    // hand: it only punches with no weapon equipped
+    std::unique_ptr<VrBareHand> bareHand = VrBareHand::install();
+
+    if (bareHand)
+      Logger::info("VR: A free bare fist punches with the game's unarmed hit, whatever the other hand holds");
+    else
+      Logger::warn("VR: The player's weapon could not be hidden from bare fists, they only punch unarmed");
+
+    std::unique_ptr<VrMeleeSwing> swing(new VrMeleeSwing(config, motorFound, std::move(bareHand)));
     g_meleeSwing = swing.get();
     return swing;
   }
@@ -272,9 +281,13 @@ namespace dxvk {
     if (!hadBlade || !m_swing.swinging())
       return result;
 
-    uint32_t swingHits = hitActors(player, previous, current, false, power);
+    uint32_t swingHits = hitActors(player, m_swing, previous, current, false, power, false);
     result.count += swingHits;
     result.power  = swingHits && power;
+
+    // A swing that touched no actor may still hit an object
+    if (!swingHits && m_objectHit)
+      m_objectHit->strike(0, previous, current, power, false);
 
     if (swingHits && m_loggedHits < MaxLoggedHits) {
       Logger::info(str::format("VR: Melee swing at ", m_swing.speed(), " m/s hit ", swingHits,
@@ -286,9 +299,69 @@ namespace dxvk {
   }
 
 
+  std::array<uint32_t, VrHandCount> VrMeleeSwing::updateFists(
+    const std::array<VrFistInput, VrHandCount>& fists,
+          bool                  out,
+    const VrGameCameraPose&     body,
+          float                 dt) {
+    std::array<uint32_t, VrHandCount> counts = { };
+
+    auto player = *reinterpret_cast<uint8_t* const*>(VrGame::Player);
+    m_fistsOut = out && player;
+
+    bool covered = player && m_bareHand && m_bareHand->covers(player);
+
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      const VrFistInput& fist = fists[i];
+
+      if (fist.bare && !covered && player && fist.hand && fist.closed && !m_loggedUncovered) {
+        Logger::warn("VR: The player's weapon cannot be hidden from a bare fist, it does not punch");
+        m_loggedUncovered = true;
+      }
+
+      if (!player || !fist.hand || !fist.closed || (fist.bare && !covered)) {
+        m_hasFist[i] = false;
+        m_fistSwings[i].reset();
+        continue;
+      }
+
+      // As the blade: the fist of the previous frame, moved with the body
+      VrSegment previous = {
+        vrPointFromHand(body, m_fists[i].a),
+        vrPointFromHand(body, m_fists[i].b) };
+      bool hadFist = m_hasFist[i];
+
+      VrSegment current = vrBladeInWorld(*fist.hand, vrFistBlade());
+
+      m_fists[i]   = { vrPointToHand(body, current.a), vrPointToHand(body, current.b) };
+      m_hasFist[i] = true;
+      m_fistSwings[i].update(m_fists[i].b, dt);
+
+      if (!hadFist || !m_fistSwings[i].swinging())
+        continue;
+
+      // The game's unarmed attack, never a power attack: the trigger is
+      // the fist's index
+      counts[i] = hitActors(player, m_fistSwings[i], previous, current, false, false, fist.bare);
+
+      if (!counts[i] && m_objectHit)
+        m_objectHit->strike(1 + i, previous, current, false, fist.bare);
+
+      if (counts[i] && m_loggedPunches < MaxLoggedHits) {
+        Logger::info(str::format("VR: The ", i == uint32_t(VrHand::Left) ? "left" : "right", " fist punched",
+          fist.bare ? " bare" : "", " at ", m_fistSwings[i].speed(), " m/s and hit ", counts[i],
+          counts[i] > 1 ? " actors" : " actor"));
+        m_loggedPunches++;
+      }
+    }
+
+    return counts;
+  }
+
+
   uint32_t VrMeleeSwing::hitWithMotor(uint8_t* player, const VrSegment& blade) {
     // The blade where it is now, however slowly it moves
-    uint32_t count = hitActors(player, blade, blade, true, false);
+    uint32_t count = hitActors(player, m_swing, blade, blade, true, false, false);
 
     if (count && m_loggedMotorHits < MaxLoggedHits) {
       Logger::info(str::format("VR: The running automatic melee weapon hit ", count,
@@ -300,7 +373,8 @@ namespace dxvk {
   }
 
 
-  uint32_t VrMeleeSwing::hitActors(uint8_t* player, const VrSegment& from, const VrSegment& to, bool motor, bool power) {
+  uint32_t VrMeleeSwing::hitActors(uint8_t* player, VrSwingTracker& swing, const VrSegment& from, const VrSegment& to,
+      bool motor, bool power, bool bare) {
     auto actors = *reinterpret_cast<const uintptr_t* const*>(VrGame::ProcessActors);
     auto end    = *reinterpret_cast<const uint32_t*>(VrGame::ProcessHighEnd);
 
@@ -315,7 +389,7 @@ namespace dxvk {
 
       // The running weapon hits at the game's pace, a swing once per target
       if (!actor || actor == reinterpret_cast<uintptr_t>(player)
-       || (!motor && m_swing.hasHit(reinterpret_cast<void*>(actor))))
+       || (!motor && swing.hasHit(reinterpret_cast<void*>(actor))))
         continue;
 
       auto vtable = readField<uintptr_t>(actor, 0);
@@ -328,14 +402,19 @@ namespace dxvk {
       if (!findContact(actor, from, to, contact))
         continue;
 
-      m_swing.addHit(reinterpret_cast<void*>(actor));
+      swing.addHit(reinterpret_cast<void*>(actor));
 
       // The game asks for the limb while it computes the hit, see setTargetedLimb
       m_contact = contact;
       m_dealt   = Dealt();
       m_dealing = true;
-      // A power attack only when charged, see findings/melee.md §12
-      combatHit(player, nullptr, reinterpret_cast<void*>(actor), power ? 1 : 0, nullptr, 0);
+      // A power attack only when charged, see findings/melee.md §12. A
+      // bare fist hits as if no weapon were equipped.
+      {
+        VrBareHand::Strike strike(bare ? m_bareHand.get() : nullptr, player);
+        combatHit(player, nullptr, reinterpret_cast<void*>(actor), power ? 1 : 0, nullptr, 0);
+      }
+
       m_dealing = false;
 
       logDealt(actor);
@@ -507,7 +586,7 @@ namespace dxvk {
           (m_dealt.flags & VrGame::HitFlagSneakAttack) ? ", sneak attack" : "")
       : std::string();
 
-    Logger::info(str::format("VR: The blade hit ", limb, damage,
+    Logger::info(str::format("VR: The hit struck ", limb, damage,
       ", health ", health, " of ", baseHealth, " left",
       dead ? ", the target is dead" : ""));
     m_loggedDamage++;

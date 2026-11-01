@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -54,10 +55,34 @@ namespace dxvk {
     using FindCollisionFn    = uint8_t* (__cdecl*)(uint8_t* object);
     using SetVelocityFn      = void (__fastcall*)(uint8_t* body, void* unused, const float* velocity);
     using SpringCallbackFn   = void (__cdecl*)(uint8_t* action, const uint8_t* stepInfo, const void* impulse);
+    using ActorTestFn        = bool (__fastcall*)(uint8_t* actor, void* unused);
+    using SetFeedbackActiveFn = void (__fastcall*)(uint8_t* ragdoll, void* unused, bool active);
+    using DoFeedbackFn        = void (__fastcall*)(uint8_t* ragdoll, void* unused);
+    using DebugLinesFn        = void (__fastcall*)(uint8_t* ragdoll, void* unused, uint32_t stage);
+    using ActorMoveFn         = void* (__fastcall*)(uint8_t* actor, void* unused, float dt, VrVector3* move, uint8_t flags);
+    using MoveModeFn          = uint32_t (__fastcall*)(uint8_t* mover, void* unused);
+    using SetHeadingFn        = void (__fastcall*)(uint8_t* actor, void* unused, float heading);
+    using GetSitStateFn       = uint32_t (__fastcall*)(uint8_t* actor, void* unused);
+    using KnockExplosionFn    = void (__fastcall*)(uint8_t* process, void* unused, uint8_t* actor,
+                                                   float sourceX, float sourceY, float sourceZ, float force);
+    using SetSpeedFn          = void (__fastcall*)(uint8_t* actor, void* unused, float speed);
+    using SetCachedDirtyFn    = void (__fastcall*)(uint8_t* process, void* unused, uint32_t flags);
+    using PhantomFilterFn     = void (__fastcall*)(uint8_t* phantom, void* unused);
+    using VelocityModFn       = void (__fastcall*)(uint8_t* controller, void* unused, const VrVector3* move, float seconds);
+    using CollidableFilterFn  = bool* (__fastcall*)(void* filter, void* unused, bool* result, const uint8_t* a, const uint8_t* b);
+    using GetAvFloatFn        = float (__fastcall*)(uint8_t* owner, void* unused, uint32_t index);
+    using DamagePointsFn      = void (__fastcall*)(uint8_t* player, void* unused, float amount);
+    using IsGodModeFn         = bool (__cdecl*)();
+    using WeaponOutFn         = bool (__fastcall*)(uint8_t* process, void* unused);
 
     static_assert(sizeof(VrVector3) == 12, "The game's NiPoint3 is three floats");
 
     VrPhysicsGrab* g_physicsGrab = nullptr;
+
+    // The bone weights of the actors in the hands, which their ragdoll
+    // controllers point at: outside the object, as the game's threads read them
+    constexpr uint32_t MaxLooseActors = 4;
+    float g_limbWeights[MaxLooseActors][VrRagdollMaxBodies];
 
     // How far around the grip's centre the hand touches what it holds
     constexpr float ProbeRadius = 0.10f * VrGameUnitsPerMetre;
@@ -65,6 +90,10 @@ namespace dxvk {
     // The game's grab lets go when the held point is this far from where
     // it belongs (findings/grab.md §2)
     constexpr float MaxStretch = 96.0f;
+
+    // A living actor the player is not strong enough to keep in place pulls
+    // free of the hand this far from it: about an arm's length
+    constexpr float PullFreeStretch = 0.6f * VrGameUnitsPerMetre;
 
     // A body let go of collides with the player again once its centre is
     // this far from the player, horizontally
@@ -80,6 +109,10 @@ namespace dxvk {
     // placed for the player of the frame before, and the step after the
     // target is set moves the player again
     constexpr float StaleFrames = 2.0f;
+
+    // Grip of both hands on an actor, and hands, closer than this do not
+    // tell a turn from the limbs' play
+    constexpr float MinTwistGrip = 0.15f * VrGameUnitsPerMetre;
 
     // How often the lead is logged while the player moves
     constexpr float LeadLogInterval = 5.0f;
@@ -98,6 +131,17 @@ namespace dxvk {
     constexpr uint32_t MaxLoggedLeads  = 10;
     constexpr uint32_t MaxLoggedFits   = 20;
     constexpr uint32_t MaxLoggedStores = 20;
+    constexpr uint32_t MaxLoggedDrags  = 20;
+    constexpr uint32_t MaxLoggedManhandling = 50;
+
+    // Height of an actor's middle above its feet
+    constexpr float ActorMiddleHeight = 0.9f * VrGameUnitsPerMetre;
+
+    // How far a shove moves an actor, in how long, and the share of the
+    // hand's velocity the limb touched takes
+    constexpr float ShoveDistance = 0.35f * VrGameUnitsPerMetre;
+    constexpr float ShoveSeconds  = 0.3f;
+    constexpr float ShoveLimbShare = 0.5f;
 
     template<typename T>
     T readField(const uint8_t* base, uintptr_t offset) {
@@ -119,6 +163,16 @@ namespace dxvk {
 
     float settingFloat(uintptr_t setting) {
       return readField<float>(reinterpret_cast<const uint8_t*>(setting), VrGame::SettingValue);
+    }
+
+    // Whether the game runs the actors' hit reaction itself
+    bool gameRunsFeedback() {
+      return readField<bool>(reinterpret_cast<const uint8_t*>(VrGame::RagdollFeedbackSetting), VrGame::SettingValue);
+    }
+
+    float actorValueOf(uint8_t* actor, uintptr_t slot, uint32_t index) {
+      uint8_t* values = actor + VrGame::ActorValueOwnerBase;
+      return virtualFunction<GetAvFloatFn>(values, slot)(values, nullptr, index);
     }
 
     float havokScale() {
@@ -268,6 +322,50 @@ namespace dxvk {
       return hand == VrHand::Left ? "left" : "right";
     }
 
+    // What keeps an actor's hit reaction from starting, null if nothing: the
+    // conditions of Actor::HitMe, except its refusal of sitting and sleeping
+    // actors, whose arms a hand holds as anyone else's
+    const char* reactionObstacle(uint8_t* actor) {
+      uint8_t* ragdoll = readField<uint8_t*>(actor, VrGame::ActorRagdollController);
+
+      if (!ragdoll)
+        return "it has no ragdoll";
+
+      if (!readField<bool>(ragdoll, VrGame::RagdollAnimEnabled))
+        return "its ragdoll does not follow its animation";
+
+      if (!readField<bool>(ragdoll, VrGame::RagdollFeedbackEnabled))
+        return "its reaction is disabled";
+
+      if (reinterpret_cast<ActorTestFn>(VrGame::ActorIsUnconscious)(actor, nullptr))
+        return "it is unconscious";
+
+      return nullptr;
+    }
+
+
+    /**
+     * \brief Whether a body is simulated, as bhkRigidBody::IsMotionTypeDynamic
+     *
+     * A body asked to be MOTION_DYNAMIC takes one of the inertia types.
+     */
+    bool isDynamic(const uint8_t* body) {
+      uint8_t motion = readField<uint8_t>(body, VrGame::BodyMotionType);
+
+      return (motion >= VrGame::MotionDynamic && motion <= VrGame::MotionBoxInertia)
+          || motion == VrGame::MotionThinBoxInertia;
+    }
+
+    /**
+     * \brief Name of the node a body belongs to, as a skeleton's bone
+     */
+    const char* bodyNodeName(uint8_t* body) {
+      uint8_t* object = reinterpret_cast<ObjectForBodyFn>(VrGame::CollisionObjectForBody)(body);
+      uint8_t* scene  = object ? readField<uint8_t*>(object, VrGame::CollisionSceneObject) : nullptr;
+      const char* name = scene ? readField<const char*>(scene, VrGame::ObjectName) : nullptr;
+      return name ? name : "?";
+    }
+
   }
 
 
@@ -321,6 +419,24 @@ namespace dxvk {
     grab->m_canStore = VrGameMemory::matches(VrGame::RefActivate,
       VrGame::RefActivatePrologue, sizeof(VrGame::RefActivatePrologue));
 
+    // Living actors are held by the limbs of their hit reaction
+    grab->m_npcLimbs = VrGameMemory::callsTo(VrGame::RagdollSetFeedbackActiveCallSite, VrGame::RagdollSetFeedbackActive)
+      && VrGameMemory::callsTo(VrGame::ActorIsUnconsciousCallSite, VrGame::ActorIsUnconscious);
+
+    // Without bRagdollFeedback, the game does not draw the reaction nor
+    // end it: it runs here for the actors the hands take
+    grab->m_drivesFeedback = grab->m_npcLimbs
+      && VrGameMemory::callsTo(VrGame::RagdollDoFeedbackCallSite, VrGame::RagdollDoFeedback)
+      && VrGameMemory::readable(VrGame::RagdollFeedbackSetting + VrGame::SettingValue, sizeof(bool))
+      && VrGameMemory::redirectCall(VrGame::RagdollFeedbackPoseCallSite, VrGame::RagdollUpdateDebugLines,
+           reinterpret_cast<const void*>(&VrPhysicsGrab::feedbackPoseHook));
+
+    // What ties the limbs to the animation gives way to the hands
+    static_assert(MaxDriven == MaxLooseActors, "One set of bone weights per loose actor");
+    grab->m_canLoosen = grab->m_npcLimbs
+      && VrGameMemory::redirectCall(VrGame::RagdollDriveStageCallSite, VrGame::RagdollUpdateDebugLines,
+           reinterpret_cast<const void*>(&VrPhysicsGrab::ragdollDriveHook));
+
     // The spheres are only made where they can be stopped while the
     // player is not in control
     grab->m_handBodies = VrHandBodies::create();
@@ -336,7 +452,60 @@ namespace dxvk {
       grab->m_handBodies.reset();
     }
 
+    // Character and Creature, not the player, whose table holds it too
+    grab->m_canHoldInPlace = VrGameMemory::redirectVirtual(VrGame::CharacterMoveSlot, VrGame::ActorMove,
+        reinterpret_cast<const void*>(&VrPhysicsGrab::actorMoveHook))
+      && VrGameMemory::redirectVirtual(VrGame::CreatureMoveSlot, VrGame::ActorMove,
+        reinterpret_cast<const void*>(&VrPhysicsGrab::actorMoveHook));
+
+    if (!grab->m_canHoldInPlace)
+      Logger::warn("VR: The actors' move was not found, hands do not keep living actors in place");
+
+    grab->m_canDrag = grab->m_canHoldInPlace
+      && VrGameMemory::redirectVirtual(VrGame::ActorMoverGetMoveModeSlot, VrGame::ActorMoverGetMoveMode,
+        reinterpret_cast<const void*>(&VrPhysicsGrab::moveModeHook));
+
+    if (grab->m_canHoldInPlace && !grab->m_canDrag)
+      Logger::warn("VR: The actors' move mode was not found, hands keep living actors in place without moving them");
+
+    // What a grip does to an actor, after PLANCK
+    grab->m_canKnockDown = VrGameMemory::callsTo(VrGame::ActorCanKnockDownCallSite, VrGame::ActorCanKnockDown);
+
+    grab->m_canSpendPoints = VrGameMemory::matches(VrGame::PlayerDamageActionPoints,
+        VrGame::PlayerDamageActionPointsPrologue, sizeof(VrGame::PlayerDamageActionPointsPrologue))
+      && VrGameMemory::matches(VrGame::PlayerIsGodMode,
+        VrGame::PlayerIsGodModePrologue, sizeof(VrGame::PlayerIsGodModePrologue));
+
+    grab->m_canSetSpeeds = VrGameMemory::callsTo(VrGame::ActorSetWalkSpeedCallSite, VrGame::ActorSetWalkSpeed)
+      && VrGameMemory::callsTo(VrGame::ActorSetRunSpeedCallSite, VrGame::ActorSetRunSpeed)
+      && VrGameMemory::callsTo(VrGame::ProcessSetCachedDirtyCallSite, VrGame::ProcessSetCachedDirty);
+
+    grab->m_canShove = VrGameMemory::callsTo(VrGame::ControllerSetVelocityModCallSite, VrGame::ControllerSetVelocityMod)
+      && VrGameMemory::callsTo(VrGame::GetCharControllerCallSite, VrGame::GetCharController);
+
+    grab->m_canPassThrough = VrGameMemory::callsTo(VrGame::GetCharControllerCallSite, VrGame::GetCharController)
+      && VrGameMemory::matches(VrGame::PhantomUpdateFilter,
+        VrGame::PhantomUpdateFilterPrologue, sizeof(VrGame::PhantomUpdateFilterPrologue))
+      && VrGameMemory::redirectVirtual(VrGame::CollidableFilterEnabledSlot, VrGame::CollidableFilterEnabled,
+        reinterpret_cast<const void*>(&VrPhysicsGrab::collisionFilterHook));
+
+    bool brakes = VrGameMemory::redirectVirtual(VrGame::PlayerMoveSlot, VrGame::ActorMove,
+      reinterpret_cast<const void*>(&VrPhysicsGrab::playerMoveHook));
+
+    Logger::info(str::format("VR: Hands on living actors: knock down ", grab->m_canKnockDown ? "found" : "not found",
+      ", action points ", grab->m_canSpendPoints ? "found" : "not found",
+      ", walk speeds ", grab->m_canSetSpeeds ? "found" : "not found",
+      ", shove ", grab->m_canShove ? "found" : "not found",
+      ", passing through ", grab->m_canPassThrough ? "found" : "not found",
+      ", player's brake ", brakes ? "found" : "not found",
+      ", limbs following the hand ", grab->m_canLoosen ? "found" : "not found"));
+
     Logger::info("VR: Each free hand holds what it touches or pulls what it points at with its grip");
+    Logger::info(!grab->m_npcLimbs
+      ? "VR: The actors' hit reaction was not found, living actors are not held"
+      : grab->m_drivesFeedback
+        ? "VR: Living actors are held by the limbs of their hit reaction, run by the VR layer while the game's is off"
+        : "VR: Living actors are held by the limbs of their hit reaction while the game runs it (bRagdollFeedback)");
     Logger::info(grab->m_canStore
       ? "VR: Items let go of at the chest go into the inventory"
       : "VR: The game's activation was not found, items let go of at the chest fall");
@@ -406,6 +575,145 @@ namespace dxvk {
   }
 
 
+  void __fastcall VrPhysicsGrab::feedbackPoseHook(
+          uint8_t*              ragdoll,
+          void*                 unused,
+          uint32_t              stage) {
+    // Where DoRagdollAnim runs the reaction when the setting is on: after
+    // the ragdoll's bodies were updated, before the drawn pose is set
+    if (g_physicsGrab && !gameRunsFeedback() && readField<bool>(ragdoll, VrGame::RagdollFeedbackActive)
+     && g_physicsGrab->drives(ragdoll))
+      reinterpret_cast<DoFeedbackFn>(VrGame::RagdollDoFeedback)(ragdoll, nullptr);
+
+    reinterpret_cast<DebugLinesFn>(VrGame::RagdollUpdateDebugLines)(ragdoll, nullptr, stage);
+  }
+
+
+  void __fastcall VrPhysicsGrab::ragdollDriveHook(
+          uint8_t*              ragdoll,
+          void*                 unused,
+          uint32_t              stage) {
+    if (g_physicsGrab)
+      g_physicsGrab->applyLoose(ragdoll);
+
+    reinterpret_cast<DebugLinesFn>(VrGame::RagdollUpdateDebugLines)(ragdoll, nullptr, stage);
+  }
+
+
+  void* __fastcall VrPhysicsGrab::actorMoveHook(
+          uint8_t*              actor,
+          void*                 unused,
+          float                 dt,
+          VrVector3*            move,
+          uint8_t               flags) {
+    if (const Drag* drag = g_physicsGrab ? g_physicsGrab->dragOf(actor) : nullptr) {
+      float heading = readField<float>(actor, VrGame::RefHeading);
+
+      if (drag->setsHeading) {
+        heading = drag->heading;
+        virtualFunction<SetHeadingFn>(actor, VrGame::SetHeadingSlot)(actor, nullptr, heading);
+      }
+
+      // In the actor's frame; the controller still applies gravity
+      VrNpcGroundVector local = vrNpcToActor({ drag->velocityX * dt, drag->velocityY * dt }, heading);
+      *move = { local.x, local.y, 0.0f };
+    }
+
+    return reinterpret_cast<ActorMoveFn>(VrGame::ActorMove)(actor, nullptr, dt, move, flags);
+  }
+
+
+  uint32_t __fastcall VrPhysicsGrab::moveModeHook(
+          uint8_t*              mover,
+          void*                 unused) {
+    uint32_t mode = reinterpret_cast<MoveModeFn>(VrGame::ActorMoverGetMoveMode)(mover, nullptr);
+
+    if (!g_physicsGrab)
+      return mode;
+
+    const Drag* drag = g_physicsGrab->dragOf(readField<uint8_t*>(mover, VrGame::ActorMoverActor));
+
+    // The animation goes with the move the hands give, nothing of what the
+    // AI wanted but the state it is in
+    return drag && drag->walks ? (mode & VrNpcMoveKeptFlags) | drag->moveMode : mode;
+  }
+
+
+  void* __fastcall VrPhysicsGrab::playerMoveHook(
+          uint8_t*              player,
+          void*                 unused,
+          float                 dt,
+          VrVector3*            move,
+          uint8_t               flags) {
+    if (g_physicsGrab && dt > 0.0f) {
+      float speed = std::sqrt(move->x * move->x + move->y * move->y) / dt;
+      float factor = vrNpcPlayerMoveFactor(speed, g_physicsGrab->m_playerSpeedLimit,
+        g_physicsGrab->m_playerBrakeStrength);
+
+      move->x *= factor;
+      move->y *= factor;
+    }
+
+    return reinterpret_cast<ActorMoveFn>(VrGame::ActorMove)(player, nullptr, dt, move, flags);
+  }
+
+
+  bool* __fastcall VrPhysicsGrab::collisionFilterHook(
+          void*                 filter,
+          void*                 unused,
+          bool*                 result,
+    const uint8_t*              a,
+    const uint8_t*              b) {
+    reinterpret_cast<CollidableFilterFn>(VrGame::CollidableFilterEnabled)(filter, nullptr, result, a, b);
+
+    if (*result && g_physicsGrab && g_physicsGrab->passesThrough(
+          readField<uint32_t>(a, VrGame::CollidableFilterInfo),
+          readField<uint32_t>(b, VrGame::CollidableFilterInfo)))
+      *result = false;
+
+    return result;
+  }
+
+
+  bool VrPhysicsGrab::passesThrough(uint32_t filterA, uint32_t filterB) const {
+    uint32_t player = m_playerGroup.load(std::memory_order_relaxed);
+
+    if (!player)
+      return false;
+
+    uint32_t own, other;
+
+    if (filterA >> VrGame::FilterGroupShift == player) {
+      own   = filterA;
+      other = filterB;
+    } else if (filterB >> VrGame::FilterGroupShift == player) {
+      own   = filterB;
+      other = filterA;
+    } else {
+      return false;
+    }
+
+    // The capsule only: the player's hands and what they hold are not its
+    uint32_t layer = other & VrGame::FilterLayerMask;
+
+    if ((own & VrGame::FilterLayerMask) != VrGame::LayerCharController
+     || (layer != VrGame::LayerCharController && layer != VrGame::LayerBiped && layer != VrGame::LayerDeadBiped))
+      return false;
+
+    uint32_t otherGroup = other >> VrGame::FilterGroupShift;
+
+    if (!otherGroup)
+      return false;
+
+    for (const auto& group : m_passedGroups) {
+      if (group.load(std::memory_order_relaxed) == otherGroup)
+        return true;
+    }
+
+    return false;
+  }
+
+
   void VrPhysicsGrab::leaveCell(uint8_t* cell) {
     uint8_t* world = cell ? reinterpret_cast<GetPartFn>(VrGame::CellGetWorld)(cell, nullptr) : nullptr;
     uint8_t* hkWorld = world ? readField<uint8_t*>(world, VrGame::RefObjectHavok) : nullptr;
@@ -440,12 +748,583 @@ namespace dxvk {
       return;
 
     updateLead(player, dt);
+    updateDriven();
+    updateHandMotion(dt);
 
     for (uint32_t i = 0; i < VrHandCount; i++)
       updateHand(player, VrHand(i), dt);
 
+    updateLoose(dt);
+    updateYanks(player, dt);
+    updateDrags(player, dt);
+    updateEffort(player, dt);
+    updateShoves(player, dt);
+    updateAnger(dt);
+    updatePassingThrough(player);
     restoreFilters(player);
     updateHandBodies(player, dt);
+
+    if (m_playerUpdateTask)
+      m_playerUpdateTask(player, dt);
+  }
+
+
+  void VrPhysicsGrab::updateHandMotion(float dt) {
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      const HandInput& input = m_input[i];
+
+      if (!input.tracked) {
+        m_handMotion[i].reset();
+        m_hasHandPosition[i] = false;
+        continue;
+      }
+
+      if (m_hasHandPosition[i])
+        m_handMotion[i].update(input.pose.position - m_handPositions[i] - m_playerStep, dt);
+
+      m_handPositions[i]   = input.pose.position;
+      m_hasHandPosition[i] = true;
+    }
+  }
+
+
+  void VrPhysicsGrab::noteLetGo(VrHand hand, const Held& held) {
+    if (!held.living || held.knocked)
+      return;
+
+    LetGo& letGo = m_letGo[uint32_t(hand)];
+    letGo.actor    = held.ref;
+    letGo.refId    = held.refId;
+    letGo.velocity = m_handMotion[uint32_t(hand)].peak();
+    letGo.age      = 0.0f;
+    letGo.fresh    = true;
+    letGo.kept     = held.inPlace;
+  }
+
+
+  void VrPhysicsGrab::updateYanks(uint8_t* player, float dt) {
+    for (LetGo& letGo : m_letGo) {
+      if (!letGo.fresh)
+        letGo.age += dt;
+    }
+
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      LetGo& letGo = m_letGo[i];
+      LetGo& other = m_letGo[i ^ 1u];
+
+      if (!letGo.fresh)
+        continue;
+
+      letGo.fresh = false;
+
+      // Decided when the last hand lets go
+      if (m_hands[i ^ 1u].grab.holding() && m_hands[i ^ 1u].ref == letGo.actor)
+        continue;
+
+      // The fastest hand decides, both hands add up
+      bool both = other.actor == letGo.actor && other.age <= VrNpcYankWindow;
+      bool fast = vrNpcYankIsFast(letGo.velocity) || (both && vrNpcYankIsFast(other.velocity));
+      bool kept = letGo.kept || (both && other.kept);
+      VrVector3 velocity = both ? letGo.velocity + other.velocity : letGo.velocity;
+
+      if (both)
+        other.fresh = false;
+
+      if (!fast || !kept || !m_canKnockDown || !m_npcReaction
+       || reinterpret_cast<FormByIdFn>(VrGame::FormById)(letGo.refId) != letGo.actor
+       || knockedDown(letGo.actor)
+       || !reinterpret_cast<ActorTestFn>(VrGame::ActorCanKnockDown)(letGo.actor, nullptr))
+        continue;
+
+      float cost = m_npcReaction->fighting(letGo.actor) ? VrNpcYankFightingCost : VrNpcYankCost;
+
+      if (!spendActionPoints(player, cost)) {
+        if (m_loggedManhandling < MaxLoggedManhandling) {
+          Logger::info(str::format("VR: No action points left to yank ", hexId(letGo.refId)));
+          m_loggedManhandling++;
+        }
+        continue;
+      }
+
+      bool knocked = knockDown(letGo.actor, velocity);
+
+      if (knocked) {
+        m_shoveCooldown = VrNpcShoveCooldown;
+
+        if (Handled* handled = handledEntry(letGo.actor))
+          handled->anger.add(VrNpcKnockDownAnger);
+      }
+
+      if (m_loggedManhandling < MaxLoggedManhandling) {
+        Logger::info(str::format("VR: A hand at ", vrLength(velocity) / VrGameUnitsPerMetre, " m/s", both ? ", both hands," : "",
+          knocked ? " yanks " : " fails to yank ", hexId(letGo.refId), ", ", cost, " action points"));
+        m_loggedManhandling++;
+      }
+    }
+  }
+
+
+  bool VrPhysicsGrab::knockedDown(uint8_t* actor) const {
+    return virtualFunction<ActorTestFn>(actor, VrGame::ActorIsKnockedOutSlot)(actor, nullptr);
+  }
+
+
+  bool VrPhysicsGrab::knockDown(uint8_t* actor, const VrVector3& velocity) {
+    uint8_t* process = readField<uint8_t*>(actor, VrGame::ActorProcess);
+
+    if (!process)
+      return false;
+
+    VrVector3 centre = readField<VrVector3>(actor, VrGame::RefLocation);
+    centre.z += ActorMiddleHeight;
+
+    VrNpcKnockPush push = vrNpcYankPush(velocity, centre, havokScale());
+
+    virtualFunction<KnockExplosionFn>(process, VrGame::ProcessKnockExplosionSlot)(process, nullptr, actor,
+      push.source.x, push.source.y, push.source.z, push.force);
+
+    return knockedDown(actor);
+  }
+
+
+  bool VrPhysicsGrab::spendActionPoints(uint8_t* player, float cost) const {
+    if (!m_canSpendPoints || reinterpret_cast<IsGodModeFn>(VrGame::PlayerIsGodMode)())
+      return true;
+
+    float points = actorValueOf(player, VrGame::AvOwnerFloatSlot, VrGame::AvActionPoints);
+
+    if (!(points > 0.0f))
+      return false;
+
+    reinterpret_cast<DamagePointsFn>(VrGame::PlayerDamageActionPoints)(player, nullptr, std::min(cost, points));
+    return true;
+  }
+
+
+  void VrPhysicsGrab::updateEffort(uint8_t* player, float dt) {
+    if (!m_npcReaction || !m_canSpendPoints || reinterpret_cast<IsGodModeFn>(VrGame::PlayerIsGodMode)())
+      return;
+
+    float cost = 0.0f;
+
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      const Held& held = m_hands[i];
+
+      if (!held.grab.holding() || !held.living || m_npcReaction->teammate(held.ref))
+        continue;
+
+      // Both hands on an actor cost as one
+      if (i == 1 && m_hands[0].grab.holding() && m_hands[0].ref == held.ref)
+        continue;
+
+      cost += vrNpcGripCost(m_npcReaction->fighting(held.ref), m_npcReaction->healthShare(held.ref));
+    }
+
+    if (!(cost > 0.0f))
+      return;
+
+    spendActionPoints(player, cost * dt);
+
+    if (actorValueOf(player, VrGame::AvOwnerFloatSlot, VrGame::AvActionPoints) > 0.0f)
+      return;
+
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      Held& held = m_hands[i];
+
+      if (!held.grab.holding() || !held.living || m_npcReaction->teammate(held.ref))
+        continue;
+
+      if (m_loggedLosses < MaxLoggedLosses) {
+        Logger::info(str::format("VR: The ", handName(VrHand(i)), " hand let go of ", hexId(held.refId),
+          ", the player has no action points left"));
+        m_loggedLosses++;
+      }
+
+      release(held);
+      held.grab.drop();
+      m_events.released[i] = true;
+    }
+  }
+
+
+  void VrPhysicsGrab::updateShoves(uint8_t* player, float dt) {
+    m_shoveCooldown = std::max(m_shoveCooldown - dt, 0.0f);
+
+    if (!m_canShove || !m_npcReaction || !canHoldLiving() || m_shoveCooldown > 0.0f)
+      return;
+
+    // A shove is for empty hands: with a weapon out the player means harm
+    uint8_t* process = readField<uint8_t*>(player, VrGame::ActorProcess);
+
+    if (!process || virtualFunction<WeaponOutFn>(process, VrGame::ProcessIsWeaponOutSlot)(process, nullptr))
+      return;
+
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      const HandInput& input = m_input[i];
+
+      if (!input.tracked || !input.free || input.grip || m_hands[i].grab.holding())
+        continue;
+
+      VrVector3 velocity = m_handMotion[i].average();
+
+      if (!vrNpcShoveIsFast(velocity))
+        continue;
+
+      Candidate touched;
+
+      if (!probe(player, VrHand(i), input.pose.position, touched) || !touched.living || knockedDown(touched.ref))
+        continue;
+
+      shove(player, VrHand(i), touched, velocity);
+      return;
+    }
+  }
+
+
+  void VrPhysicsGrab::shove(uint8_t* player, VrHand hand, const Candidate& touched, const VrVector3& velocity) {
+    uint8_t* actor = touched.ref;
+    m_shoveCooldown = VrNpcShoveCooldown;
+
+    bool spent = spendActionPoints(player, VrNpcShoveCost);
+
+    if (spent) {
+      // The limb touched gives way, if it is one of the reaction's
+      if (startReaction(actor)) {
+        driveReaction(actor);
+
+        if (isDynamic(touched.body)) {
+          VrVector3 current = readField<VrVector3>(touched.body, VrGame::BodyLinearVelocity);
+          setVelocity(touched.body, VrGame::BodySetLinearVelocity,
+            current + velocity * (ShoveLimbShare * havokScale()));
+        }
+      }
+
+      float speed = std::sqrt(velocity.x * velocity.x + velocity.y * velocity.y);
+      uint8_t* controller = reinterpret_cast<GetPartFn>(VrGame::GetCharController)(actor, nullptr);
+
+      if (controller && speed > 0.0f && !virtualFunction<GetSitStateFn>(actor, VrGame::GetSitStateSlot)(actor, nullptr)) {
+        VrVector3 move = { velocity.x * ShoveDistance / speed, velocity.y * ShoveDistance / speed, 0.0f };
+        reinterpret_cast<VelocityModFn>(VrGame::ControllerSetVelocityMod)(controller, nullptr, &move, ShoveSeconds);
+      }
+
+      if (Handled* handled = handledEntry(actor))
+        handled->anger.add(VrNpcShoveAnger);
+    }
+
+    m_npcReaction->nag(actor);
+    m_events.shoved[uint32_t(hand)] = true;
+
+    if (m_loggedManhandling < MaxLoggedManhandling) {
+      Logger::info(str::format("VR: The ", handName(hand), " open hand at ", vrLength(velocity) / VrGameUnitsPerMetre,
+        " m/s shoves ", hexId(readField<uint32_t>(actor, VrGame::FormId)),
+        spent ? "" : ", without moving it, no action points left"));
+      m_loggedManhandling++;
+    }
+  }
+
+
+  VrPhysicsGrab::Handled* VrPhysicsGrab::handledEntry(uint8_t* actor) {
+    Handled* free = nullptr;
+
+    for (Handled& handled : m_handled) {
+      if (handled.actor == actor)
+        return &handled;
+
+      if (!handled.actor && !free)
+        free = &handled;
+    }
+
+    if (!free)
+      return nullptr;
+
+    *free = Handled();
+    free->actor    = actor;
+    free->refId    = readField<uint32_t>(actor, VrGame::FormId);
+    free->forgives = m_npcReaction->forgives(actor);
+    return free;
+  }
+
+
+  void VrPhysicsGrab::updateAnger(float dt) {
+    if (!m_npcReaction)
+      return;
+
+    for (const Held& held : m_hands) {
+      if (held.grab.holding() && held.living)
+        handledEntry(held.ref);
+    }
+
+    for (Handled& handled : m_handled) {
+      if (!handled.actor)
+        continue;
+
+      bool held = false;
+
+      for (const Held& hand : m_hands)
+        held |= hand.grab.holding() && hand.ref == handled.actor;
+
+      if (reinterpret_cast<FormByIdFn>(VrGame::FormById)(handled.refId) != handled.actor
+       || (virtualFunction<IsDeadFn>(handled.actor, VrGame::ActorIsDeadSlot)(handled.actor, nullptr, 0) & 0xFF)
+       || (handled.forgives && !held)) {
+        handled = Handled();
+        continue;
+      }
+
+      if (handled.forgives)
+        continue;
+
+      VrNpcAngerAction action = handled.anger.update(held, m_npcReaction->fighting(handled.actor), dt);
+
+      if (action == VrNpcAngerAction::Complain)
+        m_npcReaction->nag(handled.actor);
+      else if (action == VrNpcAngerAction::Assault)
+        m_npcReaction->assault(handled.actor);
+
+      if (!held && !(handled.anger.anger() > 0.0f))
+        handled = Handled();
+    }
+  }
+
+
+  void VrPhysicsGrab::updateActorPhantom(uint8_t* actor) const {
+    uint8_t* controller = reinterpret_cast<GetPartFn>(VrGame::GetCharController)(actor, nullptr);
+    uint8_t* phantom = controller ? readField<uint8_t*>(controller, VrGame::ControllerShapePhantom) : nullptr;
+
+    if (phantom)
+      reinterpret_cast<PhantomFilterFn>(VrGame::PhantomUpdateFilter)(phantom, nullptr);
+  }
+
+
+  void VrPhysicsGrab::updatePassingThrough(uint8_t* player) {
+    if (!m_canPassThrough)
+      return;
+
+    uint32_t filter = 0;
+    reinterpret_cast<GetFilterFn>(VrGame::GetCollisionFilter)(player, nullptr, &filter);
+    m_playerGroup = filter >> VrGame::FilterGroupShift;
+
+    for (const Held& held : m_hands) {
+      if (!held.grab.holding() || !held.living)
+        continue;
+
+      uint32_t slot = MaxPassedThrough;
+
+      for (uint32_t i = 0; i < MaxPassedThrough; i++) {
+        if (m_passedThrough[i].actor == held.ref) {
+          slot = MaxPassedThrough + 1;
+          break;
+        }
+
+        if (!m_passedThrough[i].actor && slot == MaxPassedThrough)
+          slot = i;
+      }
+
+      if (slot >= MaxPassedThrough)
+        continue;
+
+      uint32_t actorFilter = 0;
+      reinterpret_cast<GetFilterFn>(VrGame::GetCollisionFilter)(held.ref, nullptr, &actorFilter);
+
+      m_passedThrough[slot].actor = held.ref;
+      m_passedThrough[slot].refId = held.refId;
+      m_passedGroups[slot] = actorFilter >> VrGame::FilterGroupShift;
+      updateActorPhantom(held.ref);
+    }
+
+    VrVector3 playerPosition = readField<VrVector3>(player, VrGame::RefLocation);
+
+    for (uint32_t i = 0; i < MaxPassedThrough; i++) {
+      PassedThrough& passed = m_passedThrough[i];
+
+      if (!passed.actor)
+        continue;
+
+      bool held = false;
+
+      for (const Held& hand : m_hands)
+        held |= hand.grab.holding() && hand.ref == passed.actor;
+
+      bool valid = reinterpret_cast<FormByIdFn>(VrGame::FormById)(passed.refId) == passed.actor;
+
+      if (valid && (held || !vrGrabClearOfPlayer(readField<VrVector3>(passed.actor, VrGame::RefLocation),
+            playerPosition, ClearDistance)))
+        continue;
+
+      m_passedGroups[i] = 0;
+
+      if (valid)
+        updateActorPhantom(passed.actor);
+
+      passed = PassedThrough();
+    }
+  }
+
+
+  void VrPhysicsGrab::updateDrags(uint8_t* player, float dt) {
+    bool  keeps = false;
+    float playerLimit = 0.0f;
+
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      Held& held = m_hands[i];
+      const Held& other = m_hands[i ^ 1u];
+
+      bool living = m_canHoldInPlace && m_npcReaction && held.grab.holding() && held.living && !held.knocked;
+      bool both   = living && other.grab.holding() && other.ref == held.ref;
+      float margin = living ? m_npcReaction->gripMargin(held.ref, player, both ? 2 : 1) : 0.0f;
+
+      held.inPlace = margin > 0.0f;
+
+      if (!held.inPlace) {
+        stopDrag(m_drags[i]);
+        continue;
+      }
+
+      float base   = actorValueOf(player, VrGame::AvOwnerBaseFloatSlot, VrGame::AvActionPoints);
+      float points = actorValueOf(player, VrGame::AvOwnerFloatSlot, VrGame::AvActionPoints);
+      float limit  = vrNpcGripSpeedLimit(margin, m_npcReaction->healthShare(held.ref),
+        base > 0.0f ? points / base : 1.0f, m_npcReaction->teammate(held.ref));
+
+      playerLimit = keeps ? std::min(playerLimit, limit) : limit;
+      keeps = true;
+
+      if (both && i == 1)
+        stopDrag(m_drags[i]);
+      else
+        updateDrag(m_drags[i], player, held, both ? &other : nullptr, margin, limit, dt);
+    }
+
+    m_playerBrake.update(keeps, playerLimit, dt);
+    m_playerSpeedLimit    = m_playerBrake.limit();
+    m_playerBrakeStrength = m_playerBrake.strength();
+  }
+
+
+  void VrPhysicsGrab::updateDrag(Drag& drag, uint8_t* player, const Held& held, const Held* other, float margin, float limit, float dt) {
+    uint8_t* actor = held.ref;
+    float current  = readField<float>(actor, VrGame::RefHeading);
+
+    if (drag.actor != actor) {
+      stopDrag(drag);
+      drag.logic   = VrNpcDrag();
+      drag.heading = current;
+      drag.refId   = held.refId;
+      drag.logged  = false;
+    }
+
+    bool walks = m_canDrag && dt > 0.0f
+      && !virtualFunction<GetSitStateFn>(actor, VrGame::GetSitStateSlot)(actor, nullptr)
+      && !virtualFunction<ActorTestFn>(actor, VrGame::ActorIsImmobileSlot)(actor, nullptr);
+
+    if (!walks) {
+      drag.walks       = false;
+      drag.setsHeading = false;
+      drag.velocityX   = 0.0f;
+      drag.velocityY   = 0.0f;
+      drag.heading     = current;
+      drag.actor       = actor;
+      clearDragSpeeds(drag, actor);
+      return;
+    }
+
+    // A fighter faces its target when the hands do not turn it; anyone else
+    // does not turn away from the hands' grip
+    bool fighting = m_npcReaction->fighting(actor);
+
+    VrNpcDragInput input;
+    input.heading  = fighting ? current : float(drag.heading);
+    input.maxSpeed = limit;
+    input.dt       = dt;
+    input.player   = { m_playerStep.x / dt, m_playerStep.y / dt };
+
+    VrVector3 root = readField<VrVector3>(actor, VrGame::RefLocation);
+
+    auto pullOf = [&] (const Held& hand) {
+      VrNpcGroundVector anchor = vrNpcToWorld(hand.anchor, input.heading);
+      return VrNpcGroundVector { hand.target.x - root.x - anchor.x, hand.target.y - root.y - anchor.y };
+    };
+
+    input.pull = pullOf(held);
+
+    if (other) {
+      VrNpcGroundVector second = pullOf(*other);
+      input.pull = { (input.pull.x + second.x) * 0.5f, (input.pull.y + second.y) * 0.5f };
+
+      // Hands apart on the actor turn it as they turn about each other
+      VrNpcGroundVector grip  = { held.anchor.x - other->anchor.x, held.anchor.y - other->anchor.y };
+      VrNpcGroundVector hands = { held.target.x - other->target.x, held.target.y - other->target.y };
+
+      if (grip.x * grip.x + grip.y * grip.y >= MinTwistGrip * MinTwistGrip
+       && hands.x * hands.x + hands.y * hands.y >= MinTwistGrip * MinTwistGrip) {
+        VrNpcGroundVector worldGrip = vrNpcToWorld(grip, input.heading);
+        input.twist = vrNpcTurnBetween(vrNpcHeadingOf(worldGrip), vrNpcHeadingOf(hands));
+      }
+    }
+
+    drag.logic.update(input);
+
+    VrNpcGroundVector velocity = drag.logic.velocity();
+
+    drag.velocityX   = velocity.x;
+    drag.velocityY   = velocity.y;
+    drag.heading     = drag.logic.heading();
+    drag.setsHeading = drag.logic.turned() || !fighting;
+    drag.moveMode    = drag.logic.moveMode();
+    drag.walks       = true;
+    drag.actor       = actor;
+
+    // The legs at the pace the actor goes
+    if (drag.moveMode)
+      setDragSpeeds(drag, actor, std::sqrt(velocity.x * velocity.x + velocity.y * velocity.y));
+    else
+      clearDragSpeeds(drag, actor);
+
+    if (drag.logic.translating() && !drag.logged && m_loggedDrags < MaxLoggedDrags) {
+      Logger::info(str::format("VR: The hands drag ", hexId(held.refId), ", grip exceeding its strength by ", margin,
+        other ? " with both hands" : "", ", up to ", input.maxSpeed / VrGameUnitsPerMetre, " m/s"));
+      drag.logged = true;
+      m_loggedDrags++;
+    }
+  }
+
+
+  void VrPhysicsGrab::stopDrag(Drag& drag) {
+    uint8_t* actor = drag.actor;
+
+    if (actor && reinterpret_cast<FormByIdFn>(VrGame::FormById)(drag.refId) == actor)
+      clearDragSpeeds(drag, actor);
+
+    drag.setsSpeeds = false;
+    drag.actor      = nullptr;
+  }
+
+
+  void VrPhysicsGrab::setDragSpeeds(Drag& drag, uint8_t* actor, float speed) {
+    if (!m_canSetSpeeds)
+      return;
+
+    reinterpret_cast<SetSpeedFn>(VrGame::ActorSetWalkSpeed)(actor, nullptr, speed);
+    reinterpret_cast<SetSpeedFn>(VrGame::ActorSetRunSpeed)(actor, nullptr, speed);
+    drag.setsSpeeds = true;
+  }
+
+
+  void VrPhysicsGrab::clearDragSpeeds(Drag& drag, uint8_t* actor) {
+    uint8_t* process = readField<uint8_t*>(actor, VrGame::ActorProcess);
+
+    if (drag.setsSpeeds && process)
+      reinterpret_cast<SetCachedDirtyFn>(VrGame::ProcessSetCachedDirty)(process, nullptr, VrGame::CachedWalkAndRunSpeed);
+
+    drag.setsSpeeds = false;
+  }
+
+
+  const VrPhysicsGrab::Drag* VrPhysicsGrab::dragOf(const uint8_t* actor) const {
+    for (const Drag& drag : m_drags) {
+      if (actor && drag.actor == actor)
+        return &drag;
+    }
+
+    return nullptr;
   }
 
 
@@ -485,6 +1364,7 @@ namespace dxvk {
     m_hasPlayerPosition = true;
     m_playerStep        = step;
     m_lead = vrGrabLead(step, StaleFrames + vrGrabSpringLagSteps(m_spring));
+    m_limbLead = vrGrabLead(step, StaleFrames + vrGrabSpringLagSteps(m_limbSpring));
 
     if (!m_hands[0].grab.holding() && !m_hands[1].grab.holding())
       return;
@@ -506,6 +1386,9 @@ namespace dxvk {
     Held& held = m_hands[uint32_t(hand)];
     const HandInput& input = m_input[uint32_t(hand)];
     m_corrections[uint32_t(hand)].valid = false;
+
+    if (!input.grip)
+      held.loggedMiss = false;
 
     // The object was unloaded, taken or moved out of the world
     if (held.grab.holding() && !stillHeld(held)) {
@@ -538,6 +1421,15 @@ namespace dxvk {
           break;
         }
 
+        if (held.living && m_loggedLivingReleases < MaxLoggedGrabs) {
+          Logger::info(str::format("VR: The ", handName(hand), " hand let go of the limb '", bodyNodeName(held.body),
+            "' of ", hexId(held.refId), " after ", held.heldTime, " s, up to ",
+            int32_t(held.furthest * 100.0f / VrGameUnitsPerMetre), " cm from the hand",
+            input.free ? "" : ", no longer free"));
+          m_loggedLivingReleases++;
+        }
+
+        noteLetGo(hand, held);
         release(held);
         held.grab.drop();
         m_events.released[uint32_t(hand)] = true;
@@ -547,16 +1439,29 @@ namespace dxvk {
         if (!held.grab.holding())
           break;
 
-        if (moveTarget(held, input.pose)) {
+        held.heldTime += dt;
+
+        if (held.living && !keepReaction(held)) {
+          if (m_loggedLosses < MaxLoggedLosses) {
+            Logger::info(str::format("VR: The ", handName(hand), " hand let go of ", hexId(held.refId),
+              ", whose limb follows its animation or ragdoll again"));
+            m_loggedLosses++;
+          }
+
+          release(held);
+          held.grab.drop();
+          m_events.released[uint32_t(hand)] = true;
+        } else if (moveTarget(held, input.pose)) {
           updateTurn(hand, held, input.pose);
           updateCorrection(player, hand, held, input.pose);
         } else {
           if (m_loggedLosses < MaxLoggedLosses) {
             Logger::info(str::format("VR: The ", handName(hand), " hand let go of ", hexId(held.refId),
-              ", held too far from the hand"));
+              held.living && !held.knocked && !held.inPlace ? ", which pulled free of the hand" : ", held too far from the hand"));
             m_loggedLosses++;
           }
 
+          noteLetGo(hand, held);
           release(held);
           held.grab.drop();
           m_events.released[uint32_t(hand)] = true;
@@ -577,6 +1482,20 @@ namespace dxvk {
         Logger::info(str::format("VR: The ", handName(hand), " hand touches nothing it can hold",
           m_input[uint32_t(hand)].aimed ? " and points at nothing it can pull" : ""));
         m_loggedMisses++;
+      }
+
+      // Once per grip: a grip asks for several frames
+      Held& self = m_hands[uint32_t(hand)];
+      const Held& other = m_hands[uint32_t(hand) ^ 1u];
+
+      if (other.grab.holding() && other.living && !self.loggedMiss && m_loggedSecondHand < MaxLoggedMisses) {
+        VrVector3 limb = bodyPointToWorld(other.body, other.local) * (1.0f / havokScale());
+
+        Logger::info(str::format("VR: The ", handName(hand), " hand touches nothing it can hold, ",
+          int32_t(vrLength(limb - pose.position) * 100.0f / VrGameUnitsPerMetre),
+          " cm from the point of the limb '", bodyNodeName(other.body), "' the other hand holds"));
+        self.loggedMiss = true;
+        m_loggedSecondHand++;
       }
 
       return false;
@@ -605,17 +1524,26 @@ namespace dxvk {
 
     if (m_loggedGrabs < MaxLoggedGrabs) {
       uint32_t hands = handsOn(held.body);
-      float acceleration = vrGrabMaxAcceleration(best.mass, hands, m_fullAcceleration, m_gravity);
+      float acceleration = vrGrabMaxAcceleration(held.mass, hands, m_fullAcceleration, m_gravity);
 
       Logger::info(str::format("VR: The ", handName(hand), best.pulled ? " hand pulls " : " hand holds ",
-        hexId(held.refId), " (", best.mass, " kg), ", int32_t(best.distance * 100.0f / VrGameUnitsPerMetre),
-        " cm from the hand's centre", best.corpse ? ", a limb of a corpse" : "",
+        hexId(held.refId), " (", held.mass, " kg), ", int32_t(best.distance * 100.0f / VrGameUnitsPerMetre),
+        " cm from the hand's centre", !best.limb ? std::string() : str::format(", the limb '", bodyNodeName(held.body),
+          held.knocked ? "' of an actor knocked down" : held.living ? "' of a living actor" : "' of a corpse"),
+        held.anchored ? " that follows its animation" : "",
+        held.living && !held.knocked && !gameRunsFeedback() ? " whose hit reaction the VR layer runs" : "",
         hands > 1 ? ", with the other hand" : "",
         ", up to ", m_gravity > 0.0f ? acceleration / m_gravity : acceleration, m_gravity > 0.0f ? " g" : "",
-        held.grouped || best.corpse ? "" : ", still colliding with the player",
-        best.corpse ? "" : ", turned with the hand"));
+        held.grouped || best.limb ? "" : ", still colliding with the player",
+        best.limb ? "" : ", turned with the hand"));
       m_loggedGrabs++;
     }
+
+    // Once, by the first hand to take the actor, whichever limb the other holds
+    const Held& other = m_hands[uint32_t(hand) ^ 1u];
+
+    if (held.living && !held.knocked && m_npcReaction && !(other.grab.holding() && other.ref == held.ref))
+      m_npcReaction->grabbed(held.ref);
 
     return true;
   }
@@ -694,7 +1622,7 @@ namespace dxvk {
 
     // A body is dragged by the limb a hand holds, not pulled into it
     if (!holdable(body, settingFloat(VrGame::GrabMaxWeightSetting), candidate) || candidate.ref != ref
-     || candidate.corpse)
+     || candidate.limb)
       return false;
 
     candidate.point    = readField<VrVector3>(body, VrGame::BodyCentreOfMass) * (1.0f / havokScale());
@@ -710,12 +1638,7 @@ namespace dxvk {
 
     uint8_t motion = readField<uint8_t>(body, VrGame::BodyMotionType);
 
-    if (motion == VrGame::MotionKeyframed || motion == VrGame::MotionFixed)
-      return false;
-
-    float inverseMass = readField<float>(body, VrGame::BodyInverseMass);
-
-    if (!(inverseMass > 0.0f) || 1.0f / inverseMass > maxMass)
+    if (motion == VrGame::MotionFixed)
       return false;
 
     uint8_t* object = reinterpret_cast<ObjectForBodyFn>(VrGame::CollisionObjectForBody)(body);
@@ -725,11 +1648,18 @@ namespace dxvk {
     if (!ref)
       return false;
 
-    // The living are refused, as by the game's grab. A dead actor is held
-    // by the limb touched; its ragdoll's constraints bring the rest.
-    bool actor = virtualFunction<IsActorFn>(ref, VrGame::RefIsActorSlot)(ref, nullptr);
+    // A dead actor is held by the limb touched; its ragdoll's constraints
+    // bring the rest. A living actor's limbs follow its animation
+    // (keyframed) until the hand starts its hit reaction, see attach.
+    bool actor  = virtualFunction<IsActorFn>(ref, VrGame::RefIsActorSlot)(ref, nullptr);
+    bool living = actor && !(virtualFunction<IsDeadFn>(ref, VrGame::ActorIsDeadSlot)(ref, nullptr, 0) & 0xFF);
 
-    if (actor && !(virtualFunction<IsDeadFn>(ref, VrGame::ActorIsDeadSlot)(ref, nullptr, 0) & 0xFF))
+    if (living ? !canHoldLiving() : motion == VrGame::MotionKeyframed)
+      return false;
+
+    float inverseMass = readField<float>(body, VrGame::BodyInverseMass);
+
+    if (!living && (!(inverseMass > 0.0f) || 1.0f / inverseMass > maxMass))
       return false;
 
     uint8_t* base = reinterpret_cast<GetPartFn>(VrGame::RefGetBaseForm)(ref, nullptr);
@@ -740,8 +1670,291 @@ namespace dxvk {
 
     candidate.body   = body;
     candidate.ref    = ref;
-    candidate.mass   = 1.0f / inverseMass;
-    candidate.corpse = actor;
+    candidate.mass   = inverseMass > 0.0f ? 1.0f / inverseMass : 0.0f;
+    candidate.limb   = actor;
+    candidate.living = living;
+    return true;
+  }
+
+
+  bool VrPhysicsGrab::startReaction(uint8_t* actor) const {
+    if (reactionObstacle(actor))
+      return false;
+
+    // Started, or its timer started again
+    uint8_t* ragdoll = readField<uint8_t*>(actor, VrGame::ActorRagdollController);
+    reinterpret_cast<SetFeedbackActiveFn>(VrGame::RagdollSetFeedbackActive)(ragdoll, nullptr, true);
+    return readField<bool>(ragdoll, VrGame::RagdollFeedbackActive);
+  }
+
+
+  bool VrPhysicsGrab::canHoldLiving() const {
+    // A reaction nobody runs would leave the limbs loose and never drawn
+    return m_npcLimbs && (m_drivesFeedback || gameRunsFeedback());
+  }
+
+
+  void VrPhysicsGrab::driveReaction(uint8_t* actor) {
+    if (!m_drivesFeedback)
+      return;
+
+    uint8_t* ragdoll = readField<uint8_t*>(actor, VrGame::ActorRagdollController);
+    uint32_t slot = MaxDriven;
+
+    for (uint32_t i = 0; i < MaxDriven && slot == MaxDriven; i++) {
+      if (m_driven[i].actor == actor || !m_driven[i].actor)
+        slot = i;
+    }
+
+    // All taken: one no hand holds any longer gives its place
+    for (uint32_t i = 0; i < MaxDriven && slot == MaxDriven; i++) {
+      bool held = false;
+
+      for (const Held& hand : m_hands)
+        held |= hand.grab.holding() && hand.ref == m_driven[i].actor;
+
+      if (!held)
+        slot = i;
+    }
+
+    if (slot == MaxDriven)
+      return;
+
+    m_driven[slot].actor = actor;
+    m_driven[slot].refId = readField<uint32_t>(actor, VrGame::FormId);
+    m_drivenRagdolls[slot] = ragdoll;
+  }
+
+
+  void VrPhysicsGrab::updateDriven() {
+    for (uint32_t i = 0; i < MaxDriven; i++) {
+      Driven& driven = m_driven[i];
+
+      if (!driven.actor)
+        continue;
+
+      // Unloaded, given another ragdoll, or the reaction ended: the actor
+      // is the game's again
+      uint8_t* ragdoll = m_drivenRagdolls[i];
+
+      if (reinterpret_cast<FormByIdFn>(VrGame::FormById)(driven.refId) == driven.actor
+       && readField<uint8_t*>(driven.actor, VrGame::ActorRagdollController) == ragdoll
+       && ragdoll && readField<bool>(ragdoll, VrGame::RagdollFeedbackActive))
+        continue;
+
+      m_drivenRagdolls[i] = nullptr;
+      driven = Driven();
+    }
+  }
+
+
+  bool VrPhysicsGrab::drives(const uint8_t* ragdoll) const {
+    for (const auto& driven : m_drivenRagdolls) {
+      if (driven == ragdoll)
+        return true;
+    }
+
+    return false;
+  }
+
+
+  VrPhysicsGrab::Loose* VrPhysicsGrab::looseEntry(uint8_t* actor, uint8_t* ragdoll) {
+    Loose* entry = nullptr;
+
+    for (Loose& loose : m_loose) {
+      if (loose.actor == actor)
+        return &loose;
+
+      if (!entry && !loose.actor)
+        entry = &loose;
+    }
+
+    // All taken: one going back to its animation gives its place
+    for (Loose& loose : m_loose) {
+      if (!entry && !loose.held)
+        entry = &loose;
+    }
+
+    if (!entry)
+      return nullptr;
+
+    const uint8_t* share    = readField<uint8_t*>(ragdoll, VrGame::RagdollShareData);
+    const uint8_t* feedback = share ? readField<uint8_t*>(share, VrGame::RagdollShareFeedback) : nullptr;
+
+    if (!feedback)
+      return nullptr;
+
+    entry->actor  = actor;
+    entry->refId  = readField<uint32_t>(actor, VrGame::FormId);
+    entry->blend  = readField<float>(feedback, VrGame::RagdollFeedbackBlend);
+    entry->logged = false;
+    entry->interp.store(entry->blend);
+
+    // Nothing changes for the actor until its weights are worked out
+    std::fill_n(g_limbWeights[entry - m_loose.data()], VrRagdollMaxBodies, 1.0f);
+    entry->ragdoll.store(ragdoll);
+    return entry;
+  }
+
+
+  void VrPhysicsGrab::updateLoose(float dt) {
+    if (!m_canLoosen)
+      return;
+
+    for (Loose& loose : m_loose)
+      loose.held = false;
+
+    for (Held& held : m_hands)
+      held.limbAcceleration = 0.0f;
+
+    // The bodies the limbs in the hands move
+    for (const Held& held : m_hands) {
+      if (!held.grab.holding() || !held.living || held.knocked || held.anchored)
+        continue;
+
+      uint8_t* ragdoll = readField<uint8_t*>(held.ref, VrGame::ActorRagdollController);
+      const uint8_t* controller = ragdoll ? readField<uint8_t*>(ragdoll, VrGame::RagdollRbController) : nullptr;
+
+      if (!controller)
+        continue;
+
+      uint32_t count = readField<uint32_t>(controller, VrGame::RbControllerBodyCount);
+      uint8_t* const* bodies = readField<uint8_t* const*>(controller, VrGame::RbControllerBodies);
+
+      if (count > VrRagdollMaxBodies || !bodies)
+        continue;
+
+      uint32_t body = 0;
+
+      while (body < count && bodies[body] != held.body)
+        body++;
+
+      Loose* loose = body < count ? looseEntry(held.ref, ragdoll) : nullptr;
+
+      if (!loose)
+        continue;
+
+      // The first hand on it this frame starts over
+      if (!loose->held)
+        loose->inHand.fill(1.0f);
+
+      std::array<bool, VrRagdollMaxBodies> dynamic;
+
+      for (uint32_t i = 0; i < count; i++)
+        dynamic[i] = bodies[i] && isDynamic(bodies[i]);
+
+      vrLimbLoosen(count, readField<const uint16_t*>(controller, VrGame::RbControllerParents),
+        dynamic.data(), body, loose->inHand.data());
+
+      loose->held = true;
+      loose->back = 0.0f;
+    }
+
+    for (uint32_t i = 0; i < m_loose.size(); i++) {
+      Loose& loose = m_loose[i];
+
+      if (!loose.actor)
+        continue;
+
+      // Unloaded, given another ragdoll, or the reaction ended: nothing to
+      // go back from. A knocked down actor's ragdoll is not driven.
+      uint8_t* ragdoll = loose.ragdoll.load();
+      bool valid = reinterpret_cast<FormByIdFn>(VrGame::FormById)(loose.refId) == loose.actor
+        && readField<uint8_t*>(loose.actor, VrGame::ActorRagdollController) == ragdoll
+        && ragdoll && readField<bool>(ragdoll, VrGame::RagdollFeedbackActive);
+
+      if (!loose.held && valid)
+        loose.back += dt / VrLimbReturnTime;
+
+      if (!valid || loose.back >= 1.0f) {
+        loose.ragdoll.store(nullptr);
+        loose.actor = nullptr;
+        loose.back  = 0.0f;
+        continue;
+      }
+
+      if (loose.held) {
+        uint8_t* controller = readField<uint8_t*>(ragdoll, VrGame::RagdollRbController);
+        uint32_t count = readField<uint32_t>(controller, VrGame::RbControllerBodyCount);
+        uint8_t* const* bodies = readField<uint8_t* const*>(controller, VrGame::RbControllerBodies);
+        float    branch = 0.0f;
+        uint32_t freed  = 0;
+
+        for (uint32_t b = 0; b < count; b++) {
+          float inverseMass = bodies[b] ? readField<float>(bodies[b], VrGame::BodyInverseMass) : 0.0f;
+
+          if (loose.inHand[b] < 1.0f && inverseMass > 0.0f) {
+            branch += 1.0f / inverseMass;
+            freed  += 1;
+          }
+        }
+
+        for (Held& held : m_hands) {
+          if (held.grab.holding() && held.ref == loose.actor && !held.anchored && !held.knocked)
+            held.limbAcceleration = vrLimbMaxAcceleration(m_fullAcceleration, branch, held.mass);
+        }
+
+        if (!loose.logged && m_loggedLoose < MaxLoggedGrabs) {
+          Logger::info(str::format("VR: The hands move ", freed, " bodies of ", hexId(loose.refId), " (", branch,
+            " kg of ", count, " bodies) without the animation's drive, drawn as simulated (the race's blend ", loose.blend, ")"));
+          loose.logged = true;
+          m_loggedLoose++;
+        }
+      }
+
+      for (uint32_t b = 0; b < VrRagdollMaxBodies; b++)
+        g_limbWeights[i][b] = vrLimbReturnWeight(loose.inHand[b], loose.back);
+
+      loose.interp.store(loose.blend * loose.back);
+    }
+  }
+
+
+  void VrPhysicsGrab::applyLoose(uint8_t* ragdoll) const {
+    uint8_t* controller = readField<uint8_t*>(ragdoll, VrGame::RagdollRbController);
+
+    if (!controller)
+      return;
+
+    for (uint32_t i = 0; i < m_loose.size(); i++) {
+      if (m_loose[i].ragdoll.load() == ragdoll) {
+        writeField(controller, VrGame::RbControllerBoneWeights, static_cast<const float*>(g_limbWeights[i]));
+        writeField(ragdoll, VrGame::RagdollFeedbackInterp, m_loose[i].interp.load());
+        return;
+      }
+    }
+
+    // No longer in the hands: the game's own (none, and its blend is set
+    // again with the actor's next update)
+    const float* weights = readField<const float*>(controller, VrGame::RbControllerBoneWeights);
+
+    if (weights >= g_limbWeights[0] && weights < g_limbWeights[0] + MaxLooseActors * VrRagdollMaxBodies)
+      writeField(controller, VrGame::RbControllerBoneWeights, static_cast<const float*>(nullptr));
+  }
+
+
+  bool VrPhysicsGrab::keepReaction(Held& held) {
+    if (reinterpret_cast<FormByIdFn>(VrGame::FormById)(held.refId) != held.ref)
+      return false;
+
+    // Dead, or out of the reaction's bone level of detail: the limb follows
+    // the animation or the whole ragdoll again
+    if (virtualFunction<IsDeadFn>(held.ref, VrGame::ActorIsDeadSlot)(held.ref, nullptr, 0) & 0xFF)
+      return false;
+
+    // Knocked down the limb stays in the hand, until the actor gets up
+    held.knocked = m_canKnockDown && knockedDown(held.ref);
+
+    if (held.knocked)
+      return !held.anchored && isDynamic(held.body);
+
+    uint8_t* ragdoll = readField<uint8_t*>(held.ref, VrGame::ActorRagdollController);
+
+    if (!ragdoll || !readField<bool>(ragdoll, VrGame::RagdollFeedbackActive)
+     || (!held.anchored && !isDynamic(held.body)))
+      return false;
+
+    reinterpret_cast<SetFeedbackActiveFn>(VrGame::RagdollSetFeedbackActive)(ragdoll, nullptr, true);
     return true;
   }
 
@@ -753,6 +1966,60 @@ namespace dxvk {
     uint8_t* body = candidate.body;
     uint8_t* ref  = candidate.ref;
     bool shared   = other.grab.holding() && other.body == body;
+    float mass    = candidate.mass;
+
+    bool knocked  = false;
+    bool anchored = false;
+
+    if (candidate.living) {
+      float inverseMass = readField<float>(body, VrGame::BodyInverseMass);
+
+      knocked = m_canKnockDown && knockedDown(ref) && isDynamic(body) && inverseMass > 0.0f;
+
+      // A tiny actor goes down at the touch of a hand
+      if (!knocked && m_canKnockDown && m_npcReaction
+       && vrNpcKnockedDownByGrip(m_npcReaction->maxHealth(ref))
+       && reinterpret_cast<ActorTestFn>(VrGame::ActorCanKnockDown)(ref, nullptr)
+       && knockDown(ref, VrVector3())) {
+        inverseMass = readField<float>(body, VrGame::BodyInverseMass);
+        knocked = isDynamic(body) && inverseMass > 0.0f;
+      }
+
+      if (knocked) {
+        mass = 1.0f / inverseMass;
+      } else {
+        // A living actor's limb is only a body to pull while its hit reaction
+        // runs, and only if it is one of the reaction's bones
+        bool started = startReaction(ref);
+        inverseMass = readField<float>(body, VrGame::BodyInverseMass);
+
+        // Run until it ends, even if this limb cannot be held
+        if (started)
+          driveReaction(ref);
+
+        bool dynamic = isDynamic(body) && inverseMass > 0.0f;
+
+        // Another limb stays where its animation puts it, and the hand on it
+        anchored = started && !dynamic && m_canHoldInPlace;
+
+        if (!started || (!dynamic && !anchored)) {
+          if (m_loggedLimbs < MaxLoggedMisses) {
+            const char* obstacle = reactionObstacle(ref);
+
+            Logger::info(str::format("VR: The ", handName(hand), " hand touches ",
+              hexId(readField<uint32_t>(ref, VrGame::FormId)), started
+                ? str::format(", a living actor's limb that follows its animation ('", bodyNodeName(body),
+                    "', motion type ", uint32_t(readField<uint8_t>(body, VrGame::BodyMotionType)), ")")
+                : str::format(", a living actor whose hit reaction cannot start: ",
+                    obstacle ? obstacle : "it ended at once")));
+            m_loggedLimbs++;
+          }
+          return false;
+        }
+
+        mass = dynamic ? 1.0f / inverseMass : 1.0f;
+      }
+    }
 
     // The game adds its spring to the world of the reference's cell
     uint8_t* world = nullptr;
@@ -774,11 +2041,14 @@ namespace dxvk {
     writeField(info, VrGame::SpringInfoBody, body);
     writeVector4(info, VrGame::SpringInfoLocalPoint, held.local);
     writeVector4(info, VrGame::SpringInfoTarget, point);
-    writeField(info, VrGame::SpringInfoDamping,       m_spring.damping);
-    writeField(info, VrGame::SpringInfoElasticity,    m_spring.elasticity);
+    // A limb is seen in the hand, an object may lag
+    const VrGrabSpringConstants& constants = candidate.living && !knocked ? m_limbSpring : m_spring;
+
+    writeField(info, VrGame::SpringInfoDamping,       constants.damping);
+    writeField(info, VrGame::SpringInfoElasticity,    constants.elasticity);
     writeField(info, VrGame::SpringInfoMaxForce,
-      vrGrabMaxAcceleration(candidate.mass, shared ? 2 : 1, m_fullAcceleration, m_gravity));
-    writeField(info, VrGame::SpringInfoObjectDamping, m_spring.objectDamping);
+      vrGrabMaxAcceleration(mass, shared ? 2 : 1, m_fullAcceleration, m_gravity));
+    writeField(info, VrGame::SpringInfoObjectDamping, constants.objectDamping);
 
     void* memory = reinterpret_cast<NiNewFn>(VrGame::NiNew)(VrGame::SpringSize);
 
@@ -788,11 +2058,13 @@ namespace dxvk {
     void* spring = reinterpret_cast<SpringConstructFn>(VrGame::SpringConstruct)(memory, nullptr, info);
     reinterpret_cast<SpringAssignFn>(VrGame::SpringAssign)(&held.spring, nullptr, spring);
 
-    virtualFunction<SpringAddFn>(held.spring, VrGame::SpringAddSlot)(held.spring, nullptr, world);
+    // Out of the world the spring only keeps the body alive
+    if (!anchored)
+      virtualFunction<SpringAddFn>(held.spring, VrGame::SpringAddSlot)(held.spring, nullptr, world);
 
     uint8_t* action = springAction(held.spring);
 
-    if (!action || havokWorld(action) != hkWorld) {
+    if (!action || (!anchored && havokWorld(action) != hkWorld)) {
       releaseSpring(held.spring);
       return false;
     }
@@ -800,11 +2072,26 @@ namespace dxvk {
     held.body  = body;
     held.ref   = ref;
     held.refId = readField<uint32_t>(ref, VrGame::FormId);
-    held.mass  = candidate.mass;
-    held.corpse = candidate.corpse;
-    held.turning = false;
+    held.mass   = mass;
+    held.limb   = candidate.limb;
+    held.living = candidate.living;
+    held.inPlace = false;
+    held.knocked = knocked;
+    held.anchored = anchored;
+    held.limbAcceleration = 0.0f;
 
-    if (!held.corpse)
+    if (held.living) {
+      VrVector3 root = readField<VrVector3>(ref, VrGame::RefLocation);
+      held.anchor = vrNpcToActor({ candidate.point.x - root.x, candidate.point.y - root.y },
+        readField<float>(ref, VrGame::RefHeading));
+      held.target = candidate.point;
+    }
+
+    held.turning = false;
+    held.heldTime = 0.0f;
+    held.furthest = 0.0f;
+
+    if (!held.limb)
       addTurn(held);
 
     // The other hand took the body already, the game saw it taken
@@ -833,7 +2120,7 @@ namespace dxvk {
     }
 
     held.groupedFilter = (held.filter & VrGame::FilterKeptBits) | (group << VrGame::FilterGroupShift);
-    held.grouped       = group != 0 && !candidate.corpse;
+    held.grouped       = group != 0 && !candidate.limb;
 
     if (held.grouped)
       updateFilter(body, held.groupedFilter);
@@ -842,9 +2129,14 @@ namespace dxvk {
       m_loggedNoGroup = true;
     }
 
-    // As the game's grab does
+    // As the game's grab does; a living actor is not moved for good, nor
+    // taken from its owner
     void* extraData = ref + VrGame::RefExtraData;
     reinterpret_cast<SetActionFlagFn>(VrGame::SetActionFlag)(nullptr, extraData, VrGame::ActionOnGrab);
+
+    if (held.living)
+      return true;
+
     virtualFunction<AddChangeFn>(ref, VrGame::RefAddChangeSlot)(ref, nullptr, VrGame::ChangeMoved);
     reinterpret_cast<NotifyGuardsFn>(VrGame::NotifyGuards)(extraData, nullptr, ref, player);
     reinterpret_cast<RemoveExtraFn>(VrGame::RemoveExtra)(extraData, nullptr, VrGame::ExtraGuarded);
@@ -856,6 +2148,7 @@ namespace dxvk {
     m_spring.damping       = settingFloat(VrGame::SpringDampingSetting);
     m_spring.elasticity    = settingFloat(VrGame::SpringElasticitySetting);
     m_spring.objectDamping = ObjectDamping;
+    m_limbSpring           = vrLimbSpring(m_spring);
     m_fullAcceleration     = settingFloat(VrGame::SpringMaxForceSetting);
     m_gravity              = vrLength(readField<VrVector3>(hkWorld, VrGame::WorldGravity));
 
@@ -900,7 +2193,7 @@ namespace dxvk {
     uint8_t* action = springAction(held.spring);
     uint8_t* world  = action ? havokWorld(action) : nullptr;
 
-    if (!world || world != havokWorld(held.body))
+    if (held.anchored ? !havokWorld(held.body) : (!world || world != havokWorld(held.body)))
       return false;
 
     return reinterpret_cast<FormByIdFn>(VrGame::FormById)(held.refId) == held.ref;
@@ -908,15 +2201,24 @@ namespace dxvk {
 
 
   bool VrPhysicsGrab::moveTarget(Held& held, const VrGameCameraPose& pose) {
-    VrVector3 target = held.grab.target(pose) + m_lead;
+    VrVector3 target = held.grab.target(pose) + (held.living && !held.knocked ? m_limbLead : m_lead);
     VrVector3 point  = bodyPointToWorld(held.body, held.local) * (1.0f / havokScale());
 
-    if (vrLength(point - target) > MaxStretch)
+    held.target = target;
+
+    float distance = vrLength(point - target);
+    held.furthest = std::max(held.furthest, distance);
+
+    if (distance > (held.living && !held.knocked && !held.inPlace ? PullFreeStretch : MaxStretch))
       return false;
 
+    if (held.anchored)
+      return true;
+
     // A second hand on the body, or one let go, changes its strength
-    writeField(springAction(held.spring), VrGame::SpringActionMaxForce,
-      vrGrabMaxAcceleration(held.mass, handsOn(held.body), m_fullAcceleration, m_gravity));
+    writeField(springAction(held.spring), VrGame::SpringActionMaxForce, held.limbAcceleration > 0.0f
+      ? held.limbAcceleration
+      : vrGrabMaxAcceleration(held.mass, handsOn(held.body), m_fullAcceleration, m_gravity));
 
     reinterpret_cast<SpringSetTargetFn>(VrGame::SpringSetTarget)(held.spring, nullptr, &target);
     return true;
@@ -937,7 +2239,7 @@ namespace dxvk {
 
 
   void VrPhysicsGrab::updateTurn(VrHand hand, Held& held, const VrGameCameraPose& pose) {
-    bool turning = !held.corpse && handsOn(held.body) == 1;
+    bool turning = !held.limb && handsOn(held.body) == 1;
 
     if (!turning) {
       stopTurn(hand, held);
@@ -1033,7 +2335,7 @@ namespace dxvk {
 
 
   bool VrPhysicsGrab::storable(const Held& held, VrHand hand) const {
-    if (!m_canStore || held.corpse || !held.ref)
+    if (!m_canStore || held.limb || !held.ref)
       return false;
 
     // Not while the other hand still holds it
@@ -1107,7 +2409,7 @@ namespace dxvk {
     VrHand hand = &held == &m_hands[0] ? VrHand(0) : VrHand(1);
     stopTurn(hand, held);
 
-    if (uint8_t* action = springAction(held.spring); action && !held.corpse) {
+    if (uint8_t* action = springAction(held.spring); action && !held.limb) {
       for (uint32_t i = 0; i < held.callbacks.size(); i++)
         writeField(action, VrGame::SpringActionCallbacks + 4 * i, held.callbacks[i]);
     }

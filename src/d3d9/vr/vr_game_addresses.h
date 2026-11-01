@@ -325,6 +325,17 @@ namespace dxvk {
     constexpr uintptr_t ProcessWeaponInfoSlot = 0x148;
     constexpr uintptr_t InventoryEntryForm    = 0x08;
     constexpr uintptr_t WeaponAnimationType   = 0xF4;
+    constexpr int32_t   WeaponTypeHandToHand       = 0;
+
+    /**
+     * The player's process is a HighProcess. Its table, and the function in
+     * the slot above (ProcessWeaponInfoSlot): Actor::CombatHit (call at
+     * 0x00899D94) and Actor::ObjectHit (0x008AE705) take the attacker's
+     * weapon from it, and use the game's fists when it gives none
+     * (findings/melee.md §15).
+     */
+    constexpr uintptr_t HighProcessVtable           = 0x01087864;
+    constexpr uintptr_t HighProcessCurrentWeapon    = 0x008D81E0;
 
     /**
      * Animation sequences, see findings/weapon.md. Every sequence an actor
@@ -2507,6 +2518,315 @@ namespace dxvk {
       0x55, 0x8B, 0xEC, 0x51, 0xE8, 0x67, 0x32, 0xDB, 0xFF, 0x8A, 0x80, 0xE4, 0x00, 0x00, 0x00 };
     constexpr uint8_t   ShowMessageBoxPrologue[]     = {
       0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0xE8, 0x85, 0x33, 0xDB, 0xFF };
+
+    /**
+     * A living actor's limb held by a hand (findings/grab.md §19): the
+     * actor's bhkRagdollController (Actor +0xAC) and its hit reaction
+     * ("ragdoll feedback"), which Actor::HitMe starts with
+     * SetRagdollFeedbackActive(true) (__thiscall, one byte argument): the
+     * bones of the race's feedback list become dynamic bodies driven
+     * towards the animation, for fFeedbackTimeMS (3000) from the last call.
+     * HitMe only starts it when the ragdoll's animation (+0x41) and the
+     * feedback (+0x28D) are enabled, the actor is conscious and its
+     * process's sit state is 0. +0x28E tells whether it runs.
+     * It asks Havok for MOTION_DYNAMIC (1), which a body never keeps: it
+     * becomes MOTION_SPHERE_INERTIA (2), MOTION_BOX_INERTIA (3) or
+     * MOTION_THIN_BOX_INERTIA (6), the types bhkRigidBody::IsMotionTypeDynamic
+     * (0x00C8CCE0) accepts.
+     */
+    constexpr uintptr_t ActorRagdollController       = 0xAC;
+    constexpr uintptr_t RagdollAnimEnabled           = 0x41;
+    constexpr uintptr_t RagdollFeedbackEnabled       = 0x28D;
+    constexpr uintptr_t RagdollFeedbackActive        = 0x28E;
+    constexpr uintptr_t RagdollSetFeedbackActive     = 0x00C7B6A0;
+    constexpr uintptr_t RagdollSetFeedbackActiveCallSite = 0x0089CB0B;
+    constexpr uintptr_t ActorIsUnconscious           = 0x00437BD0;
+    constexpr uintptr_t ActorIsUnconsciousCallSite   = 0x0089CA82;
+    constexpr uint8_t   MotionDynamic                = 1;
+    constexpr uint8_t   MotionBoxInertia             = 3;
+    constexpr uint8_t   MotionThinBoxInertia         = 6;
+
+    /**
+     * The reaction's work while it runs (findings/grab.md §19.4):
+     * bhkRagdollController::DoRagdollAnim calls DoRagdollFeedback
+     * (__thiscall, no argument; it draws the feedback bones between the
+     * ragdoll's pose and the animation's and ends the reaction once its timer
+     * expires) only when the INI setting bRagdollFeedback:RagdollAnim is
+     * set (Setting object, bool at SettingValue), which Fallout_default.ini
+     * turns off. The call right after it, UpdateDebugLines(2) (__thiscall,
+     * one argument), always runs, before SetSGPoseLocalSpace.
+     */
+    constexpr uintptr_t RagdollDoFeedback            = 0x00C7C870;
+    constexpr uintptr_t RagdollDoFeedbackCallSite    = 0x00C7D7CE;
+    constexpr uintptr_t RagdollUpdateDebugLines      = 0x00C7CB50;
+    constexpr uintptr_t RagdollFeedbackPoseCallSite  = 0x00C7D7D7;
+    constexpr uintptr_t RagdollFeedbackSetting       = 0x01267C54;
+
+    /**
+     * What ties a reaction's dynamic bodies to the animation (findings/grab.md
+     * §19.11). UpdateRagdollRigidBodies calls
+     * hkaRagdollRigidBodyController::driveToPose (bhkRagdollController +0x4C)
+     * once per frame, which sets each body's velocity from
+     * hkaKeyFrameHierarchyUtility::ControlData, scaled per body by
+     * BodyData::m_boneWeights (controller +0x18 + 0x10, null by default);
+     * a weight of 0 leaves the body's velocity alone. DoRagdollFeedback draws
+     * each feedback bone with the slerp of the ragdoll's rotation (0) to the
+     * animation's (1) by fCurrFeedbackInterp (+0x290), which ResetDriveGains
+     * sets to the race's blend amount (share data +0x2A4, feedback +0x18,
+     * +0x04). UpdateDebugLines(0) (__thiscall) comes before both, on the
+     * thread that animates the actor.
+     */
+    constexpr uintptr_t RagdollDriveStageCallSite    = 0x00C7D6F7;
+    constexpr uintptr_t RagdollRbController          = 0x4C;
+    constexpr uintptr_t RagdollFeedbackInterp        = 0x290;
+    constexpr uintptr_t RagdollShareData             = 0x2A4;
+    constexpr uintptr_t RagdollShareFeedback         = 0x18;
+    constexpr uintptr_t RagdollFeedbackBlend         = 0x04;
+    constexpr uintptr_t RbControllerBodyCount        = 0x18;
+    constexpr uintptr_t RbControllerBodies           = 0x1C;
+    constexpr uintptr_t RbControllerParents          = 0x20;
+    constexpr uintptr_t RbControllerBoneWeights      = 0x28;
+
+    /**
+     * NPC reactions to the player (findings/grab.md §19.3):
+     * ProcessLists::CommentOnPlayerAction (0x00977CB0) makes the actor the
+     * player aims at say the topic TESTopic::GetTopic(DT_TOPIC, 8) (__cdecl)
+     * through Actor::StartGreetingPlayer(topic) (__thiscall), after
+     * Actor::CanSpeak, IsInCombat, ShouldSkipFallOutBehavior(4) and
+     * IsPlayerTeammate (__thiscall), and sets the shared comment timer
+     * (ProcessLists +0x154) to fCommentOnPlayerActionsTimer. The call sites
+     * are those of CommentOnPlayerAction. StartGreetingPlayer only speaks while
+     * PlayerCharacter::fLastHelloTime (+0xE24) is negative: it holds the tick
+     * of the last greeting for fHelloCooldownTime (findings/grab.md §19.12).
+     * Actor::IsTalking and PlayerCharacter::GetLastAction are __thiscall.
+     * A grabbed actor says the topic of a weapon aimed at it (index 8) or of
+     * a shot fired near it (index 3, PLAYERFIREWEAPON, findings/grab.md §19.15).
+     */
+    constexpr uintptr_t TopicGetTopic                = 0x0061A2D0;
+    constexpr uintptr_t TopicGetTopicCallSite        = 0x00978137;
+    constexpr uintptr_t ActorStartGreetingPlayer     = 0x008BC3D0;
+    constexpr uintptr_t ActorStartGreetingPlayerCallSite = 0x00978149;
+    constexpr uintptr_t ActorCanSpeak                = 0x00884480;
+    constexpr uintptr_t ActorCanSpeakCallSite        = 0x00977D4B;
+    constexpr uintptr_t ActorIsInCombat              = 0x00493BB0;
+    constexpr uintptr_t ActorIsInCombatCallSite      = 0x00977D73;
+    constexpr uintptr_t ActorSkipsBehavior           = 0x008A78F0;
+    constexpr uintptr_t ActorSkipsBehaviorCallSite   = 0x00977D84;
+    constexpr uintptr_t ActorIsPlayerTeammate        = 0x00566950;
+    constexpr uintptr_t ActorIsPlayerTeammateCallSite = 0x00977D93;
+    constexpr uintptr_t ActorIsTalking               = 0x008A67F0;
+    constexpr uintptr_t ActorIsTalkingCallSite       = 0x00977DCA;
+    constexpr uintptr_t PlayerHasNoLastHelloTime     = 0x008BC520;
+    constexpr uintptr_t PlayerHasNoLastHelloTimeCallSite = 0x008BC43F;
+    constexpr uintptr_t PlayerLastHelloTime          = 0xE24;
+    constexpr uintptr_t PlayerGetLastAction          = 0x00964060;
+    constexpr uintptr_t PlayerGetLastActionCallSite  = 0x0096D90F;
+    constexpr uintptr_t ProcessListsSingleton        = 0x011E0E80;
+    constexpr uintptr_t ProcessListsCommentTimer     = 0x154;
+    constexpr uintptr_t CommentOnPlayerActionsTimerSetting = 0x011D0174;
+    constexpr uint32_t  DialogueTypeTopic            = 0;
+    constexpr uint32_t  TopicPlayerFiring            = 3;
+    constexpr uint32_t  TopicPlayerAiming            = 8;
+    constexpr uint32_t  BehaviorReactToPlayerActions = 4;
+    constexpr uint32_t  SitSleepSleeping             = 9;
+
+    /**
+     * Going into combat with the player as the script command StartCombat
+     * does (Script::StartCombatFunction, 0x005C1750): Actor::IsGuard
+     * (virtual) gives the aggressor flag, then BaseProcess::EnterCombat
+     * (virtual, __thiscall, 13 stack arguments: actor, target, then the
+     * flags 1, 1, 0, 0, 0, aggressor, 0, 1, 0, 1, 0). Aggression and
+     * Confidence are actor values 0 and 1 (ACTOR_AGGRESSION,
+     * ACTOR_CONFIDENCE: Aggressive 1, Foolhardy 4).
+     */
+    constexpr uintptr_t ActorIsGuardSlot             = 0x304;
+    constexpr uintptr_t ProcessEnterCombatSlot       = 0x33C;
+    constexpr uint32_t  AvAggression                 = 0;
+    constexpr uint32_t  AvConfidence                 = 1;
+    constexpr uint32_t  AvStrength                   = 5;
+
+    /**
+     * Whether an actor has a recorded line for a topic
+     * (findings/grab.md §19.8). TESTopic::GetMatchingInfo_1(speaker, target)
+     * (__thiscall) picks a line by its conditions, at random among the
+     * random ones, whether its audio exists or not.
+     * TESTopicInfo::LoadResponseList(wrapper) (__thiscall, returns wrapper)
+     * reads the line's responses into a ResponseListWrapper, one pointer to
+     * the first TESResponse, freed by its destructor (__thiscall).
+     * TESResponse::GetAudioFullPath(speaker, quest, topic, info, BSStringT*)
+     * (__thiscall) writes the voice file's path for the speaker's voice
+     * type; a BSStringT is 8 bytes, its characters first, with a constructor
+     * and a destructor (__thiscall). FileFinder::Locate(name, null, 0, -1)
+     * (__cdecl) looks in the archives and the folders, as the lip files'
+     * loading does.
+     */
+    constexpr uintptr_t TopicGetMatchingInfo         = 0x0061A720;
+    constexpr uintptr_t TopicGetMatchingInfoCallSite = 0x008D60A7;
+    constexpr uintptr_t TopicInfoLoadResponses       = 0x0061E760;
+    constexpr uintptr_t TopicInfoLoadResponsesCallSite = 0x0083C5C0;
+    constexpr uintptr_t ResponseListDestroy          = 0x0061F440;
+    constexpr uintptr_t ResponseListDestroyCallSite  = 0x0083C645;
+    constexpr uintptr_t ResponseGetAudioFullPath     = 0x00616F40;
+    constexpr uintptr_t ResponseGetAudioFullPathCallSite = 0x0083D35F;
+    constexpr uintptr_t BSStringConstruct            = 0x004037B0;
+    constexpr uintptr_t BSStringConstructCallSite    = 0x0083D2D3;
+    constexpr uintptr_t BSStringDestroy              = 0x004037D0;
+    constexpr uintptr_t BSStringDestroyCallSite      = 0x0083D3B1;
+    constexpr uintptr_t FileFinderLocate             = 0x00456A20;
+    constexpr uintptr_t FileFinderLocateCallSite     = 0x004D530B;
+    constexpr uintptr_t TopicInfoQuest               = 0x48;
+    constexpr uint32_t  BSStringSize                 = 8;
+
+    /**
+     * An actor's factions and the player's reputation with them, as
+     * Actor::GetFactionRank (0x008B8290) lists them:
+     * Actor::GetActorBase (__thiscall), the base's list of factions,
+     * ExtraDataList::GetFactionChangesExtra (__thiscall, list at +0xC or
+     * null), then Actor::IntegrateFactionLists(out, size, list, changes)
+     * (__thiscall, returns the count, a faction taken away leaves null).
+     * TESFaction::pReputation may be null.
+     * TESReputation::GetReputationLevel(axis) (__thiscall): level 0 to 3 of
+     * fame (axis 1) or infamy (axis 0). The title "Idolized" is fame 3
+     * without infamy (TESReputation::GetReputationTitle, 0x00616710).
+     */
+    constexpr uintptr_t ActorGetActorBase            = 0x004181E0;
+    constexpr uintptr_t ActorGetActorBaseCallSite    = 0x008B82AC;
+    constexpr uintptr_t ExtraGetFactionChanges       = 0x0042E800;
+    constexpr uintptr_t ExtraGetFactionChangesCallSite = 0x008B82CB;
+    constexpr uintptr_t ActorIntegrateFactionLists   = 0x008B8CA0;
+    constexpr uintptr_t ActorIntegrateFactionListsCallSite = 0x008B830E;
+    constexpr uintptr_t ReputationGetLevel           = 0x00616950;
+    constexpr uintptr_t ReputationGetLevelCallSite   = 0x00616A9E;
+    constexpr uintptr_t ActorBaseFactions            = 0x5C;
+    constexpr uintptr_t FactionChangesList           = 0x0C;
+    constexpr uintptr_t FactionReputation            = 0x38;
+    constexpr uint32_t  MaxFactions                  = 0x80;
+    constexpr uint32_t  ReputationFame               = 1;
+    constexpr uint32_t  ReputationInfamy             = 0;
+    constexpr uint32_t  ReputationTopLevel           = 3;
+
+    /**
+     * Actor::Move (__thiscall: seconds, NiPoint3* move, flags; virtual, the
+     * same in the tables of Character and Creature; Actor::UpdateMovement
+     * calls it with the move of the frame, in the actor's frame). The move
+     * reaches the character controller as it is; gravity and the animation
+     * are the controller's and the process's own (findings/grab.md §19.8).
+     */
+    constexpr uintptr_t ActorMove                    = 0x008A62B0;
+    constexpr uintptr_t CharacterMoveSlot            = 0x01086CBC;
+    constexpr uintptr_t CreatureMoveSlot             = 0x010872FC;
+
+    /**
+     * ActorMover::GetMoveMode (__thiscall, virtual; PlayerMover has a table
+     * of its own). Actor::GetMoveMode asks it, and Actor::PickAnimations
+     * picks the walk or run animation and its direction from the result, as
+     * Actor::UpdateMovement gives it to Actor::Move as flags
+     * (findings/grab.md §19.9). ActorMover::pActor at ActorMoverActor.
+     */
+    constexpr uintptr_t ActorMoverGetMoveMode        = 0x009DDB70;
+    constexpr uintptr_t ActorMoverGetMoveModeSlot    = 0x0109225C;
+    constexpr uintptr_t ActorMoverActor              = 0x28;
+
+    /** Actor::IsImmobileCreature, virtual, no argument */
+    constexpr uintptr_t ActorIsImmobileSlot          = 0x4B4;
+
+    /**
+     * Knocking an actor down (findings/grab.md §19.10).
+     * BaseProcess::KnockExplosion (virtual, __thiscall: actor, NiPoint3 source
+     * by value, force; callee cleans up) gets the actor out of its furniture
+     * and makes its whole ragdoll dynamic, each limb gaining force (Havok units
+     * per second) away from the source. It does nothing unless
+     * Actor::CanKnockDown (__thiscall). Actor::IsKnockedOut is virtual, true
+     * from then until the actor stands again.
+     */
+    constexpr uintptr_t ProcessKnockExplosionSlot    = 0x418;
+    constexpr uintptr_t ActorCanKnockDown            = 0x008845A0;
+    constexpr uintptr_t ActorCanKnockDownCallSite    = 0x0091FF3E;
+    constexpr uintptr_t ActorIsKnockedOutSlot        = 0x230;
+
+    /**
+     * The script command SendAssaultAlarm on the actor itself: the crime of
+     * Actor::AttackAlarm(player, minor 0, 1) (__thiscall), then
+     * BaseProcess::EnterCombat with the arguments of the site's own call
+     * (flags 1, then eight 0, then 1, 0).
+     */
+    constexpr uintptr_t ActorAttackAlarm             = 0x008C0460;
+    constexpr uintptr_t ActorAttackAlarmCallSite     = 0x005DA328;
+
+    /**
+     * The player's Actor::Move: the same function in the PlayerCharacter
+     * table; the hook slows the player holding an actor down without
+     * touching an actor value, which a save would keep.
+     */
+    constexpr uintptr_t PlayerMoveSlot               = 0x0108AC8C;
+
+    /**
+     * The collision of the player's capsule with a held actor.
+     * bhkCollisionFilter's hkpCollidableCollidableFilter table holds
+     * isCollisionEnabled(bool* result, collidable a, collidable b) (__thiscall,
+     * returns result); it reads hkpCollidable's filter at CollidableFilter.
+     * Character controllers are caching phantoms, whose overlaps only ask the
+     * filter when they begin, so bhkPhantom::UpdateCollisionFilter (__thiscall)
+     * asks again for the phantom a change concerns.
+     * MobileObject::GetCharController (__thiscall), controller's phantom at
+     * ControllerShapePhantom.
+     */
+    constexpr uintptr_t CollidableFilterEnabled      = 0x00C84880;
+    constexpr uintptr_t CollidableFilterEnabledSlot  = 0x010C3C10;
+    constexpr uintptr_t CollidableFilterInfo         = 0x1C;
+    constexpr uintptr_t PhantomUpdateFilter          = 0x00C9F460;
+    constexpr uint8_t   PhantomUpdateFilterPrologue[] = { 0x56, 0x8B, 0xF1, 0x8B, 0x06, 0x8B, 0x90, 0x98, 0x00, 0x00, 0x00 };
+    constexpr uintptr_t GetCharController            = 0x009306D0;
+    constexpr uintptr_t GetCharControllerCallSite    = 0x00525036;
+    constexpr uintptr_t ControllerShapePhantom       = 0x594;
+    constexpr uint32_t  FilterLayerMask              = 0x7F;
+    constexpr uint32_t  LayerBiped                   = 0x08;
+    constexpr uint32_t  LayerDeadBiped               = 0x1D;
+    constexpr uint32_t  LayerCharController          = 0x1E;
+
+    /**
+     * Actor::SetWalkSpeed and SetRunSpeed (__thiscall, float, ret 4) set the
+     * process's cached speeds, from which Actor::PickAnimations takes the rate
+     * of the walk and run animations. BaseProcess::SetCachedValueDirty
+     * (__thiscall, flags, ret 4) has them worked out again.
+     */
+    constexpr uintptr_t ActorSetWalkSpeed            = 0x00884FC0;
+    constexpr uintptr_t ActorSetWalkSpeedCallSite    = 0x008E2504;
+    constexpr uintptr_t ActorSetRunSpeed             = 0x00884FF0;
+    constexpr uintptr_t ActorSetRunSpeedCallSite     = 0x008E24B7;
+    constexpr uintptr_t ProcessSetCachedDirty        = 0x00884940;
+    constexpr uintptr_t ProcessSetCachedDirtyCallSite = 0x0088490D;
+    constexpr uint32_t  CachedWalkAndRunSpeed        = 0x3000;
+
+    /**
+     * bhkCharacterController::SetVelocityModifier(NiPoint3* displacement,
+     * seconds) (__thiscall, ret 8): moves the character by the displacement,
+     * game units, on top of its own move, what KnockExplosion does to an
+     * actor with no ragdoll.
+     */
+    constexpr uintptr_t ControllerSetVelocityMod     = 0x00C6D4D0;
+    constexpr uintptr_t ControllerSetVelocityModCallSite = 0x0088A355;
+
+    /**
+     * Melee hits on objects (findings/melee.md §14): Actor::ObjectHit(bool
+     * power) (__thiscall, ret 4), which MeleeAttack calls for the player
+     * when no actor is in reach, casts a shape from Actor::GetEyeVector
+     * (call at ObjectHitEyeCallSite: __thiscall, position, direction,
+     * third person, ret 0xC) and pushes the body hit along the weapon's
+     * motion: from BaseProcess::GetWeaponLastPos (virtual, no argument)
+     * to Actor::GetWeaponPosition(NiPoint3* out, bool) (call at
+     * ObjectHitWeaponCallSite, __thiscall, ret 8, returns out), both in the
+     * frame of the actor's root node. Then impact sound, decal, particles
+     * and the OnHit / OnHitWith script blocks.
+     */
+    constexpr uintptr_t ActorObjectHit               = 0x008AE660;
+    constexpr uint8_t   ActorObjectHitPrologue[]     = {
+      0x53, 0x8B, 0xDC, 0x83, 0xEC, 0x08, 0x83, 0xE4, 0xF0, 0x83, 0xC4, 0x04, 0x55, 0x8B, 0x6B, 0x04 };
+    constexpr uintptr_t ActorGetEyeVector            = 0x008AFF80;
+    constexpr uintptr_t ObjectHitEyeCallSite         = 0x008AE7E2;
+    constexpr uintptr_t ActorGetWeaponPosition       = 0x008A5340;
+    constexpr uintptr_t ObjectHitWeaponCallSite      = 0x008AEBCD;
+    constexpr uintptr_t ProcessWeaponLastPosSlot     = 0x460;
 
   }
 
