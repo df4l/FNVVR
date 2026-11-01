@@ -124,7 +124,7 @@ namespace dxvk {
     g_npcReaction = reaction.get();
     reaction->m_canAssault = VrGameMemory::callsTo(VrGame::ActorAttackAlarmCallSite, VrGame::ActorAttackAlarm);
 
-    Logger::info("VR: Grabbed actors complain as when aimed at, foolhardy aggressive ones with no recorded line attack unless idolized");
+    Logger::info("VR: Grabbed actors complain as when shot near, foolhardy aggressive ones with no recorded line attack unless idolized");
     return reaction;
   }
 
@@ -182,8 +182,8 @@ namespace dxvk {
 
 
   bool VrNpcReaction::canComment(uint8_t* actor, bool teammate, bool inCombat) const {
-    // The checks of CommentOnPlayerAction for the actor aimed at; the
-    // distance is that of the hand
+    // The checks of CommentOnPlayerAction for the actor a weapon is aimed at,
+    // the one it singles out; the distance is that of the hand
     bool dead = virtualFunction<IsDeadFn>(actor, VrGame::ActorIsDeadSlot)(actor, nullptr, 0) & 0xFF;
     bool asleep = virtualFunction<SitStateFn>(actor, VrGame::GetSitStateSlot)(actor, nullptr) == VrGame::SitSleepSleeping;
     bool skips = reinterpret_cast<SkipsBehaviorFn>(VrGame::ActorSkipsBehavior)(
@@ -204,7 +204,7 @@ namespace dxvk {
 
   bool VrNpcReaction::hasVoicedLine(uint8_t* actor) {
     void* topic = reinterpret_cast<GetTopicFn>(VrGame::TopicGetTopic)(
-      VrGame::DialogueTypeTopic, VrGame::TopicPlayerAiming);
+      VrGame::DialogueTypeTopic, VrGame::TopicPlayerFiring);
     uint8_t* player = *reinterpret_cast<uint8_t* const*>(VrGame::Player);
 
     if (!topic || !player)
@@ -351,7 +351,7 @@ namespace dxvk {
 
   void VrNpcReaction::complain(uint8_t* actor) {
     void* topic = reinterpret_cast<GetTopicFn>(VrGame::TopicGetTopic)(
-      VrGame::DialogueTypeTopic, VrGame::TopicPlayerAiming);
+      VrGame::DialogueTypeTopic, VrGame::TopicPlayerFiring);
 
     uint8_t* player = *reinterpret_cast<uint8_t* const*>(VrGame::Player);
 

@@ -2599,6 +2599,8 @@ namespace dxvk {
      * PlayerCharacter::fLastHelloTime (+0xE24) is negative: it holds the tick
      * of the last greeting for fHelloCooldownTime (findings/grab.md §19.12).
      * Actor::IsTalking and PlayerCharacter::GetLastAction are __thiscall.
+     * A grabbed actor says the topic of a shot fired near it (index 3,
+     * PLAYERFIREWEAPON, findings/grab.md §19.13).
      */
     constexpr uintptr_t TopicGetTopic                = 0x0061A2D0;
     constexpr uintptr_t TopicGetTopicCallSite        = 0x00978137;
@@ -2623,7 +2625,7 @@ namespace dxvk {
     constexpr uintptr_t ProcessListsCommentTimer     = 0x154;
     constexpr uintptr_t CommentOnPlayerActionsTimerSetting = 0x011D0174;
     constexpr uint32_t  DialogueTypeTopic            = 0;
-    constexpr uint32_t  TopicPlayerAiming            = 8;
+    constexpr uint32_t  TopicPlayerFiring            = 3;
     constexpr uint32_t  BehaviorReactToPlayerActions = 4;
     constexpr uint32_t  SitSleepSleeping             = 9;
 

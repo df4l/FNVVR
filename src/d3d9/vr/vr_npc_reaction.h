@@ -11,10 +11,10 @@ namespace dxvk {
    * \brief Makes an actor react to being grabbed by the player
    *
    * The game has no reaction of its own to an actor grabbed by the hand.
-   * The closest is its comment on a weapon aimed at an actor
-   * (ProcessLists::CommentOnPlayerAction, findings/grab.md §19.3): the
-   * actor says a line of the topic the game keeps for it ("Watch where
-   * you're pointing that thing"), at once, under the same conditions but
+   * The closest is its comment on a shot fired near an actor
+   * (ProcessLists::CommentOnPlayerAction, findings/grab.md §19.13): the
+   * actor says a line of the topic the game keeps for it ("Cut it out, will
+   * you?"), at once, under the conditions of a comment on one actor but
    * without waiting for the timers that space out remarks (findings/grab.md
    * §19.12). A foolhardy, aggressive actor with no recorded line for that
    * topic goes into combat with the player instead, as with the script

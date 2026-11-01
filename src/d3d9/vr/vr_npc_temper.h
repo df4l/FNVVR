@@ -10,7 +10,7 @@ namespace dxvk {
   enum class VrNpcGrabResponse : uint32_t {
     /// Nothing: it cannot speak now, or is still saying its last complaint
     None,
-    /// Says the line the game plays when the player aims a weapon at it
+    /// Says the line the game plays when the player fires near it
     Complain,
     /// Goes into combat with the player
     Attack,
@@ -31,7 +31,7 @@ namespace dxvk {
     bool  teammate   = false;
     /// Already in combat
     bool  inCombat   = false;
-    /// Has a recorded line for a weapon aimed at it
+    /// Has a recorded line for a shot fired near it
     bool  voicedLine = false;
     /// The player is idolized by one of its factions
     bool  idolized   = false;
@@ -61,7 +61,7 @@ namespace dxvk {
    * A hot-tempered actor with nothing recorded to say attacks at once,
    * unless the player is idolized by one of its factions (user,
    * 2026-11-01). Others say at once the line the game plays when the player
-   * aims at them, if the game's own conditions let them comment: a grab is
+   * fires near them, if the game's own conditions let them comment: a grab is
    * aimed at them, the timers that space out remarks do not apply (user,
    * 2026-11-01).
    */
