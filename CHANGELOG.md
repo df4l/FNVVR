@@ -1,6 +1,36 @@
 # Changelog
 
-## Unreleased
+## v0.11.0 (2026-11-01, since v0.10.0 `ce0c0a9`)
+
+### Holding living NPCs
+
+Modelled on what PLANCK does in Skyrim VR; none of its code is used.
+
+- **Hold a living actor by a limb**: a free hand that closes its grip on an NPC or a creature holds the limb it touches,
+  seated and sleeping actors included. The limb follows the hand and goes back to its animation when let go.
+- **Strength decides**: while your Strength is above the actor's, it stays where you hold it and you can drag it, walking
+  or running in its own animation, and turn it. Both hands count as one more point of Strength, and a greater margin moves
+  it faster; seated actors only stay in place. A stronger actor walks away and the grip breaks.
+- **Holding has a cost**: it drains action points, more in combat, and the hands let go at 0. You cannot walk faster
+  than the actor you hold, and you pass through it.
+- **Knock down and shove**: letting go with a fast move knocks the actor down (30 action points, 50 in combat) if you are
+  the stronger; its limbs stay in your hands until it gets up. A fast open hand with no weapon out shoves an actor
+  (40 action points).
+- **Actors react**: a grabbed actor says one of its recorded lines for a weapon aimed at it or a shot fired near it, at
+  most once every 10 seconds. Some of these lines mention weapons even when none is drawn. A hot-tempered actor with no
+  such line attacks at once, unless one of its factions idolizes you. Handled for too long or too roughly, any actor
+  ends up assaulting you, which is a crime, except companions and factions that idolize you.
+
+### Fists and melee
+
+- **Punch with your fists**: a free bare hand closed in a fist (or with its grip held, without finger tracking) punches
+  the actors it reaches at the melee hit speed, with the game's unarmed damage. The left fist punches with a pistol or
+  a machete in the right hand, the right fist with the weapon holstered. Only the hand wearing a hand-to-hand weapon
+  (Power Fist, ...) deals that weapon's hit.
+- **Unarmed trigger**: when unarmed, the trigger closes the index finger instead of charging a power attack. Punches are
+  never power attacks.
+- **Hit world objects**: melee weapons and fists swung at bottles, clutter and other objects push them, play the impact
+  sound of the material, leave a mark and run the objects' OnHit scripts.
 
 ### 4 GB of memory
 
@@ -25,6 +55,13 @@
   invisible spheres that let the hands push objects were added to the new place while the game was still loading it,
   and stayed in the old one after the game unloaded it; held objects are now let go of and the spheres taken out when
   the player moves to another place, and none is made while it loads.
+- **V.A.T.S. looking the wrong way** ([#9](https://github.com/df4l/FNVVR/issues/9)): V.A.T.S. could point away from
+  the target, up to the opposite direction, depending on how the player stood in the room. The target is now in
+  front of the head when V.A.T.S. starts, and the horizon stays level: look up or down at the target with the head.
+- **No sound with the window in the background** ([#8](https://github.com/df4l/FNVVR/issues/8)): sound effects and
+  voices keep playing when the game's window does not have the focus, as when it is started from the headset.
+- **Varmint rifle magazine**: the new magazine is held between the fingers, feed end up, and no longer upside down
+  beside the hand.
 - **Armour pieces beside the player**: with the NCR armours (and other outfits that add pieces of their own to the
   first-person body), legs, belts and pouches no longer float next to the player.
 
@@ -36,13 +73,10 @@
   where it happened, the registers and the return addresses on the stack. The game and any crash logger still handle
   the crash as before. Please attach this log to crash reports.
 
-- **V.A.T.S. looking the wrong way** ([#9](https://github.com/df4l/FNVVR/issues/9)): V.A.T.S. could point away from
-  the target, up to the opposite direction, depending on how the player stood in the room. The target is now in
-  front of the head when V.A.T.S. starts, and the horizon stays level: look up or down at the target with the head.
-- **Varmint rifle magazine**: the new magazine is held between the fingers, feed end up, and no longer upside down
-  beside the hand.
-- **No sound with the window in the background** ([#8](https://github.com/df4l/FNVVR/issues/8)): sound effects and
-  voices keep playing when the game's window does not have the focus, as when it is started from the headset.
+### Windows testers wanted
+
+The 4 GB patch and the sound fix cannot be checked on the developer's Linux machine: please report whether they work
+for you on Windows.
 
 ## v0.10.0 (2026-10-29, since v0.9.0 `a617e18`)
 
