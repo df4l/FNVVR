@@ -19,8 +19,8 @@ namespace dxvk {
   }
 
 
-  bool vrNpcHeldInPlace(float playerStrength, float actorStrength) {
-    return playerStrength > actorStrength;
+  float vrNpcGripMargin(float playerStrength, float actorStrength, uint32_t hands) {
+    return playerStrength + (hands > 1 ? VrNpcTwoHandsStrength : 0.0f) - actorStrength;
   }
 
 }

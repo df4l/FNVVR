@@ -66,14 +66,19 @@ namespace dxvk {
    */
   VrNpcGrabResponse vrNpcGrabResponse(const VrNpcTemper& temper);
 
+  /// Strength both hands on an actor add to the player's (user, 2026-11-01)
+  constexpr float VrNpcTwoHandsStrength = 1.0f;
+
   /**
-   * \brief Whether a hand keeps an actor from walking away
+   * \brief How far the player's grip exceeds the actor's Strength
    *
-   * The player's Strength has to exceed the actor's (user, 2026-11-01).
+   * Above zero, the hands keep the actor from walking away and move it where
+   * they want it (user, 2026-11-01).
    *
    * \param [in] playerStrength Current Strength of the player
    * \param [in] actorStrength Current Strength of the actor
+   * \param [in] hands How many hands hold the actor
    */
-  bool vrNpcHeldInPlace(float playerStrength, float actorStrength);
+  float vrNpcGripMargin(float playerStrength, float actorStrength, uint32_t hands);
 
 }

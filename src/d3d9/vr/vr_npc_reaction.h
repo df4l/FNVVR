@@ -43,13 +43,21 @@ namespace dxvk {
     void grabbed(uint8_t* actor);
 
     /**
-     * \brief Whether a hand keeps an actor from walking away
+     * \brief How far the player's grip exceeds the actor's Strength
      *
      * \param [in] actor The living actor (Actor*)
      * \param [in] player The player (PlayerCharacter*)
-     * \returns \c true if the player is the stronger (vrNpcHeldInPlace)
+     * \param [in] hands How many hands hold the actor
+     * \returns Above zero, the hands keep the actor (vrNpcGripMargin)
      */
-    bool heldInPlace(uint8_t* actor, uint8_t* player) const;
+    float gripMargin(uint8_t* actor, uint8_t* player, uint32_t hands) const;
+
+    /**
+     * \brief Whether an actor is in combat
+     *
+     * \param [in] actor The living actor (Actor*)
+     */
+    bool fighting(uint8_t* actor) const;
 
   private:
 

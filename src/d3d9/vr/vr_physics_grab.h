@@ -9,6 +9,7 @@
 #include "vr_grab.h"
 #include "vr_grab_fingers.h"
 #include "vr_hand_body.h"
+#include "vr_npc_drag.h"
 #include "vr_npc_reaction.h"
 #include "vr_types.h"
 
@@ -49,10 +50,12 @@ namespace dxvk {
    * follow the ragdoll's) and ends it when its INI setting
    * bRagdollFeedback is on, which it is not by default: for the actors
    * the hands took, that part runs here then, until the reaction ends. The
-   * actor reacts to being grabbed (VrNpcReaction). A player stronger than
-   * the actor keeps it from walking away, its moves are dropped while a
-   * hand holds it; otherwise the actor walks on and the limb leaves the
-   * hand sooner than a held object would (findings/grab.md §19.8). A hand
+   * actor reacts to being grabbed (VrNpcReaction). A grip stronger than the
+   * actor (both hands add a point of Strength) keeps it from walking away:
+   * its own move is replaced with the one the hands give it (VrNpcDrag), it
+   * stands while they stand and walks, in the game's animation, where they
+   * take it. Otherwise the actor walks on and the limb leaves the hand
+   * sooner than a held object would (findings/grab.md §19.8, §19.9). A hand
    * that touches the object the other hand holds holds it too, with a
    * second spring on the same body.
    *
@@ -241,8 +244,12 @@ namespace dxvk {
       /// A limb of an actor's ragdoll, and whether the actor lives
       bool       limb    = false;
       bool       living  = false;
-      /// The hand keeps the living actor from walking away
+      /// The grip keeps the living actor from walking away
       bool       inPlace = false;
+      /// Where the point held belongs, in the actor's frame, game units
+      VrNpcGroundVector anchor;
+      /// Where the hand wants the point held, game units
+      VrVector3  target;
       /// Seconds in the hand, and how far the point held strayed from the
       /// hand's target, game units
       float      heldTime = 0.0f;
@@ -349,10 +356,31 @@ namespace dxvk {
     // that animates the actors
     std::array<std::atomic<uint8_t*>, MaxDriven> m_drivenRagdolls = { };
 
-    // Actors the hands keep in place, only compared by actorMoveHook on the
-    // thread that moves the actors
-    std::array<std::atomic<uint8_t*>, VrHandCount> m_inPlace = { };
+    /**
+     * \brief An actor whose move the hands replace
+     *
+     * Worked in the player's update, read by actorMoveHook and moveModeHook
+     * on the threads that update the actors. Both hands on an actor share
+     * the first hand's.
+     */
+    struct Drag {
+      std::atomic<uint8_t*> actor     = { nullptr };
+      /// The actor can walk: not seated, not an immobile creature
+      std::atomic<bool>     walks     = { false };
+      std::atomic<bool>     setsHeading = { false };
+      std::atomic<float>    velocityX = { 0.0f };
+      std::atomic<float>    velocityY = { 0.0f };
+      std::atomic<float>    heading   = { 0.0f };
+      std::atomic<uint32_t> moveMode  = { 0u };
+
+      VrNpcDrag logic;
+      bool      logged = false;
+    };
+
+    std::array<Drag, VrHandCount> m_drags;
     bool m_canHoldInPlace = false;
+    bool m_canDrag        = false;
+    uint32_t m_loggedDrags = 0;
 
     void update(uint8_t* player, float dt);
 
@@ -400,9 +428,13 @@ namespace dxvk {
 
     bool drives(const uint8_t* ragdoll) const;
 
-    void updateInPlace(uint8_t* player);
+    void updateDrags(uint8_t* player, float dt);
 
-    bool keepsInPlace(const uint8_t* actor) const;
+    void updateDrag(Drag& drag, uint8_t* player, const Held& held, const Held* other, float margin, float dt);
+
+    void stopDrag(Drag& drag);
+
+    const Drag* dragOf(const uint8_t* actor) const;
 
     void addTurn(Held& held);
 
@@ -443,6 +475,10 @@ namespace dxvk {
             float                 dt,
             VrVector3*            move,
             uint8_t               flags);
+
+    static uint32_t __fastcall moveModeHook(
+            uint8_t*              mover,
+            void*                 unused);
 
   };
 

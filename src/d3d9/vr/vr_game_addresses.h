@@ -2679,6 +2679,20 @@ namespace dxvk {
     constexpr uintptr_t CreatureMoveSlot             = 0x010872FC;
 
     /**
+     * ActorMover::GetMoveMode (__thiscall, virtual; PlayerMover has a table
+     * of its own). Actor::GetMoveMode asks it, and Actor::PickAnimations
+     * picks the walk or run animation and its direction from the result, as
+     * Actor::UpdateMovement gives it to Actor::Move as flags
+     * (findings/grab.md §19.9). ActorMover::pActor at ActorMoverActor.
+     */
+    constexpr uintptr_t ActorMoverGetMoveMode        = 0x009DDB70;
+    constexpr uintptr_t ActorMoverGetMoveModeSlot    = 0x0109225C;
+    constexpr uintptr_t ActorMoverActor              = 0x28;
+
+    /** Actor::IsImmobileCreature, virtual, no argument */
+    constexpr uintptr_t ActorIsImmobileSlot          = 0x4B4;
+
+    /**
      * Melee hits on objects (findings/melee.md §14): Actor::ObjectHit(bool
      * power) (__thiscall, ret 4), which MeleeAttack calls for the player
      * when no actor is in reach, casts a shape from Actor::GetEyeVector

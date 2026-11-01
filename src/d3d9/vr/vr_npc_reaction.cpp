@@ -263,8 +263,13 @@ namespace dxvk {
   }
 
 
-  bool VrNpcReaction::heldInPlace(uint8_t* actor, uint8_t* player) const {
-    return vrNpcHeldInPlace(actorValue(player, VrGame::AvStrength), actorValue(actor, VrGame::AvStrength));
+  float VrNpcReaction::gripMargin(uint8_t* actor, uint8_t* player, uint32_t hands) const {
+    return vrNpcGripMargin(actorValue(player, VrGame::AvStrength), actorValue(actor, VrGame::AvStrength), hands);
+  }
+
+
+  bool VrNpcReaction::fighting(uint8_t* actor) const {
+    return actorTest(VrGame::ActorIsInCombat, actor);
   }
 
 

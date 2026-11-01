@@ -68,8 +68,14 @@ TEST_CASE(npc_complains_only_under_the_game_comment_rules) {
 }
 
 
-TEST_CASE(npc_is_held_in_place_only_by_a_stronger_player) {
-  CHECK(vrNpcHeldInPlace(6.0f, 5.0f));
-  CHECK(!vrNpcHeldInPlace(5.0f, 5.0f));
-  CHECK(!vrNpcHeldInPlace(4.0f, 5.0f));
+TEST_CASE(npc_is_held_only_by_a_stronger_grip) {
+  CHECK(vrNpcGripMargin(6.0f, 5.0f, 1) > 0.0f);
+  CHECK(!(vrNpcGripMargin(5.0f, 5.0f, 1) > 0.0f));
+  CHECK(!(vrNpcGripMargin(4.0f, 5.0f, 1) > 0.0f));
+}
+
+
+TEST_CASE(npc_grip_of_both_hands_adds_one_point_of_strength) {
+  CHECK(vrNpcGripMargin(5.0f, 5.0f, 2) > 0.0f);
+  CHECK(!(vrNpcGripMargin(4.0f, 5.0f, 2) > 0.0f));
 }
