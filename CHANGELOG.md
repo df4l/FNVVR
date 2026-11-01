@@ -4,8 +4,6 @@
 
 ### Holding living NPCs
 
-Modelled on what PLANCK does in Skyrim VR; none of its code is used.
-
 - **Hold a living actor by a limb**: a free hand that closes its grip on an NPC or a creature holds the limb it touches,
   seated and sleeping actors included. The limb follows the hand and goes back to its animation when let go.
 - **Strength decides**: while your Strength is above the actor's, it stays where you hold it and you can drag it, walking
@@ -17,7 +15,7 @@ Modelled on what PLANCK does in Skyrim VR; none of its code is used.
   the stronger; its limbs stay in your hands until it gets up. A fast open hand with no weapon out shoves an actor
   (40 action points).
 - **Actors react**: a grabbed actor says one of its recorded lines for a weapon aimed at it or a shot fired near it, at
-  most once every 10 seconds. Some of these lines mention weapons even when none is drawn. A hot-tempered actor with no
+  most once every 10 seconds. A hot-tempered actor with no
   such line attacks at once, unless one of its factions idolizes you. Handled for too long or too roughly, any actor
   ends up assaulting you, which is a crime, except companions and factions that idolize you.
 
@@ -77,6 +75,11 @@ Modelled on what PLANCK does in Skyrim VR; none of its code is used.
 
 The 4 GB patch and the sound fix cannot be checked on the developer's Linux machine: please report whether they work
 for you on Windows.
+
+### Known issues
+
+- What a grabbed NPC says can be off-topic: these lines were recorded for a weapon aimed at it or a shot fired near it,
+  and some mention weapons even when none is drawn.
 
 ## v0.10.0 (2026-10-29, since v0.9.0 `a617e18`)
 
