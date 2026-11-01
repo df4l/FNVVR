@@ -2595,7 +2595,10 @@ namespace dxvk {
      * Actor::CanSpeak, IsInCombat, ShouldSkipFallOutBehavior(4) and
      * IsPlayerTeammate (__thiscall), and sets the shared comment timer
      * (ProcessLists +0x154) to fCommentOnPlayerActionsTimer. The call sites
-     * are those of CommentOnPlayerAction.
+     * are those of CommentOnPlayerAction. StartGreetingPlayer only speaks while
+     * PlayerCharacter::fLastHelloTime (+0xE24) is negative: it holds the tick
+     * of the last greeting for fHelloCooldownTime (findings/grab.md §19.12).
+     * Actor::IsTalking and PlayerCharacter::GetLastAction are __thiscall.
      */
     constexpr uintptr_t TopicGetTopic                = 0x0061A2D0;
     constexpr uintptr_t TopicGetTopicCallSite        = 0x00978137;
@@ -2609,6 +2612,13 @@ namespace dxvk {
     constexpr uintptr_t ActorSkipsBehaviorCallSite   = 0x00977D84;
     constexpr uintptr_t ActorIsPlayerTeammate        = 0x00566950;
     constexpr uintptr_t ActorIsPlayerTeammateCallSite = 0x00977D93;
+    constexpr uintptr_t ActorIsTalking               = 0x008A67F0;
+    constexpr uintptr_t ActorIsTalkingCallSite       = 0x00977DCA;
+    constexpr uintptr_t PlayerHasNoLastHelloTime     = 0x008BC520;
+    constexpr uintptr_t PlayerHasNoLastHelloTimeCallSite = 0x008BC43F;
+    constexpr uintptr_t PlayerLastHelloTime          = 0xE24;
+    constexpr uintptr_t PlayerGetLastAction          = 0x00964060;
+    constexpr uintptr_t PlayerGetLastActionCallSite  = 0x0096D90F;
     constexpr uintptr_t ProcessListsSingleton        = 0x011E0E80;
     constexpr uintptr_t ProcessListsCommentTimer     = 0x154;
     constexpr uintptr_t CommentOnPlayerActionsTimerSetting = 0x011D0174;

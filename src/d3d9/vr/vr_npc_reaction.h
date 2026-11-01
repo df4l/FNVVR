@@ -14,10 +14,11 @@ namespace dxvk {
    * The closest is its comment on a weapon aimed at an actor
    * (ProcessLists::CommentOnPlayerAction, findings/grab.md §19.3): the
    * actor says a line of the topic the game keeps for it ("Watch where
-   * you're pointing that thing"), under the same conditions and the same
-   * timer shared by every comment on the player's actions. A foolhardy,
-   * aggressive actor with no recorded line for that topic goes into combat
-   * with the player instead, as with the script command StartCombat, unless
+   * you're pointing that thing"), at once, under the same conditions but
+   * without waiting for the timers that space out remarks (findings/grab.md
+   * §19.12). A foolhardy, aggressive actor with no recorded line for that
+   * topic goes into combat with the player instead, as with the script
+   * command StartCombat, unless
    * one of its factions idolizes the player (vrNpcGrabResponse,
    * findings/grab.md §19.8).
    *
@@ -92,7 +93,8 @@ namespace dxvk {
     /**
      * \brief Makes a held actor complain again
      *
-     * Under the game's own conditions and timer for comments.
+     * Under the game's own conditions and timer for comments, unless it is
+     * still saying its last complaint.
      *
      * \param [in] actor The living actor (Actor*)
      */
@@ -115,8 +117,11 @@ namespace dxvk {
     uint32_t m_loggedReactions   = 0;
     uint32_t m_loggedAudioMisses = 0;
     bool     m_canAssault        = false;
+    uint32_t m_complainer        = 0;
 
     VrNpcTemper readTemper(uint8_t* actor);
+
+    bool complaining(uint8_t* actor) const;
 
     bool canComment(uint8_t* actor, bool teammate, bool inCombat) const;
 

@@ -8,7 +8,7 @@ namespace dxvk {
    * \brief What an actor grabbed by the player does
    */
   enum class VrNpcGrabResponse : uint32_t {
-    /// Nothing: it cannot speak now, or another actor commented a moment ago
+    /// Nothing: it cannot speak now, or is still saying its last complaint
     None,
     /// Says the line the game plays when the player aims a weapon at it
     Complain,
@@ -38,9 +38,8 @@ namespace dxvk {
     /// Passes the game's own checks for commenting the player's action
     /// (awake, able to speak, not in combat, reacts to the player's actions)
     bool  canComment = false;
-    /// Seconds left on the game's timer shared by every comment on the
-    /// player's actions
-    float commentTimer = 0.0f;
+    /// Still saying the line of its last complaint
+    bool  complaining = false;
   };
 
   /// ACTOR_AGGRESSION_AGGRESSIVE
@@ -61,8 +60,10 @@ namespace dxvk {
    *
    * A hot-tempered actor with nothing recorded to say attacks at once,
    * unless the player is idolized by one of its factions (user,
-   * 2026-11-01). Others say the line the game plays when the player aims
-   * at them, under the game's own conditions and timer.
+   * 2026-11-01). Others say at once the line the game plays when the player
+   * aims at them, if the game's own conditions let them comment: a grab is
+   * aimed at them, the timers that space out remarks do not apply (user,
+   * 2026-11-01).
    */
   VrNpcGrabResponse vrNpcGrabResponse(const VrNpcTemper& temper);
 

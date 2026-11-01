@@ -12,7 +12,7 @@ namespace dxvk {
     if (vrNpcHotTempered(temper) && !temper.voicedLine && !temper.idolized)
       return VrNpcGrabResponse::Attack;
 
-    if (temper.canComment && temper.commentTimer <= 0.0f)
+    if (temper.canComment && !temper.complaining)
       return VrNpcGrabResponse::Complain;
 
     return VrNpcGrabResponse::None;

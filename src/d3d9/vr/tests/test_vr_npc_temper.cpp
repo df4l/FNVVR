@@ -62,9 +62,18 @@ TEST_CASE(npc_complains_only_under_the_game_comment_rules) {
   silent.canComment = false;
   CHECK(vrNpcGrabResponse(silent) == VrNpcGrabResponse::None);
 
-  VrNpcTemper waiting = temper(0.0f, 2.0f);
-  waiting.commentTimer = 2.0f;
-  CHECK(vrNpcGrabResponse(waiting) == VrNpcGrabResponse::None);
+  CHECK(vrNpcGrabResponse(temper(0.0f, 2.0f)) == VrNpcGrabResponse::Complain);
+}
+
+
+TEST_CASE(npc_does_not_restart_the_complaint_it_is_saying) {
+  VrNpcTemper saying = temper(0.0f, 2.0f);
+  saying.complaining = true;
+  CHECK(vrNpcGrabResponse(saying) == VrNpcGrabResponse::None);
+
+  VrNpcTemper hot = temper(1.0f, 4.0f);
+  hot.complaining = true;
+  CHECK(vrNpcGrabResponse(hot) == VrNpcGrabResponse::Attack);
 }
 
 

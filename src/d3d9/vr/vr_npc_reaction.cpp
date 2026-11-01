@@ -29,6 +29,7 @@ namespace dxvk {
     using StringFn        = void (__fastcall*)(void* string, void* unused);
     using LocateFn        = int32_t (__cdecl*)(const char* name, char* path, uint32_t skip, int32_t archive);
     using ActorBaseFn     = uint8_t* (__fastcall*)(uint8_t* actor, void* unused);
+    using LastActionFn    = uint32_t (__fastcall*)(uint8_t* player, void* unused);
     using FactionChangesFn = uint8_t* (__fastcall*)(void* extraData, void* unused);
     using ListFactionsFn  = uint32_t (__fastcall*)(uint8_t* actor, void* unused, uint8_t** factions, uint32_t size,
                                                    void* list, void* changes);
@@ -96,6 +97,9 @@ namespace dxvk {
     bool found = VrGameMemory::callsTo(VrGame::TopicGetTopicCallSite, VrGame::TopicGetTopic)
       && VrGameMemory::callsTo(VrGame::ActorStartGreetingPlayerCallSite, VrGame::ActorStartGreetingPlayer)
       && VrGameMemory::callsTo(VrGame::ActorCanSpeakCallSite, VrGame::ActorCanSpeak)
+      && VrGameMemory::callsTo(VrGame::ActorIsTalkingCallSite, VrGame::ActorIsTalking)
+      && VrGameMemory::callsTo(VrGame::PlayerHasNoLastHelloTimeCallSite, VrGame::PlayerHasNoLastHelloTime)
+      && VrGameMemory::callsTo(VrGame::PlayerGetLastActionCallSite, VrGame::PlayerGetLastAction)
       && VrGameMemory::callsTo(VrGame::ActorIsInCombatCallSite, VrGame::ActorIsInCombat)
       && VrGameMemory::callsTo(VrGame::ActorSkipsBehaviorCallSite, VrGame::ActorSkipsBehavior)
       && VrGameMemory::callsTo(VrGame::ActorIsPlayerTeammateCallSite, VrGame::ActorIsPlayerTeammate)
@@ -129,6 +133,10 @@ namespace dxvk {
     VrNpcTemper temper = readTemper(actor);
     VrNpcGrabResponse response = vrNpcGrabResponse(temper);
 
+    uint8_t* player = *reinterpret_cast<uint8_t* const*>(VrGame::Player);
+    float timer = *commentTimer();
+    uint32_t lastAction = player ? reinterpret_cast<LastActionFn>(VrGame::PlayerGetLastAction)(player, nullptr) : 0;
+
     switch (response) {
       case VrNpcGrabResponse::Attack:   attack(actor);   break;
       case VrNpcGrabResponse::Complain: complain(actor); break;
@@ -138,10 +146,8 @@ namespace dxvk {
     if (m_loggedReactions < MaxLoggedReactions) {
       const char* what = response == VrNpcGrabResponse::Attack ? "attacks the player"
         : response == VrNpcGrabResponse::Complain ? "complains"
-        : temper.canComment ? "says nothing, another comment was made a moment ago"
+        : temper.complaining ? "says nothing, it is still saying its last complaint"
         : "says nothing, it cannot comment now";
-
-      uint8_t* player = *reinterpret_cast<uint8_t* const*>(VrGame::Player);
 
       Logger::info(str::format("VR: Grabbed actor ", hexId(readField<uint32_t>(actor, VrGame::FormId)),
         " (aggression ", temper.aggression, ", confidence ", temper.confidence,
@@ -149,7 +155,8 @@ namespace dxvk {
         " against the player's ", player ? actorValue(player, VrGame::AvStrength) : 0.0f,
         !vrNpcHotTempered(temper) ? "" : temper.voicedLine ? ", a recorded line" : ", no recorded line",
         temper.idolized ? ", idolizes the player" : "",
-        temper.teammate ? ", companion" : "", temper.inCombat ? ", in combat" : "", ") ", what));
+        temper.teammate ? ", companion" : "", temper.inCombat ? ", in combat" : "", ") ", what,
+        "; game's comment timer ", timer, " s, player's last action ", lastAction));
       m_loggedReactions++;
     }
   }
@@ -162,8 +169,8 @@ namespace dxvk {
     temper.teammate   = actorTest(VrGame::ActorIsPlayerTeammate, actor);
     temper.inCombat   = actorTest(VrGame::ActorIsInCombat, actor);
 
-    temper.canComment   = canComment(actor, temper.teammate, temper.inCombat);
-    temper.commentTimer = *commentTimer();
+    temper.canComment  = canComment(actor, temper.teammate, temper.inCombat);
+    temper.complaining = complaining(actor);
 
     if (vrNpcHotTempered(temper)) {
       temper.idolized   = factionIdolizesPlayer(actor);
@@ -185,6 +192,13 @@ namespace dxvk {
     return !dead && !asleep && !inCombat
       && actorTest(VrGame::ActorCanSpeak, actor)
       && (!skips || teammate);
+  }
+
+
+  bool VrNpcReaction::complaining(uint8_t* actor) const {
+    // Any other speech gives way, as for a weapon aimed at the actor
+    return m_complainer == readField<uint32_t>(actor, VrGame::FormId)
+      && actorTest(VrGame::ActorIsTalking, actor);
   }
 
 
@@ -303,7 +317,7 @@ namespace dxvk {
 
 
   void VrNpcReaction::nag(uint8_t* actor) {
-    if (*commentTimer() > 0.0f || !canComment(actor, teammate(actor), fighting(actor)))
+    if (*commentTimer() > 0.0f || complaining(actor) || !canComment(actor, teammate(actor), fighting(actor)))
       return;
 
     complain(actor);
@@ -339,10 +353,18 @@ namespace dxvk {
     void* topic = reinterpret_cast<GetTopicFn>(VrGame::TopicGetTopic)(
       VrGame::DialogueTypeTopic, VrGame::TopicPlayerAiming);
 
-    if (!topic)
+    uint8_t* player = *reinterpret_cast<uint8_t* const*>(VrGame::Player);
+
+    if (!topic || !player)
       return;
 
+    // StartGreetingPlayer is silent during the cooldown of the last greeting
+    // of any actor, and starts it anew
+    *reinterpret_cast<float*>(player + VrGame::PlayerLastHelloTime) = -1.0f;
+
     reinterpret_cast<GreetFn>(VrGame::ActorStartGreetingPlayer)(actor, nullptr, topic);
+    m_complainer = readField<uint32_t>(actor, VrGame::FormId);
+
     *commentTimer() = readField<float>(reinterpret_cast<const uint8_t*>(VrGame::CommentOnPlayerActionsTimerSetting),
       VrGame::SettingValue);
   }
