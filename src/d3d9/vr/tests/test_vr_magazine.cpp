@@ -507,6 +507,38 @@ TEST_CASE(magazine_pushed_in_upright_is_kept) {
 }
 
 
+TEST_CASE(magazine_swung_in_is_told_from_one_sliding_straight) {
+  // The varmint rifle's and the service rifle's animations, from a log
+  CHECK(vrMagazineSwingsIn({ -0.314914f, -0.672653f, 0.669602f }));
+  CHECK(!vrMagazineSwingsIn({ 0.166754f, -0.981533f, 0.0937349f }));
+
+  // Not under the weapon
+  CHECK(!vrMagazineSwingsIn({ -0.909762f, 0.0463558f, 0.412534f }));
+}
+
+
+TEST_CASE(magazine_held_as_in_the_weapon) {
+  // The hand bone turned a quarter about the controller's forward
+  VrGameRotation hand;
+  hand.m[1][1] = 0.0f; hand.m[1][2] = -1.0f;
+  hand.m[2][1] = 1.0f; hand.m[2][2] = 0.0f;
+
+  VrGameRotation inWeapon;
+  VrVector3 centre = { -2.0f, 0.0f, 0.0f };
+  VrVector3 point  = { 8.0f, 1.0f, -1.0f };
+
+  VrGameTransform inHand = vrMagazineHeldAsInWeapon(hand, inWeapon, centre, point);
+
+  // Its feed end points along the controller's up, whatever the hand's pose
+  VrVector3 feed = hand * (inHand.rotate * VrVector3 { 0.0f, 1.0f, 0.0f });
+  CHECK(vrDot(feed, VrVector3 { 0.0f, 1.0f, 0.0f }) > 0.999f);
+
+  // And its centre is at the point
+  VrVector3 held = inHand.translate + inHand.rotate * centre;
+  CHECK(vrLength(held - point) < 1e-4f);
+}
+
+
 TEST_CASE(rack_parts_are_found_by_keyword) {
   CHECK(vrClassifyWeaponPart("##Slide") == VrWeaponPartKind::Rack);
   CHECK(vrClassifyWeaponPart("##nmBar") == VrWeaponPartKind::Rack);
