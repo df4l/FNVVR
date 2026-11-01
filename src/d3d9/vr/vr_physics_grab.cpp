@@ -58,6 +58,7 @@ namespace dxvk {
     using SetFeedbackActiveFn = void (__fastcall*)(uint8_t* ragdoll, void* unused, bool active);
     using DoFeedbackFn        = void (__fastcall*)(uint8_t* ragdoll, void* unused);
     using DebugLinesFn        = void (__fastcall*)(uint8_t* ragdoll, void* unused, uint32_t stage);
+    using ActorMoveFn         = void* (__fastcall*)(uint8_t* actor, void* unused, float dt, VrVector3* move, uint8_t flags);
 
     static_assert(sizeof(VrVector3) == 12, "The game's NiPoint3 is three floats");
 
@@ -69,6 +70,10 @@ namespace dxvk {
     // The game's grab lets go when the held point is this far from where
     // it belongs (findings/grab.md §2)
     constexpr float MaxStretch = 96.0f;
+
+    // A living actor the player is not strong enough to keep in place pulls
+    // free of the hand this far from it: about an arm's length
+    constexpr float PullFreeStretch = 0.6f * VrGameUnitsPerMetre;
 
     // A body let go of collides with the player again once its centre is
     // this far from the player, horizontally
@@ -401,6 +406,15 @@ namespace dxvk {
       grab->m_handBodies.reset();
     }
 
+    // Character and Creature, not the player, whose table holds it too
+    grab->m_canHoldInPlace = VrGameMemory::redirectVirtual(VrGame::CharacterMoveSlot, VrGame::ActorMove,
+        reinterpret_cast<const void*>(&VrPhysicsGrab::actorMoveHook))
+      && VrGameMemory::redirectVirtual(VrGame::CreatureMoveSlot, VrGame::ActorMove,
+        reinterpret_cast<const void*>(&VrPhysicsGrab::actorMoveHook));
+
+    if (!grab->m_canHoldInPlace)
+      Logger::warn("VR: The actors' move was not found, hands do not keep living actors in place");
+
     Logger::info("VR: Each free hand holds what it touches or pulls what it points at with its grip");
     Logger::info(!grab->m_npcLimbs
       ? "VR: The actors' hit reaction was not found, living actors are not held"
@@ -490,6 +504,20 @@ namespace dxvk {
   }
 
 
+  void* __fastcall VrPhysicsGrab::actorMoveHook(
+          uint8_t*              actor,
+          void*                 unused,
+          float                 dt,
+          VrVector3*            move,
+          uint8_t               flags) {
+    // The controller still applies gravity; the legs keep their animation
+    if (g_physicsGrab && g_physicsGrab->keepsInPlace(actor))
+      *move = VrVector3();
+
+    return reinterpret_cast<ActorMoveFn>(VrGame::ActorMove)(actor, nullptr, dt, move, flags);
+  }
+
+
   void VrPhysicsGrab::leaveCell(uint8_t* cell) {
     uint8_t* world = cell ? reinterpret_cast<GetPartFn>(VrGame::CellGetWorld)(cell, nullptr) : nullptr;
     uint8_t* hkWorld = world ? readField<uint8_t*>(world, VrGame::RefObjectHavok) : nullptr;
@@ -529,11 +557,34 @@ namespace dxvk {
     for (uint32_t i = 0; i < VrHandCount; i++)
       updateHand(player, VrHand(i), dt);
 
+    updateInPlace(player);
     restoreFilters(player);
     updateHandBodies(player, dt);
 
     if (m_playerUpdateTask)
       m_playerUpdateTask(player, dt);
+  }
+
+
+  void VrPhysicsGrab::updateInPlace(uint8_t* player) {
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      Held& held = m_hands[i];
+
+      held.inPlace = m_canHoldInPlace && m_npcReaction && held.grab.holding() && held.living
+        && m_npcReaction->heldInPlace(held.ref, player);
+
+      m_inPlace[i] = held.inPlace ? held.ref : nullptr;
+    }
+  }
+
+
+  bool VrPhysicsGrab::keepsInPlace(const uint8_t* actor) const {
+    for (const auto& kept : m_inPlace) {
+      if (kept == actor)
+        return true;
+    }
+
+    return false;
   }
 
 
@@ -661,7 +712,7 @@ namespace dxvk {
         } else {
           if (m_loggedLosses < MaxLoggedLosses) {
             Logger::info(str::format("VR: The ", handName(hand), " hand let go of ", hexId(held.refId),
-              ", held too far from the hand"));
+              held.living && !held.inPlace ? ", which pulled free of the hand" : ", held too far from the hand"));
             m_loggedLosses++;
           }
 
@@ -1049,6 +1100,7 @@ namespace dxvk {
     held.mass   = mass;
     held.limb   = candidate.limb;
     held.living = candidate.living;
+    held.inPlace = false;
     held.turning = false;
     held.heldTime = 0.0f;
     held.furthest = 0.0f;
@@ -1168,7 +1220,7 @@ namespace dxvk {
     float distance = vrLength(point - target);
     held.furthest = std::max(held.furthest, distance);
 
-    if (distance > MaxStretch)
+    if (distance > (held.living && !held.inPlace ? PullFreeStretch : MaxStretch))
       return false;
 
     // A second hand on the body, or one let go, changes its strength

@@ -2668,6 +2668,17 @@ namespace dxvk {
     constexpr uint32_t  ReputationTopLevel           = 3;
 
     /**
+     * Actor::Move (__thiscall: seconds, NiPoint3* move, flags; virtual, the
+     * same in the tables of Character and Creature; Actor::UpdateMovement
+     * calls it with the move of the frame, in the actor's frame). The move
+     * reaches the character controller as it is; gravity and the animation
+     * are the controller's and the process's own (findings/grab.md §19.8).
+     */
+    constexpr uintptr_t ActorMove                    = 0x008A62B0;
+    constexpr uintptr_t CharacterMoveSlot            = 0x01086CBC;
+    constexpr uintptr_t CreatureMoveSlot             = 0x010872FC;
+
+    /**
      * Melee hits on objects (findings/melee.md §14): Actor::ObjectHit(bool
      * power) (__thiscall, ret 4), which MeleeAttack calls for the player
      * when no actor is in reach, casts a shape from Actor::GetEyeVector

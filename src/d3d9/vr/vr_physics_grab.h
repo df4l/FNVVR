@@ -48,8 +48,13 @@ namespace dxvk {
    * level of detail). The game only draws the reaction (the drawn limbs
    * follow the ragdoll's) and ends it when its INI setting
    * bRagdollFeedback is on, which it is not by default: for the actors
-   * the hands took, that part runs here then, until the reaction ends. The actor reacts to being grabbed (VrNpcReaction). A hand that touches the object the other hand holds
-   * holds it too, with a second spring on the same body.
+   * the hands took, that part runs here then, until the reaction ends. The
+   * actor reacts to being grabbed (VrNpcReaction). A player stronger than
+   * the actor keeps it from walking away, its moves are dropped while a
+   * hand holds it; otherwise the actor walks on and the limb leaves the
+   * hand sooner than a held object would (findings/grab.md §19.8). A hand
+   * that touches the object the other hand holds holds it too, with a
+   * second spring on the same body.
    *
    * A body held by one hand also turns with the hand: a callback of its
    * spring sets the body's angular velocity towards the rotation it had in
@@ -236,6 +241,8 @@ namespace dxvk {
       /// A limb of an actor's ragdoll, and whether the actor lives
       bool       limb    = false;
       bool       living  = false;
+      /// The hand keeps the living actor from walking away
+      bool       inPlace = false;
       /// Seconds in the hand, and how far the point held strayed from the
       /// hand's target, game units
       float      heldTime = 0.0f;
@@ -342,6 +349,11 @@ namespace dxvk {
     // that animates the actors
     std::array<std::atomic<uint8_t*>, MaxDriven> m_drivenRagdolls = { };
 
+    // Actors the hands keep in place, only compared by actorMoveHook on the
+    // thread that moves the actors
+    std::array<std::atomic<uint8_t*>, VrHandCount> m_inPlace = { };
+    bool m_canHoldInPlace = false;
+
     void update(uint8_t* player, float dt);
 
     void updateLead(uint8_t* player, float dt);
@@ -388,6 +400,10 @@ namespace dxvk {
 
     bool drives(const uint8_t* ragdoll) const;
 
+    void updateInPlace(uint8_t* player);
+
+    bool keepsInPlace(const uint8_t* actor) const;
+
     void addTurn(Held& held);
 
     void updateTurn(VrHand hand, Held& held, const VrGameCameraPose& pose);
@@ -420,6 +436,13 @@ namespace dxvk {
             uint8_t*              ragdoll,
             void*                 unused,
             uint32_t              stage);
+
+    static void* __fastcall actorMoveHook(
+            uint8_t*              actor,
+            void*                 unused,
+            float                 dt,
+            VrVector3*            move,
+            uint8_t               flags);
 
   };
 
