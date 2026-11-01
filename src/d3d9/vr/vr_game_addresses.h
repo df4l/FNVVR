@@ -2605,6 +2605,67 @@ namespace dxvk {
     constexpr uintptr_t ProcessEnterCombatSlot       = 0x33C;
     constexpr uint32_t  AvAggression                 = 0;
     constexpr uint32_t  AvConfidence                 = 1;
+    constexpr uint32_t  AvStrength                   = 5;
+
+    /**
+     * Whether an actor has a recorded line for a topic
+     * (findings/grab.md §19.8). TESTopic::GetMatchingInfo_1(speaker, target)
+     * (__thiscall) picks a line by its conditions, at random among the
+     * random ones, whether its audio exists or not.
+     * TESTopicInfo::LoadResponseList(wrapper) (__thiscall, returns wrapper)
+     * reads the line's responses into a ResponseListWrapper, one pointer to
+     * the first TESResponse, freed by its destructor (__thiscall).
+     * TESResponse::GetAudioFullPath(speaker, quest, topic, info, BSStringT*)
+     * (__thiscall) writes the voice file's path for the speaker's voice
+     * type; a BSStringT is 8 bytes, its characters first, with a constructor
+     * and a destructor (__thiscall). FileFinder::Locate(name, null, 0, -1)
+     * (__cdecl) looks in the archives and the folders, as the lip files'
+     * loading does.
+     */
+    constexpr uintptr_t TopicGetMatchingInfo         = 0x0061A720;
+    constexpr uintptr_t TopicGetMatchingInfoCallSite = 0x008D60A7;
+    constexpr uintptr_t TopicInfoLoadResponses       = 0x0061E760;
+    constexpr uintptr_t TopicInfoLoadResponsesCallSite = 0x0083C5C0;
+    constexpr uintptr_t ResponseListDestroy          = 0x0061F440;
+    constexpr uintptr_t ResponseListDestroyCallSite  = 0x0083C645;
+    constexpr uintptr_t ResponseGetAudioFullPath     = 0x00616F40;
+    constexpr uintptr_t ResponseGetAudioFullPathCallSite = 0x0083D35F;
+    constexpr uintptr_t BSStringConstruct            = 0x004037B0;
+    constexpr uintptr_t BSStringConstructCallSite    = 0x0083D2D3;
+    constexpr uintptr_t BSStringDestroy              = 0x004037D0;
+    constexpr uintptr_t BSStringDestroyCallSite      = 0x0083D3B1;
+    constexpr uintptr_t FileFinderLocate             = 0x00456A20;
+    constexpr uintptr_t FileFinderLocateCallSite     = 0x004D530B;
+    constexpr uintptr_t TopicInfoQuest               = 0x48;
+    constexpr uint32_t  BSStringSize                 = 8;
+
+    /**
+     * An actor's factions and the player's reputation with them, as
+     * Actor::GetFactionRank (0x008B8290) lists them:
+     * Actor::GetActorBase (__thiscall), the base's list of factions,
+     * ExtraDataList::GetFactionChangesExtra (__thiscall, list at +0xC or
+     * null), then Actor::IntegrateFactionLists(out, size, list, changes)
+     * (__thiscall, returns the count, a faction taken away leaves null).
+     * TESFaction::pReputation may be null.
+     * TESReputation::GetReputationLevel(axis) (__thiscall): level 0 to 3 of
+     * fame (axis 1) or infamy (axis 0). The title "Idolized" is fame 3
+     * without infamy (TESReputation::GetReputationTitle, 0x00616710).
+     */
+    constexpr uintptr_t ActorGetActorBase            = 0x004181E0;
+    constexpr uintptr_t ActorGetActorBaseCallSite    = 0x008B82AC;
+    constexpr uintptr_t ExtraGetFactionChanges       = 0x0042E800;
+    constexpr uintptr_t ExtraGetFactionChangesCallSite = 0x008B82CB;
+    constexpr uintptr_t ActorIntegrateFactionLists   = 0x008B8CA0;
+    constexpr uintptr_t ActorIntegrateFactionListsCallSite = 0x008B830E;
+    constexpr uintptr_t ReputationGetLevel           = 0x00616950;
+    constexpr uintptr_t ReputationGetLevelCallSite   = 0x00616A9E;
+    constexpr uintptr_t ActorBaseFactions            = 0x5C;
+    constexpr uintptr_t FactionChangesList           = 0x0C;
+    constexpr uintptr_t FactionReputation            = 0x38;
+    constexpr uint32_t  MaxFactions                  = 0x80;
+    constexpr uint32_t  ReputationFame               = 1;
+    constexpr uint32_t  ReputationInfamy             = 0;
+    constexpr uint32_t  ReputationTopLevel           = 3;
 
     /**
      * Melee hits on objects (findings/melee.md §14): Actor::ObjectHit(bool

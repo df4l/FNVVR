@@ -19,7 +19,8 @@ namespace dxvk {
   /**
    * \brief What decides the response of an actor grabbed by the player
    *
-   * Read from the game when the grab starts, see findings/grab.md §19.3.
+   * Read from the game when the grab starts, see findings/grab.md §19.3
+   * and §19.8.
    */
   struct VrNpcTemper {
     /// Current Aggression actor value (0 Unaggressive to 3 Frenzied)
@@ -30,6 +31,10 @@ namespace dxvk {
     bool  teammate   = false;
     /// Already in combat
     bool  inCombat   = false;
+    /// Has a recorded line for a weapon aimed at it
+    bool  voicedLine = false;
+    /// The player is idolized by one of its factions
+    bool  idolized   = false;
     /// Passes the game's own checks for commenting the player's action
     /// (awake, able to speak, not in combat, reacts to the player's actions)
     bool  canComment = false;
@@ -44,13 +49,31 @@ namespace dxvk {
   constexpr float VrNpcFoolhardy  = 4.0f;
 
   /**
+   * \brief Whether the actor's temper alone can make it attack
+   *
+   * Foolhardy and at least aggressive, unless it is a companion or already
+   * fighting. Tells whether voicedLine and idolized matter.
+   */
+  bool vrNpcHotTempered(const VrNpcTemper& temper);
+
+  /**
    * \brief Response of an actor grabbed by the player
    *
-   * A foolhardy actor that is at least aggressive attacks at once (user,
-   * 2026-10-31), unless it is a companion or already fighting. Others say
-   * the line the game plays when the player aims at them, under the
-   * game's own conditions and timer.
+   * A hot-tempered actor with nothing recorded to say attacks at once,
+   * unless the player is idolized by one of its factions (user,
+   * 2026-11-01). Others say the line the game plays when the player aims
+   * at them, under the game's own conditions and timer.
    */
   VrNpcGrabResponse vrNpcGrabResponse(const VrNpcTemper& temper);
+
+  /**
+   * \brief Whether a hand keeps an actor from walking away
+   *
+   * The player's Strength has to exceed the actor's (user, 2026-11-01).
+   *
+   * \param [in] playerStrength Current Strength of the player
+   * \param [in] actorStrength Current Strength of the actor
+   */
+  bool vrNpcHeldInPlace(float playerStrength, float actorStrength);
 
 }

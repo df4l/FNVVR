@@ -16,8 +16,10 @@ namespace dxvk {
    * actor says a line of the topic the game keeps for it ("Watch where
    * you're pointing that thing"), under the same conditions and the same
    * timer shared by every comment on the player's actions. A foolhardy,
-   * aggressive actor goes into combat with the player instead, as with
-   * the script command StartCombat (vrNpcGrabResponse).
+   * aggressive actor with no recorded line for that topic goes into combat
+   * with the player instead, as with the script command StartCombat, unless
+   * one of its factions idolizes the player (vrNpcGrabResponse,
+   * findings/grab.md §19.8).
    *
    * Only used on the game's main thread.
    */
@@ -40,13 +42,29 @@ namespace dxvk {
      */
     void grabbed(uint8_t* actor);
 
+    /**
+     * \brief Whether a hand keeps an actor from walking away
+     *
+     * \param [in] actor The living actor (Actor*)
+     * \param [in] player The player (PlayerCharacter*)
+     * \returns \c true if the player is the stronger (vrNpcHeldInPlace)
+     */
+    bool heldInPlace(uint8_t* actor, uint8_t* player) const;
+
   private:
 
     VrNpcReaction() = default;
 
-    uint32_t m_loggedReactions = 0;
+    uint32_t m_loggedReactions   = 0;
+    uint32_t m_loggedAudioMisses = 0;
 
-    VrNpcTemper readTemper(uint8_t* actor) const;
+    VrNpcTemper readTemper(uint8_t* actor);
+
+    bool hasVoicedLine(uint8_t* actor);
+
+    bool isVoiced(uint8_t* actor, void* topic, uint8_t* info);
+
+    bool factionIdolizesPlayer(uint8_t* actor) const;
 
     void complain(uint8_t* actor);
 
