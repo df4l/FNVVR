@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <unordered_map>
 
 namespace dxvk {
 
@@ -8,9 +9,9 @@ namespace dxvk {
    * \brief What an actor grabbed by the player does
    */
   enum class VrNpcGrabResponse : uint32_t {
-    /// Nothing: it cannot speak now, or is still saying its last complaint
+    /// Nothing: it cannot speak now, or complained a moment ago
     None,
-    /// Says the line the game plays when the player fires near it
+    /// Says a line the game plays when the player aims or fires near it
     Complain,
     /// Goes into combat with the player
     Attack,
@@ -31,7 +32,7 @@ namespace dxvk {
     bool  teammate   = false;
     /// Already in combat
     bool  inCombat   = false;
-    /// Has a recorded line for a shot fired near it
+    /// Has a recorded line for a weapon aimed at it or a shot fired near it
     bool  voicedLine = false;
     /// The player is idolized by one of its factions
     bool  idolized   = false;
@@ -40,6 +41,8 @@ namespace dxvk {
     bool  canComment = false;
     /// Still saying the line of its last complaint
     bool  complaining = false;
+    /// Complained too recently to complain again
+    bool  coolingDown = false;
   };
 
   /// ACTOR_AGGRESSION_AGGRESSIVE
@@ -60,12 +63,46 @@ namespace dxvk {
    *
    * A hot-tempered actor with nothing recorded to say attacks at once,
    * unless the player is idolized by one of its factions (user,
-   * 2026-11-01). Others say at once the line the game plays when the player
-   * fires near them, if the game's own conditions let them comment: a grab is
-   * aimed at them, the timers that space out remarks do not apply (user,
-   * 2026-11-01).
+   * 2026-11-01). Others say at once a line the game plays when the player
+   * aims or fires near them, if the game's own conditions let them comment
+   * and they have not complained a moment ago (user, 2026-11-01): the timers
+   * of the game that space out remarks are shared by all actors and do not
+   * apply to a grab.
    */
   VrNpcGrabResponse vrNpcGrabResponse(const VrNpcTemper& temper);
+
+  /**
+   * \brief Spaces out the complaints of each actor
+   *
+   * Per actor: touching one again stays silent for a while, another one
+   * still answers at once (findings/grab.md §19.15).
+   */
+  class VrNpcComplaintCooldown {
+
+  public:
+
+    /**
+     * \brief Whether an actor complained too recently to complain again
+     *
+     * \param [in] actor The actor's form ID
+     * \param [in] now Current time, in seconds
+     */
+    bool coolingDown(uint32_t actor, double now) const;
+
+    /**
+     * \brief An actor just complained
+     *
+     * \param [in] actor The actor's form ID
+     * \param [in] now Current time, in seconds
+     * \param [in] seconds How long it stays silent
+     */
+    void start(uint32_t actor, double now, double seconds);
+
+  private:
+
+    std::unordered_map<uint32_t, double> m_silentUntil;
+
+  };
 
   /// Strength both hands on an actor add to the player's (user, 2026-11-01)
   constexpr float VrNpcTwoHandsStrength = 1.0f;

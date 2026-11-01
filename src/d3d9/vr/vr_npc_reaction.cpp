@@ -38,7 +38,19 @@ namespace dxvk {
       uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t aggressor,
       uint32_t, uint32_t, uint32_t, uint32_t, uint32_t);
 
-    constexpr uint32_t MaxLoggedReactions = 50;
+    constexpr uint32_t MaxLoggedReactions = 100;
+
+    struct ComplaintTopic {
+      uint32_t    index;
+      const char* name;
+    };
+
+    constexpr ComplaintTopic ComplaintTopics[] = {
+      { VrGame::TopicPlayerAiming, "a weapon aimed at it" },
+      { VrGame::TopicPlayerFiring, "a shot fired near it" },
+    };
+
+    constexpr uint32_t ComplaintTopicCount = sizeof(ComplaintTopics) / sizeof(ComplaintTopics[0]);
 
     // The game picks at random among an actor's random lines, some of which
     // may have no audio for its voice: asked this often, one with audio
@@ -73,6 +85,11 @@ namespace dxvk {
 
     float* commentTimer() {
       return reinterpret_cast<float*>(VrGame::ProcessListsSingleton + VrGame::ProcessListsCommentTimer);
+    }
+
+    float commentInterval() {
+      return readField<float>(reinterpret_cast<const uint8_t*>(VrGame::CommentOnPlayerActionsTimerSetting),
+        VrGame::SettingValue);
     }
 
     std::string hexId(uint32_t id) {
@@ -124,7 +141,7 @@ namespace dxvk {
     g_npcReaction = reaction.get();
     reaction->m_canAssault = VrGameMemory::callsTo(VrGame::ActorAttackAlarmCallSite, VrGame::ActorAttackAlarm);
 
-    Logger::info("VR: Grabbed actors complain as when shot near, foolhardy aggressive ones with no recorded line attack unless idolized");
+    Logger::info("VR: Grabbed actors complain as when aimed at or shot near, foolhardy aggressive ones with no recorded line attack unless idolized");
     return reaction;
   }
 
@@ -147,6 +164,7 @@ namespace dxvk {
       const char* what = response == VrNpcGrabResponse::Attack ? "attacks the player"
         : response == VrNpcGrabResponse::Complain ? "complains"
         : temper.complaining ? "says nothing, it is still saying its last complaint"
+        : temper.coolingDown ? "says nothing, it complained a moment ago"
         : "says nothing, it cannot comment now";
 
       Logger::info(str::format("VR: Grabbed actor ", hexId(readField<uint32_t>(actor, VrGame::FormId)),
@@ -171,10 +189,11 @@ namespace dxvk {
 
     temper.canComment  = canComment(actor, temper.teammate, temper.inCombat);
     temper.complaining = complaining(actor);
+    temper.coolingDown = m_cooldown.coolingDown(readField<uint32_t>(actor, VrGame::FormId), now());
 
     if (vrNpcHotTempered(temper)) {
       temper.idolized   = factionIdolizesPlayer(actor);
-      temper.voicedLine = hasVoicedLine(actor);
+      temper.voicedLine = hasAnyVoicedLine(actor);
     }
 
     return temper;
@@ -202,9 +221,23 @@ namespace dxvk {
   }
 
 
-  bool VrNpcReaction::hasVoicedLine(uint8_t* actor) {
-    void* topic = reinterpret_cast<GetTopicFn>(VrGame::TopicGetTopic)(
-      VrGame::DialogueTypeTopic, VrGame::TopicPlayerFiring);
+  double VrNpcReaction::now() const {
+    return std::chrono::duration<double>(std::chrono::steady_clock::now() - m_start).count();
+  }
+
+
+  bool VrNpcReaction::hasAnyVoicedLine(uint8_t* actor) {
+    for (const ComplaintTopic& topic : ComplaintTopics) {
+      if (hasVoicedLine(actor, topic.index))
+        return true;
+    }
+
+    return false;
+  }
+
+
+  bool VrNpcReaction::hasVoicedLine(uint8_t* actor, uint32_t topicIndex) {
+    void* topic = reinterpret_cast<GetTopicFn>(VrGame::TopicGetTopic)(VrGame::DialogueTypeTopic, topicIndex);
     uint8_t* player = *reinterpret_cast<uint8_t* const*>(VrGame::Player);
 
     if (!topic || !player)
@@ -317,7 +350,9 @@ namespace dxvk {
 
 
   void VrNpcReaction::nag(uint8_t* actor) {
-    if (*commentTimer() > 0.0f || complaining(actor) || !canComment(actor, teammate(actor), fighting(actor)))
+    if (*commentTimer() > 0.0f || complaining(actor)
+     || m_cooldown.coolingDown(readField<uint32_t>(actor, VrGame::FormId), now())
+     || !canComment(actor, teammate(actor), fighting(actor)))
       return;
 
     complain(actor);
@@ -350,23 +385,46 @@ namespace dxvk {
 
 
   void VrNpcReaction::complain(uint8_t* actor) {
-    void* topic = reinterpret_cast<GetTopicFn>(VrGame::TopicGetTopic)(
-      VrGame::DialogueTypeTopic, VrGame::TopicPlayerFiring);
-
     uint8_t* player = *reinterpret_cast<uint8_t* const*>(VrGame::Player);
 
-    if (!topic || !player)
+    if (!player)
       return;
+
+    // The topics take turns; an actor recorded for only one says that one
+    const ComplaintTopic* chosen = nullptr;
+
+    for (uint32_t i = 0; i < ComplaintTopicCount && !chosen; i++) {
+      const ComplaintTopic& candidate = ComplaintTopics[(m_nextTopic + i) % ComplaintTopicCount];
+
+      if (hasVoicedLine(actor, candidate.index))
+        chosen = &candidate;
+    }
+
+    uint32_t actorId = readField<uint32_t>(actor, VrGame::FormId);
+
+    if (m_loggedReactions < MaxLoggedReactions) {
+      Logger::info(chosen
+        ? str::format("VR: Actor ", hexId(actorId), " says its line for ", chosen->name)
+        : str::format("VR: Actor ", hexId(actorId), " has no recorded line to say"));
+      m_loggedReactions++;
+    }
+
+    if (!chosen)
+      return;
+
+    m_nextTopic = (uint32_t(chosen - ComplaintTopics) + 1) % ComplaintTopicCount;
+
+    void* topic = reinterpret_cast<GetTopicFn>(VrGame::TopicGetTopic)(VrGame::DialogueTypeTopic, chosen->index);
 
     // StartGreetingPlayer is silent during the cooldown of the last greeting
     // of any actor, and starts it anew
     *reinterpret_cast<float*>(player + VrGame::PlayerLastHelloTime) = -1.0f;
 
     reinterpret_cast<GreetFn>(VrGame::ActorStartGreetingPlayer)(actor, nullptr, topic);
-    m_complainer = readField<uint32_t>(actor, VrGame::FormId);
+    m_complainer = actorId;
+    m_cooldown.start(actorId, now(), commentInterval());
 
-    *commentTimer() = readField<float>(reinterpret_cast<const uint8_t*>(VrGame::CommentOnPlayerActionsTimerSetting),
-      VrGame::SettingValue);
+    *commentTimer() = commentInterval();
   }
 
 

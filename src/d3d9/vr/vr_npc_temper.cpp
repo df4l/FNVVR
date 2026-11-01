@@ -12,10 +12,28 @@ namespace dxvk {
     if (vrNpcHotTempered(temper) && !temper.voicedLine && !temper.idolized)
       return VrNpcGrabResponse::Attack;
 
-    if (temper.canComment && !temper.complaining)
+    if (temper.canComment && !temper.complaining && !temper.coolingDown)
       return VrNpcGrabResponse::Complain;
 
     return VrNpcGrabResponse::None;
+  }
+
+
+  bool VrNpcComplaintCooldown::coolingDown(uint32_t actor, double now) const {
+    auto entry = m_silentUntil.find(actor);
+    return entry != m_silentUntil.end() && now < entry->second;
+  }
+
+
+  void VrNpcComplaintCooldown::start(uint32_t actor, double now, double seconds) {
+    for (auto entry = m_silentUntil.begin(); entry != m_silentUntil.end(); ) {
+      if (now < entry->second)
+        ++entry;
+      else
+        entry = m_silentUntil.erase(entry);
+    }
+
+    m_silentUntil[actor] = now + seconds;
   }
 
 

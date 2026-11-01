@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 
@@ -11,16 +12,16 @@ namespace dxvk {
    * \brief Makes an actor react to being grabbed by the player
    *
    * The game has no reaction of its own to an actor grabbed by the hand.
-   * The closest is its comment on a shot fired near an actor
-   * (ProcessLists::CommentOnPlayerAction, findings/grab.md §19.13): the
-   * actor says a line of the topic the game keeps for it ("Cut it out, will
-   * you?"), at once, under the conditions of a comment on one actor but
-   * without waiting for the timers that space out remarks (findings/grab.md
-   * §19.12). A foolhardy, aggressive actor with no recorded line for that
-   * topic goes into combat with the player instead, as with the script
-   * command StartCombat, unless
-   * one of its factions idolizes the player (vrNpcGrabResponse,
-   * findings/grab.md §19.8).
+   * The closest are its comments on a weapon aimed at an actor and on a shot
+   * fired near it (ProcessLists::CommentOnPlayerAction): the actor says a
+   * line of one of these topics in turn ("Cut it out, will you?"), at once,
+   * under the conditions of a comment on one actor. The game's timers that
+   * space out remarks are shared by all actors and do not apply
+   * (findings/grab.md §19.12); each actor has its own cooldown instead
+   * (findings/grab.md §19.15). A foolhardy, aggressive actor with no recorded
+   * line for either topic goes into combat with the player instead, as with
+   * the script command StartCombat, unless one of its factions idolizes the
+   * player (vrNpcGrabResponse, findings/grab.md §19.8).
    *
    * Only used on the game's main thread.
    */
@@ -94,7 +95,7 @@ namespace dxvk {
      * \brief Makes a held actor complain again
      *
      * Under the game's own conditions and timer for comments, unless it is
-     * still saying its last complaint.
+     * still saying its last complaint or complained a moment ago.
      *
      * \param [in] actor The living actor (Actor*)
      */
@@ -118,6 +119,13 @@ namespace dxvk {
     uint32_t m_loggedAudioMisses = 0;
     bool     m_canAssault        = false;
     uint32_t m_complainer        = 0;
+    uint32_t m_nextTopic         = 0;
+
+    VrNpcComplaintCooldown m_cooldown;
+
+    std::chrono::steady_clock::time_point m_start = std::chrono::steady_clock::now();
+
+    double now() const;
 
     VrNpcTemper readTemper(uint8_t* actor);
 
@@ -125,7 +133,9 @@ namespace dxvk {
 
     bool canComment(uint8_t* actor, bool teammate, bool inCombat) const;
 
-    bool hasVoicedLine(uint8_t* actor);
+    bool hasVoicedLine(uint8_t* actor, uint32_t topicIndex);
+
+    bool hasAnyVoicedLine(uint8_t* actor);
 
     bool isVoiced(uint8_t* actor, void* topic, uint8_t* info);
 
