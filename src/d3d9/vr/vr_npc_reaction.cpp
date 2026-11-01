@@ -14,6 +14,7 @@ namespace dxvk {
   namespace {
 
     using ActorTestFn     = bool (__fastcall*)(uint8_t* actor, void* unused);
+    using AttackAlarmFn   = void (__fastcall*)(uint8_t* actor, void* unused, uint8_t* attacker, bool minor, bool unknown);
     using SkipsBehaviorFn = bool (__fastcall*)(uint8_t* actor, void* unused, uint32_t behavior);
     using IsDeadFn        = uint32_t (__fastcall*)(uint8_t* actor, void* unused, uint32_t unknown);
     using SitStateFn      = uint32_t (__fastcall*)(uint8_t* actor, void* unused);
@@ -117,6 +118,7 @@ namespace dxvk {
 
     std::unique_ptr<VrNpcReaction> reaction(new VrNpcReaction());
     g_npcReaction = reaction.get();
+    reaction->m_canAssault = VrGameMemory::callsTo(VrGame::ActorAttackAlarmCallSite, VrGame::ActorAttackAlarm);
 
     Logger::info("VR: Grabbed actors complain as when aimed at, foolhardy aggressive ones with no recorded line attack unless idolized");
     return reaction;
@@ -160,16 +162,7 @@ namespace dxvk {
     temper.teammate   = actorTest(VrGame::ActorIsPlayerTeammate, actor);
     temper.inCombat   = actorTest(VrGame::ActorIsInCombat, actor);
 
-    // The checks of CommentOnPlayerAction for the actor aimed at; the
-    // distance is that of the hand
-    bool dead = virtualFunction<IsDeadFn>(actor, VrGame::ActorIsDeadSlot)(actor, nullptr, 0) & 0xFF;
-    bool asleep = virtualFunction<SitStateFn>(actor, VrGame::GetSitStateSlot)(actor, nullptr) == VrGame::SitSleepSleeping;
-    bool skips = reinterpret_cast<SkipsBehaviorFn>(VrGame::ActorSkipsBehavior)(
-      actor, nullptr, VrGame::BehaviorReactToPlayerActions);
-
-    temper.canComment = !dead && !asleep && !temper.inCombat
-      && actorTest(VrGame::ActorCanSpeak, actor)
-      && (!skips || temper.teammate);
+    temper.canComment   = canComment(actor, temper.teammate, temper.inCombat);
     temper.commentTimer = *commentTimer();
 
     if (vrNpcHotTempered(temper)) {
@@ -178,6 +171,20 @@ namespace dxvk {
     }
 
     return temper;
+  }
+
+
+  bool VrNpcReaction::canComment(uint8_t* actor, bool teammate, bool inCombat) const {
+    // The checks of CommentOnPlayerAction for the actor aimed at; the
+    // distance is that of the hand
+    bool dead = virtualFunction<IsDeadFn>(actor, VrGame::ActorIsDeadSlot)(actor, nullptr, 0) & 0xFF;
+    bool asleep = virtualFunction<SitStateFn>(actor, VrGame::GetSitStateSlot)(actor, nullptr) == VrGame::SitSleepSleeping;
+    bool skips = reinterpret_cast<SkipsBehaviorFn>(VrGame::ActorSkipsBehavior)(
+      actor, nullptr, VrGame::BehaviorReactToPlayerActions);
+
+    return !dead && !asleep && !inCombat
+      && actorTest(VrGame::ActorCanSpeak, actor)
+      && (!skips || teammate);
   }
 
 
@@ -270,6 +277,61 @@ namespace dxvk {
 
   bool VrNpcReaction::fighting(uint8_t* actor) const {
     return actorTest(VrGame::ActorIsInCombat, actor);
+  }
+
+
+  bool VrNpcReaction::teammate(uint8_t* actor) const {
+    return actorTest(VrGame::ActorIsPlayerTeammate, actor);
+  }
+
+
+  bool VrNpcReaction::forgives(uint8_t* actor) const {
+    return teammate(actor) || factionIdolizesPlayer(actor);
+  }
+
+
+  float VrNpcReaction::healthShare(uint8_t* actor) const {
+    float base = maxHealth(actor);
+    return base > 0.0f ? actorValue(actor, VrGame::AvHealth) / base : 1.0f;
+  }
+
+
+  float VrNpcReaction::maxHealth(uint8_t* actor) const {
+    uint8_t* values = actor + VrGame::ActorValueOwnerBase;
+    return virtualFunction<GetAvFloatFn>(values, VrGame::AvOwnerBaseFloatSlot)(values, nullptr, VrGame::AvHealth);
+  }
+
+
+  void VrNpcReaction::nag(uint8_t* actor) {
+    if (*commentTimer() > 0.0f || !canComment(actor, teammate(actor), fighting(actor)))
+      return;
+
+    complain(actor);
+
+    if (m_loggedReactions < MaxLoggedReactions) {
+      Logger::info(str::format("VR: Held actor ", hexId(readField<uint32_t>(actor, VrGame::FormId)), " complains again"));
+      m_loggedReactions++;
+    }
+  }
+
+
+  void VrNpcReaction::assault(uint8_t* actor) {
+    uint8_t* process = readField<uint8_t*>(actor, VrGame::ActorProcess);
+    uint8_t* player  = *reinterpret_cast<uint8_t* const*>(VrGame::Player);
+
+    if (!m_canAssault || !process || !player)
+      return;
+
+    reinterpret_cast<AttackAlarmFn>(VrGame::ActorAttackAlarm)(actor, nullptr, player, false, true);
+
+    virtualFunction<EnterCombatFn>(process, VrGame::ProcessEnterCombatSlot)(process, nullptr,
+      actor, player, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0);
+
+    if (m_loggedReactions < MaxLoggedReactions) {
+      Logger::info(str::format("VR: Actor ", hexId(readField<uint32_t>(actor, VrGame::FormId)),
+        " takes its handling for an assault"));
+      m_loggedReactions++;
+    }
   }
 
 

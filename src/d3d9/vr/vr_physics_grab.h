@@ -10,6 +10,7 @@
 #include "vr_grab_fingers.h"
 #include "vr_hand_body.h"
 #include "vr_npc_drag.h"
+#include "vr_npc_manhandle.h"
 #include "vr_npc_reaction.h"
 #include "vr_types.h"
 
@@ -24,6 +25,8 @@ namespace dxvk {
     std::array<bool, VrHandCount> released = { };
     /// Let go of at the chest and put in the inventory
     std::array<bool, VrHandCount> stored   = { };
+    /// Shoved an actor
+    std::array<bool, VrHandCount> shoved   = { };
   };
 
   /**
@@ -55,9 +58,18 @@ namespace dxvk {
    * its own move is replaced with the one the hands give it (VrNpcDrag), it
    * stands while they stand and walks, in the game's animation, where they
    * take it. Otherwise the actor walks on and the limb leaves the hand
-   * sooner than a held object would (findings/grab.md §19.8, §19.9). A hand
-   * that touches the object the other hand holds holds it too, with a
-   * second spring on the same body.
+   * sooner than a held object would (findings/grab.md §19.8, §19.9). A limb
+   * outside the reaction follows its animation: the hand stays on it and the
+   * actor still goes where the hand takes it. A hand that touches the object
+   * the other hand holds holds it too, with a second spring on the same body.
+   *
+   * After the Skyrim VR mod PLANCK (findings/grab.md §19.10): a kept actor let
+   * go of by a hand moving fast is knocked down with the game's own knock down,
+   * thrown along the hand's move; the limbs of an actor knocked down are held as those of a corpse until it
+   * stands up. Holding costs action points and the hands let go when there are
+   * none left. The player cannot walk away faster than the actor comes along,
+   * and passes through it. A fast open hand shoves an actor. Being handled
+   * angers an actor, up to an assault on the player.
    *
    * A body held by one hand also turns with the hand: a callback of its
    * spring sets the body's angular velocity towards the rotation it had in
@@ -246,6 +258,11 @@ namespace dxvk {
       bool       living  = false;
       /// The grip keeps the living actor from walking away
       bool       inPlace = false;
+      /// The living actor is knocked down, its whole ragdoll simulated
+      bool       knocked = false;
+      /// The limb follows its animation: the spring, which keeps the body
+      /// alive, is not in the world
+      bool       anchored = false;
       /// Where the point held belongs, in the actor's frame, game units
       VrNpcGroundVector anchor;
       /// Where the hand wants the point held, game units
@@ -374,7 +391,10 @@ namespace dxvk {
       std::atomic<uint32_t> moveMode  = { 0u };
 
       VrNpcDrag logic;
+      uint32_t  refId  = 0;
       bool      logged = false;
+      /// The actor's cached walk and run speeds are the drag's
+      bool      setsSpeeds = false;
     };
 
     std::array<Drag, VrHandCount> m_drags;
@@ -382,7 +402,96 @@ namespace dxvk {
     bool m_canDrag        = false;
     uint32_t m_loggedDrags = 0;
 
+    /**
+     * \brief A hand that let go of an actor, for a yank
+     */
+    struct LetGo {
+      uint8_t*  actor  = nullptr;
+      uint32_t  refId  = 0;
+      VrVector3 velocity;
+      float     age    = 0.0f;
+      bool      fresh  = false;
+      bool      kept   = false;
+    };
+
+    /**
+     * \brief How angry an actor is who was handled lately
+     */
+    struct Handled {
+      uint8_t*   actor = nullptr;
+      uint32_t   refId = 0;
+      bool       forgives = false;
+      VrNpcAnger anger;
+    };
+
+    /**
+     * \brief An actor the player's capsule passes through
+     *
+     * From when a hand takes it until it is clear of the player once let go.
+     */
+    struct PassedThrough {
+      uint8_t* actor = nullptr;
+      uint32_t refId = 0;
+    };
+
+    constexpr static uint32_t MaxHandled = 4;
+    constexpr static uint32_t MaxPassedThrough = 4;
+
+    std::array<VrHandMotion, VrHandCount> m_handMotion;
+    std::array<VrVector3, VrHandCount>    m_handPositions;
+    std::array<bool, VrHandCount>         m_hasHandPosition = { };
+    std::array<LetGo, VrHandCount>        m_letGo;
+    std::array<Handled, MaxHandled>       m_handled;
+    std::array<PassedThrough, MaxPassedThrough> m_passedThrough;
+    bool     m_canKnockDown     = false;
+    bool     m_canPassThrough   = false;
+    bool     m_canSetSpeeds     = false;
+    bool     m_canShove         = false;
+    bool     m_canSpendPoints   = false;
+    float    m_shoveCooldown    = 0.0f;
+    uint32_t m_loggedManhandling = 0;
+    VrNpcPlayerBrake m_playerBrake;
+
+    // Read by playerMoveHook and collisionFilterHook on the threads that
+    // move the player and step Havok
+    std::atomic<float>    m_playerSpeedLimit  = { 0.0f };
+    std::atomic<float>    m_playerBrakeStrength = { 0.0f };
+    std::atomic<uint32_t> m_playerGroup       = { 0u };
+    std::array<std::atomic<uint32_t>, MaxPassedThrough> m_passedGroups = { };
+
     void update(uint8_t* player, float dt);
+
+    void updateHandMotion(float dt);
+
+    void noteLetGo(VrHand hand, const Held& held);
+
+    void updateYanks(uint8_t* player, float dt);
+
+    bool knockedDown(uint8_t* actor) const;
+
+    bool knockDown(uint8_t* actor, const VrVector3& velocity);
+
+    bool spendActionPoints(uint8_t* player, float cost) const;
+
+    void updateEffort(uint8_t* player, float dt);
+
+    void updateShoves(uint8_t* player, float dt);
+
+    void shove(uint8_t* player, VrHand hand, const Candidate& touched, const VrVector3& velocity);
+
+    Handled* handledEntry(uint8_t* actor);
+
+    void updateAnger(float dt);
+
+    void updatePassingThrough(uint8_t* player);
+
+    void updateActorPhantom(uint8_t* actor) const;
+
+    bool passesThrough(uint32_t filterA, uint32_t filterB) const;
+
+    void setDragSpeeds(Drag& drag, uint8_t* actor, float speed);
+
+    void clearDragSpeeds(Drag& drag, uint8_t* actor);
 
     void updateLead(uint8_t* player, float dt);
 
@@ -418,7 +527,7 @@ namespace dxvk {
 
     bool startReaction(uint8_t* actor) const;
 
-    bool keepReaction(const Held& held) const;
+    bool keepReaction(Held& held);
 
     bool canHoldLiving() const;
 
@@ -430,7 +539,7 @@ namespace dxvk {
 
     void updateDrags(uint8_t* player, float dt);
 
-    void updateDrag(Drag& drag, uint8_t* player, const Held& held, const Held* other, float margin, float dt);
+    void updateDrag(Drag& drag, uint8_t* player, const Held& held, const Held* other, float margin, float limit, float dt);
 
     void stopDrag(Drag& drag);
 
@@ -479,6 +588,20 @@ namespace dxvk {
     static uint32_t __fastcall moveModeHook(
             uint8_t*              mover,
             void*                 unused);
+
+    static void* __fastcall playerMoveHook(
+            uint8_t*              player,
+            void*                 unused,
+            float                 dt,
+            VrVector3*            move,
+            uint8_t               flags);
+
+    static bool* __fastcall collisionFilterHook(
+            void*                 filter,
+            void*                 unused,
+            bool*                 result,
+      const uint8_t*              a,
+      const uint8_t*              b);
 
   };
 

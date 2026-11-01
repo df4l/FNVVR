@@ -1214,7 +1214,7 @@ namespace dxvk {
     VrPhysicsGrabEvents events = m_physicsGrab->takeEvents();
 
     for (uint32_t i = 0; i < VrHandCount; i++) {
-      if (events.grabbed[i])
+      if (events.grabbed[i] || events.shoved[i])
         m_backend.applyHaptic(VrHand(i), GrabHaptic, GrabHapticDuration);
       else if (events.stored[i])
         m_backend.applyHaptic(VrHand(i), GrabHaptic * 2.0f, GrabHapticDuration * 2.0f);

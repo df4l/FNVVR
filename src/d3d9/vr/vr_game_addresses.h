@@ -2693,6 +2693,83 @@ namespace dxvk {
     constexpr uintptr_t ActorIsImmobileSlot          = 0x4B4;
 
     /**
+     * Knocking an actor down (findings/grab.md §19.10).
+     * BaseProcess::KnockExplosion (virtual, __thiscall: actor, NiPoint3 source
+     * by value, force; callee cleans up) gets the actor out of its furniture
+     * and makes its whole ragdoll dynamic, each limb gaining force (Havok units
+     * per second) away from the source. It does nothing unless
+     * Actor::CanKnockDown (__thiscall). Actor::IsKnockedOut is virtual, true
+     * from then until the actor stands again.
+     */
+    constexpr uintptr_t ProcessKnockExplosionSlot    = 0x418;
+    constexpr uintptr_t ActorCanKnockDown            = 0x008845A0;
+    constexpr uintptr_t ActorCanKnockDownCallSite    = 0x0091FF3E;
+    constexpr uintptr_t ActorIsKnockedOutSlot        = 0x230;
+
+    /**
+     * The script command SendAssaultAlarm on the actor itself: the crime of
+     * Actor::AttackAlarm(player, minor 0, 1) (__thiscall), then
+     * BaseProcess::EnterCombat with the arguments of the site's own call
+     * (flags 1, then eight 0, then 1, 0).
+     */
+    constexpr uintptr_t ActorAttackAlarm             = 0x008C0460;
+    constexpr uintptr_t ActorAttackAlarmCallSite     = 0x005DA328;
+
+    /**
+     * The player's Actor::Move: the same function in the PlayerCharacter
+     * table; the hook slows the player holding an actor down without
+     * touching an actor value, which a save would keep.
+     */
+    constexpr uintptr_t PlayerMoveSlot               = 0x0108AC8C;
+
+    /**
+     * The collision of the player's capsule with a held actor.
+     * bhkCollisionFilter's hkpCollidableCollidableFilter table holds
+     * isCollisionEnabled(bool* result, collidable a, collidable b) (__thiscall,
+     * returns result); it reads hkpCollidable's filter at CollidableFilter.
+     * Character controllers are caching phantoms, whose overlaps only ask the
+     * filter when they begin, so bhkPhantom::UpdateCollisionFilter (__thiscall)
+     * asks again for the phantom a change concerns.
+     * MobileObject::GetCharController (__thiscall), controller's phantom at
+     * ControllerShapePhantom.
+     */
+    constexpr uintptr_t CollidableFilterEnabled      = 0x00C84880;
+    constexpr uintptr_t CollidableFilterEnabledSlot  = 0x010C3C10;
+    constexpr uintptr_t CollidableFilterInfo         = 0x1C;
+    constexpr uintptr_t PhantomUpdateFilter          = 0x00C9F460;
+    constexpr uint8_t   PhantomUpdateFilterPrologue[] = { 0x56, 0x8B, 0xF1, 0x8B, 0x06, 0x8B, 0x90, 0x98, 0x00, 0x00, 0x00 };
+    constexpr uintptr_t GetCharController            = 0x009306D0;
+    constexpr uintptr_t GetCharControllerCallSite    = 0x00525036;
+    constexpr uintptr_t ControllerShapePhantom       = 0x594;
+    constexpr uint32_t  FilterLayerMask              = 0x7F;
+    constexpr uint32_t  LayerBiped                   = 0x08;
+    constexpr uint32_t  LayerDeadBiped               = 0x1D;
+    constexpr uint32_t  LayerCharController          = 0x1E;
+
+    /**
+     * Actor::SetWalkSpeed and SetRunSpeed (__thiscall, float, ret 4) set the
+     * process's cached speeds, from which Actor::PickAnimations takes the rate
+     * of the walk and run animations. BaseProcess::SetCachedValueDirty
+     * (__thiscall, flags, ret 4) has them worked out again.
+     */
+    constexpr uintptr_t ActorSetWalkSpeed            = 0x00884FC0;
+    constexpr uintptr_t ActorSetWalkSpeedCallSite    = 0x008E2504;
+    constexpr uintptr_t ActorSetRunSpeed             = 0x00884FF0;
+    constexpr uintptr_t ActorSetRunSpeedCallSite     = 0x008E24B7;
+    constexpr uintptr_t ProcessSetCachedDirty        = 0x00884940;
+    constexpr uintptr_t ProcessSetCachedDirtyCallSite = 0x0088490D;
+    constexpr uint32_t  CachedWalkAndRunSpeed        = 0x3000;
+
+    /**
+     * bhkCharacterController::SetVelocityModifier(NiPoint3* displacement,
+     * seconds) (__thiscall, ret 8): moves the character by the displacement,
+     * game units, on top of its own move, what KnockExplosion does to an
+     * actor with no ragdoll.
+     */
+    constexpr uintptr_t ControllerSetVelocityMod     = 0x00C6D4D0;
+    constexpr uintptr_t ControllerSetVelocityModCallSite = 0x0088A355;
+
+    /**
      * Melee hits on objects (findings/melee.md §14): Actor::ObjectHit(bool
      * power) (__thiscall, ret 4), which MeleeAttack calls for the player
      * when no actor is in reach, casts a shape from Actor::GetEyeVector

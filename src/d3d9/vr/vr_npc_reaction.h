@@ -59,14 +59,66 @@ namespace dxvk {
      */
     bool fighting(uint8_t* actor) const;
 
+    /**
+     * \brief Whether an actor is a companion of the player
+     *
+     * \param [in] actor The living actor (Actor*)
+     */
+    bool teammate(uint8_t* actor) const;
+
+    /**
+     * \brief Whether an actor takes being handled without getting angry
+     *
+     * A companion, or one of a faction that idolizes the player.
+     *
+     * \param [in] actor The living actor (Actor*)
+     */
+    bool forgives(uint8_t* actor) const;
+
+    /**
+     * \brief An actor's share of its Health, 0 to 1
+     *
+     * \param [in] actor The living actor (Actor*)
+     */
+    float healthShare(uint8_t* actor) const;
+
+    /**
+     * \brief An actor's base Health
+     *
+     * \param [in] actor The living actor (Actor*)
+     */
+    float maxHealth(uint8_t* actor) const;
+
+    /**
+     * \brief Makes a held actor complain again
+     *
+     * Under the game's own conditions and timer for comments.
+     *
+     * \param [in] actor The living actor (Actor*)
+     */
+    void nag(uint8_t* actor);
+
+    /**
+     * \brief An actor takes its handling for an assault
+     *
+     * As the script command SendAssaultAlarm on the actor: a crime others may
+     * react to, and combat with the player.
+     *
+     * \param [in] actor The living actor (Actor*)
+     */
+    void assault(uint8_t* actor);
+
   private:
 
     VrNpcReaction() = default;
 
     uint32_t m_loggedReactions   = 0;
     uint32_t m_loggedAudioMisses = 0;
+    bool     m_canAssault        = false;
 
     VrNpcTemper readTemper(uint8_t* actor);
+
+    bool canComment(uint8_t* actor, bool teammate, bool inCombat) const;
 
     bool hasVoicedLine(uint8_t* actor);
 
