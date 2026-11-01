@@ -54,6 +54,7 @@ vr_dxvk_src = files([
   'vr_prompt_icon.cpp',
   'vr_hud_meters.cpp',
   'vr_comfort_settings.cpp',
+  'vr_sound_focus.cpp',
   'vr_system.cpp',
   'vr_backend_factory.cpp',
   'vr_openvr_backend.cpp',

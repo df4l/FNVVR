@@ -409,6 +409,21 @@ namespace dxvk {
     constexpr size_t    ObjectWorldTransformSize = 0x34;
     constexpr size_t    BoundSize             = 0x10;
 
+    /**
+     * The instructions that end the buffer flags of every game sound before
+     * IDirectSound8::CreateSoundBuffer: `or reg, 2A0h` (CTRLFX, CTRLVOLUME,
+     * CTRLFREQUENCY) in BSWin32GameSound::Open, OpenOgg, Copy and
+     * PrepareReverb. Their flags hold no focus flag, so DirectSound silences
+     * the sounds while another window has the focus. See findings/audio.md §4.
+     */
+    constexpr uintptr_t SoundFlagsOpen          = 0x00AEB943;
+    constexpr uintptr_t SoundFlagsOpenOgg       = 0x00AEC4B0;
+    constexpr uintptr_t SoundFlagsCopy          = 0x00AF08C6;
+    constexpr uintptr_t SoundFlagsPrepareReverb = 0x00AF1643;
+
+    constexpr uint8_t SoundFlagsOrEcx[] = { 0x81, 0xC9, 0xA0, 0x02, 0x00, 0x00 };
+    constexpr uint8_t SoundFlagsOrEdx[] = { 0x81, 0xCA, 0xA0, 0x02, 0x00, 0x00 };
+
     /** State of the VATS camera, 0 when VATS is not running */
     constexpr uintptr_t VatsCameraState = 0x011F2258;
 

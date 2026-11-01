@@ -98,6 +98,28 @@ namespace dxvk {
   }
 
 
+  bool VrGameMemory::replaceCode(
+          uintptr_t             site,
+    const uint8_t*              expected,
+    const uint8_t*              replacement,
+          size_t                size) {
+    if (!matches(site, expected, size))
+      return false;
+
+    void* code = reinterpret_cast<void*>(site);
+    DWORD oldProtect = 0;
+
+    if (!VirtualProtect(code, size, PAGE_EXECUTE_READWRITE, &oldProtect))
+      return false;
+
+    std::memcpy(code, replacement, size);
+
+    VirtualProtect(code, size, oldProtect, &oldProtect);
+    FlushInstructionCache(GetCurrentProcess(), code, size);
+    return true;
+  }
+
+
   bool VrGameMemory::redirectVirtual(
           uintptr_t             slot,
           uintptr_t             expectedTarget,
