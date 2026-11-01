@@ -79,6 +79,11 @@ namespace dxvk {
 
     VrPhysicsGrab* g_physicsGrab = nullptr;
 
+    // The bone weights of the actors in the hands, which their ragdoll
+    // controllers point at: outside the object, as the game's threads read them
+    constexpr uint32_t MaxLooseActors = 4;
+    float g_limbWeights[MaxLooseActors][VrRagdollMaxBodies];
+
     // How far around the grip's centre the hand touches what it holds
     constexpr float ProbeRadius = 0.10f * VrGameUnitsPerMetre;
 
@@ -426,6 +431,12 @@ namespace dxvk {
       && VrGameMemory::redirectCall(VrGame::RagdollFeedbackPoseCallSite, VrGame::RagdollUpdateDebugLines,
            reinterpret_cast<const void*>(&VrPhysicsGrab::feedbackPoseHook));
 
+    // What ties the limbs to the animation gives way to the hands
+    static_assert(MaxDriven == MaxLooseActors, "One set of bone weights per loose actor");
+    grab->m_canLoosen = grab->m_npcLimbs
+      && VrGameMemory::redirectCall(VrGame::RagdollDriveStageCallSite, VrGame::RagdollUpdateDebugLines,
+           reinterpret_cast<const void*>(&VrPhysicsGrab::ragdollDriveHook));
+
     // The spheres are only made where they can be stopped while the
     // player is not in control
     grab->m_handBodies = VrHandBodies::create();
@@ -486,7 +497,8 @@ namespace dxvk {
       ", walk speeds ", grab->m_canSetSpeeds ? "found" : "not found",
       ", shove ", grab->m_canShove ? "found" : "not found",
       ", passing through ", grab->m_canPassThrough ? "found" : "not found",
-      ", player's brake ", brakes ? "found" : "not found"));
+      ", player's brake ", brakes ? "found" : "not found",
+      ", limbs following the hand ", grab->m_canLoosen ? "found" : "not found"));
 
     Logger::info("VR: Each free hand holds what it touches or pulls what it points at with its grip");
     Logger::info(!grab->m_npcLimbs
@@ -572,6 +584,17 @@ namespace dxvk {
     if (g_physicsGrab && !gameRunsFeedback() && readField<bool>(ragdoll, VrGame::RagdollFeedbackActive)
      && g_physicsGrab->drives(ragdoll))
       reinterpret_cast<DoFeedbackFn>(VrGame::RagdollDoFeedback)(ragdoll, nullptr);
+
+    reinterpret_cast<DebugLinesFn>(VrGame::RagdollUpdateDebugLines)(ragdoll, nullptr, stage);
+  }
+
+
+  void __fastcall VrPhysicsGrab::ragdollDriveHook(
+          uint8_t*              ragdoll,
+          void*                 unused,
+          uint32_t              stage) {
+    if (g_physicsGrab)
+      g_physicsGrab->applyLoose(ragdoll);
 
     reinterpret_cast<DebugLinesFn>(VrGame::RagdollUpdateDebugLines)(ragdoll, nullptr, stage);
   }
@@ -731,6 +754,7 @@ namespace dxvk {
     for (uint32_t i = 0; i < VrHandCount; i++)
       updateHand(player, VrHand(i), dt);
 
+    updateLoose(dt);
     updateYanks(player, dt);
     updateDrags(player, dt);
     updateEffort(player, dt);
@@ -1340,6 +1364,7 @@ namespace dxvk {
     m_hasPlayerPosition = true;
     m_playerStep        = step;
     m_lead = vrGrabLead(step, StaleFrames + vrGrabSpringLagSteps(m_spring));
+    m_limbLead = vrGrabLead(step, StaleFrames + vrGrabSpringLagSteps(m_limbSpring));
 
     if (!m_hands[0].grab.holding() && !m_hands[1].grab.holding())
       return;
@@ -1361,6 +1386,9 @@ namespace dxvk {
     Held& held = m_hands[uint32_t(hand)];
     const HandInput& input = m_input[uint32_t(hand)];
     m_corrections[uint32_t(hand)].valid = false;
+
+    if (!input.grip)
+      held.loggedMiss = false;
 
     // The object was unloaded, taken or moved out of the world
     if (held.grab.holding() && !stillHeld(held)) {
@@ -1456,6 +1484,20 @@ namespace dxvk {
         m_loggedMisses++;
       }
 
+      // Once per grip: a grip asks for several frames
+      Held& self = m_hands[uint32_t(hand)];
+      const Held& other = m_hands[uint32_t(hand) ^ 1u];
+
+      if (other.grab.holding() && other.living && !self.loggedMiss && m_loggedSecondHand < MaxLoggedMisses) {
+        VrVector3 limb = bodyPointToWorld(other.body, other.local) * (1.0f / havokScale());
+
+        Logger::info(str::format("VR: The ", handName(hand), " hand touches nothing it can hold, ",
+          int32_t(vrLength(limb - pose.position) * 100.0f / VrGameUnitsPerMetre),
+          " cm from the point of the limb '", bodyNodeName(other.body), "' the other hand holds"));
+        self.loggedMiss = true;
+        m_loggedSecondHand++;
+      }
+
       return false;
     }
 
@@ -1497,8 +1539,10 @@ namespace dxvk {
       m_loggedGrabs++;
     }
 
-    // Once, by the first hand to take the actor
-    if (held.living && !held.knocked && m_npcReaction && handsOn(held.body) == 1)
+    // Once, by the first hand to take the actor, whichever limb the other holds
+    const Held& other = m_hands[uint32_t(hand) ^ 1u];
+
+    if (held.living && !held.knocked && m_npcReaction && !(other.grab.holding() && other.ref == held.ref))
       m_npcReaction->grabbed(held.ref);
 
     return true;
@@ -1714,6 +1758,181 @@ namespace dxvk {
   }
 
 
+  VrPhysicsGrab::Loose* VrPhysicsGrab::looseEntry(uint8_t* actor, uint8_t* ragdoll) {
+    Loose* entry = nullptr;
+
+    for (Loose& loose : m_loose) {
+      if (loose.actor == actor)
+        return &loose;
+
+      if (!entry && !loose.actor)
+        entry = &loose;
+    }
+
+    // All taken: one going back to its animation gives its place
+    for (Loose& loose : m_loose) {
+      if (!entry && !loose.held)
+        entry = &loose;
+    }
+
+    if (!entry)
+      return nullptr;
+
+    const uint8_t* share    = readField<uint8_t*>(ragdoll, VrGame::RagdollShareData);
+    const uint8_t* feedback = share ? readField<uint8_t*>(share, VrGame::RagdollShareFeedback) : nullptr;
+
+    if (!feedback)
+      return nullptr;
+
+    entry->actor  = actor;
+    entry->refId  = readField<uint32_t>(actor, VrGame::FormId);
+    entry->blend  = readField<float>(feedback, VrGame::RagdollFeedbackBlend);
+    entry->logged = false;
+    entry->interp.store(entry->blend);
+
+    // Nothing changes for the actor until its weights are worked out
+    std::fill_n(g_limbWeights[entry - m_loose.data()], VrRagdollMaxBodies, 1.0f);
+    entry->ragdoll.store(ragdoll);
+    return entry;
+  }
+
+
+  void VrPhysicsGrab::updateLoose(float dt) {
+    if (!m_canLoosen)
+      return;
+
+    for (Loose& loose : m_loose)
+      loose.held = false;
+
+    for (Held& held : m_hands)
+      held.limbAcceleration = 0.0f;
+
+    // The bodies the limbs in the hands move
+    for (const Held& held : m_hands) {
+      if (!held.grab.holding() || !held.living || held.knocked || held.anchored)
+        continue;
+
+      uint8_t* ragdoll = readField<uint8_t*>(held.ref, VrGame::ActorRagdollController);
+      const uint8_t* controller = ragdoll ? readField<uint8_t*>(ragdoll, VrGame::RagdollRbController) : nullptr;
+
+      if (!controller)
+        continue;
+
+      uint32_t count = readField<uint32_t>(controller, VrGame::RbControllerBodyCount);
+      uint8_t* const* bodies = readField<uint8_t* const*>(controller, VrGame::RbControllerBodies);
+
+      if (count > VrRagdollMaxBodies || !bodies)
+        continue;
+
+      uint32_t body = 0;
+
+      while (body < count && bodies[body] != held.body)
+        body++;
+
+      Loose* loose = body < count ? looseEntry(held.ref, ragdoll) : nullptr;
+
+      if (!loose)
+        continue;
+
+      // The first hand on it this frame starts over
+      if (!loose->held)
+        loose->inHand.fill(1.0f);
+
+      std::array<bool, VrRagdollMaxBodies> dynamic;
+
+      for (uint32_t i = 0; i < count; i++)
+        dynamic[i] = bodies[i] && isDynamic(bodies[i]);
+
+      vrLimbLoosen(count, readField<const uint16_t*>(controller, VrGame::RbControllerParents),
+        dynamic.data(), body, loose->inHand.data());
+
+      loose->held = true;
+      loose->back = 0.0f;
+    }
+
+    for (uint32_t i = 0; i < m_loose.size(); i++) {
+      Loose& loose = m_loose[i];
+
+      if (!loose.actor)
+        continue;
+
+      // Unloaded, given another ragdoll, or the reaction ended: nothing to
+      // go back from. A knocked down actor's ragdoll is not driven.
+      uint8_t* ragdoll = loose.ragdoll.load();
+      bool valid = reinterpret_cast<FormByIdFn>(VrGame::FormById)(loose.refId) == loose.actor
+        && readField<uint8_t*>(loose.actor, VrGame::ActorRagdollController) == ragdoll
+        && ragdoll && readField<bool>(ragdoll, VrGame::RagdollFeedbackActive);
+
+      if (!loose.held && valid)
+        loose.back += dt / VrLimbReturnTime;
+
+      if (!valid || loose.back >= 1.0f) {
+        loose.ragdoll.store(nullptr);
+        loose.actor = nullptr;
+        loose.back  = 0.0f;
+        continue;
+      }
+
+      if (loose.held) {
+        uint8_t* controller = readField<uint8_t*>(ragdoll, VrGame::RagdollRbController);
+        uint32_t count = readField<uint32_t>(controller, VrGame::RbControllerBodyCount);
+        uint8_t* const* bodies = readField<uint8_t* const*>(controller, VrGame::RbControllerBodies);
+        float    branch = 0.0f;
+        uint32_t freed  = 0;
+
+        for (uint32_t b = 0; b < count; b++) {
+          float inverseMass = bodies[b] ? readField<float>(bodies[b], VrGame::BodyInverseMass) : 0.0f;
+
+          if (loose.inHand[b] < 1.0f && inverseMass > 0.0f) {
+            branch += 1.0f / inverseMass;
+            freed  += 1;
+          }
+        }
+
+        for (Held& held : m_hands) {
+          if (held.grab.holding() && held.ref == loose.actor && !held.anchored && !held.knocked)
+            held.limbAcceleration = vrLimbMaxAcceleration(m_fullAcceleration, branch, held.mass);
+        }
+
+        if (!loose.logged && m_loggedLoose < MaxLoggedGrabs) {
+          Logger::info(str::format("VR: The hands move ", freed, " bodies of ", hexId(loose.refId), " (", branch,
+            " kg of ", count, " bodies) without the animation's drive, drawn as simulated (the race's blend ", loose.blend, ")"));
+          loose.logged = true;
+          m_loggedLoose++;
+        }
+      }
+
+      for (uint32_t b = 0; b < VrRagdollMaxBodies; b++)
+        g_limbWeights[i][b] = vrLimbReturnWeight(loose.inHand[b], loose.back);
+
+      loose.interp.store(loose.blend * loose.back);
+    }
+  }
+
+
+  void VrPhysicsGrab::applyLoose(uint8_t* ragdoll) const {
+    uint8_t* controller = readField<uint8_t*>(ragdoll, VrGame::RagdollRbController);
+
+    if (!controller)
+      return;
+
+    for (uint32_t i = 0; i < m_loose.size(); i++) {
+      if (m_loose[i].ragdoll.load() == ragdoll) {
+        writeField(controller, VrGame::RbControllerBoneWeights, static_cast<const float*>(g_limbWeights[i]));
+        writeField(ragdoll, VrGame::RagdollFeedbackInterp, m_loose[i].interp.load());
+        return;
+      }
+    }
+
+    // No longer in the hands: the game's own (none, and its blend is set
+    // again with the actor's next update)
+    const float* weights = readField<const float*>(controller, VrGame::RbControllerBoneWeights);
+
+    if (weights >= g_limbWeights[0] && weights < g_limbWeights[0] + MaxLooseActors * VrRagdollMaxBodies)
+      writeField(controller, VrGame::RbControllerBoneWeights, static_cast<const float*>(nullptr));
+  }
+
+
   bool VrPhysicsGrab::keepReaction(Held& held) {
     if (reinterpret_cast<FormByIdFn>(VrGame::FormById)(held.refId) != held.ref)
       return false;
@@ -1822,11 +2041,14 @@ namespace dxvk {
     writeField(info, VrGame::SpringInfoBody, body);
     writeVector4(info, VrGame::SpringInfoLocalPoint, held.local);
     writeVector4(info, VrGame::SpringInfoTarget, point);
-    writeField(info, VrGame::SpringInfoDamping,       m_spring.damping);
-    writeField(info, VrGame::SpringInfoElasticity,    m_spring.elasticity);
+    // A limb is seen in the hand, an object may lag
+    const VrGrabSpringConstants& constants = candidate.living && !knocked ? m_limbSpring : m_spring;
+
+    writeField(info, VrGame::SpringInfoDamping,       constants.damping);
+    writeField(info, VrGame::SpringInfoElasticity,    constants.elasticity);
     writeField(info, VrGame::SpringInfoMaxForce,
       vrGrabMaxAcceleration(mass, shared ? 2 : 1, m_fullAcceleration, m_gravity));
-    writeField(info, VrGame::SpringInfoObjectDamping, m_spring.objectDamping);
+    writeField(info, VrGame::SpringInfoObjectDamping, constants.objectDamping);
 
     void* memory = reinterpret_cast<NiNewFn>(VrGame::NiNew)(VrGame::SpringSize);
 
@@ -1856,6 +2078,7 @@ namespace dxvk {
     held.inPlace = false;
     held.knocked = knocked;
     held.anchored = anchored;
+    held.limbAcceleration = 0.0f;
 
     if (held.living) {
       VrVector3 root = readField<VrVector3>(ref, VrGame::RefLocation);
@@ -1925,6 +2148,7 @@ namespace dxvk {
     m_spring.damping       = settingFloat(VrGame::SpringDampingSetting);
     m_spring.elasticity    = settingFloat(VrGame::SpringElasticitySetting);
     m_spring.objectDamping = ObjectDamping;
+    m_limbSpring           = vrLimbSpring(m_spring);
     m_fullAcceleration     = settingFloat(VrGame::SpringMaxForceSetting);
     m_gravity              = vrLength(readField<VrVector3>(hkWorld, VrGame::WorldGravity));
 
@@ -1977,7 +2201,7 @@ namespace dxvk {
 
 
   bool VrPhysicsGrab::moveTarget(Held& held, const VrGameCameraPose& pose) {
-    VrVector3 target = held.grab.target(pose) + m_lead;
+    VrVector3 target = held.grab.target(pose) + (held.living && !held.knocked ? m_limbLead : m_lead);
     VrVector3 point  = bodyPointToWorld(held.body, held.local) * (1.0f / havokScale());
 
     held.target = target;
@@ -1992,8 +2216,9 @@ namespace dxvk {
       return true;
 
     // A second hand on the body, or one let go, changes its strength
-    writeField(springAction(held.spring), VrGame::SpringActionMaxForce,
-      vrGrabMaxAcceleration(held.mass, handsOn(held.body), m_fullAcceleration, m_gravity));
+    writeField(springAction(held.spring), VrGame::SpringActionMaxForce, held.limbAcceleration > 0.0f
+      ? held.limbAcceleration
+      : vrGrabMaxAcceleration(held.mass, handsOn(held.body), m_fullAcceleration, m_gravity));
 
     reinterpret_cast<SpringSetTargetFn>(VrGame::SpringSetTarget)(held.spring, nullptr, &target);
     return true;

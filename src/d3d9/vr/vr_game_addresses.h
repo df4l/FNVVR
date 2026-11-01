@@ -2549,8 +2549,8 @@ namespace dxvk {
     /**
      * The reaction's work while it runs (findings/grab.md §19.4):
      * bhkRagdollController::DoRagdollAnim calls DoRagdollFeedback
-     * (__thiscall, no argument; it slerps the drawn pose of the feedback
-     * bones towards the ragdoll's and ends the reaction once its timer
+     * (__thiscall, no argument; it draws the feedback bones between the
+     * ragdoll's pose and the animation's and ends the reaction once its timer
      * expires) only when the INI setting bRagdollFeedback:RagdollAnim is
      * set (Setting object, bool at SettingValue), which Fallout_default.ini
      * turns off. The call right after it, UpdateDebugLines(2) (__thiscall,
@@ -2561,6 +2561,31 @@ namespace dxvk {
     constexpr uintptr_t RagdollUpdateDebugLines      = 0x00C7CB50;
     constexpr uintptr_t RagdollFeedbackPoseCallSite  = 0x00C7D7D7;
     constexpr uintptr_t RagdollFeedbackSetting       = 0x01267C54;
+
+    /**
+     * What ties a reaction's dynamic bodies to the animation (findings/grab.md
+     * §19.11). UpdateRagdollRigidBodies calls
+     * hkaRagdollRigidBodyController::driveToPose (bhkRagdollController +0x4C)
+     * once per frame, which sets each body's velocity from
+     * hkaKeyFrameHierarchyUtility::ControlData, scaled per body by
+     * BodyData::m_boneWeights (controller +0x18 + 0x10, null by default);
+     * a weight of 0 leaves the body's velocity alone. DoRagdollFeedback draws
+     * each feedback bone with the slerp of the ragdoll's rotation (0) to the
+     * animation's (1) by fCurrFeedbackInterp (+0x290), which ResetDriveGains
+     * sets to the race's blend amount (share data +0x2A4, feedback +0x18,
+     * +0x04). UpdateDebugLines(0) (__thiscall) comes before both, on the
+     * thread that animates the actor.
+     */
+    constexpr uintptr_t RagdollDriveStageCallSite    = 0x00C7D6F7;
+    constexpr uintptr_t RagdollRbController          = 0x4C;
+    constexpr uintptr_t RagdollFeedbackInterp        = 0x290;
+    constexpr uintptr_t RagdollShareData             = 0x2A4;
+    constexpr uintptr_t RagdollShareFeedback         = 0x18;
+    constexpr uintptr_t RagdollFeedbackBlend         = 0x04;
+    constexpr uintptr_t RbControllerBodyCount        = 0x18;
+    constexpr uintptr_t RbControllerBodies           = 0x1C;
+    constexpr uintptr_t RbControllerParents          = 0x20;
+    constexpr uintptr_t RbControllerBoneWeights      = 0x28;
 
     /**
      * NPC reactions to the player (findings/grab.md §19.3):

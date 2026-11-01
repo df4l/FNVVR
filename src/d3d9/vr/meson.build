@@ -45,6 +45,7 @@ vr_src = files([
   'vr_npc_temper.cpp',
   'vr_npc_drag.cpp',
   'vr_npc_manhandle.cpp',
+  'vr_npc_limb.cpp',
 ])
 
 # Parts that depend on DXVK and Vulkan, only built into d3d9.dll
@@ -166,6 +167,7 @@ if add_languages('cpp', native: true, required: false)
     'tests/test_vr_npc_temper.cpp',
     'tests/test_vr_npc_drag.cpp',
     'tests/test_vr_npc_manhandle.cpp',
+    'tests/test_vr_npc_limb.cpp',
   ])
 
   vr_test = executable('vr_tests', vr_test_sources, vr_src,

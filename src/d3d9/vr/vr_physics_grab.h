@@ -10,6 +10,7 @@
 #include "vr_grab_fingers.h"
 #include "vr_hand_body.h"
 #include "vr_npc_drag.h"
+#include "vr_npc_limb.h"
 #include "vr_npc_manhandle.h"
 #include "vr_npc_reaction.h"
 #include "vr_types.h"
@@ -263,6 +264,10 @@ namespace dxvk {
       /// The limb follows its animation: the spring, which keeps the body
       /// alive, is not in the world
       bool       anchored = false;
+      /// The spring's limit on a living limb, for all it drags along, once known
+      float      limbAcceleration = 0.0f;
+      /// The second hand's failed grip on this actor was logged
+      bool       loggedMiss = false;
       /// Where the point held belongs, in the actor's frame, game units
       VrNpcGroundVector anchor;
       /// Where the hand wants the point held, game units
@@ -326,10 +331,12 @@ namespace dxvk {
     VrPhysicsGrabEvents                m_events;
 
     VrGrabSpringConstants m_spring;
+    VrGrabSpringConstants m_limbSpring;
     float     m_fullAcceleration = 0.0f;
     float     m_gravity          = 0.0f;
     VrVector3 m_playerPosition;
     VrVector3 m_lead;
+    VrVector3 m_limbLead;
     VrVector3 m_playerStep;
     bool      m_hasPlayerPosition = false;
     float     m_leadLogTime       = 0.0f;
@@ -372,6 +379,33 @@ namespace dxvk {
     // Their ragdoll controllers, read by feedbackPoseHook on the thread
     // that animates the actors
     std::array<std::atomic<uint8_t*>, MaxDriven> m_drivenRagdolls = { };
+
+    /**
+     * \brief A living actor whose limbs follow the hands
+     *
+     * Its drive weights and blend are worked in the player's update and given
+     * to the game by ragdollDriveHook on the thread that animates the actors.
+     * Kept after the hands let go while the limbs go back to their animation.
+     */
+    struct Loose {
+      std::atomic<uint8_t*> ragdoll = { nullptr };
+      std::atomic<float>    interp  = { 0.0f };
+      uint8_t* actor  = nullptr;
+      uint32_t refId  = 0;
+      /// The race's blend between the ragdoll's pose and the animation's
+      float    blend  = 1.0f;
+      /// Share of the way back to the animation
+      float    back   = 0.0f;
+      bool     held   = false;
+      bool     logged = false;
+      /// The weights in the hands, kept while the limbs go back
+      std::array<float, VrRagdollMaxBodies> inHand = { };
+    };
+
+    bool                         m_canLoosen = false;
+    std::array<Loose, MaxDriven> m_loose;
+    uint32_t                     m_loggedLoose = 0;
+    uint32_t                     m_loggedSecondHand = 0;
 
     /**
      * \brief An actor whose move the hands replace
@@ -537,6 +571,12 @@ namespace dxvk {
 
     bool drives(const uint8_t* ragdoll) const;
 
+    void updateLoose(float dt);
+
+    Loose* looseEntry(uint8_t* actor, uint8_t* ragdoll);
+
+    void applyLoose(uint8_t* ragdoll) const;
+
     void updateDrags(uint8_t* player, float dt);
 
     void updateDrag(Drag& drag, uint8_t* player, const Held& held, const Held* other, float margin, float limit, float dt);
@@ -574,6 +614,11 @@ namespace dxvk {
             uint8_t*              cell);
 
     static void __fastcall feedbackPoseHook(
+            uint8_t*              ragdoll,
+            void*                 unused,
+            uint32_t              stage);
+
+    static void __fastcall ragdollDriveHook(
             uint8_t*              ragdoll,
             void*                 unused,
             uint32_t              stage);
