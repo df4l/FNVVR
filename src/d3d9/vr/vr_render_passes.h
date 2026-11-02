@@ -7,6 +7,7 @@
 
 #include "vr_game_camera.h"
 #include "vr_render_profile.h"
+#include "vr_scope_lens.h"
 
 namespace dxvk {
 
@@ -22,6 +23,8 @@ namespace dxvk {
     bool handsDepthTest = true;
     /// Test of the scope's render: the world seen through the sniper rifle's scope, on a lens
     bool scopeTest = false;
+    /// Side in pixels of the square the scope's view is drawn in
+    uint32_t scopeResolution = 1024;
   };
 
   /**
@@ -87,6 +90,18 @@ namespace dxvk {
      */
     void endFrame();
 
+    /**
+     * \brief Limits the scene pass to a part of its target
+     *
+     * Only the scene pass: the game's scissor applies to what is drawn before
+     * the next change of target, and the shadow, water and screen passes draw
+     * into targets of other sizes.
+     *
+     * \param [in] area The part to draw, stays valid until the next call, or
+     *    \c nullptr to draw it all
+     */
+    void setSceneScissor(const VrScopeArea* area);
+
   private:
 
     VrRenderPasses(const VrRenderPassConfig& config, ViewFn view);
@@ -99,6 +114,9 @@ namespace dxvk {
     uint32_t m_eye = NoEye;
     high_resolution_clock::time_point m_eyeStart;
 
+    const VrScopeArea* m_sceneScissor = nullptr;
+    bool     m_scissorFound        = false;
+
     bool     m_shadowsDrawnForLeft = false;
     uint32_t m_shadowsReused       = 0;
 
@@ -107,6 +125,9 @@ namespace dxvk {
 
     template<typename Fn>
     uintptr_t runShadows(Fn&& fn);
+
+    template<typename Fn>
+    uintptr_t runScene(Fn&& fn);
 
     bool sharesShadows() const;
 

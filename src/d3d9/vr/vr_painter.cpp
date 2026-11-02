@@ -132,7 +132,7 @@ namespace dxvk {
     m_device->SetTransform(D3DTS_VIEW, &identity);
     m_device->SetTransform(D3DTS_PROJECTION, reinterpret_cast<const D3DMATRIX*>(projection));
 
-    m_device->SetFVF(D3DFVF_XYZ | D3DFVF_TEX2);
+    m_device->SetFVF(D3DFVF_XYZ | D3DFVF_TEX1);
     m_device->SetRenderState(D3DRS_VERTEXBLEND, D3DVBF_DISABLE);
     m_device->SetRenderState(D3DRS_INDEXEDVERTEXBLENDENABLE, FALSE);
     m_device->SetTexture(0, image);
@@ -150,7 +150,7 @@ namespace dxvk {
       m_device->SetTextureStageState(1, D3DTSS_COLORARG2, D3DTA_CURRENT);
       m_device->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
       m_device->SetTextureStageState(1, D3DTSS_ALPHAARG1, D3DTA_CURRENT);
-      m_device->SetTextureStageState(1, D3DTSS_TEXCOORDINDEX, 1);
+      m_device->SetTextureStageState(1, D3DTSS_TEXCOORDINDEX, 0);
       m_device->SetTextureStageState(1, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
       m_device->SetTextureStageState(2, D3DTSS_COLOROP, D3DTOP_DISABLE);
       m_device->SetTextureStageState(2, D3DTSS_ALPHAOP, D3DTOP_DISABLE);

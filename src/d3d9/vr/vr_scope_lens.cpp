@@ -11,11 +11,15 @@ namespace dxvk {
 
     constexpr float Pi = 3.14159265f;
 
+    // fDefaultWorldFOV's default
+    constexpr float DefaultWorldFov = 75.0f;
+
     // Half the side of the reticle's quad over half the height of the view at
     // 4:3, as the game draws it (HUDMainMenu::Create3DCamera, the model at
     // 380 units and scale 0.1, the quad's half side 435): the reticle covers
     // the same part of the world as in the game
     constexpr float ReticleOverImageHeight = 1.023f;
+    constexpr float ViewHeightOverWidth    = 0.75f;
 
     std::string lowerCase(std::string text) {
       std::transform(text.begin(), text.end(), text.begin(),
@@ -47,7 +51,6 @@ namespace dxvk {
     VrScopeLensVertex lensVertex(
       const VrScopeLens&       lens,
       const VrGameCameraPose&  eye,
-      const VrScopeImageScale& scale,
             float              depth,
       const VrVector3&         point) {
       VrVector3 fromEye = point - eye.position;
@@ -56,10 +59,8 @@ namespace dxvk {
       vertex.x = vrDot(fromEye, eye.right);
       vertex.y = vrDot(fromEye, eye.up);
       vertex.z = vrDot(fromEye, eye.forward);
-      vertex.u = 0.5f + 0.5f * scale.x * vrDot(fromEye, lens.eyepiece.right) / depth;
-      vertex.v = 0.5f - 0.5f * scale.y * vrDot(fromEye, lens.eyepiece.up) / depth;
-      vertex.reticleU = 0.5f + 0.5f * scale.reticle * vrDot(fromEye, lens.eyepiece.right) / depth;
-      vertex.reticleV = 0.5f - 0.5f * scale.reticle * vrDot(fromEye, lens.eyepiece.up) / depth;
+      vertex.u = 0.5f + 0.5f * vrDot(fromEye, lens.eyepiece.right) / (depth * vrScopeApparentTangent());
+      vertex.v = 0.5f - 0.5f * vrDot(fromEye, lens.eyepiece.up) / (depth * vrScopeApparentTangent());
       return vertex;
     }
 
@@ -67,20 +68,44 @@ namespace dxvk {
 
 
   float vrComputeScopeMagnification(float sightFovDegrees) {
-    // fDefaultWorldFOV's default
-    constexpr float DefaultWorldFov = 75.0f;
-
     return std::tan(0.5f * DefaultWorldFov * Pi / 180.0f)
          / std::tan(0.5f * sightFovDegrees * Pi / 180.0f);
   }
 
 
-  VrScopeImageScale vrComputeScopeImageScale(const VrFov& renderFov, float magnification) {
-    VrScopeImageScale scale;
-    scale.x = 1.0f / (magnification * std::tan(renderFov.angleRight));
-    scale.y = 1.0f / (magnification * std::tan(renderFov.angleUp));
-    scale.reticle = scale.y / ReticleOverImageHeight;
-    return scale;
+  float vrScopeApparentTangent() {
+    static const float tangent = ReticleOverImageHeight * ViewHeightOverWidth
+      * std::tan(0.5f * DefaultWorldFov * Pi / 180.0f);
+    return tangent;
+  }
+
+
+  VrScopeArea vrComputeScopeArea(uint32_t width, uint32_t height, uint32_t resolution) {
+    constexpr uint32_t MinSide = 64;
+
+    // Even, so that the square is centred on a target of even size
+    uint32_t side = std::min(std::max(resolution, MinSide), std::min(width, height)) & ~1u;
+
+    VrScopeArea area;
+    area.left   = (width - side) / 2;
+    area.top    = (height - side) / 2;
+    area.right  = area.left + side;
+    area.bottom = area.top + side;
+    return area;
+  }
+
+
+  VrFov vrComputeScopeRenderFov(float magnification, uint32_t width, uint32_t height, const VrScopeArea& area) {
+    float perPixel   = 2.0f * vrScopeApparentTangent() / (magnification * float(area.right - area.left));
+    float halfWidth  = 0.5f * perPixel * float(width);
+    float halfHeight = 0.5f * perPixel * float(height);
+
+    VrFov fov;
+    fov.angleLeft  = -std::atan(halfWidth);
+    fov.angleRight =  std::atan(halfWidth);
+    fov.angleUp    =  std::atan(halfHeight);
+    fov.angleDown  = -std::atan(halfHeight);
+    return fov;
   }
 
 
@@ -113,7 +138,6 @@ namespace dxvk {
   bool vrComputeScopeLensDisc(
     const VrScopeLens&       lens,
     const VrGameCameraPose&  eye,
-    const VrScopeImageScale& scale,
           VrScopeLensDisc&   disc) {
     // Along the axis the whole disc is at the same distance from the eye
     constexpr float MinDepth = 0.01f;
@@ -123,12 +147,12 @@ namespace dxvk {
     if (depth < MinDepth)
       return false;
 
-    disc[0] = lensVertex(lens, eye, scale, depth, lens.eyepiece.position);
+    disc[0] = lensVertex(lens, eye, depth, lens.eyepiece.position);
 
     for (uint32_t i = 0; i <= VrScopeLensSegments; i++) {
       float angle = 2.0f * Pi * float(i) / float(VrScopeLensSegments);
 
-      disc[i + 1] = lensVertex(lens, eye, scale, depth, lens.eyepiece.position
+      disc[i + 1] = lensVertex(lens, eye, depth, lens.eyepiece.position
         + lens.eyepiece.right * (lens.radius * std::cos(angle))
         + lens.eyepiece.up    * (lens.radius * std::sin(angle)));
     }

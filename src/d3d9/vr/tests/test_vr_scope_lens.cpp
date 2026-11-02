@@ -52,15 +52,48 @@ TEST_CASE(scope_magnification_follows_the_weapons_view) {
 }
 
 
-TEST_CASE(scope_image_scale_fills_the_image_at_its_apparent_field) {
-  float half = std::atan(0.25f);
-  VrFov fov = { -half, half, half, -half };
+TEST_CASE(scope_apparent_field_matches_the_game_at_any_weapon) {
+  // The reticle's quad in the game at the default field of view
+  CHECK_NEAR(vrScopeApparentTangent(), 1.023f * 0.75f * 0.7673f, 1e-3);
+}
 
-  VrScopeImageScale scale = vrComputeScopeImageScale(fov, 2.0f);
 
-  // A direction at a tangent of 0.5 through the lens is 0.25 in the world
-  CHECK_NEAR(scale.x * 0.5f, 1.0f, 1e-5);
-  CHECK_NEAR(scale.y * 0.5f, 1.0f, 1e-5);
+TEST_CASE(scope_area_is_a_centred_square) {
+  VrScopeArea area = vrComputeScopeArea(3136, 2352, 1024);
+
+  CHECK(area.left == 1056 && area.right == 2080);
+  CHECK(area.top == 664 && area.bottom == 1688);
+}
+
+
+TEST_CASE(scope_area_fits_the_image) {
+  VrScopeArea area = vrComputeScopeArea(1600, 1200, 4096);
+
+  CHECK(area.left == 200 && area.right == 1400);
+  CHECK(area.top == 0 && area.bottom == 1200);
+}
+
+
+TEST_CASE(scope_area_has_a_smallest_side) {
+  VrScopeArea area = vrComputeScopeArea(1600, 1200, 0);
+
+  CHECK(area.right - area.left == 64);
+}
+
+
+TEST_CASE(scope_render_view_puts_the_scopes_field_on_the_area) {
+  float magnification = vrComputeScopeMagnification(25.0f);
+  VrScopeArea area = vrComputeScopeArea(3136, 2352, 1024);
+  VrFov fov = vrComputeScopeRenderFov(magnification, 3136, 2352, area);
+
+  // The area's edge, as a tangent in the world
+  float edge = std::tan(fov.angleUp) * 1024.0f / 2352.0f;
+  CHECK_NEAR(edge * magnification, vrScopeApparentTangent(), 1e-4);
+
+  // The pixels are square
+  CHECK_NEAR(std::tan(fov.angleRight) / std::tan(fov.angleUp), 3136.0f / 2352.0f, 1e-4);
+  CHECK_NEAR(fov.angleLeft + fov.angleRight, 0.0f, 1e-5);
+  CHECK_NEAR(fov.angleUp + fov.angleDown, 0.0f, 1e-5);
 }
 
 
@@ -74,7 +107,7 @@ TEST_CASE(scope_camera_sits_at_the_objective_on_the_axis) {
 
 TEST_CASE(scope_lens_on_the_axis_is_centred_on_the_image) {
   VrScopeLensDisc disc;
-  CHECK(vrComputeScopeLensDisc(northLens(), eyeAt({ 0.0f, -4.0f, 0.0f }), { 1.0f, 1.0f }, disc));
+  CHECK(vrComputeScopeLensDisc(northLens(), eyeAt({ 0.0f, -4.0f, 0.0f }), disc));
 
   CHECK_NEAR(disc[0].u, 0.5f, 1e-5);
   CHECK_NEAR(disc[0].v, 0.5f, 1e-5);
@@ -85,7 +118,7 @@ TEST_CASE(scope_lens_on_the_axis_is_centred_on_the_image) {
 
   // The top of the rim shows what is higher up: nearer the image's top
   CHECK_NEAR(rimTop(disc).y, 2.0f, 1e-4);
-  CHECK_NEAR(rimTop(disc).v, 0.5f - 0.5f * 2.0f / 4.0f, 1e-4);
+  CHECK_NEAR(rimTop(disc).v, 0.5f - 0.5f * (2.0f / 4.0f) / vrScopeApparentTangent(), 1e-4);
 }
 
 
@@ -93,42 +126,16 @@ TEST_CASE(scope_lens_keeps_the_world_still_when_the_eye_moves) {
   // The image lies at infinity: the same image point stays in the same
   // direction from the eye, wherever the eye is behind the lens
   VrScopeLens lens = northLens();
-  VrScopeImageScale scale = { 1.0f, 1.0f };
-
   VrScopeLensDisc centred;
   VrScopeLensDisc moved;
-  CHECK(vrComputeScopeLensDisc(lens, eyeAt({ 0.0f, -4.0f, 0.0f }), scale, centred));
-  CHECK(vrComputeScopeLensDisc(lens, eyeAt({ 1.0f, -4.0f, 0.0f }), scale, moved));
+  CHECK(vrComputeScopeLensDisc(lens, eyeAt({ 0.0f, -4.0f, 0.0f }), centred));
+  CHECK(vrComputeScopeLensDisc(lens, eyeAt({ 1.0f, -4.0f, 0.0f }), moved));
 
-  float tangentOf = (moved[0].u - 0.5f) * 2.0f;
+  float tangentOf = (moved[0].u - 0.5f) * 2.0f * vrScopeApparentTangent();
 
   // The disc's centre is left of the moved eye, and shows what is left of the axis
   CHECK_NEAR(tangentOf, moved[0].x / moved[0].z, 1e-5);
   CHECK(moved[0].u < centred[0].u);
-}
-
-
-TEST_CASE(scope_reticle_covers_the_same_part_of_the_world_at_any_magnification) {
-  float half = std::atan(0.1662f);
-  VrFov fov = { -half, half, half, -half };
-
-  // The edge of the reticle's texture, as a tangent in the world
-  float edge = 1.0f / (vrComputeScopeImageScale(fov, 3.0f).reticle * 3.0f);
-
-  CHECK_NEAR(edge, 0.1662f * 1.023f, 1e-4);
-}
-
-
-TEST_CASE(scope_reticle_stays_on_the_axis_when_the_eye_moves) {
-  VrScopeImageScale scale = { 1.0f, 1.0f, 0.5f };
-
-  VrScopeLensDisc disc;
-  CHECK(vrComputeScopeLensDisc(northLens(), eyeAt({ 1.0f, -4.0f, 0.0f }), scale, disc));
-
-  // The eye is 1 unit right of the axis at 4 units: the disc's centre is
-  // left of the eye and shows the reticle left of its centre
-  CHECK_NEAR(disc[0].reticleU, 0.5f + 0.5f * 0.5f * (-1.0f / 4.0f), 1e-5);
-  CHECK_NEAR(disc[0].reticleV, 0.5f, 1e-5);
 }
 
 
@@ -154,7 +161,7 @@ TEST_CASE(scope_model_without_a_reticle_names_none) {
 
 TEST_CASE(scope_lens_is_not_drawn_for_an_eye_in_front_of_it) {
   VrScopeLensDisc disc;
-  CHECK(!vrComputeScopeLensDisc(northLens(), eyeAt({ 0.0f, 3.0f, 0.0f }), { 1.0f, 1.0f }, disc));
+  CHECK(!vrComputeScopeLensDisc(northLens(), eyeAt({ 0.0f, 3.0f, 0.0f }), disc));
 }
 
 

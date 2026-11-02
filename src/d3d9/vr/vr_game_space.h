@@ -160,17 +160,6 @@ namespace dxvk {
   VrGameFrustum vrComputeGameFrustum(const VrFov& fov);
 
   /**
-   * \brief Field of view of a scope's render
-   *
-   * The game's field of view while aiming is horizontal at 4:3 and wider
-   * screens keep their height, as BSSceneGraph::SetCameraFOV does it.
-   *
-   * \param [in] sightFovDegrees The weapon's horizontal field of view
-   * \param [in] aspect Width over height of the image
-   */
-  VrFov vrComputeScopeFov(float sightFovDegrees, float aspect);
-
-  /**
    * \brief Places the camera of a menu's own scene for a VR eye
    *
    * Rendered menus, such as the game's terminals, draw a model with a

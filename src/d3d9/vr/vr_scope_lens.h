@@ -30,10 +30,8 @@ namespace dxvk {
    */
   struct VrScopeLensVertex {
     float x, y, z;
-    /// In the scope's image
+    /// In the scope's image and the reticle's texture, which cover the same part of the world
     float u, v;
-    /// In the reticle's texture
-    float reticleU, reticleV;
   };
 
   /// Segments of the lens disc's rim
@@ -43,17 +41,15 @@ namespace dxvk {
   using VrScopeLensDisc = std::array<VrScopeLensVertex, VrScopeLensSegments + 2>;
 
   /**
-   * \brief How the eye's directions map to the scope's image
+   * \brief The part of the game's image that holds the scope's view
    *
-   * Texture coordinate per tangent of the angle from the scope's axis, as
-   * the eye sees it through the lens. The reticle lies in the same space,
-   * so it stays on the scope's axis and its dark ring acts as the scope's
-   * field stop: an eye off the axis sees the ring close in on one side.
+   * In pixels, right and bottom excluded.
    */
-  struct VrScopeImageScale {
-    float x = 1.0f;
-    float y = 1.0f;
-    float reticle = 1.0f;
+  struct VrScopeArea {
+    uint32_t left = 0;
+    uint32_t top = 0;
+    uint32_t right = 0;
+    uint32_t bottom = 0;
   };
 
   /**
@@ -67,12 +63,38 @@ namespace dxvk {
   float vrComputeScopeMagnification(float sightFovDegrees);
 
   /**
-   * \brief Scale of the image for a scope's render
+   * \brief Tangent, seen from the eye, of the edge of the scope's image
    *
-   * \param [in] renderFov Field of view the image was drawn with
-   * \param [in] magnification How much the scope magnifies
+   * The image and the reticle's texture have the same edge. It does not
+   * depend on the weapon: as in the game, a stronger scope shows a smaller
+   * part of the world in the same apparent field. The reticle's dark ring
+   * lies inside it and acts as the scope's field stop, so an eye off the axis
+   * sees the ring close in on one side.
    */
-  VrScopeImageScale vrComputeScopeImageScale(const VrFov& renderFov, float magnification);
+  float vrScopeApparentTangent();
+
+  /**
+   * \brief Chooses the centred square the scope's view is drawn in
+   *
+   * \param [in] width Width of the game's image
+   * \param [in] height Height of the game's image
+   * \param [in] resolution Wanted side of the square
+   */
+  VrScopeArea vrComputeScopeArea(uint32_t width, uint32_t height, uint32_t resolution);
+
+  /**
+   * \brief Field of view of the game's whole image for a scope's render
+   *
+   * The game's screen effects need its image at full size, so the view is
+   * made wider than the scope's: the scope's view falls on the area, and the
+   * rest of the image is not drawn.
+   *
+   * \param [in] magnification How much the scope magnifies
+   * \param [in] width Width of the game's image
+   * \param [in] height Height of the game's image
+   * \param [in] area The square that holds the scope's view
+   */
+  VrFov vrComputeScopeRenderFov(float magnification, uint32_t width, uint32_t height, const VrScopeArea& area);
 
   /**
    * \brief Finds the reticle's texture in a scope's model
@@ -103,14 +125,12 @@ namespace dxvk {
    *
    * \param [in] lens The scope
    * \param [in] eye The eye's pose in the game world
-   * \param [in] scale Scale of the image
    * \param [out] disc The disc
    * \returns \c false if the eye is not behind the eyepiece
    */
   bool vrComputeScopeLensDisc(
     const VrScopeLens&       lens,
     const VrGameCameraPose&  eye,
-    const VrScopeImageScale& scale,
           VrScopeLensDisc&   disc);
 
   /**

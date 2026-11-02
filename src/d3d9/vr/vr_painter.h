@@ -57,7 +57,7 @@ namespace dxvk {
      * \param [in] overlay Image laid over it, or \c nullptr
      * \param [in] projection Projection of the positions, in row-vector order
      * \param [in] vertices The fan's vertices: position, then the texture
-     *    coordinates of the texture and of the overlay
+     *    coordinates, the same for the texture and the overlay
      * \param [in] count Number of vertices
      * \param [in] stride Size of a vertex
      * \returns \c false if nothing could be drawn

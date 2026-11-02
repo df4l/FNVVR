@@ -408,7 +408,7 @@ namespace dxvk {
       Logger::info("VR: The world render's passes were not found, they are drawn for each eye and not timed");
 
     if (passes.scopeTest)
-      renderer->m_scopeRender = VrScopeRender::install(device);
+      renderer->m_scopeRender = VrScopeRender::install(device, passes.scopeResolution);
 
     if (!renderer->m_gameTimer)
       Logger::info("VR: The game's frame timer update was not found, it is not measured");
@@ -941,9 +941,9 @@ namespace dxvk {
     m_scopeRender->selectReticle(VrScopeRender::weaponScopeModel());
 
     VrEyeView view;
-    view.fov = vrComputeScopeFov(sightFov, m_scopeRender->aspect());
 
-    m_scopeScale = vrComputeScopeImageScale(view.fov, vrComputeScopeMagnification(sightFov));
+    if (!m_scopeRender->prepareView(vrComputeScopeMagnification(sightFov), view.fov))
+      return;
 
     VrGameCameraPose camera = vrComputeScopeCamera(m_scopeLens);
 
@@ -956,7 +956,13 @@ namespace dxvk {
     if (m_skyAnchor)
       m_skyAnchor->setEye(&m_eyePosition);
 
+    if (m_renderPasses)
+      m_renderPasses->setSceneScissor(&m_scopeRender->area());
+
     m_scopeDrawn = m_scopeRender->render(main);
+
+    if (m_renderPasses)
+      m_renderPasses->setSceneScissor(nullptr);
 
     if (m_skyAnchor)
       m_skyAnchor->setEye(nullptr);
@@ -1837,7 +1843,7 @@ namespace dxvk {
         m_scopeRender->drawLens(eyeSurface.ptr(), m_scopeLens,
           vrComputeEyeCameraPose(m_gameCameraPose,
             vrComputeEyeInReference(m_reference, m_eyeView->pose), VrGameUnitsPerMetre),
-          m_eyeView->fov, m_scopeScale);
+          m_eyeView->fov);
       }
     }
 

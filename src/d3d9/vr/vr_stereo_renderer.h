@@ -438,7 +438,6 @@ namespace dxvk {
     std::unique_ptr<VrScopeRender> m_scopeRender;
     bool m_scopeDrawn = false;
     VrScopeLens m_scopeLens;
-    VrScopeImageScale m_scopeScale;
     const VrGameCameraPose* m_scopeCamera = nullptr;
 
     VrVector3           m_screenShift;

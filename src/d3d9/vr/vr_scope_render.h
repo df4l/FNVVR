@@ -21,6 +21,11 @@ namespace dxvk {
    * placed, without the first-person model, HUD or present, see
    * findings/optics.md §7.
    *
+   * That call draws at the game's full size, which the screen effects rely
+   * on. The view is therefore wider than the scope's, so that the scope's
+   * part falls on a small centred square, and only that square is drawn
+   * and kept.
+   *
    * Only used on the game's main thread, between two frames.
    */
   class VrScopeRender {
@@ -31,9 +36,10 @@ namespace dxvk {
      * \brief Checks the game's functions and creates the render
      *
      * \param [in] device The game's device
+     * \param [in] resolution Side in pixels of the image
      * \returns \c nullptr if the executable is not the supported version
      */
-    static std::unique_ptr<VrScopeRender> install(IDirect3DDevice9* device);
+    static std::unique_ptr<VrScopeRender> install(IDirect3DDevice9* device, uint32_t resolution);
 
     /**
      * \brief The equipped weapon's field of view while aiming
@@ -60,9 +66,20 @@ namespace dxvk {
     void selectReticle(const char* model);
 
     /**
-     * \brief Width over height of the image
+     * \brief Chooses the area of the game's image and the view that fits it
+     *
+     * \param [in] magnification How much the scope magnifies
+     * \param [out] fov Field of view to draw the game's whole image with
+     * \returns \c false if the size of the game's image is not known
      */
-    float aspect() const;
+    bool prepareView(float magnification, VrFov& fov);
+
+    /**
+     * \brief The area chosen by prepareView, where the scene has to be drawn
+     */
+    const VrScopeArea& area() const {
+      return m_area;
+    }
 
     /**
      * \brief Culls the scene for the world camera and draws the image
@@ -82,22 +99,25 @@ namespace dxvk {
      * \param [in] lens The scope
      * \param [in] eye The eye's pose in the game world
      * \param [in] eyeFov The eye's field of view
-     * \param [in] scale Scale of the image
      */
     void drawLens(
             IDirect3DSurface9*  target,
       const VrScopeLens&        lens,
       const VrGameCameraPose&   eye,
-      const VrFov&              eyeFov,
-      const VrScopeImageScale&  scale);
+      const VrFov&              eyeFov);
 
   private:
 
-    explicit VrScopeRender(IDirect3DDevice9* device);
+    VrScopeRender(IDirect3DDevice9* device, uint32_t resolution);
 
     IDirect3DDevice9*      m_device;
     VrPainter              m_painter;
+    uint32_t               m_resolution;
     Com<IDirect3DTexture9> m_image;
+    Com<IDirect3DTexture9> m_savedAdaptation;
+    VrScopeArea            m_area;
+    uint32_t               m_targetWidth  = 0;
+    uint32_t               m_targetHeight = 0;
     std::map<std::string, VrImage> m_reticles;
     const VrImage*         m_reticle      = nullptr;
     bool                   m_imageReady   = false;
@@ -109,6 +129,10 @@ namespace dxvk {
     double                 m_windowDraw   = 0.0;
 
     bool copyImage(void* destination);
+
+    bool saveAdaptation();
+
+    void restoreAdaptation();
 
     static VrImage readReticle(const std::string& model);
 

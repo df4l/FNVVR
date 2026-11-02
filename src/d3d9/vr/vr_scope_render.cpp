@@ -37,14 +37,34 @@ namespace dxvk {
 
     constexpr uint32_t WindowFrames = 900;
 
+    // BSRenderedTexture -> NiRenderedTexture -> its renderer data -> the device's texture
+    bool renderedTextureSurface(void* rendered, Com<IDirect3DSurface9>& surface) {
+      void* texture = rendered ? field<void*>(rendered, VrGame::RenderedTextureFirst) : nullptr;
+      void* data    = texture ? field<void*>(texture, VrGame::TextureRendererData) : nullptr;
+      auto  base    = data ? field<IDirect3DBaseTexture9*>(data, VrGame::TextureDataD3DTexture) : nullptr;
+
+      Com<IDirect3DTexture9> d3dTexture;
+
+      return base && base->GetType() == D3DRTYPE_TEXTURE
+          && SUCCEEDED(base->QueryInterface(__uuidof(IDirect3DTexture9), reinterpret_cast<void**>(&d3dTexture)))
+          && SUCCEEDED(d3dTexture->GetSurfaceLevel(0, &surface));
+    }
+
+    bool adaptedLightSurface(Com<IDirect3DSurface9>& surface) {
+      void* light = reinterpret_cast<void*>(VrGame::HdrAdaptedLight);
+
+      return field<uint8_t>(light, VrGame::ImageSpaceTextureIsRendered)
+          && renderedTextureSurface(field<void*>(light, VrGame::ImageSpaceTextureObject), surface);
+    }
+
   }
 
 
-  VrScopeRender::VrScopeRender(IDirect3DDevice9* device)
-  : m_device(device), m_painter(device) { }
+  VrScopeRender::VrScopeRender(IDirect3DDevice9* device, uint32_t resolution)
+  : m_device(device), m_painter(device), m_resolution(resolution) { }
 
 
-  std::unique_ptr<VrScopeRender> VrScopeRender::install(IDirect3DDevice9* device) {
+  std::unique_ptr<VrScopeRender> VrScopeRender::install(IDirect3DDevice9* device, uint32_t resolution) {
     bool found = VrGameMemory::callsTo(VrGame::MenuBackgroundDrawWorldCall, VrGame::DrawWorld)
       && VrGameMemory::callsTo(VrGame::MenuBackgroundBorrowCall, VrGame::BorrowRenderedTexture)
       && VrGameMemory::callsTo(VrGame::MenuBackgroundReturnCall, VrGame::ReturnRenderedTexture)
@@ -58,7 +78,7 @@ namespace dxvk {
     }
 
     Logger::info("VR: Scope test: a scope the mod knows shows the world on a lens");
-    return std::unique_ptr<VrScopeRender>(new VrScopeRender(device));
+    return std::unique_ptr<VrScopeRender>(new VrScopeRender(device, resolution));
   }
 
 
@@ -127,16 +147,20 @@ namespace dxvk {
   }
 
 
-  float VrScopeRender::aspect() const {
-    // The image has the size of the game's window
+  bool VrScopeRender::prepareView(float magnification, VrFov& fov) {
+    // The game's image has the size of its window
     Com<IDirect3DSurface9> target;
     D3DSURFACE_DESC desc = { };
 
     if (FAILED(m_device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &target))
-     || FAILED(target->GetDesc(&desc)) || !desc.Height)
-      return 1.0f;
+     || FAILED(target->GetDesc(&desc)) || !desc.Width || !desc.Height)
+      return false;
 
-    return float(desc.Width) / float(desc.Height);
+    m_targetWidth  = desc.Width;
+    m_targetHeight = desc.Height;
+    m_area = vrComputeScopeArea(desc.Width, desc.Height, m_resolution);
+    fov    = vrComputeScopeRenderFov(magnification, desc.Width, desc.Height, m_area);
+    return true;
   }
 
 
@@ -186,8 +210,15 @@ namespace dxvk {
     bool copied = false;
 
     if (destination) {
+      // The eyes keep adapting to what they see, not to this mostly black image
+      bool adaptationSaved = saveAdaptation();
+
       reinterpret_cast<DrawWorldFn>(VrGame::DrawWorld)(main, nullptr, destination, 0, 1);
       copied = copyImage(destination);
+
+      if (adaptationSaved)
+        restoreAdaptation();
+
       reinterpret_cast<ReturnFn>(VrGame::ReturnRenderedTexture)(manager, nullptr, destination);
     }
 
@@ -218,11 +249,10 @@ namespace dxvk {
           IDirect3DSurface9*  target,
     const VrScopeLens&        lens,
     const VrGameCameraPose&   eye,
-    const VrFov&              eyeFov,
-    const VrScopeImageScale&  scale) {
+    const VrFov&              eyeFov) {
     VrScopeLensDisc disc;
 
-    if (!m_imageReady || !vrComputeScopeLensDisc(lens, eye, scale, disc))
+    if (!m_imageReady || !vrComputeScopeLensDisc(lens, eye, disc))
       return;
 
     std::array<float, 16> projection = vrComputeEyeProjection(eyeFov);
@@ -233,19 +263,10 @@ namespace dxvk {
 
 
   bool VrScopeRender::copyImage(void* destination) {
-    // BSRenderedTexture -> NiRenderedTexture -> its renderer data -> the device's texture
-    void* texture = field<void*>(destination, VrGame::RenderedTextureFirst);
-    void* data    = texture ? field<void*>(texture, VrGame::TextureRendererData) : nullptr;
-    auto  base    = data ? field<IDirect3DBaseTexture9*>(data, VrGame::TextureDataD3DTexture) : nullptr;
-
-    Com<IDirect3DTexture9> sourceTexture;
     Com<IDirect3DSurface9> source;
     D3DSURFACE_DESC desc = { };
 
-    if (!base || base->GetType() != D3DRTYPE_TEXTURE
-     || FAILED(base->QueryInterface(__uuidof(IDirect3DTexture9), reinterpret_cast<void**>(&sourceTexture)))
-     || FAILED(sourceTexture->GetSurfaceLevel(0, &source))
-     || FAILED(source->GetDesc(&desc))) {
+    if (!renderedTextureSurface(destination, source) || FAILED(source->GetDesc(&desc))) {
       if (!m_loggedTexture) {
         Logger::err("VR: Scope test: the rendered texture's image was not found");
         m_loggedTexture = true;
@@ -254,20 +275,63 @@ namespace dxvk {
       return false;
     }
 
-    if (m_image == nullptr && FAILED(m_device->CreateTexture(desc.Width / 2, desc.Height / 2, 1,
+    if (desc.Width != m_targetWidth || desc.Height != m_targetHeight) {
+      if (!m_loggedTexture) {
+        Logger::err(str::format("VR: Scope test: the rendered texture is ", desc.Width, "x", desc.Height,
+          " and the window ", m_targetWidth, "x", m_targetHeight));
+        m_loggedTexture = true;
+      }
+
+      return false;
+    }
+
+    uint32_t side = m_area.right - m_area.left;
+
+    if (m_image == nullptr && FAILED(m_device->CreateTexture(side, side, 1,
         D3DUSAGE_RENDERTARGET, desc.Format, D3DPOOL_DEFAULT, &m_image, nullptr)))
       return false;
 
     if (!m_loggedSize) {
-      Logger::info(str::format("VR: Scope test: drawn at ", desc.Width, "x", desc.Height,
+      Logger::info(str::format("VR: Scope test: drawn in ", side, "x", side, " of ", desc.Width, "x", desc.Height,
         ", format ", uint32_t(desc.Format)));
       m_loggedSize = true;
     }
 
+    RECT area = { LONG(m_area.left), LONG(m_area.top), LONG(m_area.right), LONG(m_area.bottom) };
+
     Com<IDirect3DSurface9> image;
 
     return SUCCEEDED(m_image->GetSurfaceLevel(0, &image))
-        && SUCCEEDED(m_device->StretchRect(source.ptr(), nullptr, image.ptr(), nullptr, D3DTEXF_LINEAR));
+        && SUCCEEDED(m_device->StretchRect(source.ptr(), &area, image.ptr(), nullptr, D3DTEXF_POINT));
+  }
+
+
+  bool VrScopeRender::saveAdaptation() {
+    Com<IDirect3DSurface9> light;
+    D3DSURFACE_DESC desc = { };
+
+    // None before the first frame with HDR
+    if (!adaptedLightSurface(light) || FAILED(light->GetDesc(&desc)))
+      return false;
+
+    if (m_savedAdaptation == nullptr && FAILED(m_device->CreateTexture(desc.Width, desc.Height, 1,
+        D3DUSAGE_RENDERTARGET, desc.Format, D3DPOOL_DEFAULT, &m_savedAdaptation, nullptr)))
+      return false;
+
+    Com<IDirect3DSurface9> saved;
+
+    return SUCCEEDED(m_savedAdaptation->GetSurfaceLevel(0, &saved))
+        && SUCCEEDED(m_device->StretchRect(light.ptr(), nullptr, saved.ptr(), nullptr, D3DTEXF_POINT));
+  }
+
+
+  void VrScopeRender::restoreAdaptation() {
+    // The render replaced the texture by a new one
+    Com<IDirect3DSurface9> light;
+    Com<IDirect3DSurface9> saved;
+
+    if (adaptedLightSurface(light) && SUCCEEDED(m_savedAdaptation->GetSurfaceLevel(0, &saved)))
+      m_device->StretchRect(saved.ptr(), nullptr, light.ptr(), nullptr, D3DTEXF_POINT);
   }
 
 }

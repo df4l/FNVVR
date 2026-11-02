@@ -2920,6 +2920,26 @@ namespace dxvk {
     /** Path of the weapon's scope model: TESModel at +0x1E8 (TESObjectWEAP::GetScopeModel 0x00504E60) */
     constexpr uintptr_t WeaponScopeModelPath         = 0x1EC;
 
+    /**
+     * The scissor the game uses for its own scope (findings/optics.md §7):
+     * EnableFullScreenScissor is __cdecl (left, top, right, bottom), and locks
+     * the rectangle and the test until DisableFullScreenScissor, __cdecl ().
+     * The call sites are in TESMain::DrawWorldStandard.
+     */
+    constexpr uintptr_t EnableFullScreenScissor      = 0x00B4F540;
+    constexpr uintptr_t DisableFullScreenScissor     = 0x00B540D0;
+    constexpr uintptr_t EnableScissorCallSite        = 0x00870DFD;
+    constexpr uintptr_t DisableScissorCallSite       = 0x00871146;
+
+    /**
+     * ImageSpaceEffectHDR::kAdaptedLight, an ImageSpaceTexture replaced by
+     * each HDR render (ImageSpaceEffectHDR::Render 0x00BADB90). Its fields:
+     * bIsRenderedTexture, and spTexture, a BSRenderedTexture if that is set.
+     */
+    constexpr uintptr_t HdrAdaptedLight              = 0x012005A4;
+    constexpr uintptr_t ImageSpaceTextureIsRendered  = 0x1;
+    constexpr uintptr_t ImageSpaceTextureObject      = 0x4;
+
   }
 
 }
