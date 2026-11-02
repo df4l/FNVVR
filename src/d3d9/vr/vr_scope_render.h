@@ -1,6 +1,8 @@
 #pragma once
 
+#include <map>
 #include <memory>
+#include <string>
 
 #include "../d3d9_include.h"
 #include "../../util/com/com_pointer.h"
@@ -42,6 +44,22 @@ namespace dxvk {
     static float weaponSightFov();
 
     /**
+     * \brief Path of the equipped weapon's scope model
+     *
+     * \returns The path relative to Data\Meshes, or \c nullptr
+     */
+    static const char* weaponScopeModel();
+
+    /**
+     * \brief Selects the reticle of a scope model
+     *
+     * Reads the model and its reticle the first time it is seen.
+     *
+     * \param [in] model Path relative to Data\Meshes, or \c nullptr
+     */
+    void selectReticle(const char* model);
+
+    /**
      * \brief Width over height of the image
      */
     float aspect() const;
@@ -80,6 +98,8 @@ namespace dxvk {
     IDirect3DDevice9*      m_device;
     VrPainter              m_painter;
     Com<IDirect3DTexture9> m_image;
+    std::map<std::string, VrImage> m_reticles;
+    const VrImage*         m_reticle      = nullptr;
     bool                   m_imageReady   = false;
     bool                   m_loggedSize   = false;
     bool                   m_loggedThreads = false;
@@ -89,6 +109,8 @@ namespace dxvk {
     double                 m_windowDraw   = 0.0;
 
     bool copyImage(void* destination);
+
+    static VrImage readReticle(const std::string& model);
 
   };
 

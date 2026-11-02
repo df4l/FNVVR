@@ -1588,6 +1588,7 @@ namespace dxvk {
     constexpr uintptr_t FileFinderGetFile    = 0x00AFDF20;
     constexpr uint32_t  FileReadOnly         = 0;
     constexpr uint32_t  FileBufferSize       = 0x4000;
+    constexpr uint32_t  ArchiveMeshes        = 0x1;
     constexpr uint32_t  ArchiveTextures      = 0x2;
     constexpr uintptr_t FileGetSize          = 0x28;
     constexpr uintptr_t FileRead             = 0x08;
@@ -2916,6 +2917,8 @@ namespace dxvk {
     constexpr uint32_t  TextureMainMenuBackground    = 6;
     constexpr uintptr_t RenderedTextureFirst         = 0x30;
     constexpr uintptr_t WeaponSightFov               = 0x110;
+    /** Path of the weapon's scope model: TESModel at +0x1E8 (TESObjectWEAP::GetScopeModel 0x00504E60) */
+    constexpr uintptr_t WeaponScopeModelPath         = 0x1EC;
 
   }
 

@@ -938,6 +938,8 @@ namespace dxvk {
     if (sightFov <= 0.0f || !m_weaponHand->scopeLens(m_scopeLens))
       return;
 
+    m_scopeRender->selectReticle(VrScopeRender::weaponScopeModel());
+
     VrEyeView view;
     view.fov = vrComputeScopeFov(sightFov, m_scopeRender->aspect());
 

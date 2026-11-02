@@ -1,4 +1,7 @@
+#include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <cstring>
 
 #include "vr_scope_lens.h"
 
@@ -7,6 +10,39 @@ namespace dxvk {
   namespace {
 
     constexpr float Pi = 3.14159265f;
+
+    // Half the side of the reticle's quad over half the height of the view at
+    // 4:3, as the game draws it (HUDMainMenu::Create3DCamera, the model at
+    // 380 units and scale 0.1, the quad's half side 435): the reticle covers
+    // the same part of the world as in the game
+    constexpr float ReticleOverImageHeight = 1.023f;
+
+    std::string lowerCase(std::string text) {
+      std::transform(text.begin(), text.end(), text.begin(),
+        [] (unsigned char c) { return char(std::tolower(c)); });
+      return text;
+    }
+
+    bool endsWith(const std::string& text, const char* end) {
+      size_t length = std::strlen(end);
+      return text.size() >= length && text.compare(text.size() - length, length, end) == 0;
+    }
+
+    // Reads a string of the model's file ending at an offset: its length
+    // comes just before it
+    std::string stringEndingAt(const uint8_t* data, size_t end) {
+      constexpr size_t MaxLength = 260;
+
+      for (size_t length = 5; length <= MaxLength && length + sizeof(uint32_t) <= end; length++) {
+        uint32_t stored;
+        std::memcpy(&stored, data + end - length - sizeof(stored), sizeof(stored));
+
+        if (stored == length)
+          return std::string(reinterpret_cast<const char*>(data + end - length), length);
+      }
+
+      return std::string();
+    }
 
     VrScopeLensVertex lensVertex(
       const VrScopeLens&       lens,
@@ -22,6 +58,8 @@ namespace dxvk {
       vertex.z = vrDot(fromEye, eye.forward);
       vertex.u = 0.5f + 0.5f * scale.x * vrDot(fromEye, lens.eyepiece.right) / depth;
       vertex.v = 0.5f - 0.5f * scale.y * vrDot(fromEye, lens.eyepiece.up) / depth;
+      vertex.reticleU = 0.5f + 0.5f * scale.reticle * vrDot(fromEye, lens.eyepiece.right) / depth;
+      vertex.reticleV = 0.5f - 0.5f * scale.reticle * vrDot(fromEye, lens.eyepiece.up) / depth;
       return vertex;
     }
 
@@ -41,7 +79,27 @@ namespace dxvk {
     VrScopeImageScale scale;
     scale.x = 1.0f / (magnification * std::tan(renderFov.angleRight));
     scale.y = 1.0f / (magnification * std::tan(renderFov.angleUp));
+    scale.reticle = scale.y / ReticleOverImageHeight;
     return scale;
+  }
+
+
+  std::string vrFindScopeReticleTexture(const uint8_t* data, size_t size) {
+    constexpr size_t ExtensionSize = 4;
+
+    for (size_t end = ExtensionSize; end <= size; end++) {
+      if (std::tolower(data[end - 1]) != 's' || std::tolower(data[end - 2]) != 'd'
+       || std::tolower(data[end - 3]) != 'd' || data[end - 4] != '.')
+        continue;
+
+      std::string path = stringEndingAt(data, end);
+      std::string name = lowerCase(path);
+
+      if (!path.empty() && !endsWith(name, "\\scope01.dds") && !endsWith(name, "\\scope03_n.dds"))
+        return path;
+    }
+
+    return std::string();
   }
 
 

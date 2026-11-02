@@ -18,7 +18,7 @@ namespace dxvk {
 
     // The texel of an image as the GPU reads it, see VrPaintImageUse
     uint32_t textureTexel(uint32_t pixel, VrPaintImageUse use) {
-      if (use == VrPaintImageUse::Picture)
+      if (use == VrPaintImageUse::Picture || use == VrPaintImageUse::PictureWithMipmaps)
         return pixel;
 
       uint32_t coverage = pixel >> 24;
@@ -101,13 +101,22 @@ namespace dxvk {
   bool VrPainter::drawFan(
           IDirect3DSurface9* target,
           IDirect3DTexture9* image,
+    const VrImage*           overlay,
     const float*             projection,
     const void*              vertices,
           UINT               count,
           UINT               stride) {
     D3DSURFACE_DESC desc = { };
 
-    if (count < 3 || FAILED(target->GetDesc(&desc)) || !captureState())
+    if (count < 3 || FAILED(target->GetDesc(&desc)))
+      return false;
+
+    // Before the state is captured, as in paint
+    IDirect3DTexture9* overlayTexture = overlay
+      ? texture(*overlay, VrPaintImageUse::PictureWithMipmaps)
+      : nullptr;
+
+    if (!captureState())
       return false;
 
     SavedTargets saved;
@@ -123,7 +132,7 @@ namespace dxvk {
     m_device->SetTransform(D3DTS_VIEW, &identity);
     m_device->SetTransform(D3DTS_PROJECTION, reinterpret_cast<const D3DMATRIX*>(projection));
 
-    m_device->SetFVF(D3DFVF_XYZ | D3DFVF_TEX1);
+    m_device->SetFVF(D3DFVF_XYZ | D3DFVF_TEX2);
     m_device->SetRenderState(D3DRS_VERTEXBLEND, D3DVBF_DISABLE);
     m_device->SetRenderState(D3DRS_INDEXEDVERTEXBLENDENABLE, FALSE);
     m_device->SetTexture(0, image);
@@ -133,6 +142,29 @@ namespace dxvk {
     m_device->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_BORDER);
     m_device->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_BORDER);
     m_device->SetSamplerState(0, D3DSAMP_BORDERCOLOR, D3DCOLOR_ARGB(255, 0, 0, 0));
+
+    if (overlayTexture) {
+      m_device->SetTexture(1, overlayTexture);
+      m_device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_BLENDTEXTUREALPHA);
+      m_device->SetTextureStageState(1, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+      m_device->SetTextureStageState(1, D3DTSS_COLORARG2, D3DTA_CURRENT);
+      m_device->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+      m_device->SetTextureStageState(1, D3DTSS_ALPHAARG1, D3DTA_CURRENT);
+      m_device->SetTextureStageState(1, D3DTSS_TEXCOORDINDEX, 1);
+      m_device->SetTextureStageState(1, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
+      m_device->SetTextureStageState(2, D3DTSS_COLOROP, D3DTOP_DISABLE);
+      m_device->SetTextureStageState(2, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+
+      m_device->SetSamplerState(1, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+      m_device->SetSamplerState(1, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+      m_device->SetSamplerState(1, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+      m_device->SetSamplerState(1, D3DSAMP_MAXMIPLEVEL, 0);
+      m_device->SetSamplerState(1, D3DSAMP_MIPMAPLODBIAS, 0);
+      m_device->SetSamplerState(1, D3DSAMP_SRGBTEXTURE, FALSE);
+      m_device->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_BORDER);
+      m_device->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_BORDER);
+      m_device->SetSamplerState(1, D3DSAMP_BORDERCOLOR, D3DCOLOR_ARGB(255, 0, 0, 0));
+    }
 
     m_device->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, count - 2, vertices, stride);
 
@@ -195,7 +227,7 @@ namespace dxvk {
     // Shapes are drawn smaller than their images: the GPU makes their
     // mipmaps. Glyphs packed in a font's texture would bleed into each
     // other in mipmaps.
-    bool mipmaps = use == VrPaintImageUse::Shape;
+    bool mipmaps = use == VrPaintImageUse::Shape || use == VrPaintImageUse::PictureWithMipmaps;
     D3DLOCKED_RECT locked = { };
 
     if (!image.width || !image.height

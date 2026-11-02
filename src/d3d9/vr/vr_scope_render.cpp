@@ -1,9 +1,12 @@
 #include <chrono>
+#include <vector>
 
 #include "../../util/log/log.h"
 #include "../../util/util_string.h"
 
+#include "vr_dds.h"
 #include "vr_game_addresses.h"
+#include "vr_game_file.h"
 #include "vr_game_memory.h"
 #include "vr_scope_render.h"
 #include "vr_weapon_drawn.h"
@@ -68,6 +71,59 @@ namespace dxvk {
 
     float fov = *reinterpret_cast<const float*>(weapon + VrGame::WeaponSightFov);
     return fov > 0.0f ? fov : 0.0f;
+  }
+
+
+  const char* VrScopeRender::weaponScopeModel() {
+    int32_t type = -1;
+    const uint8_t* weapon = VrWeaponDrawn::equippedWeapon(type);
+
+    return weapon
+      ? *reinterpret_cast<const char* const*>(weapon + VrGame::WeaponScopeModelPath)
+      : nullptr;
+  }
+
+
+  void VrScopeRender::selectReticle(const char* model) {
+    if (!model || !model[0]) {
+      m_reticle = nullptr;
+      return;
+    }
+
+    auto found = m_reticles.find(model);
+
+    if (found == m_reticles.end())
+      found = m_reticles.emplace(model, readReticle(model)).first;
+
+    m_reticle = found->second.width ? &found->second : nullptr;
+  }
+
+
+  VrImage VrScopeRender::readReticle(const std::string& model) {
+    VrImage image;
+    std::vector<uint8_t> data;
+
+    if (!VrGameFile::read(("Data\\Meshes\\" + model).c_str(), VrGame::ArchiveMeshes, data)) {
+      Logger::warn(str::format("VR: The scope model '", model, "' could not be read, the lens has no reticle"));
+      return image;
+    }
+
+    std::string texture = vrFindScopeReticleTexture(data.data(), data.size());
+
+    if (texture.empty()) {
+      Logger::info(str::format("VR: The scope model '", model, "' names no reticle"));
+      return image;
+    }
+
+    if (!VrGameFile::read(("Data\\" + texture).c_str(), VrGame::ArchiveTextures, data)
+     || !vrDecodeDds(data.data(), data.size(), image)) {
+      Logger::warn(str::format("VR: The reticle '", texture, "' could not be read"));
+      return VrImage();
+    }
+
+    Logger::info(str::format("VR: Scope model '", model, "' uses the reticle '", texture, "', ",
+      image.width, "x", image.height));
+    return image;
   }
 
 
@@ -171,7 +227,7 @@ namespace dxvk {
 
     std::array<float, 16> projection = vrComputeEyeProjection(eyeFov);
 
-    m_painter.drawFan(target, m_image.ptr(), projection.data(),
+    m_painter.drawFan(target, m_image.ptr(), m_reticle, projection.data(),
       disc.data(), UINT(disc.size()), sizeof(VrScopeLensVertex));
   }
 

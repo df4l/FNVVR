@@ -1,4 +1,7 @@
 #include <cmath>
+#include <cstring>
+#include <string>
+#include <vector>
 
 #include "test.h"
 
@@ -29,6 +32,15 @@ namespace {
   // Where the disc is at the top of its rim, a quarter of the way round
   const VrScopeLensVertex& rimTop(const VrScopeLensDisc& disc) {
     return disc[1 + VrScopeLensSegments / 4];
+  }
+
+  // A string as the game's model files store it, after some other bytes
+  void addString(std::vector<uint8_t>& file, const std::string& text) {
+    uint32_t length = uint32_t(text.size());
+    file.push_back(0xAB);
+    file.insert(file.end(), reinterpret_cast<const uint8_t*>(&length),
+      reinterpret_cast<const uint8_t*>(&length) + sizeof(length));
+    file.insert(file.end(), text.begin(), text.end());
   }
 
 }
@@ -93,6 +105,50 @@ TEST_CASE(scope_lens_keeps_the_world_still_when_the_eye_moves) {
   // The disc's centre is left of the moved eye, and shows what is left of the axis
   CHECK_NEAR(tangentOf, moved[0].x / moved[0].z, 1e-5);
   CHECK(moved[0].u < centred[0].u);
+}
+
+
+TEST_CASE(scope_reticle_covers_the_same_part_of_the_world_at_any_magnification) {
+  float half = std::atan(0.1662f);
+  VrFov fov = { -half, half, half, -half };
+
+  // The edge of the reticle's texture, as a tangent in the world
+  float edge = 1.0f / (vrComputeScopeImageScale(fov, 3.0f).reticle * 3.0f);
+
+  CHECK_NEAR(edge, 0.1662f * 1.023f, 1e-4);
+}
+
+
+TEST_CASE(scope_reticle_stays_on_the_axis_when_the_eye_moves) {
+  VrScopeImageScale scale = { 1.0f, 1.0f, 0.5f };
+
+  VrScopeLensDisc disc;
+  CHECK(vrComputeScopeLensDisc(northLens(), eyeAt({ 1.0f, -4.0f, 0.0f }), scale, disc));
+
+  // The eye is 1 unit right of the axis at 4 units: the disc's centre is
+  // left of the eye and shows the reticle left of its centre
+  CHECK_NEAR(disc[0].reticleU, 0.5f + 0.5f * 0.5f * (-1.0f / 4.0f), 1e-5);
+  CHECK_NEAR(disc[0].reticleV, 0.5f, 1e-5);
+}
+
+
+TEST_CASE(scope_reticle_texture_is_found_past_the_surround) {
+  std::vector<uint8_t> file;
+  addString(file, "keepScope01:0");
+  addString(file, "textures\\weapons\\scope\\scope01.dds");
+  addString(file, "textures\\weapons\\scope\\MilDot_o.dds");
+  addString(file, "textures\\weapons\\scope\\scope03_n.dds");
+
+  CHECK(vrFindScopeReticleTexture(file.data(), file.size())
+     == "textures\\weapons\\scope\\MilDot_o.dds");
+}
+
+
+TEST_CASE(scope_model_without_a_reticle_names_none) {
+  std::vector<uint8_t> file;
+  addString(file, "textures\\weapons\\scope\\Scope01.dds");
+
+  CHECK(vrFindScopeReticleTexture(file.data(), file.size()).empty());
 }
 
 

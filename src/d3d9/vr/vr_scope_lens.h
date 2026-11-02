@@ -1,7 +1,9 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
+#include <string>
 
 #include "vr_game_space.h"
 
@@ -28,7 +30,10 @@ namespace dxvk {
    */
   struct VrScopeLensVertex {
     float x, y, z;
+    /// In the scope's image
     float u, v;
+    /// In the reticle's texture
+    float reticleU, reticleV;
   };
 
   /// Segments of the lens disc's rim
@@ -41,11 +46,14 @@ namespace dxvk {
    * \brief How the eye's directions map to the scope's image
    *
    * Texture coordinate per tangent of the angle from the scope's axis, as
-   * the eye sees it through the lens.
+   * the eye sees it through the lens. The reticle lies in the same space,
+   * so it stays on the scope's axis and its dark ring acts as the scope's
+   * field stop: an eye off the axis sees the ring close in on one side.
    */
   struct VrScopeImageScale {
     float x = 1.0f;
     float y = 1.0f;
+    float reticle = 1.0f;
   };
 
   /**
@@ -65,6 +73,18 @@ namespace dxvk {
    * \param [in] magnification How much the scope magnifies
    */
   VrScopeImageScale vrComputeScopeImageScale(const VrFov& renderFov, float magnification);
+
+  /**
+   * \brief Finds the reticle's texture in a scope's model
+   *
+   * The game's scope models name their reticle among their textures, next
+   * to the textures of the surround, which VR has no use for.
+   *
+   * \param [in] data The model's file
+   * \param [in] size Size of the file in bytes
+   * \returns The texture's path as the model gives it, empty if it has none
+   */
+  std::string vrFindScopeReticleTexture(const uint8_t* data, size_t size);
 
   /**
    * \brief Where the scope's image is drawn from: the objective, along the axis

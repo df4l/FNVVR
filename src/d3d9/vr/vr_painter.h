@@ -49,11 +49,15 @@ namespace dxvk {
      * \brief Draws a textured triangle fan with a projection
      *
      * Opaque and without a depth test. The image is black past its edges.
+     * The overlay is laid over it by its own alpha, and is opaque black past
+     * its edges.
      *
      * \param [in] target Render target surface
      * \param [in] image Texture
+     * \param [in] overlay Image laid over it, or \c nullptr
      * \param [in] projection Projection of the positions, in row-vector order
-     * \param [in] vertices The fan's vertices: position, then texture coordinates
+     * \param [in] vertices The fan's vertices: position, then the texture
+     *    coordinates of the texture and of the overlay
      * \param [in] count Number of vertices
      * \param [in] stride Size of a vertex
      * \returns \c false if nothing could be drawn
@@ -61,6 +65,7 @@ namespace dxvk {
     bool drawFan(
             IDirect3DSurface9* target,
             IDirect3DTexture9* image,
+      const VrImage*           overlay,
       const float*             projection,
       const void*              vertices,
             UINT               count,
