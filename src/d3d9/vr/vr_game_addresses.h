@@ -2876,6 +2876,45 @@ namespace dxvk {
     constexpr uintptr_t ObjectHitWeaponCallSite      = 0x008AEBCD;
     constexpr uintptr_t ProcessWeaponLastPosSlot     = 0x460;
 
+    /**
+     * The world drawn into a texture, as TESMain::RenderMenuBackground
+     * (0x00871DC0) does, findings/optics.md §7. Its calls are what install
+     * checks:
+     *
+     * - DrawWorld: __thiscall (destination, renderedMenuMode, skipFirstPerson);
+     * - BorrowRenderedTexture: __thiscall on the texture manager (renderer,
+     *   type, 0, 0, 0), ReturnRenderedTexture: __thiscall (texture);
+     * - RendererLock and RendererUnlock: __thiscall on the renderer;
+     * - TileLock and TileUnlock: __cdecl without arguments;
+     * - ResetMultiBounds: TES::ResetAllMultiBoundNodes, __thiscall (landscape,
+     *   rooms), called before the visibility pass.
+     *
+     * Offsets: BSRenderedTexture spRenderedTextures[0], NiTexture renderer
+     * data, NiDX9TextureData's IDirect3DBaseTexture9. TESObjectWEAP fSightFOV is
+     * kData (+0xF4) + 0x1C.
+     */
+    constexpr uintptr_t DrawWorld                    = 0x008706B0;
+    constexpr uintptr_t RendererLock                 = 0x004A0370;
+    constexpr uintptr_t RendererUnlock               = 0x004A03C0;
+    constexpr uintptr_t TileLock                     = 0x00A044F0;
+    constexpr uintptr_t TileUnlock                   = 0x00A04500;
+    constexpr uintptr_t ResetMultiBounds             = 0x0045BC80;
+    constexpr uintptr_t MenuBackgroundDrawWorldCall  = 0x008721A4;
+    constexpr uintptr_t MenuBackgroundBorrowCall     = 0x00871EBC;
+    constexpr uintptr_t MenuBackgroundReturnCall     = 0x00871EA2;
+    constexpr uintptr_t MenuBackgroundLockCall       = 0x00871E6C;
+    constexpr uintptr_t MenuBackgroundUnlockCall     = 0x0087232C;
+    constexpr uintptr_t MenuBackgroundTileLockCall   = 0x00871E71;
+    constexpr uintptr_t MenuBackgroundTileUnlockCall = 0x00872320;
+    constexpr uintptr_t ResetMultiBoundsCallSite     = 0x0086EBCC;
+    constexpr uintptr_t TesSingleton                 = 0x011DEA10;
+    constexpr uintptr_t TextureManager               = 0x011F91A8;
+    constexpr uintptr_t ImageSpaceEndOfFrameEnabled  = 0x011AD884;
+    constexpr uintptr_t MainRenderingMenuBackground  = 0x9C;
+    constexpr uint32_t  TextureMainMenuBackground    = 6;
+    constexpr uintptr_t RenderedTextureFirst         = 0x30;
+    constexpr uintptr_t WeaponSightFov               = 0x110;
+
   }
 
 }

@@ -45,6 +45,7 @@
 #include "vr_preview_window.h"
 #include "vr_prompt_icon.h"
 #include "vr_render_passes.h"
+#include "vr_scope_render.h"
 #include "vr_sky_anchor.h"
 #include "vr_tile_texture_retry.h"
 #include "vr_weapon_hand.h"
@@ -433,6 +434,10 @@ namespace dxvk {
     std::unique_ptr<VrGameTimer> m_gameTimer;
     std::unique_ptr<VrRenderPasses> m_renderPasses;
 
+    // The world seen from the right hand, in a corner of each eye (d3d9.vrScopeTest)
+    std::unique_ptr<VrScopeRender> m_scopeRender;
+    bool m_scopeDrawn = false;
+
     VrVector3           m_screenShift;
     bool                m_screenPass = false;
 
@@ -558,6 +563,8 @@ namespace dxvk {
             uint32_t              eye,
       const VrEyeView&            view,
             void*                 main);
+
+    void renderScope(const VrInputState& input, VrGameStateKind state, void* main);
 
     void applyEyePose();
 

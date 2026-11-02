@@ -119,6 +119,22 @@ namespace dxvk {
   }
 
 
+  VrFov vrComputeScopeFov(float sightFovDegrees, float aspect) {
+    constexpr float DegreesToRadians = 3.14159265f / 180.0f;
+    constexpr float ReferenceAspect  = 4.0f / 3.0f;
+
+    float halfHeight = std::tan(0.5f * sightFovDegrees * DegreesToRadians) / ReferenceAspect;
+    float halfWidth  = halfHeight * aspect;
+
+    VrFov fov;
+    fov.angleLeft  = -std::atan(halfWidth);
+    fov.angleRight =  std::atan(halfWidth);
+    fov.angleUp    =  std::atan(halfHeight);
+    fov.angleDown  = -std::atan(halfHeight);
+    return fov;
+  }
+
+
   VrGameCameraPose vrComputeMenuSceneCameraPose(
     const VrPose&           anchor,
     const VrPose&           eye,

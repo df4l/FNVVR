@@ -407,6 +407,9 @@ namespace dxvk {
     if (!renderer->m_renderPasses)
       Logger::info("VR: The world render's passes were not found, they are drawn for each eye and not timed");
 
+    if (passes.scopeTest)
+      renderer->m_scopeRender = VrScopeRender::install(device);
+
     if (!renderer->m_gameTimer)
       Logger::info("VR: The game's frame timer update was not found, it is not measured");
 
@@ -672,6 +675,8 @@ namespace dxvk {
       ? m_hudMeters.place(vrComputeInterfaceSize(targetDesc.Width, targetDesc.Height).y)
       : VrHudMetersPlaced();
 
+    renderScope(input, state, main);
+
     for (uint32_t eye = 0; eye < VrEyeCount; eye++) {
       m_eyeCopied[eye] = false;
       renderEye(eye, views[eye], main);
@@ -917,6 +922,47 @@ namespace dxvk {
 
     m_eye     = NoEye;
     m_eyeView = nullptr;
+  }
+
+
+  void VrStereoRenderer::renderScope(const VrInputState& input, VrGameStateKind state, void* main) {
+    m_scopeDrawn = false;
+
+    if (!m_scopeRender || state != VrGameStateKind::InGame)
+      return;
+
+    const VrControllerState& right = input.controllers[uint32_t(VrHand::Right)];
+    float sightFov = VrScopeRender::weaponSightFov();
+
+    // Any weapon, as this only tests the render. One that does not zoom gets
+    // the view of a sniper rifle.
+    constexpr float FallbackSightFov = 25.0f;
+
+    if (!right.isActive || (m_weaponDrawn && m_weaponDrawn->playerHolstered()))
+      return;
+
+    VrEyeView view;
+    view.pose = right.aimPose;
+    view.fov  = vrComputeScopeFov(sightFov > 0.0f ? sightFov : FallbackSightFov, m_scopeRender->aspect());
+
+    // The camera hooks keep the camera on this view while the world is drawn
+    m_eye     = NoEye;
+    m_eyeView = &view;
+    applyEyePose();
+
+    if (m_skyAnchor)
+      m_skyAnchor->setEye(&m_eyePosition);
+
+    m_scopeDrawn = m_scopeRender->render(main);
+
+    if (m_skyAnchor)
+      m_skyAnchor->setEye(nullptr);
+
+    m_eyeView = nullptr;
+    m_renderCamera.restore(m_gameCamera);
+
+    if (m_cullingCamera)
+      m_cullingCamera->cullAgain();
   }
 
 
@@ -1777,6 +1823,22 @@ namespace dxvk {
     logEyeCapture();
 
     m_eyeCopied[m_eye] = copyRenderTarget(m_eye);
+
+    if (m_eyeCopied[m_eye] && m_scopeDrawn) {
+      Com<IDirect3DSurface9> eyeSurface;
+      D3DSURFACE_DESC eyeDesc = { };
+
+      if (SUCCEEDED(m_eyeTextures[m_eye]->GetSurfaceLevel(0, &eyeSurface))
+       && SUCCEEDED(eyeSurface->GetDesc(&eyeDesc))) {
+        // Below the centre of the view, where both eyes see it
+        LONG width  = LONG(eyeDesc.Width) * 3 / 10;
+        LONG height = LONG(float(width) / m_scopeRender->aspect());
+        LONG left   = (LONG(eyeDesc.Width) - width) / 2;
+        LONG top    = LONG(eyeDesc.Height) * 6 / 10;
+
+        m_scopeRender->drawInto(eyeSurface.ptr(), RECT { left, top, left + width, top + height });
+      }
+    }
 
     if (!m_eyeCopied[m_eye] && !m_loggedFailure) {
       Logger::err("VR: Failed to copy the rendered eye image");

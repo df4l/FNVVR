@@ -380,3 +380,23 @@ TEST_CASE(menu_scene_points_map_back_to_the_room) {
   VrVector3 forward = vrRotate(eye.orientation, { 0.0f, 0.0f, -1.0f });
   checkVector(vrComputeMenuSceneDirectionInRoom(anchor, camera.forward), forward.x, forward.y, forward.z);
 }
+
+
+TEST_CASE(scope_fov_keeps_the_weapons_view_at_four_thirds) {
+  VrFov fov = vrComputeScopeFov(25.0f, 4.0f / 3.0f);
+  float half = 12.5f * 3.14159265f / 180.0f;
+
+  CHECK(std::abs(fov.angleRight - half) < 1e-5f);
+  CHECK(std::abs(fov.angleLeft + half) < 1e-5f);
+  CHECK(std::abs(std::tan(fov.angleUp) - std::tan(half) * 0.75f) < 1e-5f);
+  CHECK(std::abs(fov.angleDown + fov.angleUp) < 1e-5f);
+}
+
+
+TEST_CASE(scope_fov_of_a_square_image_keeps_its_height) {
+  VrFov wide   = vrComputeScopeFov(38.0f, 4.0f / 3.0f);
+  VrFov square = vrComputeScopeFov(38.0f, 1.0f);
+
+  CHECK(std::abs(square.angleUp - wide.angleUp) < 1e-5f);
+  CHECK(std::abs(square.angleRight - square.angleUp) < 1e-5f);
+}
