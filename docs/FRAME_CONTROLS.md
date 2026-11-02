@@ -33,6 +33,14 @@ the previous tab or the right grip for the next tab. In the Pip-Boy inventory,
 hold the right grip (the game's RB input) and use the left stick to assign a
 highlighted item to a hotkey slot.
 
+## Trigger and grip sensitivity
+
+The triggers press at 55% of their travel and release at 40%. The grips press at
+40% and release at 15%, so that a held grip stays held with a light squeeze. To
+change them, open the binding in the SteamVR Controller Bindings page and edit the
+click thresholds of the trigger or grip button. A personal binding replaces the
+default one: to get a later default, select the default binding again.
+
 ## Alternate profile
 
 The Oculus Touch profile remains available as a fallback. Its face-button labels

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Steam Frame
+
+- **Trigger and grip response**: the Frame profile now presses the triggers and grips at set points of their analog
+  travel, as Valve's own Frame bindings do, instead of relying on the click of the input. A held left grip stays held
+  with a light squeeze (press at 40%, release at 15%), which also applies to the right grip; the triggers press at 55%
+  and release at 40%. Copy the new `bindings_frame_controller.json` into `fnvvr/`; a personal binding must be reset to
+  the default one to get these values.
+
 ## v0.11.0 (2026-11-01, since v0.10.0 `ce0c0a9`)
 
 ### Holding living NPCs
