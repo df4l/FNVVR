@@ -483,6 +483,17 @@ namespace dxvk {
     constexpr uintptr_t PadConnectedMessageCallSite    = 0x0070C5E2;
 
     /**
+     * After a change of that flag, InterfaceManager::Update walks every menu
+     * tile (FUN_00719580, reached through FUN_00719630) and compares each
+     * tile's name with "xbox_button" and "PCShortcutLabel" through a __cdecl
+     * strcmp wrapper. The name of a tile without one is a null pointer, which
+     * the game never checks.
+     */
+    constexpr uintptr_t StringCompare                  = 0x00408B20;
+    constexpr uintptr_t TileNameButtonCompareCallSite  = 0x007195D1;
+    constexpr uintptr_t TileNameLabelCompareCallSite   = 0x007195EB;
+
+    /**
      * isInStartMenu, __cdecl without arguments: true while the main menu is
      * shown (StartMenu exists without its in-game flag, so not the pause
      * menu). Checked against its first bytes before it is called.

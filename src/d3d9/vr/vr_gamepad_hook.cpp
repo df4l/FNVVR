@@ -38,6 +38,25 @@ namespace dxvk {
     // arguments, so ignoring them is safe.
     void __cdecl skipMessageBox() { }
 
+    using StringCompareFn = int (__cdecl*)(const char* first, const char* second);
+
+    // The laser's cursor mode changes the interface's gamepad flag each time
+    // it starts or ends, so the game's walk over the menu tiles runs far more
+    // often than with a real gamepad and meets tiles that have no name
+    int __cdecl compareTileName(const char* name, const char* expected) {
+      if (name)
+        return reinterpret_cast<StringCompareFn>(VrGame::StringCompare)(name, expected);
+
+      static bool logged = false;
+
+      if (!logged) {
+        Logger::info("VR: A menu tile has no name, it is skipped when the interface changes its gamepad mode");
+        logged = true;
+      }
+
+      return 1;
+    }
+
     DWORD reportControllers(XINPUT_STATE* state) {
       if (!g_loggedControllers) {
         Logger::info("VR: The VR controllers are in use, the game sees them as a gamepad");
@@ -193,6 +212,16 @@ namespace dxvk {
       for (uintptr_t site : messageSites) {
         if (!VrGameMemory::redirectCall(site, VrGame::ShowMessageBox, reinterpret_cast<const void*>(&skipMessageBox)))
           Logger::warn(str::format("VR: Gamepad message at 0x", std::hex, site, " was not found, it stays enabled"));
+      }
+
+      const uintptr_t tileNameSites[] = {
+        VrGame::TileNameButtonCompareCallSite,
+        VrGame::TileNameLabelCompareCallSite,
+      };
+
+      for (uintptr_t site : tileNameSites) {
+        if (!VrGameMemory::redirectCall(site, VrGame::StringCompare, reinterpret_cast<const void*>(&compareTileName)))
+          Logger::warn(str::format("VR: Tile name comparison at 0x", std::hex, site, " was not found, a tile without a name can crash the game"));
       }
     }
 
