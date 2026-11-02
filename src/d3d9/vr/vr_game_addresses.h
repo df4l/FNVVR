@@ -360,6 +360,13 @@ namespace dxvk {
     constexpr char ProjectileNodeName[]       = "ProjectileNode";
     constexpr char ProjectileNodeAltName[]    = "##ProjectileNode";
 
+    /**
+     * Glass of the sniper rifle's scope in its model (sniperrifle.nif): the
+     * eyepiece from x 8.3, radius 1.37, the objective up to x 28.6, its axis
+     * along x at y 5.615 and z 0
+     */
+    constexpr char SniperScopeGlassName[]     = "##ScopeLens:0";
+
     /** Hand bones of the first-person skeleton (strings 0x010C4C40 and 0x010C4C20) */
     constexpr char LeftHandNodeName[]         = "Bip01 L Hand";
     constexpr char RightHandNodeName[]        = "Bip01 R Hand";

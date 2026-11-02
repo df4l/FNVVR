@@ -434,9 +434,12 @@ namespace dxvk {
     std::unique_ptr<VrGameTimer> m_gameTimer;
     std::unique_ptr<VrRenderPasses> m_renderPasses;
 
-    // The world seen from the right hand, in a corner of each eye (d3d9.vrScopeTest)
+    // The world seen through the scope, on its lens (d3d9.vrScopeTest)
     std::unique_ptr<VrScopeRender> m_scopeRender;
     bool m_scopeDrawn = false;
+    VrScopeLens m_scopeLens;
+    VrScopeImageScale m_scopeScale;
+    const VrGameCameraPose* m_scopeCamera = nullptr;
 
     VrVector3           m_screenShift;
     bool                m_screenPass = false;
@@ -564,7 +567,7 @@ namespace dxvk {
       const VrEyeView&            view,
             void*                 main);
 
-    void renderScope(const VrInputState& input, VrGameStateKind state, void* main);
+    void renderScope(VrGameStateKind state, void* main);
 
     void applyEyePose();
 

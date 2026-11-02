@@ -1033,7 +1033,34 @@ namespace dxvk {
   }
 
 
+  bool VrWeaponHand::scopeLens(VrScopeLens& lens) const {
+    if (!m_hasScopeLens || !m_hasHand)
+      return false;
+
+    VrGameCameraPose hand = m_hand;
+
+    if (m_scopeTwoHanded) {
+      hand = vrComputeTwoHandedPose(hand, vrCameraRotation(hand) * m_scopeSupport,
+        m_otherHand.position - m_hand.position);
+    }
+
+    VrGameRotation rotation = vrCameraRotation(hand) * m_scopeRotation;
+
+    // The columns of a rotation are the axes: x along the barrel, y up and
+    // z to the right in the game's weapon models
+    lens.eyepiece.position = vrPointFromHand(hand, m_scopeEyepiece);
+    lens.eyepiece.forward  = { rotation.m[0][0], rotation.m[1][0], rotation.m[2][0] };
+    lens.eyepiece.up       = { rotation.m[0][1], rotation.m[1][1], rotation.m[2][1] };
+    lens.eyepiece.right    = { rotation.m[0][2], rotation.m[1][2], rotation.m[2][2] };
+    lens.radius            = m_scopeRadius;
+    lens.tubeLength        = m_scopeTubeLength;
+    return true;
+  }
+
+
   void VrWeaponHand::placeModel(uint8_t* root, void* updateData) {
+    m_hasScopeLens = false;
+
     uint8_t* main = m_main;
     m_main = nullptr;
 
@@ -1230,7 +1257,10 @@ namespace dxvk {
     GripKind  grip    = weaponGrip(object);
     updateGrip(grip, forearm != nullptr, support);
 
-    if (m_twoHanded && grip == GripKind::TwoHanded) {
+    VrVector3 supportInHand = vrTranspose(vrCameraRotation(hand)) * support;
+    bool pointedByBothHands = m_twoHanded && grip == GripKind::TwoHanded;
+
+    if (pointedByBothHands) {
       hand = vrComputeTwoHandedPose(hand, support, m_otherHand.position - m_hand.position);
       rig  = vrComputeRigToHand(m_gameCamera, drawnWeapon, hand);
     }
@@ -1344,6 +1374,31 @@ namespace dxvk {
       ? vrComputeBarrelDirection(m_muzzleRotation)
       : hand.forward;
     m_hasAim         = true;
+
+    if (uint8_t* glass = findObject(weapon, VrGame::SniperScopeGlassName)) {
+      // Values of the model, see SniperScopeGlassName
+      constexpr VrVector3 Eyepiece = { 8.3f, 5.615f, 0.0f };
+      constexpr float     Radius   = 1.37f;
+      constexpr float     Tube     = 20.3f;
+
+      VrGameRotation glassRotation = readRotation(glass, VrGame::ObjectWorldRotation);
+      VrVector3      eyepiece      = glassRotation * Eyepiece
+                                   + readVector(glass, VrGame::ObjectWorldTranslation);
+
+      m_scopeEyepiece   = vrPointToHand(hand, eyepiece);
+      m_scopeRotation   = vrTranspose(vrCameraRotation(hand)) * glassRotation;
+      m_scopeRadius     = Radius;
+      m_scopeTubeLength = Tube;
+      m_scopeTwoHanded  = pointedByBothHands;
+      m_scopeSupport    = supportInHand;
+      m_hasScopeLens    = true;
+
+      if (glass != m_loggedScopeWeapon) {
+        Logger::info(str::format("VR: Scope lens at ", m_scopeEyepiece.x, ", ", m_scopeEyepiece.y, ", ",
+          m_scopeEyepiece.z, " units along the hand's forward, up and right"));
+        m_loggedScopeWeapon = glass;
+      }
+    }
 
     if (weapon != m_loggedBarrelWeapon) {
       VrHeadAngles barrelAngles = vrComputeAimAngles(m_aimDirection);

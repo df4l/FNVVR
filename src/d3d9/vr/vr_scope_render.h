@@ -5,6 +5,9 @@
 #include "../d3d9_include.h"
 #include "../../util/com/com_pointer.h"
 
+#include "vr_painter.h"
+#include "vr_scope_lens.h"
+
 namespace dxvk {
 
   /**
@@ -55,18 +58,27 @@ namespace dxvk {
     bool render(void* main);
 
     /**
-     * \brief Copies the image into a part of a surface
+     * \brief Draws the lens with the image over an eye's picture
      *
-     * \param [in] target Surface to draw on
-     * \param [in] rect Part of the surface
+     * \param [in] target The eye's picture
+     * \param [in] lens The scope
+     * \param [in] eye The eye's pose in the game world
+     * \param [in] eyeFov The eye's field of view
+     * \param [in] scale Scale of the image
      */
-    void drawInto(IDirect3DSurface9* target, const RECT& rect);
+    void drawLens(
+            IDirect3DSurface9*  target,
+      const VrScopeLens&        lens,
+      const VrGameCameraPose&   eye,
+      const VrFov&              eyeFov,
+      const VrScopeImageScale&  scale);
 
   private:
 
     explicit VrScopeRender(IDirect3DDevice9* device);
 
     IDirect3DDevice9*      m_device;
+    VrPainter              m_painter;
     Com<IDirect3DTexture9> m_image;
     bool                   m_imageReady   = false;
     bool                   m_loggedSize   = false;

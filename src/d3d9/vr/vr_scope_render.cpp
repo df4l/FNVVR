@@ -38,7 +38,7 @@ namespace dxvk {
 
 
   VrScopeRender::VrScopeRender(IDirect3DDevice9* device)
-  : m_device(device) { }
+  : m_device(device), m_painter(device) { }
 
 
   std::unique_ptr<VrScopeRender> VrScopeRender::install(IDirect3DDevice9* device) {
@@ -54,7 +54,7 @@ namespace dxvk {
       return nullptr;
     }
 
-    Logger::info("VR: Scope test: the world is also drawn from the right hand, shown in a corner of each eye");
+    Logger::info("VR: Scope test: a scope the mod knows shows the world on a lens");
     return std::unique_ptr<VrScopeRender>(new VrScopeRender(device));
   }
 
@@ -158,14 +158,21 @@ namespace dxvk {
   }
 
 
-  void VrScopeRender::drawInto(IDirect3DSurface9* target, const RECT& rect) {
-    if (!m_imageReady)
+  void VrScopeRender::drawLens(
+          IDirect3DSurface9*  target,
+    const VrScopeLens&        lens,
+    const VrGameCameraPose&   eye,
+    const VrFov&              eyeFov,
+    const VrScopeImageScale&  scale) {
+    VrScopeLensDisc disc;
+
+    if (!m_imageReady || !vrComputeScopeLensDisc(lens, eye, scale, disc))
       return;
 
-    Com<IDirect3DSurface9> source;
+    std::array<float, 16> projection = vrComputeEyeProjection(eyeFov);
 
-    if (SUCCEEDED(m_image->GetSurfaceLevel(0, &source)))
-      m_device->StretchRect(source.ptr(), nullptr, target, &rect, D3DTEXF_LINEAR);
+    m_painter.drawFan(target, m_image.ptr(), projection.data(),
+      disc.data(), UINT(disc.size()), sizeof(VrScopeLensVertex));
   }
 
 

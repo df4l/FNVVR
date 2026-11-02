@@ -20,7 +20,7 @@ namespace dxvk {
     bool shareShadows = true;
     /// The hands and the weapon are hidden by the world in front of them
     bool handsDepthTest = true;
-    /// Test of the scope's render: the world seen from the right hand, in a corner of each eye
+    /// Test of the scope's render: the world seen through the sniper rifle's scope, on a lens
     bool scopeTest = false;
   };
 

@@ -675,7 +675,7 @@ namespace dxvk {
       ? m_hudMeters.place(vrComputeInterfaceSize(targetDesc.Width, targetDesc.Height).y)
       : VrHudMetersPlaced();
 
-    renderScope(input, state, main);
+    renderScope(state, main);
 
     for (uint32_t eye = 0; eye < VrEyeCount; eye++) {
       m_eyeCopied[eye] = false;
@@ -925,31 +925,30 @@ namespace dxvk {
   }
 
 
-  void VrStereoRenderer::renderScope(const VrInputState& input, VrGameStateKind state, void* main) {
+  void VrStereoRenderer::renderScope(VrGameStateKind state, void* main) {
     m_scopeDrawn = false;
 
     // The game's menu mode follows the Pip-Boy's state by a frame
-    if (!m_scopeRender || state != VrGameStateKind::InGame
-     || m_pipBoyControl.state() != VrPipBoyState::Closed)
+    if (!m_scopeRender || state != VrGameStateKind::InGame || !m_hasReference
+     || !m_weaponHand || m_pipBoyControl.state() != VrPipBoyState::Closed)
       return;
 
-    const VrControllerState& right = input.controllers[uint32_t(VrHand::Right)];
     float sightFov = VrScopeRender::weaponSightFov();
 
-    // Any weapon, as this only tests the render. One that does not zoom gets
-    // the view of a sniper rifle.
-    constexpr float FallbackSightFov = 25.0f;
-
-    if (!right.isActive || (m_weaponDrawn && m_weaponDrawn->playerHolstered()))
+    if (sightFov <= 0.0f || !m_weaponHand->scopeLens(m_scopeLens))
       return;
 
     VrEyeView view;
-    view.pose = right.aimPose;
-    view.fov  = vrComputeScopeFov(sightFov > 0.0f ? sightFov : FallbackSightFov, m_scopeRender->aspect());
+    view.fov = vrComputeScopeFov(sightFov, m_scopeRender->aspect());
+
+    m_scopeScale = vrComputeScopeImageScale(view.fov, vrComputeScopeMagnification(sightFov));
+
+    VrGameCameraPose camera = vrComputeScopeCamera(m_scopeLens);
 
     // The camera hooks keep the camera on this view while the world is drawn
-    m_eye     = NoEye;
-    m_eyeView = &view;
+    m_eye         = NoEye;
+    m_eyeView     = &view;
+    m_scopeCamera = &camera;
     applyEyePose();
 
     if (m_skyAnchor)
@@ -960,7 +959,8 @@ namespace dxvk {
     if (m_skyAnchor)
       m_skyAnchor->setEye(nullptr);
 
-    m_eyeView = nullptr;
+    m_scopeCamera = nullptr;
+    m_eyeView     = nullptr;
     m_renderCamera.restore(m_gameCamera);
 
     if (m_cullingCamera)
@@ -973,7 +973,9 @@ namespace dxvk {
       ? vrComputeEyeInReference(m_reference, m_eyeView->pose)
       : VrPose();
 
-    VrGameCameraPose pose = vrComputeEyeCameraPose(m_gameCameraPose, eyeInReference, VrGameUnitsPerMetre);
+    VrGameCameraPose pose = m_scopeCamera
+      ? *m_scopeCamera
+      : vrComputeEyeCameraPose(m_gameCameraPose, eyeInReference, VrGameUnitsPerMetre);
     m_eyePosition = pose.position;
 
     if (m_screenPass)
@@ -1828,21 +1830,12 @@ namespace dxvk {
 
     if (m_eyeCopied[m_eye] && m_scopeDrawn) {
       Com<IDirect3DSurface9> eyeSurface;
-      D3DSURFACE_DESC eyeDesc = { };
 
-      if (SUCCEEDED(m_eyeTextures[m_eye]->GetSurfaceLevel(0, &eyeSurface))
-       && SUCCEEDED(eyeSurface->GetDesc(&eyeDesc))) {
-        // In the same direction for both eyes, below straight ahead: the
-        // middle of an eye's image is not, its field of view being off centre
-        constexpr float InsetDown  = 0.25f;
-        constexpr float InsetWidth = 0.6f;
-
-        VrEyeInset inset = vrComputeEyeInset(m_eyeView->fov, 0.0f, -InsetDown,
-          InsetWidth, InsetWidth / m_scopeRender->aspect());
-
-        m_scopeRender->drawInto(eyeSurface.ptr(), RECT {
-          LONG(inset.left   * float(eyeDesc.Width)),  LONG(inset.top    * float(eyeDesc.Height)),
-          LONG(inset.right  * float(eyeDesc.Width)),  LONG(inset.bottom * float(eyeDesc.Height)) });
+      if (SUCCEEDED(m_eyeTextures[m_eye]->GetSurfaceLevel(0, &eyeSurface))) {
+        m_scopeRender->drawLens(eyeSurface.ptr(), m_scopeLens,
+          vrComputeEyeCameraPose(m_gameCameraPose,
+            vrComputeEyeInReference(m_reference, m_eyeView->pose), VrGameUnitsPerMetre),
+          m_eyeView->fov, m_scopeScale);
       }
     }
 

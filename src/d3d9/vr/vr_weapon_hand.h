@@ -11,6 +11,7 @@
 #include "vr_melee.h"
 #include "vr_pipboy_size.h"
 #include "vr_reload_animation.h"
+#include "vr_scope_lens.h"
 #include "vr_throw.h"
 #include "vr_throw_animation.h"
 #include "vr_weapon_aim.h"
@@ -240,6 +241,20 @@ namespace dxvk {
     void beforePlaceCamera(
             void*                 main,
       const VrVector3&            eyePosition);
+
+    /**
+     * \brief The scope on the weapon in the right hand, for the frame set
+     *    with beginFrame
+     *
+     * Measured when the model was last drawn, in the previous frame, and
+     * placed on this frame's hands, as the scope's view is drawn before the
+     * model is placed. What the game animates, such as recoil, follows by a
+     * frame.
+     *
+     * \param [out] lens The scope in the game world
+     * \returns \c false if the weapon has no scope the mod knows
+     */
+    bool scopeLens(VrScopeLens& lens) const;
 
     /**
      * \brief Whether the game's aim control should be pressed
@@ -741,6 +756,16 @@ namespace dxvk {
 
     // Muzzle relative to the first-person root, its rotation, and the
     // direction the hand pointed, when the weapon was last drawn in the hand
+    // The scope in the frame of the hand holding the weapon, see scopeLens
+    bool             m_hasScopeLens = false;
+    VrVector3        m_scopeEyepiece;
+    VrGameRotation   m_scopeRotation;
+    float            m_scopeRadius = 0.0f;
+    float            m_scopeTubeLength = 0.0f;
+    bool             m_scopeTwoHanded = false;
+    VrVector3        m_scopeSupport;
+    const uint8_t*   m_loggedScopeWeapon = nullptr;
+
     VrVector3        m_muzzleOffset;
     VrGameRotation   m_muzzleRotation;
     VrVector3        m_aimDirection;
