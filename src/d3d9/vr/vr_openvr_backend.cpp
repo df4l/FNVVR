@@ -651,7 +651,22 @@ namespace dxvk {
     m_runtime->compositor->SetExplicitTimingMode(
       vr::VRCompositorTimingMode_Explicit_ApplicationPerformsPostPresentHandoff);
     m_frameStarted = false;
+    startSession();
+    return true;
+  }
 
+
+  bool VrOpenVrBackend::beginPanelSession() {
+    if (!initializeRuntime() || !m_runtime->compositor)
+      return false;
+
+    m_runtime->compositor->SetTrackingSpace(vr::TrackingUniverseStanding);
+    startSession();
+    return true;
+  }
+
+
+  void VrOpenVrBackend::startSession() {
     float rate = m_runtime->system->GetFloatTrackedDeviceProperty(
       vr::k_unTrackedDeviceIndex_Hmd, vr::Prop_DisplayFrequency_Float);
 
@@ -663,7 +678,6 @@ namespace dxvk {
     m_statsRunning = false;
     m_frameClock   = FrameClock();
     m_state    = VrSessionState::Running;
-    return true;
   }
 
 
@@ -1092,6 +1106,36 @@ namespace dxvk {
 
     m_runtime->overlay->HideOverlay(state.handle);
     state.visible = false;
+  }
+
+
+  bool VrOpenVrBackend::submitPanelPixels(VrPanelId id, const VrPanelPixels& panel) {
+    if (m_state != VrSessionState::Running || !panel.rgba || !createPanel(id))
+      return false;
+
+    vr::IVROverlay* overlay = m_runtime->overlay;
+    Panel& state = m_panels[uint32_t(id)];
+
+    vr::HmdMatrix34_t transform = { };
+    vrPoseToMatrix34(panel.pose, transform.m);
+
+    overlay->SetOverlayTransformAbsolute(state.handle, vr::TrackingUniverseStanding, &transform);
+    overlay->SetOverlayWidthInMeters(state.handle, panel.metres);
+
+    // SteamVR's interface takes a non-const pointer, and only reads the pixels
+    vr::EVROverlayError error = overlay->SetOverlayRaw(state.handle,
+      const_cast<uint8_t*>(panel.rgba), panel.width, panel.height, 4);
+
+    if (error == vr::VROverlayError_None && !state.visible) {
+      error = overlay->ShowOverlay(state.handle);
+      state.visible = error == vr::VROverlayError_None;
+    }
+
+    if (error != vr::VROverlayError_None)
+      Logger::err(str::format("VR: The image of the panel ", PanelOverlayKeys[uint32_t(id)],
+        " was refused, error ", int32_t(error)));
+
+    return error == vr::VROverlayError_None;
   }
 
 

@@ -120,6 +120,22 @@ namespace dxvk {
   };
 
   /**
+   * \brief Image of a panel held in system memory
+   *
+   * For a panel with no graphics device behind it. The panel stays in the
+   * room, see VrPanelAnchor::Room.
+   */
+  struct VrPanelPixels {
+    /// RGBA8 pixels, top row first, not premultiplied
+    const uint8_t* rgba   = nullptr;
+    uint32_t       width  = 0;
+    uint32_t       height = 0;
+    VrPose         pose;
+    /// Width in the room, in metres
+    float          metres = 0.0f;
+  };
+
+  /**
    * \brief Laser drawn from a controller
    *
    * The laser starts at \c origin and goes along its -Z axis for \c length
@@ -189,6 +205,18 @@ namespace dxvk {
     virtual bool beginSession(const VrGraphicsBinding& binding) = 0;
 
     virtual void endSession() = 0;
+
+    /**
+     * \brief Starts a session without a graphics device
+     *
+     * For a process that only shows panels and lasers. It renders no eyes:
+     * the runtime shows its own surroundings behind the panels. Only
+     * waitFrame, pollInput, setInputContext, submitPanelPixels, hidePanel,
+     * showPointer, hidePointer and endSession may be used.
+     *
+     * \returns \c true if the session is running
+     */
+    virtual bool beginPanelSession() = 0;
 
     virtual VrSessionState sessionState() const = 0;
 
@@ -260,6 +288,15 @@ namespace dxvk {
     virtual bool submitPanel(VrPanelId id, const VrPanelSubmission& panel) = 0;
 
     virtual void hidePanel(VrPanelId id) = 0;
+
+    /**
+     * \brief Shows a panel from an image in system memory
+     *
+     * Slower than submitPanel: meant for images that rarely change.
+     *
+     * \returns \c true if the panel was updated
+     */
+    virtual bool submitPanelPixels(VrPanelId id, const VrPanelPixels& panel) = 0;
 
     /**
      * \brief Shows the laser of a hand, or moves it if it is shown

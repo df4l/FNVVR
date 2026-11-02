@@ -25,6 +25,7 @@
 #include "vr_gamepad_hook.h"
 #include "vr_large_address.h"
 #include "vr_sound_focus.h"
+#include "vr_launcher_overlay.h"
 #include "vr_menu_cursor.h"
 #include "vr_options_file.h"
 #include "vr_options_menu.h"
@@ -36,6 +37,9 @@ namespace dxvk {
 
   static std::unique_ptr<VrSystem> g_vrSystem;
   static bool                      g_vrInitialized = false;
+
+  // Never deleted: it runs on its own thread until the launcher's process ends
+  static VrLauncherOverlay*        g_launcherOverlay = nullptr;
 
 
   namespace {
@@ -124,6 +128,18 @@ namespace dxvk {
 
     if (name == "off" || name.empty())
       return;
+
+    // The launcher loads this DLL too, and has no game to render
+    if (VrLauncherOverlay::isLauncherProcess()) {
+      if (name == "openvr" && config.getOption<bool>("d3d9.vrLauncherOverlay", true)) {
+        VrPanelConfig panel;
+        g_launcherOverlay = new VrLauncherOverlay(name,
+          config.getOption<float>("d3d9.vrPanelDistance", panel.distance),
+          config.getOption<float>("d3d9.vrPanelWidth", panel.width));
+      }
+
+      return;
+    }
 
     std::unique_ptr<IVRBackend> backend = vrCreateBackend(name);
 
@@ -250,6 +266,9 @@ namespace dxvk {
 
 
   void VrSystem::onInterfaceCreated() {
+    if (g_launcherOverlay)
+      g_launcherOverlay->start();
+
     if (!g_vrSystem)
       return;
 

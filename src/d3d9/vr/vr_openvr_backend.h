@@ -80,6 +80,8 @@ namespace dxvk {
 
     void endSession() override;
 
+    bool beginPanelSession() override;
+
     VrSessionState sessionState() const override;
 
     VrExtent recommendedEyeExtent() const override;
@@ -102,6 +104,8 @@ namespace dxvk {
 
     void hidePanel(VrPanelId id) override;
 
+    bool submitPanelPixels(VrPanelId id, const VrPanelPixels& panel) override;
+
     void showPointer(VrHand hand, const VrPointerSubmission& pointer) override;
 
     void hidePointer(VrHand hand) override;
@@ -113,6 +117,8 @@ namespace dxvk {
     struct Runtime;
 
     bool initializeRuntime();
+
+    void startSession();
 
     void shutdownRuntime();
 

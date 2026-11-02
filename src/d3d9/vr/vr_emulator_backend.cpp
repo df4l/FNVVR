@@ -55,6 +55,11 @@ namespace dxvk {
   }
 
 
+  bool VrEmulatorBackend::beginPanelSession() {
+    return beginSession(VrGraphicsBinding());
+  }
+
+
   void VrEmulatorBackend::endSession() {
     m_state = VrSessionState::Idle;
 
@@ -194,6 +199,16 @@ namespace dxvk {
     if (m_sink)
       m_sink->onPanel(id, panel);
 
+    return true;
+  }
+
+
+  bool VrEmulatorBackend::submitPanelPixels(VrPanelId id, const VrPanelPixels& panel) {
+    if (m_state != VrSessionState::Running || !panel.rgba)
+      return false;
+
+    m_submittedPanels++;
+    m_panelVisible[uint32_t(id)] = true;
     return true;
   }
 
