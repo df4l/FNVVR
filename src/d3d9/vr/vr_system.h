@@ -113,6 +113,8 @@ namespace dxvk {
     bool                                 m_headsetResolution;
     bool                                 m_resolutionChosen = false;
     bool                                 m_forceGameSettings = false;
+    bool                                 m_hideGameWindow = false;
+    bool                                 m_keepGameActive = false;
     bool                                 m_hasSession = false;
 
     void chooseResolution();

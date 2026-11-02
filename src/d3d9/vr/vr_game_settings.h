@@ -23,6 +23,14 @@ namespace dxvk {
      */
     static void apply();
 
+    /**
+     * \brief Keeps the game running while its window is not active
+     *
+     * A deactivated window otherwise stops the game's timer. Same check of
+     * the setting's name as \ref apply.
+     */
+    static void keepActive();
+
   };
 
 }

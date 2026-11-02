@@ -64,6 +64,8 @@ namespace dxvk {
     Immediate,
     /// Drop the present (first eye's frame)
     Drop,
+    /// The window is hidden: end the frame without presenting it
+    Hidden,
   };
 
   /**

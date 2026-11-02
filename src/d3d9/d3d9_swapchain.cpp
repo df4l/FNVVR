@@ -132,6 +132,12 @@ namespace dxvk {
     if (vrPresent == VrPresentMode::Drop)
       return D3D_OK;
 
+    if (vrPresent == VrPresentMode::Hidden) {
+      m_parent->EndFrame(nullptr);
+      m_parent->Flush();
+      return D3D_OK;
+    }
+
     uint32_t presentInterval = m_presentParams.PresentationInterval;
 
     // This is not true directly in d3d9 to to timing differences that don't matter for us.

@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Launcher and desktop
+
+- **The launcher in the headset**: with the `openvr` backend, the game's launcher appears on a panel in front of the
+  player, and the lasers click its buttons, lists and dialogs (the trigger clicks, the right stick scrolls). It replaces
+  the flat copy of the window that SteamVR shows for a non-VR application. The launcher stays usable with the mouse on
+  the desktop, and stays there alone when no VR session can start. `d3d9.vrLauncherOverlay = False` turns this off. A
+  `dxvk.conf` from an earlier version that holds `d3d9.vrBackend = off` under `[FalloutNVLauncher.exe]` keeps the flat
+  launcher: remove that section.
+- **No more giant window**: with a headset, the game's window is hidden from the desktop, and the game no longer copies
+  each frame to it. The game also keeps running when another window takes the focus. `d3d9.vrHideGameWindow = False`
+  brings the window back.
+
 ### Performance
 
 - **Game settings for VR**: with a headset, the mod replaces some game settings in memory at startup, with the values of the

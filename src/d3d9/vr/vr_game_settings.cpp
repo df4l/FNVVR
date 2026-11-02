@@ -81,6 +81,16 @@ namespace dxvk {
   }
 
 
+  void VrGameSettings::keepActive() {
+    const ForcedSetting value = { VrGame::SettingAlwaysActive, "bAlwaysActive:General", SettingType::Bool, 1, 0.0f };
+
+    if (hasName(value))
+      write(value);
+    else
+      Logger::warn(str::format("VR: Game setting ", value.name, " was not found, it keeps its value"));
+  }
+
+
   void VrGameSettings::apply() {
     for (const auto& value : Values) {
       if (hasName(value))

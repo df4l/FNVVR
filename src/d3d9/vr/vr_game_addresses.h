@@ -754,6 +754,9 @@ namespace dxvk {
     constexpr uintptr_t SettingDoHighDynamicRange         = 0x011C76C0;
     constexpr uintptr_t SettingUseBlurShader              = 0x011C7768;
     constexpr uintptr_t SettingLightEffectFadeDuration    = 0x011DB2BC;
+    /// bAlwaysActive:General, TESMain::SetActive (0x00871C90) keeps the game
+    /// running when its window is deactivated
+    constexpr uintptr_t SettingAlwaysActive               = 0x011DEED8;
 
     constexpr uintptr_t RendererSizeReadSite  = 0x004DA730;
     constexpr uint8_t   RendererSizeRead[] = {

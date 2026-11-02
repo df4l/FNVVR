@@ -25,6 +25,7 @@
 #include "vr_gamepad_hook.h"
 #include "vr_large_address.h"
 #include "vr_sound_focus.h"
+#include "vr_game_window.h"
 #include "vr_launcher_overlay.h"
 #include "vr_menu_cursor.h"
 #include "vr_options_file.h"
@@ -251,6 +252,8 @@ namespace dxvk {
     g_vrSystem->m_sneakConfig.physical = options.physicalSneak;
     g_vrSystem->m_sneakConfig.crouch   = crouch;
     g_vrSystem->m_forceGameSettings = !emulated && config.getOption<bool>("d3d9.vrForceGameSettings", true);
+    g_vrSystem->m_hideGameWindow = !emulated && config.getOption<bool>("d3d9.vrHideGameWindow", true);
+    g_vrSystem->m_keepGameActive = g_vrSystem->m_hideGameWindow;
     DxvkInstance::registerExtensionProvider(g_vrSystem->m_extensionProvider.get());
 
     VrOptionsMenu::install(options, [] (const VrOptions& changed) {
@@ -277,6 +280,11 @@ namespace dxvk {
     if (g_vrSystem->m_forceGameSettings) {
       g_vrSystem->m_forceGameSettings = false;
       VrGameSettings::apply();
+    }
+
+    if (g_vrSystem->m_keepGameActive) {
+      g_vrSystem->m_keepGameActive = false;
+      VrGameSettings::keepActive();
     }
   }
 
@@ -334,7 +342,16 @@ namespace dxvk {
     if (!g_vrSystem || !g_vrSystem->m_stereoRenderer)
       return VrPresentMode::Game;
 
-    return g_vrSystem->m_stereoRenderer->onPresent(swapchain);
+    VrPresentMode mode = g_vrSystem->m_stereoRenderer->onPresent(swapchain);
+
+    if (!g_vrSystem->m_hideGameWindow || mode == VrPresentMode::Drop || !VrGameWindow::hide(swapchain))
+      return mode;
+
+    // Without a present, nothing else paces the frames the headset does not pace
+    if (mode == VrPresentMode::Game)
+      VrGameWindow::waitUnpacedFrame();
+
+    return VrPresentMode::Hidden;
   }
 
 

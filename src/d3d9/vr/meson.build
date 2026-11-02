@@ -67,6 +67,7 @@ vr_dxvk_src = files([
   'vr_culling_camera.cpp',
   'vr_developer_mode.cpp',
   'vr_menu_cursor.cpp',
+  'vr_game_window.cpp',
   'vr_launcher_overlay.cpp',
   'vr_launcher_windows.cpp',
   'vr_head_look.cpp',
