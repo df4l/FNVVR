@@ -431,6 +431,16 @@ namespace dxvk {
     constexpr uint8_t SoundFlagsOrEcx[] = { 0x81, 0xC9, 0xA0, 0x02, 0x00, 0x00 };
     constexpr uint8_t SoundFlagsOrEdx[] = { 0x81, 0xCA, 0xA0, 0x02, 0x00, 0x00 };
 
+    /**
+     * BSWin32Audio::Shutdown (0x00AEA4D0) clears bInitialized, then
+     * BSAudio::Shutdown asks the audio thread to end and waits for it without
+     * a limit. BSAudioManager::ComposeMessage drops every message once
+     * bInitialized is clear, so with bMultiThreadAudio the game never exits.
+     * BSAudio::Shutdown clears the flag itself after the wait.
+     */
+    constexpr uintptr_t AudioShutdownClearInitialized = 0x00AEA4DC;
+    constexpr uint8_t   AudioShutdownClearInitializedCode[] = { 0xC6, 0x40, 0x05, 0x00 };
+
     /** State of the VATS camera, 0 when VATS is not running */
     constexpr uintptr_t VatsCameraState = 0x011F2258;
 

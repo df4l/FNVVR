@@ -81,6 +81,16 @@ namespace dxvk {
   }
 
 
+  bool VrGameSettings::fixAudioThreadExit() {
+    constexpr size_t Size = sizeof(VrGame::AudioShutdownClearInitializedCode);
+
+    const uint8_t nops[Size] = { 0x90, 0x90, 0x90, 0x90 };
+
+    return VrGameMemory::replaceCode(VrGame::AudioShutdownClearInitialized,
+      VrGame::AudioShutdownClearInitializedCode, nops, Size);
+  }
+
+
   void VrGameSettings::keepActive() {
     const ForcedSetting value = { VrGame::SettingAlwaysActive, "bAlwaysActive:General", SettingType::Bool, 1, 0.0f };
 
@@ -92,7 +102,14 @@ namespace dxvk {
 
 
   void VrGameSettings::apply() {
+    bool exitFixed = fixAudioThreadExit();
+
     for (const auto& value : Values) {
+      if (value.setting == VrGame::SettingMultiThreadAudio && !exitFixed) {
+        Logger::warn(str::format("VR: Game setting ", value.name, " keeps its value: the game could not exit with it"));
+        continue;
+      }
+
       if (hasName(value))
         write(value);
       else

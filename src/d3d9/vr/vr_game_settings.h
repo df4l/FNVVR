@@ -31,6 +31,18 @@ namespace dxvk {
      */
     static void keepActive();
 
+  private:
+
+    /**
+     * \brief Lets the game end its audio thread when it exits
+     *
+     * Without this, the game waits for that thread forever when it quits
+     * with bMultiThreadAudio on. See findings/game-settings.md.
+     *
+     * \returns \c true if the game's code was the expected one and is fixed
+     */
+    static bool fixAudioThreadExit();
+
   };
 
 }
