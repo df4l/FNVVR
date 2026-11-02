@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixes
+
+- **Crash when opening a menu**: a menu tile without a name no longer crashes the game when the laser pointer takes over
+  the menu cursor.
+
 ### Steam Frame
 
 - **Trigger and grip response**: the Frame profile now presses the triggers and grips at set points of their analog
