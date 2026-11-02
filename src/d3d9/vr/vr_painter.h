@@ -45,6 +45,27 @@ namespace dxvk {
      */
     bool paint(IDirect3DTexture9* target, const VrPaintList& list, bool clear);
 
+    /**
+     * \brief Draws a textured triangle fan with a projection
+     *
+     * Opaque and without a depth test. The image is black past its edges.
+     *
+     * \param [in] target Render target surface
+     * \param [in] image Texture
+     * \param [in] projection Projection of the positions, in row-vector order
+     * \param [in] vertices The fan's vertices: position, then texture coordinates
+     * \param [in] count Number of vertices
+     * \param [in] stride Size of a vertex
+     * \returns \c false if nothing could be drawn
+     */
+    bool drawFan(
+            IDirect3DSurface9* target,
+            IDirect3DTexture9* image,
+      const float*             projection,
+      const void*              vertices,
+            UINT               count,
+            UINT               stride);
+
   private:
 
     struct DeviceVertex {
@@ -55,12 +76,24 @@ namespace dxvk {
 
     using TextureKey = std::tuple<const uint32_t*, uint32_t, uint32_t, VrPaintImageUse>;
 
+    /// The device's targets while something is drawn
+    struct SavedTargets {
+      Com<IDirect3DSurface9> colour[4];
+      Com<IDirect3DSurface9> depth;
+    };
+
     IDirect3DDevice9*                          m_device;
     Com<IDirect3DStateBlock9>                  m_state;
     std::map<TextureKey, Com<IDirect3DTexture9>> m_textures;
     std::vector<DeviceVertex>                  m_vertices;
 
     IDirect3DTexture9* texture(const VrImage& image, VrPaintImageUse use);
+
+    bool captureState();
+
+    void saveTargets(SavedTargets& saved, IDirect3DSurface9* target);
+
+    void restoreTargets(SavedTargets& saved);
 
     void setStates(UINT width, UINT height);
 

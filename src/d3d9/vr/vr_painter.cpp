@@ -39,11 +39,6 @@ namespace dxvk {
     if (!target)
       return false;
 
-    if (m_state == nullptr && FAILED(m_device->CreateStateBlock(D3DSBT_ALL, &m_state))) {
-      Logger::err("VR: Failed to create the state block of the panels' drawing");
-      return false;
-    }
-
     Com<IDirect3DSurface9> surface;
 
     if (FAILED(target->GetSurfaceLevel(0, &surface)))
@@ -69,23 +64,11 @@ namespace dxvk {
       m_vertices[i] = { vertex.x - 0.5f, vertex.y - 0.5f, 0.0f, 1.0f, vertex.colour, vertex.u, vertex.v };
     }
 
-    m_state->Capture();
+    if (!captureState())
+      return false;
 
-    // Render targets and the depth buffer are not part of a state block
-    Com<IDirect3DSurface9> targets[RenderTargetCount];
-    Com<IDirect3DSurface9> depth;
-
-    for (DWORD i = 0; i < RenderTargetCount; i++)
-      m_device->GetRenderTarget(i, &targets[i]);
-
-    m_device->GetDepthStencilSurface(&depth);
-
-    m_device->SetRenderTarget(0, surface.ptr());
-
-    for (DWORD i = 1; i < RenderTargetCount; i++)
-      m_device->SetRenderTarget(i, nullptr);
-
-    m_device->SetDepthStencilSurface(nullptr);
+    SavedTargets saved;
+    saveTargets(saved, surface.ptr());
 
     setStates(desc.Width, desc.Height);
 
@@ -110,18 +93,93 @@ namespace dxvk {
       m_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, batch.count / 3, &m_vertices[batch.first], sizeof(DeviceVertex));
     }
 
-    for (DWORD i = 0; i < RenderTargetCount; i++) {
-      if (i == 0 && targets[i] == nullptr)
-        continue;
+    restoreTargets(saved);
+    return true;
+  }
 
-      m_device->SetRenderTarget(i, targets[i].ptr());
+
+  bool VrPainter::drawFan(
+          IDirect3DSurface9* target,
+          IDirect3DTexture9* image,
+    const float*             projection,
+    const void*              vertices,
+          UINT               count,
+          UINT               stride) {
+    D3DSURFACE_DESC desc = { };
+
+    if (count < 3 || FAILED(target->GetDesc(&desc)) || !captureState())
+      return false;
+
+    SavedTargets saved;
+    saveTargets(saved, target);
+
+    setStates(desc.Width, desc.Height);
+    setBlend(VrPaintBlend::Copy);
+
+    D3DMATRIX identity = { };
+    identity.m[0][0] = identity.m[1][1] = identity.m[2][2] = identity.m[3][3] = 1.0f;
+
+    m_device->SetTransform(D3DTS_WORLD, &identity);
+    m_device->SetTransform(D3DTS_VIEW, &identity);
+    m_device->SetTransform(D3DTS_PROJECTION, reinterpret_cast<const D3DMATRIX*>(projection));
+
+    m_device->SetFVF(D3DFVF_XYZ | D3DFVF_TEX1);
+    m_device->SetRenderState(D3DRS_VERTEXBLEND, D3DVBF_DISABLE);
+    m_device->SetRenderState(D3DRS_INDEXEDVERTEXBLENDENABLE, FALSE);
+    m_device->SetTexture(0, image);
+    m_device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+    m_device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+    m_device->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+    m_device->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_BORDER);
+    m_device->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_BORDER);
+    m_device->SetSamplerState(0, D3DSAMP_BORDERCOLOR, D3DCOLOR_ARGB(255, 0, 0, 0));
+
+    m_device->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, count - 2, vertices, stride);
+
+    restoreTargets(saved);
+    return true;
+  }
+
+
+  bool VrPainter::captureState() {
+    if (m_state == nullptr && FAILED(m_device->CreateStateBlock(D3DSBT_ALL, &m_state))) {
+      Logger::err("VR: Failed to create the state block of the panels' drawing");
+      return false;
     }
 
-    m_device->SetDepthStencilSurface(depth.ptr());
+    m_state->Capture();
+    return true;
+  }
+
+
+  void VrPainter::saveTargets(SavedTargets& saved, IDirect3DSurface9* target) {
+    // Render targets and the depth buffer are not part of a state block
+    for (DWORD i = 0; i < RenderTargetCount; i++)
+      m_device->GetRenderTarget(i, &saved.colour[i]);
+
+    m_device->GetDepthStencilSurface(&saved.depth);
+
+    m_device->SetRenderTarget(0, target);
+
+    for (DWORD i = 1; i < RenderTargetCount; i++)
+      m_device->SetRenderTarget(i, nullptr);
+
+    m_device->SetDepthStencilSurface(nullptr);
+  }
+
+
+  void VrPainter::restoreTargets(SavedTargets& saved) {
+    for (DWORD i = 0; i < RenderTargetCount; i++) {
+      if (i == 0 && saved.colour[i] == nullptr)
+        continue;
+
+      m_device->SetRenderTarget(i, saved.colour[i].ptr());
+    }
+
+    m_device->SetDepthStencilSurface(saved.depth.ptr());
 
     // Last: setting the render target also set the viewport
     m_state->Apply();
-    return true;
   }
 
 
