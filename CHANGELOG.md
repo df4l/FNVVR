@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Performance
+
+- **Game settings for VR**: with a headset, the mod replaces some game settings in memory at startup, with the values of the
+  Viva New Vegas guide: no full scene water reflections, threaded audio with a larger cache, background lip files, faster
+  cell unloading, the 3.0 grass vertex shader, HDR on, and the Pip-Boy light fade. Actor shadows, grass distance and
+  texture quality stay the player's choice. `d3d9.vrForceGameSettings = False` turns this off.
+
 ### Fixes
 
 - **Crash when opening a menu**: a menu tile without a name no longer crashes the game when the laser pointer takes over

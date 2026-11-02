@@ -19,6 +19,7 @@
 #include "vr_emulator_keyboard.h"
 #include "vr_extension_provider.h"
 #include "vr_game_console.h"
+#include "vr_game_settings.h"
 #include "vr_game_space.h"
 #include "vr_gamepad_head.h"
 #include "vr_gamepad_hook.h"
@@ -163,6 +164,8 @@ namespace dxvk {
     turn.smooth      = options.smoothTurn;
     turn.smoothSpeed = options.smoothTurnSpeed;
 
+    bool emulated = dynamic_cast<VrEmulatorBackend*>(backend.get()) != nullptr;
+
     if (auto* emulator = dynamic_cast<VrEmulatorBackend*>(backend.get())) {
       VrEmulatorKeyboard keyboard;
       emulator->setInputSource([keyboard] {
@@ -228,6 +231,7 @@ namespace dxvk {
     g_vrSystem->m_handPush = config.getOption<bool>("d3d9.vrHandPush", true);
     g_vrSystem->m_sneakConfig.physical = options.physicalSneak;
     g_vrSystem->m_sneakConfig.crouch   = crouch;
+    g_vrSystem->m_forceGameSettings = !emulated && config.getOption<bool>("d3d9.vrForceGameSettings", true);
     DxvkInstance::registerExtensionProvider(g_vrSystem->m_extensionProvider.get());
 
     VrOptionsMenu::install(options, [] (const VrOptions& changed) {
@@ -243,8 +247,15 @@ namespace dxvk {
 
 
   void VrSystem::onInterfaceCreated() {
-    if (g_vrSystem)
-      g_vrSystem->chooseResolution();
+    if (!g_vrSystem)
+      return;
+
+    g_vrSystem->chooseResolution();
+
+    if (g_vrSystem->m_forceGameSettings) {
+      g_vrSystem->m_forceGameSettings = false;
+      VrGameSettings::apply();
+    }
   }
 
 

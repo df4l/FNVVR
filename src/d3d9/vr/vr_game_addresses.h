@@ -726,6 +726,28 @@ namespace dxvk {
     constexpr uintptr_t SettingSizeWidth      = 0x011C73DC;
     constexpr uintptr_t SettingSizeHeight     = 0x011C718C;
     constexpr uintptr_t SettingFullScreen     = 0x011C77B4;
+    /** Name of a setting, "name:section": a pointer in the Setting object */
+    constexpr uintptr_t SettingName           = 0x8;
+
+    /**
+     * Settings the VR layer replaces on the first D3D9 interface, see
+     * findings/game-settings.md. WinMain has read the INI files by then; the
+     * audio setup (TESMain::TESMain), TESRenderer::Init and the run-time
+     * readers come after it.
+     */
+    constexpr uintptr_t SettingForceHighDetailReflections = 0x011C7C00;
+    constexpr uintptr_t SettingMultiThreadAudio           = 0x011F6DFC;
+    constexpr uintptr_t SettingUseAudioDebugInformation   = 0x011F6E5C;
+    constexpr uintptr_t SettingAudioCacheSize             = 0x011F6EC8;
+    constexpr uintptr_t SettingMaxSizeForCachedSound      = 0x011F6ED4;
+    constexpr uintptr_t SettingSelectivePurgeOnFastTravel = 0x011C3C10;
+    constexpr uintptr_t SettingBackgroundLoadLipFiles     = 0x011E05EC;
+    constexpr uintptr_t SettingPreemptivelyUnloadCells    = 0x011C3D40;
+    constexpr uintptr_t Setting30GrassVS                  = 0x011C7308;
+    constexpr uintptr_t SettingDoHighDynamicRange         = 0x011C76C0;
+    constexpr uintptr_t SettingUseBlurShader              = 0x011C7768;
+    constexpr uintptr_t SettingLightEffectFadeDuration    = 0x011DB2BC;
+
     constexpr uintptr_t RendererSizeReadSite  = 0x004DA730;
     constexpr uint8_t   RendererSizeRead[] = {
       0xB9, 0xDC, 0x73, 0x1C, 0x01, 0xE8, 0xB6, 0x5C, 0xF7, 0xFF, 0xA3, 0x7C, 0x94, 0x18, 0x01,

@@ -112,6 +112,7 @@ namespace dxvk {
     VrGameResolution                     m_resolution;
     bool                                 m_headsetResolution;
     bool                                 m_resolutionChosen = false;
+    bool                                 m_forceGameSettings = false;
     bool                                 m_hasSession = false;
 
     void chooseResolution();
