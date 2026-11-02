@@ -43,7 +43,12 @@
         },
         {
           "path": "/user/hand/right/input/trigger",
-          "mode": "trigger",
+          "mode": "button",
+          "parameters": {
+            "click_activate_threshold": "0.55",
+            "click_deactivate_threshold": "0.4",
+            "haptic_amplitude": "0"
+          },
           "inputs": {
             "click": {
               "output": "/actions/game/in/attack"
@@ -52,7 +57,12 @@
         },
         {
           "path": "/user/hand/left/input/trigger",
-          "mode": "trigger",
+          "mode": "button",
+          "parameters": {
+            "click_activate_threshold": "0.55",
+            "click_deactivate_threshold": "0.4",
+            "haptic_amplitude": "0"
+          },
           "inputs": {
             "click": {
               "output": "/actions/game/in/magazine"
@@ -61,7 +71,12 @@
         },
         {
           "path": "/user/hand/right/input/grip",
-          "mode": "trigger",
+          "mode": "button",
+          "parameters": {
+            "click_activate_threshold": "0.4",
+            "click_deactivate_threshold": "0.15",
+            "haptic_amplitude": "0"
+          },
           "inputs": {
             "click": {
               "output": "/actions/game/in/grab"
@@ -70,7 +85,12 @@
         },
         {
           "path": "/user/hand/left/input/grip",
-          "mode": "trigger",
+          "mode": "button",
+          "parameters": {
+            "click_activate_threshold": "0.4",
+            "click_deactivate_threshold": "0.15",
+            "haptic_amplitude": "0"
+          },
           "inputs": {
             "click": {
               "output": "/actions/game/in/two_hand_grip"
@@ -183,7 +203,12 @@
         },
         {
           "path": "/user/hand/left/input/trigger",
-          "mode": "trigger",
+          "mode": "button",
+          "parameters": {
+            "click_activate_threshold": "0.55",
+            "click_deactivate_threshold": "0.4",
+            "haptic_amplitude": "0"
+          },
           "inputs": {
             "click": {
               "output": "/actions/menu/in/left_trigger"
@@ -192,7 +217,12 @@
         },
         {
           "path": "/user/hand/right/input/trigger",
-          "mode": "trigger",
+          "mode": "button",
+          "parameters": {
+            "click_activate_threshold": "0.55",
+            "click_deactivate_threshold": "0.4",
+            "haptic_amplitude": "0"
+          },
           "inputs": {
             "click": {
               "output": "/actions/menu/in/right_trigger"
@@ -201,7 +231,12 @@
         },
         {
           "path": "/user/hand/left/input/grip",
-          "mode": "trigger",
+          "mode": "button",
+          "parameters": {
+            "click_activate_threshold": "0.4",
+            "click_deactivate_threshold": "0.15",
+            "haptic_amplitude": "0"
+          },
           "inputs": {
             "click": {
               "output": "/actions/menu/in/previous"
@@ -210,7 +245,12 @@
         },
         {
           "path": "/user/hand/right/input/grip",
-          "mode": "trigger",
+          "mode": "button",
+          "parameters": {
+            "click_activate_threshold": "0.4",
+            "click_deactivate_threshold": "0.15",
+            "haptic_amplitude": "0"
+          },
           "inputs": {
             "click": {
               "output": "/actions/menu/in/next"
