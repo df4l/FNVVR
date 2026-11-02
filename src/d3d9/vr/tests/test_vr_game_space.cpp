@@ -393,6 +393,24 @@ TEST_CASE(scope_fov_keeps_the_weapons_view_at_four_thirds) {
 }
 
 
+TEST_CASE(eye_inset_stays_at_the_same_direction_in_off_centre_views) {
+  VrFov left  = { -std::atan(1.3f), std::atan(1.0f), std::atan(1.1f), -std::atan(1.1f) };
+  VrFov right = { -std::atan(1.0f), std::atan(1.3f), std::atan(1.1f), -std::atan(1.1f) };
+
+  VrEyeInset inLeft  = vrComputeEyeInset(left,  0.0f, -0.25f, 0.6f, 0.45f);
+  VrEyeInset inRight = vrComputeEyeInset(right, 0.0f, -0.25f, 0.6f, 0.45f);
+
+  // Straight ahead is 1.3 / 2.3 across the left eye's image and 1 / 2.3
+  // across the right eye's, so the picture lies further right in the left eye
+  CHECK(std::abs(0.5f * (inLeft.left + inLeft.right) - 1.3f / 2.3f) < 1e-5f);
+  CHECK(std::abs(0.5f * (inRight.left + inRight.right) - 1.0f / 2.3f) < 1e-5f);
+
+  CHECK(std::abs((inLeft.right - inLeft.left) - 0.6f / 2.3f) < 1e-5f);
+  CHECK(std::abs(inLeft.top - inRight.top) < 1e-5f);
+  CHECK(std::abs(0.5f * (inLeft.top + inLeft.bottom) - 1.35f / 2.2f) < 1e-5f);
+}
+
+
 TEST_CASE(scope_fov_of_a_square_image_keeps_its_height) {
   VrFov wide   = vrComputeScopeFov(38.0f, 4.0f / 3.0f);
   VrFov square = vrComputeScopeFov(38.0f, 1.0f);

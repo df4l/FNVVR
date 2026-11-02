@@ -135,6 +135,24 @@ namespace dxvk {
   }
 
 
+  VrEyeInset vrComputeEyeInset(const VrFov& fov, float centreX, float centreY, float width, float height) {
+    float tanLeft  = std::tan(fov.angleLeft);
+    float tanRight = std::tan(fov.angleRight);
+    float tanUp    = std::tan(fov.angleUp);
+    float tanDown  = std::tan(fov.angleDown);
+
+    float spanX = tanRight - tanLeft;
+    float spanY = tanUp - tanDown;
+
+    VrEyeInset inset;
+    inset.left   = (centreX - 0.5f * width - tanLeft) / spanX;
+    inset.right  = (centreX + 0.5f * width - tanLeft) / spanX;
+    inset.top    = (tanUp - centreY - 0.5f * height) / spanY;
+    inset.bottom = (tanUp - centreY + 0.5f * height) / spanY;
+    return inset;
+  }
+
+
   VrGameCameraPose vrComputeMenuSceneCameraPose(
     const VrPose&           anchor,
     const VrPose&           eye,

@@ -16,7 +16,6 @@ namespace dxvk {
     using ResetBoundsFn = void (__fastcall*)(void* tes, void* unused, uint32_t landscape, uint32_t rooms);
     using VisibilityFn  = void (__fastcall*)(void* object, void* unused, void* camera);
     using RendererLockFn = void (__fastcall*)(void* renderer, void* unused);
-    using TileLockFn    = void (__cdecl*)();
     using BorrowFn      = void* (__fastcall*)(void* manager, void* unused, void* renderer,
       uint32_t type, uint32_t a, uint32_t b, uint32_t c);
     using ReturnFn      = void (__fastcall*)(void* manager, void* unused, void* texture);
@@ -48,8 +47,6 @@ namespace dxvk {
       && VrGameMemory::callsTo(VrGame::MenuBackgroundReturnCall, VrGame::ReturnRenderedTexture)
       && VrGameMemory::callsTo(VrGame::MenuBackgroundLockCall, VrGame::RendererLock)
       && VrGameMemory::callsTo(VrGame::MenuBackgroundUnlockCall, VrGame::RendererUnlock)
-      && VrGameMemory::callsTo(VrGame::MenuBackgroundTileLockCall, VrGame::TileLock)
-      && VrGameMemory::callsTo(VrGame::MenuBackgroundTileUnlockCall, VrGame::TileUnlock)
       && VrGameMemory::callsTo(VrGame::ResetMultiBoundsCallSite, VrGame::ResetMultiBounds);
 
     if (!found) {
@@ -112,8 +109,10 @@ namespace dxvk {
 
     auto culled = Clock::now();
 
-    // As TESMain::RenderMenuBackground does. Marking the render as the menu
-    // background keeps the interface out of it.
+    // As TESMain::RenderMenuBackground does, except for the lock on the tiles:
+    // the game only holds it over a render while its AI threads are stopped,
+    // and they run here. Marking the render as the menu background keeps the
+    // interface out of it.
     void* renderer = gameValue<void*>(VrGame::Renderer);
     void* manager  = gameValue<void*>(VrGame::TextureManager);
 
@@ -124,7 +123,6 @@ namespace dxvk {
     field<uint8_t>(main, VrGame::MainRenderingMenuBackground) = 1;
 
     reinterpret_cast<RendererLockFn>(VrGame::RendererLock)(renderer, nullptr);
-    reinterpret_cast<TileLockFn>(VrGame::TileLock)();
 
     void* destination = reinterpret_cast<BorrowFn>(VrGame::BorrowRenderedTexture)(
       manager, nullptr, renderer, VrGame::TextureMainMenuBackground, 0, 0, 0);
@@ -137,7 +135,6 @@ namespace dxvk {
       reinterpret_cast<ReturnFn>(VrGame::ReturnRenderedTexture)(manager, nullptr, destination);
     }
 
-    reinterpret_cast<TileLockFn>(VrGame::TileUnlock)();
     reinterpret_cast<RendererLockFn>(VrGame::RendererUnlock)(renderer, nullptr);
 
     field<uint8_t>(main, VrGame::MainRenderingMenuBackground) = savedMenuBgFlag;

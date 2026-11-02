@@ -171,6 +171,31 @@ namespace dxvk {
   VrFov vrComputeScopeFov(float sightFovDegrees, float aspect);
 
   /**
+   * \brief Part of an eye's image, from 0 to 1 and from its top left corner
+   */
+  struct VrEyeInset {
+    float left;
+    float top;
+    float right;
+    float bottom;
+  };
+
+  /**
+   * \brief Where a flat picture at infinity falls in an eye's image
+   *
+   * Both eyes look at it in parallel when given the same direction, whatever
+   * their fields of view. Directions and sizes are tangents of the angle from
+   * straight ahead, +X right and +Y up.
+   *
+   * \param [in] fov The eye's field of view
+   * \param [in] centreX Direction of the picture's centre, to the right
+   * \param [in] centreY Direction of the picture's centre, up
+   * \param [in] width Width of the picture
+   * \param [in] height Height of the picture
+   */
+  VrEyeInset vrComputeEyeInset(const VrFov& fov, float centreX, float centreY, float width, float height);
+
+  /**
    * \brief Places the camera of a menu's own scene for a VR eye
    *
    * Rendered menus, such as the game's terminals, draw a model with a

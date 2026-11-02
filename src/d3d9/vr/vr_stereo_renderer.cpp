@@ -928,7 +928,9 @@ namespace dxvk {
   void VrStereoRenderer::renderScope(const VrInputState& input, VrGameStateKind state, void* main) {
     m_scopeDrawn = false;
 
-    if (!m_scopeRender || state != VrGameStateKind::InGame)
+    // The game's menu mode follows the Pip-Boy's state by a frame
+    if (!m_scopeRender || state != VrGameStateKind::InGame
+     || m_pipBoyControl.state() != VrPipBoyState::Closed)
       return;
 
     const VrControllerState& right = input.controllers[uint32_t(VrHand::Right)];
@@ -1830,13 +1832,17 @@ namespace dxvk {
 
       if (SUCCEEDED(m_eyeTextures[m_eye]->GetSurfaceLevel(0, &eyeSurface))
        && SUCCEEDED(eyeSurface->GetDesc(&eyeDesc))) {
-        // Below the centre of the view, where both eyes see it
-        LONG width  = LONG(eyeDesc.Width) * 3 / 10;
-        LONG height = LONG(float(width) / m_scopeRender->aspect());
-        LONG left   = (LONG(eyeDesc.Width) - width) / 2;
-        LONG top    = LONG(eyeDesc.Height) * 6 / 10;
+        // In the same direction for both eyes, below straight ahead: the
+        // middle of an eye's image is not, its field of view being off centre
+        constexpr float InsetDown  = 0.25f;
+        constexpr float InsetWidth = 0.6f;
 
-        m_scopeRender->drawInto(eyeSurface.ptr(), RECT { left, top, left + width, top + height });
+        VrEyeInset inset = vrComputeEyeInset(m_eyeView->fov, 0.0f, -InsetDown,
+          InsetWidth, InsetWidth / m_scopeRender->aspect());
+
+        m_scopeRender->drawInto(eyeSurface.ptr(), RECT {
+          LONG(inset.left   * float(eyeDesc.Width)),  LONG(inset.top    * float(eyeDesc.Height)),
+          LONG(inset.right  * float(eyeDesc.Width)),  LONG(inset.bottom * float(eyeDesc.Height)) });
       }
     }
 
