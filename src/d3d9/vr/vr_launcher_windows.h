@@ -2,11 +2,54 @@
 
 #include <windows.h>
 
+#include <functional>
 #include <vector>
 
 #include "vr_launcher_input.h"
 
 namespace dxvk {
+
+  /**
+   * \brief Runs work on the launcher's thread
+   *
+   * The launcher's loop sleeps 10 ms each time it has looked at its messages,
+   * so a message sent from another thread takes that long to get an answer.
+   * Sent one by one, the messages of a single picture of the main window took
+   * 235 ms. A hook on the launcher's thread runs the work as one message, on
+   * that thread, where the messages it sends are plain calls.
+   */
+  class VrLauncherThreadCall {
+
+  public:
+
+    /**
+     * \brief Sets the hook
+     *
+     * Must be called on the thread that owns the launcher's windows. Without
+     * the hook, \ref run does the work on the caller's thread: slow, but it
+     * works.
+     */
+    static void install();
+
+    /**
+     * \param [in] thread Thread that owns the launcher's windows
+     */
+    explicit VrLauncherThreadCall(DWORD thread);
+
+    /**
+     * \brief Does the work and returns when it is done
+     *
+     * \param [in] work What to do
+     * \returns \c false if the launcher was too busy, and nothing was done
+     */
+    bool run(const std::function<void()>& work);
+
+  private:
+
+    DWORD m_thread;
+
+  };
+
 
   /**
    * \brief Takes pictures of the launcher's windows
@@ -16,8 +59,9 @@ namespace dxvk {
    * at a time, because the child windows, of which the launcher's main
    * dialog is entirely made, cannot be relied on with WM_PRINT under Wine.
    *
-   * Used from a thread of its own: the windows draw on the launcher's
-   * thread, and a window that does not answer in time skips the picture.
+   * To be used through \ref VrLauncherThreadCall: from another thread each
+   * of the many messages waits for the launcher's loop. A window that does
+   * not answer in time skips the picture.
    */
   class VrLauncherCapture {
 
@@ -105,7 +149,8 @@ namespace dxvk {
    * The events are posted as the real mouse's would be: to the window that
    * holds the mouse capture, else to the deepest window under the point.
    * The real cursor does not move, and the window may be anywhere on the
-   * desktop or covered.
+   * desktop or covered. To be used through \ref VrLauncherThreadCall: finding
+   * the window asks the windows under the point.
    */
   class VrLauncherMouseRouter {
 

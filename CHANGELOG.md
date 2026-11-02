@@ -9,7 +9,7 @@
   the flat copy of the window that SteamVR shows for a non-VR application. The launcher stays usable with the mouse on
   the desktop, and stays there alone when no VR session can start. `d3d9.vrLauncherOverlay = False` turns this off. A
   `dxvk.conf` from an earlier version that holds `d3d9.vrBackend = off` under `[FalloutNVLauncher.exe]` keeps the flat
-  launcher: remove that section.
+  launcher: remove that section. The panel and the lasers follow the headset's rate.
 - **No more giant window**: with a headset, the game's window is hidden from the desktop, and the game no longer copies
   each frame to it. The game also keeps running when another window takes the focus. `d3d9.vrHideGameWindow = False`
   brings the window back.
@@ -19,7 +19,8 @@
 - **Game settings for VR**: with a headset, the mod replaces some game settings in memory at startup, with the values of the
   Viva New Vegas guide: no full scene water reflections, threaded audio with a larger cache, background lip files, faster
   cell unloading, the 3.0 grass vertex shader, HDR on, and the Pip-Boy light fade. Actor shadows, grass distance and
-  texture quality stay the player's choice. `d3d9.vrForceGameSettings = False` turns this off.
+  texture quality stay the player's choice. `d3d9.vrForceGameSettings = False` turns this off. The game's own bug that
+  freezes it on exit with threaded audio is fixed along with it.
 
 ### Fixes
 

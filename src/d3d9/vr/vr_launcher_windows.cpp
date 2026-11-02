@@ -1,8 +1,10 @@
 #include <algorithm>
 #include <cstring>
+#include <mutex>
 #include <string>
 
 #include "../../util/log/log.h"
+#include "../../util/thread.h"
 #include "../../util/util_string.h"
 
 #include "vr_launcher_windows.h"
@@ -131,12 +133,77 @@ namespace dxvk {
     }
 
 
+    BOOL CALLBACK takeFirstWindow(HWND window, LPARAM result) {
+      *reinterpret_cast<HWND*>(result) = window;
+      return FALSE;
+    }
+
+
+    // A hook procedure takes no argument of ours, so this has to be global.
+    // The work is only reachable under the lock, so that a message delivered
+    // after its sender gave up finds nothing to do.
+    HHOOK                       g_threadCallHook    = nullptr;
+    UINT                        g_threadCallMessage = 0;
+    dxvk::mutex                 g_threadCallLock;
+    const std::function<void()>* g_threadCallWork   = nullptr;
+
+    LRESULT CALLBACK threadCallHook(int code, WPARAM wparam, LPARAM lparam) {
+      if (code == HC_ACTION && reinterpret_cast<const CWPSTRUCT*>(lparam)->message == g_threadCallMessage) {
+        std::lock_guard<dxvk::mutex> lock(g_threadCallLock);
+
+        if (g_threadCallWork) {
+          (*g_threadCallWork)();
+          g_threadCallWork = nullptr;
+        }
+      }
+
+      return CallNextHookEx(nullptr, code, wparam, lparam);
+    }
+
+
     std::string describe(HWND window) {
       WCHAR name[64] = { };
       GetClassNameW(window, name, 64);
       return str::format(str::fromws(name), " ", GetDlgCtrlID(window));
     }
 
+  }
+
+
+  void VrLauncherThreadCall::install() {
+    g_threadCallMessage = RegisterWindowMessageW(L"FNVVR.LauncherThreadCall");
+
+    if (g_threadCallMessage)
+      g_threadCallHook = SetWindowsHookExW(WH_CALLWNDPROC, threadCallHook, nullptr, GetCurrentThreadId());
+
+    if (!g_threadCallHook)
+      Logger::warn("VR: Launcher: The hook on its thread could not be set, its panel will be slow");
+  }
+
+
+  VrLauncherThreadCall::VrLauncherThreadCall(DWORD thread)
+  : m_thread(thread) { }
+
+
+  bool VrLauncherThreadCall::run(const std::function<void()>& work) {
+    HWND window = nullptr;
+    EnumThreadWindows(m_thread, takeFirstWindow, reinterpret_cast<LPARAM>(&window));
+
+    if (!g_threadCallHook || !window) {
+      work();
+      return true;
+    }
+
+    { std::lock_guard<dxvk::mutex> lock(g_threadCallLock);
+      g_threadCallWork = &work;
+    }
+
+    ask(window, g_threadCallMessage, 0, 0);
+
+    std::lock_guard<dxvk::mutex> lock(g_threadCallLock);
+    bool done = !g_threadCallWork;
+    g_threadCallWork = nullptr;
+    return done;
   }
 
 
