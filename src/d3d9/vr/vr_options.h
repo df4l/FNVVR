@@ -26,6 +26,8 @@ namespace dxvk {
     bool  manualReload    = true;
     /// Sneak by crouching instead of with the sneak button, see findings/sneak.md
     bool  physicalSneak   = false;
+    /// Scopes show the world on a lens, see findings/optics.md
+    bool  scopeLens       = true;
   };
 
   /// Slowest smooth turning speed of the options page, in degrees per second
