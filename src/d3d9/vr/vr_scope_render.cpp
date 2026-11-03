@@ -9,7 +9,6 @@
 #include "vr_game_file.h"
 #include "vr_game_memory.h"
 #include "vr_scope_render.h"
-#include "vr_weapon_drawn.h"
 
 namespace dxvk {
 
@@ -36,6 +35,8 @@ namespace dxvk {
     }
 
     constexpr uint32_t WindowFrames = 900;
+
+    constexpr char ReplacementReticle[] = "textures\\weapons\\scope\\duplexscope_o.dds";
 
     // BSRenderedTexture -> NiRenderedTexture -> its renderer data -> the device's texture
     bool renderedTextureSurface(void* rendered, Com<IDirect3DSurface9>& surface) {
@@ -73,34 +74,12 @@ namespace dxvk {
       && VrGameMemory::callsTo(VrGame::ResetMultiBoundsCallSite, VrGame::ResetMultiBounds);
 
     if (!found) {
-      Logger::warn("VR: The game's render to a texture was not found, the scope test is off");
+      Logger::warn("VR: The game's render to a texture was not found, scopes show a dark glass");
       return nullptr;
     }
 
-    Logger::info("VR: Scope test: a scope the mod knows shows the world on a lens");
+    Logger::info("VR: Scopes show the world on a lens");
     return std::unique_ptr<VrScopeRender>(new VrScopeRender(device, resolution));
-  }
-
-
-  float VrScopeRender::weaponSightFov() {
-    int32_t type = -1;
-    const uint8_t* weapon = VrWeaponDrawn::equippedWeapon(type);
-
-    if (!weapon)
-      return 0.0f;
-
-    float fov = *reinterpret_cast<const float*>(weapon + VrGame::WeaponSightFov);
-    return fov > 0.0f ? fov : 0.0f;
-  }
-
-
-  const char* VrScopeRender::weaponScopeModel() {
-    int32_t type = -1;
-    const uint8_t* weapon = VrWeaponDrawn::equippedWeapon(type);
-
-    return weapon
-      ? *reinterpret_cast<const char* const*>(weapon + VrGame::WeaponScopeModelPath)
-      : nullptr;
   }
 
 
@@ -130,10 +109,9 @@ namespace dxvk {
 
     std::string texture = vrFindScopeReticleTexture(data.data(), data.size());
 
-    if (texture.empty()) {
-      Logger::info(str::format("VR: The scope model '", model, "' names no reticle"));
-      return image;
-    }
+    // Its crosshair is geometry (scope01.nif): one of the game's reticles stands in
+    if (texture.empty())
+      texture = ReplacementReticle;
 
     if (!VrGameFile::read(("Data\\" + texture).c_str(), VrGame::ArchiveTextures, data)
      || !vrDecodeDds(data.data(), data.size(), image)) {
@@ -147,7 +125,7 @@ namespace dxvk {
   }
 
 
-  bool VrScopeRender::prepareView(float magnification, VrFov& fov) {
+  bool VrScopeRender::prepareView(float magnification, float apparentTangent, VrFov& fov) {
     // The game's image has the size of its window
     Com<IDirect3DSurface9> target;
     D3DSURFACE_DESC desc = { };
@@ -159,15 +137,17 @@ namespace dxvk {
     m_targetWidth  = desc.Width;
     m_targetHeight = desc.Height;
     m_area = vrComputeScopeArea(desc.Width, desc.Height, m_resolution);
-    fov    = vrComputeScopeRenderFov(magnification, desc.Width, desc.Height, m_area);
+    fov    = vrComputeScopeRenderFov(magnification, apparentTangent, desc.Width, desc.Height, m_area);
     return true;
   }
 
 
   bool VrScopeRender::render(void* main) {
+    m_imageReady = false;
+
     if (gameValue<uint8_t>(VrGame::MultiThreadedRendering)) {
       if (!m_loggedThreads) {
-        Logger::warn("VR: Scope test: not drawn while bMTRendering is set");
+        Logger::warn("VR: Scopes show a dark glass while bMTRendering is set");
         m_loggedThreads = true;
       }
 
@@ -233,7 +213,7 @@ namespace dxvk {
     m_windowDraw += std::chrono::duration<double, std::milli>(end - culled).count();
 
     if (++m_windowFrames == WindowFrames) {
-      Logger::info(str::format("VR: Scope test over ", WindowFrames, " frames: culling ",
+      Logger::info(str::format("VR: Scope image over ", WindowFrames, " frames: culling ",
         m_windowCull / WindowFrames, " ms, drawing ", m_windowDraw / WindowFrames, " ms"));
       m_windowFrames = 0;
       m_windowCull   = 0.0;
@@ -246,19 +226,131 @@ namespace dxvk {
 
 
   void VrScopeRender::drawLens(
-          IDirect3DSurface9*  target,
     const VrScopeLens&        lens,
     const VrGameCameraPose&   eye,
-    const VrFov&              eyeFov) {
-    VrScopeLensDisc disc;
+    const VrFov&              eyeFov,
+          float               nearDistance,
+          float               farDistance) {
+    m_lensDrawn = false;
 
-    if (!m_imageReady || !vrComputeScopeLensDisc(lens, eye, disc))
+    VrScopeLensMesh mesh;
+
+    if (!vrComputeScopeLensMesh(lens, eye, mesh)
+     || !vrComputeScopeLensBounds(mesh, eyeFov, m_lensBounds))
       return;
 
-    std::array<float, 16> projection = vrComputeEyeProjection(eyeFov);
+    Com<IDirect3DSurface9> depth;
+    D3DSURFACE_DESC depthDesc = { };
 
-    m_painter.drawFan(target, m_image.ptr(), m_reticle, projection.data(),
-      disc.data(), UINT(disc.size()), sizeof(VrScopeLensVertex));
+    if (FAILED(m_device->GetDepthStencilSurface(&depth)) || depth == nullptr || FAILED(depth->GetDesc(&depthDesc))) {
+      if (!m_loggedLensDepth) {
+        Logger::warn("VR: The first-person model was drawn without a depth buffer, the lens is not drawn");
+        m_loggedLensDepth = true;
+      }
+
+      return;
+    }
+
+    if (!prepareLensTarget(depthDesc))
+      return;
+
+    std::array<float, 16> projection = vrComputeEyeProjection(eyeFov, nearDistance, farDistance);
+
+    // The depth as the game drew with it: Do_SetCameraData may have moved its
+    // near plane, which changes this row, and the device keeps the matrix
+    D3DMATRIX gameProjection = { };
+
+    if (SUCCEEDED(m_device->GetTransform(D3DTS_PROJECTION, &gameProjection))
+     && gameProjection._34 == 1.0f && gameProjection._44 == 0.0f) {
+      projection[10] = gameProjection._33;
+      projection[14] = gameProjection._43;
+    }
+
+    if (!m_loggedLensProjection) {
+      Logger::info(str::format("VR: The scope's lens is tested with the depth ", projection[10], " + ", projection[14],
+        " / z, the camera's near ", nearDistance, " far ", farDistance));
+      m_loggedLensProjection = true;
+    }
+
+    VrPainter::LensDrawing drawing = { };
+    drawing.target       = m_lensSurface.ptr();
+    drawing.depth        = depth.ptr();
+    drawing.image        = m_imageReady ? m_image.ptr() : nullptr;
+    drawing.overlay      = m_reticle;
+    drawing.projection   = projection.data();
+    drawing.vertices     = mesh.data();
+    drawing.vertexCount  = VrScopeLensVertexCount;
+    drawing.vertexStride = sizeof(VrScopeLensVertex);
+    drawing.indices      = vrScopeLensIndices().data();
+    drawing.triangles    = VrScopeLensTriangles;
+    drawing.amplified    = lens.nightVision;
+
+    if (!m_painter.drawLens(drawing))
+      return;
+
+    // A surface of its own if multisampled
+    if (m_lensSamples != D3DMULTISAMPLE_NONE) {
+      Com<IDirect3DSurface9> resolved;
+
+      if (FAILED(m_lensImage->GetSurfaceLevel(0, &resolved))
+       || FAILED(m_device->StretchRect(m_lensSurface.ptr(), nullptr, resolved.ptr(), nullptr, D3DTEXF_NONE)))
+        return;
+    }
+
+    m_lensDrawn = true;
+  }
+
+
+  void VrScopeRender::presentLens(IDirect3DSurface9* target) {
+    if (!m_lensDrawn)
+      return;
+
+    m_painter.composite(target, m_lensImage.ptr(),
+      m_lensBounds.left, m_lensBounds.top, m_lensBounds.right, m_lensBounds.bottom);
+
+    m_lensDrawn = false;
+  }
+
+
+  bool VrScopeRender::prepareLensTarget(const D3DSURFACE_DESC& depth) {
+    if (m_lensSurface != nullptr) {
+      D3DSURFACE_DESC current = { };
+      m_lensSurface->GetDesc(&current);
+
+      if (current.Width == depth.Width && current.Height == depth.Height && m_lensSamples == depth.MultiSampleType)
+        return true;
+
+      m_lensSurface = nullptr;
+      m_lensImage   = nullptr;
+    }
+
+    m_lensSamples = depth.MultiSampleType;
+
+    bool made = SUCCEEDED(m_device->CreateTexture(depth.Width, depth.Height, 1,
+      D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &m_lensImage, nullptr));
+
+    if (made) {
+      made = depth.MultiSampleType == D3DMULTISAMPLE_NONE
+        ? SUCCEEDED(m_lensImage->GetSurfaceLevel(0, &m_lensSurface))
+        : SUCCEEDED(m_device->CreateRenderTarget(depth.Width, depth.Height, D3DFMT_A8R8G8B8,
+            depth.MultiSampleType, depth.MultiSampleQuality, FALSE, &m_lensSurface, nullptr));
+    }
+
+    if (!made) {
+      m_lensImage   = nullptr;
+      m_lensSurface = nullptr;
+
+      if (!m_loggedLensTarget) {
+        Logger::err(str::format("VR: Failed to make the ", depth.Width, "x", depth.Height, " target of the scope's lens"));
+        m_loggedLensTarget = true;
+      }
+
+      return false;
+    }
+
+    Logger::info(str::format("VR: The scope's lens is drawn on ", depth.Width, "x", depth.Height,
+      ", ", uint32_t(depth.MultiSampleType), " samples, against depth format ", uint32_t(depth.Format)));
+    return true;
   }
 
 
@@ -268,7 +360,7 @@ namespace dxvk {
 
     if (!renderedTextureSurface(destination, source) || FAILED(source->GetDesc(&desc))) {
       if (!m_loggedTexture) {
-        Logger::err("VR: Scope test: the rendered texture's image was not found");
+        Logger::err("VR: The scope's rendered texture has no image");
         m_loggedTexture = true;
       }
 
@@ -277,7 +369,7 @@ namespace dxvk {
 
     if (desc.Width != m_targetWidth || desc.Height != m_targetHeight) {
       if (!m_loggedTexture) {
-        Logger::err(str::format("VR: Scope test: the rendered texture is ", desc.Width, "x", desc.Height,
+        Logger::err(str::format("VR: The scope's rendered texture is ", desc.Width, "x", desc.Height,
           " and the window ", m_targetWidth, "x", m_targetHeight));
         m_loggedTexture = true;
       }
@@ -292,7 +384,7 @@ namespace dxvk {
       return false;
 
     if (!m_loggedSize) {
-      Logger::info(str::format("VR: Scope test: drawn in ", side, "x", side, " of ", desc.Width, "x", desc.Height,
+      Logger::info(str::format("VR: Scope image drawn in ", side, "x", side, " of ", desc.Width, "x", desc.Height,
         ", format ", uint32_t(desc.Format)));
       m_loggedSize = true;
     }

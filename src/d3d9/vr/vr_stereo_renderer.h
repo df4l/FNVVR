@@ -45,6 +45,7 @@
 #include "vr_preview_window.h"
 #include "vr_prompt_icon.h"
 #include "vr_render_passes.h"
+#include "vr_scope_game.h"
 #include "vr_scope_render.h"
 #include "vr_sky_anchor.h"
 #include "vr_tile_texture_retry.h"
@@ -236,6 +237,13 @@ namespace dxvk {
     void setSneakConfig(const VrSneakConfig& config) {
       m_controls.setSneakConfig(config);
     }
+
+    /**
+     * \brief Turns the scopes' lenses on or off
+     *
+     * \param [in] enabled Whether scopes show the world on a lens
+     */
+    void setScopesEnabled(bool enabled);
 
   private:
 
@@ -436,9 +444,12 @@ namespace dxvk {
     std::unique_ptr<VrGameTimer> m_gameTimer;
     std::unique_ptr<VrRenderPasses> m_renderPasses;
 
-    // The world seen through the scope, on its lens (d3d9.vrScopeTest)
+    // The game's flat scope is off with a headset, findings/optics.md §10
+    std::unique_ptr<VrScopeGame> m_scopeGame;
+    // The world seen through the scope, on its lens
     std::unique_ptr<VrScopeRender> m_scopeRender;
-    bool m_scopeDrawn = false;
+    bool m_scopesEnabled = true;
+    bool m_scopeVisible = false;
     VrScopeLens m_scopeLens;
     const VrGameCameraPose* m_scopeCamera = nullptr;
 
@@ -568,7 +579,11 @@ namespace dxvk {
       const VrEyeView&            view,
             void*                 main);
 
-    void renderScope(VrGameStateKind state, void* main);
+    void renderScope(VrGameStateKind state, void* main, const std::array<VrEyeView, VrEyeCount>& views);
+
+    void drawScopeLens();
+
+    VrGameCameraPose eyeInGame(const VrEyeView& view) const;
 
     void applyEyePose();
 

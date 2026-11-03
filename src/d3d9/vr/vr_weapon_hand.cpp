@@ -1052,9 +1052,89 @@ namespace dxvk {
     lens.eyepiece.forward  = { rotation.m[0][0], rotation.m[1][0], rotation.m[2][0] };
     lens.eyepiece.up       = { rotation.m[0][1], rotation.m[1][1], rotation.m[2][1] };
     lens.eyepiece.right    = { rotation.m[0][2], rotation.m[1][2], rotation.m[2][2] };
-    lens.radius            = m_scopeRadius;
-    lens.tubeLength        = m_scopeTubeLength;
+    lens.halfWidth         = m_scopeHalfWidth;
+    lens.halfHeight        = m_scopeHalfHeight;
+    lens.rectangular       = m_scopeRectangular;
+    lens.apparentTangent   = vrComputeScopeApparentTangent(m_scopeHalfWidth, m_scopeHalfHeight);
+    lens.objective         = vrPointFromHand(hand, m_scopeObjective);
+    lens.nightVision       = m_scopeNightVision;
     return true;
+  }
+
+
+  void VrWeaponHand::placeScope(
+          uint8_t*          weapon,
+          uint8_t*          muzzle,
+    const uint8_t*          form,
+    const VrGameCameraPose& hand,
+          bool              pointedByBothHands,
+    const VrVector3&        supportInHand) {
+    VrEquippedScope equipped;
+
+    // Without a projectile node the weapon's model is not attached yet
+    if (!m_scopesEnabled || !form || !muzzle || !VrScopeGame::readEquipped(equipped))
+      return;
+
+    VrGameRotation modelRotation = readRotation(weapon, VrGame::ObjectWorldRotation);
+    VrVector3      modelOrigin   = readVector(weapon, VrGame::ObjectWorldTranslation);
+    float          modelScale    = field<float>(weapon, VrGame::ObjectWorldScale);
+
+    auto toWorld = [&] (const VrVector3& inModel) {
+      return modelRotation * (inModel * modelScale) + modelOrigin;
+    };
+
+    VrScopePlacement placement;
+
+    if (!m_scopeTable.find(equipped.weaponModel, placement)) {
+      placement = VrScopeTable::guess(
+        vrTranspose(modelRotation) * (readVector(muzzle, VrGame::ObjectWorldTranslation) - modelOrigin) * (1.0f / modelScale));
+
+      if (form != m_loggedScopeForm) {
+        Logger::warn(str::format("VR: The scope of the model '", equipped.weaponModel ? equipped.weaponModel : "",
+          "' is not known, its place is a guess. fnvvr\\scopes.ini can correct it."));
+      }
+    }
+
+    if (form != m_loggedScopeForm) {
+      Logger::info(str::format("VR: Scope of '", equipped.weaponModel ? equipped.weaponModel : "",
+        "': eyepiece at ", placement.eyepiece.x, ", ", placement.eyepiece.y, ", ", placement.eyepiece.z,
+        " half size ", placement.halfWidth, " x ", placement.halfHeight,
+        ", sight field ", equipped.sightFov, " degrees", equipped.nightVision ? ", night vision" : ""));
+      m_loggedScopeForm = form;
+    }
+
+    if (!placement.hasLens())
+      return;
+
+    // Square to the barrel: the shots leave along the projectile node, whichever
+    // axis of the model that is. The barrel, up and right are its y, z and x.
+    // Stored as columns forward, up, right, see scopeLens.
+    VrGameRotation node = readRotation(muzzle, VrGame::ObjectWorldRotation);
+    VrGameRotation axes = node;
+
+    for (uint32_t row = 0; row < 3; row++) {
+      axes.m[row][0] = node.m[row][1];
+      axes.m[row][1] = node.m[row][2];
+      axes.m[row][2] = node.m[row][0];
+    }
+
+    VrVector3 eyepiece = toWorld(placement.eyepiece);
+
+    // The render looks from the barrel's end along the shots, so that the
+    // reticle's centre is where they go at any range: the offset of a
+    // scope's axis from the barrel is a matter of zeroing in a real one
+    VrVector3 objective = readVector(muzzle, VrGame::ObjectWorldTranslation);
+
+    m_scopeEyepiece    = vrPointToHand(hand, eyepiece);
+    m_scopeObjective   = vrPointToHand(hand, objective);
+    m_scopeRotation    = vrTranspose(vrCameraRotation(hand)) * axes;
+    m_scopeHalfWidth   = placement.halfWidth * modelScale;
+    m_scopeHalfHeight  = placement.halfHeight * modelScale;
+    m_scopeRectangular = placement.rectangular;
+    m_scopeNightVision = equipped.nightVision;
+    m_scopeTwoHanded   = pointedByBothHands;
+    m_scopeSupport     = supportInHand;
+    m_hasScopeLens     = true;
   }
 
 
@@ -1375,30 +1455,7 @@ namespace dxvk {
       : hand.forward;
     m_hasAim         = true;
 
-    if (uint8_t* glass = findObject(weapon, VrGame::SniperScopeGlassName)) {
-      // Values of the model, see SniperScopeGlassName
-      constexpr VrVector3 Eyepiece = { 8.3f, 5.615f, 0.0f };
-      constexpr float     Radius   = 1.37f;
-      constexpr float     Tube     = 20.3f;
-
-      VrGameRotation glassRotation = readRotation(glass, VrGame::ObjectWorldRotation);
-      VrVector3      eyepiece      = glassRotation * Eyepiece
-                                   + readVector(glass, VrGame::ObjectWorldTranslation);
-
-      m_scopeEyepiece   = vrPointToHand(hand, eyepiece);
-      m_scopeRotation   = vrTranspose(vrCameraRotation(hand)) * glassRotation;
-      m_scopeRadius     = Radius;
-      m_scopeTubeLength = Tube;
-      m_scopeTwoHanded  = pointedByBothHands;
-      m_scopeSupport    = supportInHand;
-      m_hasScopeLens    = true;
-
-      if (glass != m_loggedScopeWeapon) {
-        Logger::info(str::format("VR: Scope lens at ", m_scopeEyepiece.x, ", ", m_scopeEyepiece.y, ", ",
-          m_scopeEyepiece.z, " units along the hand's forward, up and right"));
-        m_loggedScopeWeapon = glass;
-      }
-    }
+    placeScope(weapon, muzzle, form, hand, pointedByBothHands, supportInHand);
 
     if (weapon != m_loggedBarrelWeapon) {
       VrHeadAngles barrelAngles = vrComputeAimAngles(m_aimDirection);

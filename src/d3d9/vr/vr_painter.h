@@ -46,30 +46,62 @@ namespace dxvk {
     bool paint(IDirect3DTexture9* target, const VrPaintList& list, bool clear);
 
     /**
-     * \brief Draws a textured triangle fan with a projection
+     * \brief What VrPainter::drawLens draws
      *
-     * Opaque and without a depth test. The image is black past its edges.
-     * The overlay is laid over it by its own alpha, and is opaque black past
-     * its edges.
+     * The vertices hold a position, a colour multiplied with the image, a
+     * colour added to it, and the texture coordinates of the image and the
+     * overlay.
+     */
+    struct LensDrawing {
+      /// Render target, the same size as the depth buffer
+      IDirect3DSurface9*  target;
+      /// Depth buffer to test against, not written to
+      IDirect3DSurface9*  depth;
+      /// Black past its edges, or \c nullptr for a dark glass
+      IDirect3DTexture9*  image;
+      /// Laid over the image by its own alpha, opaque black past its edges, or \c nullptr
+      const VrImage*      overlay;
+      /// In row-vector order
+      const float*        projection;
+      const void*         vertices;
+      UINT                vertexCount;
+      UINT                vertexStride;
+      const uint16_t*     indices;
+      UINT                triangles;
+      /// The colours are multiplied by 4, to amplify the image
+      bool                amplified;
+    };
+
+    /**
+     * \brief Clears a target and draws a lens into it
      *
-     * \param [in] target Render target surface
-     * \param [in] image Texture
-     * \param [in] overlay Image laid over it, or \c nullptr
-     * \param [in] projection Projection of the positions, in row-vector order
-     * \param [in] vertices The fan's vertices: position, then the texture
-     *    coordinates, the same for the texture and the overlay
-     * \param [in] count Number of vertices
-     * \param [in] stride Size of a vertex
+     * The target ends up with the lens, premultiplied, where the lens is not
+     * hidden, and transparent elsewhere.
+     *
      * \returns \c false if nothing could be drawn
      */
-    bool drawFan(
+    bool drawLens(const LensDrawing& lens);
+
+    /**
+     * \brief Lays a part of a texture over the same part of a target
+     *
+     * The texture is premultiplied. The target's alpha stays.
+     *
+     * \param [in] target Render target surface
+     * \param [in] source Texture, covering the whole target at any size
+     * \param [in] left Left side of the part, from 0 to 1
+     * \param [in] top Top side of the part, from 0 to 1
+     * \param [in] right Right side of the part, from 0 to 1
+     * \param [in] bottom Bottom side of the part, from 0 to 1
+     * \returns \c false if nothing could be drawn
+     */
+    bool composite(
             IDirect3DSurface9* target,
-            IDirect3DTexture9* image,
-      const VrImage*           overlay,
-      const float*             projection,
-      const void*              vertices,
-            UINT               count,
-            UINT               stride);
+            IDirect3DTexture9* source,
+            float              left,
+            float              top,
+            float              right,
+            float              bottom);
 
   private:
 

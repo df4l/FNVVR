@@ -23,13 +23,13 @@ namespace dxvk {
   }
 
 
-  bool VrOptionsFile::load(VrOptions& options) {
+  bool VrOptionsFile::readText(const wchar_t* name, std::string& text) {
     std::wstring folder = folderPath();
 
     if (folder.empty())
       return false;
 
-    std::wstring path = folder + L"vr_options.ini";
+    std::wstring path = folder + name;
     HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ,
       nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
 
@@ -46,7 +46,18 @@ namespace dxvk {
       return false;
     }
 
-    vrParseOptions(std::string(buffer.data(), read), options);
+    text.assign(buffer.data(), read);
+    return true;
+  }
+
+
+  bool VrOptionsFile::load(VrOptions& options) {
+    std::string text;
+
+    if (!readText(L"vr_options.ini", text))
+      return false;
+
+    vrParseOptions(text, options);
     return true;
   }
 

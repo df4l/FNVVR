@@ -12,6 +12,7 @@
 #include "vr_game_memory.h"
 #include "vr_game_nodes.h"
 #include "vr_head_hud.h"
+#include "vr_options_file.h"
 #include "vr_math.h"
 #include "vr_stereo_renderer.h"
 #include "vr_weapon_types.h"
@@ -407,8 +408,23 @@ namespace dxvk {
     if (!renderer->m_renderPasses)
       Logger::info("VR: The world render's passes were not found, they are drawn for each eye and not timed");
 
-    if (passes.scopeTest)
+    renderer->m_scopeGame = VrScopeGame::install();
+
+    if (renderer->m_weaponHand && renderer->m_renderPasses) {
       renderer->m_scopeRender = VrScopeRender::install(device, passes.scopeResolution);
+
+      if (renderer->m_scopeRender) {
+        std::string corrections;
+
+        if (VrOptionsFile::readText(L"scopes.ini", corrections)) {
+          size_t count = renderer->m_weaponHand->scopeTable().parse(corrections);
+          Logger::info(str::format("VR: ", count, " scope places read from fnvvr\\scopes.ini"));
+        }
+
+        renderer->m_renderPasses->setAfterFirstPerson([self] { self->drawScopeLens(); });
+        renderer->m_weaponHand->setScopesEnabled(renderer->m_scopesEnabled);
+      }
+    }
 
     if (!renderer->m_gameTimer)
       Logger::info("VR: The game's frame timer update was not found, it is not measured");
@@ -603,8 +619,12 @@ namespace dxvk {
     // The weapon hand decided on the previous frame whether the game aims,
     // the melee guard whether it blocks (the same control), and the gaze
     // whether the Pip-Boy closes
-    if (m_weaponHand)
+    if (m_weaponHand) {
       m_controls.setGameAim(m_weaponHand->wantsGameAim() || (m_meleeSwing && m_meleeSwing->wantsBlock()));
+
+      if (m_scopeGame)
+        m_scopeGame->setSteadied(m_weaponHand->leftHandOnWeapon());
+    }
 
     m_controls.setSwingsWithHand((m_meleeSwing && m_meleeSwing->swingsWithHand())
       || (m_handThrow && m_handThrow->throwsWithHand()));
@@ -675,7 +695,7 @@ namespace dxvk {
       ? m_hudMeters.place(vrComputeInterfaceSize(targetDesc.Width, targetDesc.Height).y)
       : VrHudMetersPlaced();
 
-    renderScope(state, main);
+    renderScope(state, main, views);
 
     for (uint32_t eye = 0; eye < VrEyeCount; eye++) {
       m_eyeCopied[eye] = false;
@@ -925,25 +945,62 @@ namespace dxvk {
   }
 
 
-  void VrStereoRenderer::renderScope(VrGameStateKind state, void* main) {
-    m_scopeDrawn = false;
+  void VrStereoRenderer::setScopesEnabled(bool enabled) {
+    m_scopesEnabled = enabled;
+
+    if (m_weaponHand && m_scopeRender)
+      m_weaponHand->setScopesEnabled(enabled);
+  }
+
+
+  VrGameCameraPose VrStereoRenderer::eyeInGame(const VrEyeView& view) const {
+    return vrComputeEyeCameraPose(m_gameCameraPose,
+      vrComputeEyeInReference(m_reference, view.pose), VrGameUnitsPerMetre);
+  }
+
+
+  void VrStereoRenderer::renderScope(VrGameStateKind state, void* main, const std::array<VrEyeView, VrEyeCount>& views) {
+    constexpr float FallbackDefaultFov = 75.0f;
+
+    m_scopeVisible = false;
 
     // The game's menu mode follows the Pip-Boy's state by a frame
-    if (!m_scopeRender || state != VrGameStateKind::InGame || !m_hasReference
+    if (!m_scopeRender || !m_scopesEnabled || state != VrGameStateKind::InGame || !m_hasReference
      || !m_weaponHand || m_pipBoyControl.state() != VrPipBoyState::Closed)
       return;
 
-    float sightFov = VrScopeRender::weaponSightFov();
-
-    if (sightFov <= 0.0f || !m_weaponHand->scopeLens(m_scopeLens))
+    if (!m_weaponHand->scopeLens(m_scopeLens))
       return;
 
-    m_scopeRender->selectReticle(VrScopeRender::weaponScopeModel());
+    m_scopeVisible = true;
+
+    // Without an eye at the eyepiece the lens is a dark glass, and costs no render
+    bool seen = false;
+
+    for (uint32_t eye = 0; eye < VrEyeCount; eye++)
+      seen |= vrScopeLensShowsImage(m_scopeLens, eyeInGame(views[eye]), views[eye].fov);
+
+    VrEquippedScope equipped;
+
+    if (!seen || !VrScopeGame::readEquipped(equipped)) {
+      m_scopeRender->forgetImage();
+      return;
+    }
+
+    m_scopeRender->selectReticle(equipped.scopeModel);
+
+    float defaultFov = *reinterpret_cast<const float*>(VrGame::SettingDefaultWorldFov + VrGame::SettingValue);
+
+    if (!(defaultFov > equipped.sightFov && defaultFov < 170.0f))
+      defaultFov = std::max(FallbackDefaultFov, equipped.sightFov);
 
     VrEyeView view;
 
-    if (!m_scopeRender->prepareView(vrComputeScopeMagnification(sightFov), view.fov))
+    if (!m_scopeRender->prepareView(vrComputeScopeMagnification(equipped.sightFov, defaultFov),
+        m_scopeLens.apparentTangent, view.fov)) {
+      m_scopeRender->forgetImage();
       return;
+    }
 
     VrGameCameraPose camera = vrComputeScopeCamera(m_scopeLens);
 
@@ -959,7 +1016,7 @@ namespace dxvk {
     if (m_renderPasses)
       m_renderPasses->setSceneScissor(&m_scopeRender->area());
 
-    m_scopeDrawn = m_scopeRender->render(main);
+    m_scopeRender->render(main);
 
     if (m_renderPasses)
       m_renderPasses->setSceneScissor(nullptr);
@@ -973,6 +1030,20 @@ namespace dxvk {
 
     if (m_cullingCamera)
       m_cullingCamera->cullAgain();
+  }
+
+
+  void VrStereoRenderer::drawScopeLens() {
+    constexpr uint32_t NearIndex = 4;
+    constexpr uint32_t FarIndex  = 5;
+
+    if (!m_scopeVisible || m_eye == NoEye || !m_eyeView)
+      return;
+
+    VrGameCameraState camera = m_renderCamera.save();
+
+    m_scopeRender->drawLens(m_scopeLens, eyeInGame(*m_eyeView), m_eyeView->fov,
+      camera.frustum[NearIndex], camera.frustum[FarIndex]);
   }
 
 
@@ -1836,15 +1907,11 @@ namespace dxvk {
 
     m_eyeCopied[m_eye] = copyRenderTarget(m_eye);
 
-    if (m_eyeCopied[m_eye] && m_scopeDrawn) {
+    if (m_eyeCopied[m_eye] && m_scopeVisible) {
       Com<IDirect3DSurface9> eyeSurface;
 
-      if (SUCCEEDED(m_eyeTextures[m_eye]->GetSurfaceLevel(0, &eyeSurface))) {
-        m_scopeRender->drawLens(eyeSurface.ptr(), m_scopeLens,
-          vrComputeEyeCameraPose(m_gameCameraPose,
-            vrComputeEyeInReference(m_reference, m_eyeView->pose), VrGameUnitsPerMetre),
-          m_eyeView->fov);
-      }
+      if (SUCCEEDED(m_eyeTextures[m_eye]->GetSurfaceLevel(0, &eyeSurface)))
+        m_scopeRender->presentLens(eyeSurface.ptr());
     }
 
     if (!m_eyeCopied[m_eye] && !m_loggedFailure) {

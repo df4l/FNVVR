@@ -98,75 +98,150 @@ namespace dxvk {
   }
 
 
-  bool VrPainter::drawFan(
-          IDirect3DSurface9* target,
-          IDirect3DTexture9* image,
-    const VrImage*           overlay,
-    const float*             projection,
-    const void*              vertices,
-          UINT               count,
-          UINT               stride) {
+  bool VrPainter::drawLens(const LensDrawing& lens) {
     D3DSURFACE_DESC desc = { };
 
-    if (count < 3 || FAILED(target->GetDesc(&desc)))
+    if (FAILED(lens.target->GetDesc(&desc)))
       return false;
 
     // Before the state is captured, as in paint
-    IDirect3DTexture9* overlayTexture = overlay
-      ? texture(*overlay, VrPaintImageUse::PictureWithMipmaps)
+    IDirect3DTexture9* overlayTexture = lens.image && lens.overlay
+      ? texture(*lens.overlay, VrPaintImageUse::PictureWithMipmaps)
       : nullptr;
 
     if (!captureState())
       return false;
 
     SavedTargets saved;
-    saveTargets(saved, target);
+    saveTargets(saved, lens.target);
 
     setStates(desc.Width, desc.Height);
     setBlend(VrPaintBlend::Copy);
+
+    m_device->Clear(0, nullptr, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 0, 0, 0), 1.0f, 0);
+
+    // Tested against the world and the first-person model, as they were drawn
+    m_device->SetDepthStencilSurface(lens.depth);
+    m_device->SetRenderState(D3DRS_ZENABLE,             D3DZB_TRUE);
+    m_device->SetRenderState(D3DRS_ZFUNC,               D3DCMP_LESSEQUAL);
+    m_device->SetRenderState(D3DRS_DEPTHBIAS,           0);
+    m_device->SetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, 0);
+
+    // Added to the textures' result by the device
+    m_device->SetRenderState(D3DRS_SPECULARENABLE, TRUE);
 
     D3DMATRIX identity = { };
     identity.m[0][0] = identity.m[1][1] = identity.m[2][2] = identity.m[3][3] = 1.0f;
 
     m_device->SetTransform(D3DTS_WORLD, &identity);
     m_device->SetTransform(D3DTS_VIEW, &identity);
-    m_device->SetTransform(D3DTS_PROJECTION, reinterpret_cast<const D3DMATRIX*>(projection));
+    m_device->SetTransform(D3DTS_PROJECTION, reinterpret_cast<const D3DMATRIX*>(lens.projection));
 
-    m_device->SetFVF(D3DFVF_XYZ | D3DFVF_TEX1);
+    m_device->SetFVF(D3DFVF_XYZ | D3DFVF_DIFFUSE | D3DFVF_SPECULAR | D3DFVF_TEX1);
     m_device->SetRenderState(D3DRS_VERTEXBLEND, D3DVBF_DISABLE);
     m_device->SetRenderState(D3DRS_INDEXEDVERTEXBLENDENABLE, FALSE);
-    m_device->SetTexture(0, image);
+
+    DWORD stage = 0;
+
+    // The image, or a dark glass
+    m_device->SetRenderState(D3DRS_TEXTUREFACTOR, D3DCOLOR_ARGB(255, 0, 0, 0));
+    m_device->SetTextureStageState(0, D3DTSS_RESULTARG, D3DTA_CURRENT);
+    m_device->SetTextureStageState(1, D3DTSS_RESULTARG, D3DTA_CURRENT);
+    m_device->SetTextureStageState(2, D3DTSS_RESULTARG, D3DTA_CURRENT);
+    m_device->SetTexture(stage, lens.image);
+    m_device->SetTextureStageState(stage, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+    m_device->SetTextureStageState(stage, D3DTSS_COLORARG1, lens.image ? D3DTA_TEXTURE : D3DTA_TFACTOR);
+    m_device->SetTextureStageState(stage, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+    m_device->SetTextureStageState(stage, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+    m_device->SetSamplerState(stage, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+    m_device->SetSamplerState(stage, D3DSAMP_ADDRESSU, D3DTADDRESS_BORDER);
+    m_device->SetSamplerState(stage, D3DSAMP_ADDRESSV, D3DTADDRESS_BORDER);
+    m_device->SetSamplerState(stage, D3DSAMP_BORDERCOLOR, D3DCOLOR_ARGB(255, 0, 0, 0));
+    stage += 1;
+
+    if (overlayTexture) {
+      m_device->SetTexture(stage, overlayTexture);
+      m_device->SetTextureStageState(stage, D3DTSS_COLOROP, D3DTOP_BLENDTEXTUREALPHA);
+      m_device->SetTextureStageState(stage, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+      m_device->SetTextureStageState(stage, D3DTSS_COLORARG2, D3DTA_CURRENT);
+      m_device->SetTextureStageState(stage, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+      m_device->SetTextureStageState(stage, D3DTSS_ALPHAARG1, D3DTA_CURRENT);
+      m_device->SetTextureStageState(stage, D3DTSS_TEXCOORDINDEX, 0);
+      m_device->SetTextureStageState(stage, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
+
+      m_device->SetSamplerState(stage, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+      m_device->SetSamplerState(stage, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+      m_device->SetSamplerState(stage, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+      m_device->SetSamplerState(stage, D3DSAMP_MAXMIPLEVEL, 0);
+      m_device->SetSamplerState(stage, D3DSAMP_MIPMAPLODBIAS, 0);
+      m_device->SetSamplerState(stage, D3DSAMP_SRGBTEXTURE, FALSE);
+      m_device->SetSamplerState(stage, D3DSAMP_ADDRESSU, D3DTADDRESS_BORDER);
+      m_device->SetSamplerState(stage, D3DSAMP_ADDRESSV, D3DTADDRESS_BORDER);
+      m_device->SetSamplerState(stage, D3DSAMP_BORDERCOLOR, D3DCOLOR_ARGB(255, 0, 0, 0));
+      stage += 1;
+    }
+
+    // What the glass lets through
+    m_device->SetTexture(stage, nullptr);
+    m_device->SetTextureStageState(stage, D3DTSS_COLOROP, lens.amplified ? D3DTOP_MODULATE4X : D3DTOP_MODULATE);
+    m_device->SetTextureStageState(stage, D3DTSS_COLORARG1, D3DTA_CURRENT);
+    m_device->SetTextureStageState(stage, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+    m_device->SetTextureStageState(stage, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+    m_device->SetTextureStageState(stage, D3DTSS_ALPHAARG1, D3DTA_CURRENT);
+    m_device->SetTextureStageState(stage, D3DTSS_TEXCOORDINDEX, 0);
+    m_device->SetTextureStageState(stage, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
+    stage += 1;
+
+    m_device->SetTextureStageState(stage, D3DTSS_COLOROP, D3DTOP_DISABLE);
+    m_device->SetTextureStageState(stage, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+
+    m_device->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, lens.vertexCount, lens.triangles,
+      lens.indices, D3DFMT_INDEX16, lens.vertices, lens.vertexStride);
+
+    restoreTargets(saved);
+    return true;
+  }
+
+
+  bool VrPainter::composite(
+          IDirect3DSurface9* target,
+          IDirect3DTexture9* source,
+          float              left,
+          float              top,
+          float              right,
+          float              bottom) {
+    D3DSURFACE_DESC desc = { };
+
+    if (FAILED(target->GetDesc(&desc)) || !captureState())
+      return false;
+
+    SavedTargets saved;
+    saveTargets(saved, target);
+
+    setStates(desc.Width, desc.Height);
+    setBlend(VrPaintBlend::OverKeepAlpha);
+
+    m_device->SetTexture(0, source);
     m_device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
     m_device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
     m_device->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
-    m_device->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_BORDER);
-    m_device->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_BORDER);
-    m_device->SetSamplerState(0, D3DSAMP_BORDERCOLOR, D3DCOLOR_ARGB(255, 0, 0, 0));
 
-    if (overlayTexture) {
-      m_device->SetTexture(1, overlayTexture);
-      m_device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_BLENDTEXTUREALPHA);
-      m_device->SetTextureStageState(1, D3DTSS_COLORARG1, D3DTA_TEXTURE);
-      m_device->SetTextureStageState(1, D3DTSS_COLORARG2, D3DTA_CURRENT);
-      m_device->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
-      m_device->SetTextureStageState(1, D3DTSS_ALPHAARG1, D3DTA_CURRENT);
-      m_device->SetTextureStageState(1, D3DTSS_TEXCOORDINDEX, 0);
-      m_device->SetTextureStageState(1, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
-      m_device->SetTextureStageState(2, D3DTSS_COLOROP, D3DTOP_DISABLE);
-      m_device->SetTextureStageState(2, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+    // Pre-transformed, moved by half a pixel as in paint
+    float x0 = left   * float(desc.Width)  - 0.5f;
+    float x1 = right  * float(desc.Width)  - 0.5f;
+    float y0 = top    * float(desc.Height) - 0.5f;
+    float y1 = bottom * float(desc.Height) - 0.5f;
 
-      m_device->SetSamplerState(1, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-      m_device->SetSamplerState(1, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-      m_device->SetSamplerState(1, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
-      m_device->SetSamplerState(1, D3DSAMP_MAXMIPLEVEL, 0);
-      m_device->SetSamplerState(1, D3DSAMP_MIPMAPLODBIAS, 0);
-      m_device->SetSamplerState(1, D3DSAMP_SRGBTEXTURE, FALSE);
-      m_device->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_BORDER);
-      m_device->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_BORDER);
-      m_device->SetSamplerState(1, D3DSAMP_BORDERCOLOR, D3DCOLOR_ARGB(255, 0, 0, 0));
-    }
+    D3DCOLOR white = D3DCOLOR_ARGB(255, 255, 255, 255);
 
-    m_device->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, count - 2, vertices, stride);
+    const DeviceVertex quad[4] = {
+      { x0, y0, 0.0f, 1.0f, white, left,  top    },
+      { x1, y0, 0.0f, 1.0f, white, right, top    },
+      { x0, y1, 0.0f, 1.0f, white, left,  bottom },
+      { x1, y1, 0.0f, 1.0f, white, right, bottom },
+    };
+
+    m_device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, quad, sizeof(DeviceVertex));
 
     restoreTargets(saved);
     return true;

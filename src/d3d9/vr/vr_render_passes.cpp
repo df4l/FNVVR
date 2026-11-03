@@ -299,8 +299,13 @@ namespace dxvk {
     if (!g_renderPasses)
       return original(main, nullptr, a, b, c, d);
 
-    return g_renderPasses->runPass(VrRenderPass::FirstPerson,
+    uintptr_t result = g_renderPasses->runPass(VrRenderPass::FirstPerson,
       [&] { return original(main, nullptr, a, b, c, d); });
+
+    if (g_renderPasses->m_afterFirstPerson)
+      g_renderPasses->m_afterFirstPerson();
+
+    return result;
   }
 
 

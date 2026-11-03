@@ -218,7 +218,6 @@ namespace dxvk {
     VrRenderPassConfig passes;
     passes.shareShadows = config.getOption<bool>("d3d9.vrShareShadows", passes.shareShadows);
     passes.handsDepthTest = config.getOption<bool>("d3d9.vrHandsDepthTest", passes.handsDepthTest);
-    passes.scopeTest = config.getOption<bool>("d3d9.vrScopeTest", passes.scopeTest);
     passes.scopeResolution = uint32_t(std::max<int32_t>(0,
       config.getOption<int32_t>("d3d9.vrScopeResolution", int32_t(passes.scopeResolution))));
 

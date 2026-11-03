@@ -21,10 +21,8 @@ namespace dxvk {
     bool shareShadows = true;
     /// The hands and the weapon are hidden by the world in front of them
     bool handsDepthTest = true;
-    /// Test of the scope's render: the world seen through the sniper rifle's scope, on a lens
-    bool scopeTest = false;
     /// Side in pixels of the square the scope's view is drawn in
-    uint32_t scopeResolution = 1024;
+    uint32_t scopeResolution = 768;
   };
 
   /**
@@ -102,6 +100,15 @@ namespace dxvk {
      */
     void setSceneScissor(const VrScopeArea* area);
 
+    /**
+     * \brief Sets what is drawn right after the first-person model of an eye
+     *
+     * While its depth buffer is still bound and holds the model and the world.
+     */
+    void setAfterFirstPerson(std::function<void()> callback) {
+      m_afterFirstPerson = std::move(callback);
+    }
+
   private:
 
     VrRenderPasses(const VrRenderPassConfig& config, ViewFn view);
@@ -115,6 +122,7 @@ namespace dxvk {
     high_resolution_clock::time_point m_eyeStart;
 
     const VrScopeArea* m_sceneScissor = nullptr;
+    std::function<void()> m_afterFirstPerson;
     bool     m_scissorFound        = false;
 
     bool     m_shadowsDrawnForLeft = false;

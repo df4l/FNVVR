@@ -11,6 +11,8 @@ using namespace dxvk;
 
 namespace {
 
+  constexpr float Tolerance = 1e-4f;
+
   // The scope looks north with its eyepiece at the origin, in game units
   VrScopeLens northLens() {
     VrScopeLens lens;
@@ -18,8 +20,10 @@ namespace {
     lens.eyepiece.up       = { 0.0f, 0.0f, 1.0f };
     lens.eyepiece.right    = { 1.0f, 0.0f, 0.0f };
     lens.eyepiece.position = { 0.0f, 0.0f, 0.0f };
-    lens.radius     = 2.0f;
-    lens.tubeLength = 20.0f;
+    lens.halfWidth         = 2.0f;
+    lens.halfHeight        = 2.0f;
+    lens.apparentTangent   = vrComputeScopeApparentTangent(2.0f, 2.0f);
+    lens.objective         = { 0.0f, 40.0f, -5.0f };
     return lens;
   }
 
@@ -29,9 +33,17 @@ namespace {
     return eye;
   }
 
-  // Where the disc is at the top of its rim, a quarter of the way round
-  const VrScopeLensVertex& rimTop(const VrScopeLensDisc& disc) {
-    return disc[1 + VrScopeLensSegments / 4];
+  VrFov wideFov() {
+    return { -1.0f, 1.0f, 1.0f, -1.0f };
+  }
+
+  // The lens's rim at an angle counted in segments from the right
+  const VrScopeLensVertex& rim(const VrScopeLensMesh& mesh, uint32_t segment) {
+    return mesh[1 + (VrScopeLensRings - 1) * VrScopeLensSegments + segment];
+  }
+
+  const VrScopeLensVertex& rimTop(const VrScopeLensMesh& mesh) {
+    return rim(mesh, VrScopeLensSegments / 4);
   }
 
   // A string as the game's model files store it, after some other bytes
@@ -47,14 +59,20 @@ namespace {
 
 
 TEST_CASE(scope_magnification_follows_the_weapons_view) {
-  CHECK_NEAR(vrComputeScopeMagnification(75.0f), 1.0f, 1e-5);
-  CHECK_NEAR(vrComputeScopeMagnification(25.0f), 3.459f, 1e-2);
+  CHECK_NEAR(vrComputeScopeMagnification(75.0f, 75.0f), 1.0f, 1e-5);
+  CHECK_NEAR(vrComputeScopeMagnification(25.0f, 75.0f), 3.459f, 1e-2);
 }
 
 
-TEST_CASE(scope_apparent_field_matches_the_game_at_any_weapon) {
-  // The reticle's quad in the game at the default field of view
-  CHECK_NEAR(vrScopeApparentTangent(), 1.023f * 0.75f * 0.7673f, 1e-3);
+TEST_CASE(scope_ring_lies_at_the_rim_from_the_designed_distance) {
+  // 13 cm from the eye, at the reticle's ring radius
+  float tangent = vrComputeScopeApparentTangent(1.5f, 1.5f);
+  CHECK_NEAR(0.88f * tangent * 9.0f, 1.5f, Tolerance);
+}
+
+
+TEST_CASE(scope_rectangle_is_sized_by_its_long_side) {
+  CHECK_NEAR(vrComputeScopeApparentTangent(2.0f, 1.0f), vrComputeScopeApparentTangent(2.0f, 2.0f), Tolerance);
 }
 
 
@@ -82,43 +100,45 @@ TEST_CASE(scope_area_has_a_smallest_side) {
 
 
 TEST_CASE(scope_render_view_puts_the_scopes_field_on_the_area) {
-  float magnification = vrComputeScopeMagnification(25.0f);
+  float magnification = vrComputeScopeMagnification(25.0f, 75.0f);
+  float tangent = vrComputeScopeApparentTangent(1.5f, 1.5f);
   VrScopeArea area = vrComputeScopeArea(3136, 2352, 1024);
-  VrFov fov = vrComputeScopeRenderFov(magnification, 3136, 2352, area);
+  VrFov fov = vrComputeScopeRenderFov(magnification, tangent, 3136, 2352, area);
 
   // The area's edge, as a tangent in the world
   float edge = std::tan(fov.angleUp) * 1024.0f / 2352.0f;
-  CHECK_NEAR(edge * magnification, vrScopeApparentTangent(), 1e-4);
+  CHECK_NEAR(edge * magnification, tangent, Tolerance);
 
   // The pixels are square
-  CHECK_NEAR(std::tan(fov.angleRight) / std::tan(fov.angleUp), 3136.0f / 2352.0f, 1e-4);
+  CHECK_NEAR(std::tan(fov.angleRight) / std::tan(fov.angleUp), 3136.0f / 2352.0f, Tolerance);
   CHECK_NEAR(fov.angleLeft + fov.angleRight, 0.0f, 1e-5);
   CHECK_NEAR(fov.angleUp + fov.angleDown, 0.0f, 1e-5);
 }
 
 
-TEST_CASE(scope_camera_sits_at_the_objective_on_the_axis) {
+TEST_CASE(scope_camera_looks_along_the_axis_from_the_objective) {
   VrGameCameraPose camera = vrComputeScopeCamera(northLens());
 
-  CHECK_NEAR(camera.position.y, 20.0f, 1e-5);
+  CHECK_NEAR(camera.position.y, 40.0f, 1e-5);
+  CHECK_NEAR(camera.position.z, -5.0f, 1e-5);
   CHECK_NEAR(camera.forward.y, 1.0f, 1e-5);
 }
 
 
 TEST_CASE(scope_lens_on_the_axis_is_centred_on_the_image) {
-  VrScopeLensDisc disc;
-  CHECK(vrComputeScopeLensDisc(northLens(), eyeAt({ 0.0f, -4.0f, 0.0f }), disc));
+  VrScopeLensMesh mesh;
+  CHECK(vrComputeScopeLensMesh(northLens(), eyeAt({ 0.0f, -4.0f, 0.0f }), mesh));
 
-  CHECK_NEAR(disc[0].u, 0.5f, 1e-5);
-  CHECK_NEAR(disc[0].v, 0.5f, 1e-5);
+  CHECK_NEAR(mesh[0].u, 0.5f, 1e-5);
+  CHECK_NEAR(mesh[0].v, 0.5f, 1e-5);
 
-  // In the eye's frame the disc is straight ahead
-  CHECK_NEAR(disc[0].x, 0.0f, 1e-5);
-  CHECK_NEAR(disc[0].z, 4.0f, 1e-5);
+  // In the eye's frame the lens is straight ahead
+  CHECK_NEAR(mesh[0].x, 0.0f, 1e-5);
+  CHECK_NEAR(mesh[0].z, 4.0f, 1e-5);
 
   // The top of the rim shows what is higher up: nearer the image's top
-  CHECK_NEAR(rimTop(disc).y, 2.0f, 1e-4);
-  CHECK_NEAR(rimTop(disc).v, 0.5f - 0.5f * (2.0f / 4.0f) / vrScopeApparentTangent(), 1e-4);
+  CHECK_NEAR(rimTop(mesh).y, 2.0f, Tolerance);
+  CHECK_NEAR(rimTop(mesh).v, 0.5f - 0.5f * (2.0f / 4.0f) / northLens().apparentTangent, Tolerance);
 }
 
 
@@ -126,16 +146,137 @@ TEST_CASE(scope_lens_keeps_the_world_still_when_the_eye_moves) {
   // The image lies at infinity: the same image point stays in the same
   // direction from the eye, wherever the eye is behind the lens
   VrScopeLens lens = northLens();
-  VrScopeLensDisc centred;
-  VrScopeLensDisc moved;
-  CHECK(vrComputeScopeLensDisc(lens, eyeAt({ 0.0f, -4.0f, 0.0f }), centred));
-  CHECK(vrComputeScopeLensDisc(lens, eyeAt({ 1.0f, -4.0f, 0.0f }), moved));
+  VrScopeLensMesh centred;
+  VrScopeLensMesh moved;
+  CHECK(vrComputeScopeLensMesh(lens, eyeAt({ 0.0f, -4.0f, 0.0f }), centred));
+  CHECK(vrComputeScopeLensMesh(lens, eyeAt({ 1.0f, -4.0f, 0.0f }), moved));
 
-  float tangentOf = (moved[0].u - 0.5f) * 2.0f * vrScopeApparentTangent();
+  float tangentOf = (moved[0].u - 0.5f) * 2.0f * lens.apparentTangent;
 
-  // The disc's centre is left of the moved eye, and shows what is left of the axis
+  // The lens's centre is left of the moved eye, and shows what is left of the axis
   CHECK_NEAR(tangentOf, moved[0].x / moved[0].z, 1e-5);
   CHECK(moved[0].u < centred[0].u);
+}
+
+
+TEST_CASE(scope_rectangular_lens_has_corners) {
+  VrScopeLens lens = northLens();
+  lens.rectangular = true;
+  lens.halfWidth   = 2.0f;
+  lens.halfHeight  = 1.0f;
+
+  VrScopeLensMesh mesh;
+  CHECK(vrComputeScopeLensMesh(lens, eyeAt({ 0.0f, -4.0f, 0.0f }), mesh));
+
+  const VrScopeLensVertex& corner = rim(mesh, VrScopeLensSegments / 8);
+  CHECK_NEAR(corner.x, 2.0f, Tolerance);
+  CHECK_NEAR(corner.y, 1.0f, Tolerance);
+}
+
+
+TEST_CASE(scope_lens_triangles_stay_within_the_mesh) {
+  const VrScopeLensIndices& indices = vrScopeLensIndices();
+  bool valid = true;
+
+  for (uint16_t index : indices)
+    valid &= index < VrScopeLensVertexCount;
+
+  CHECK(valid);
+  CHECK(indices[0] == 0);
+}
+
+
+TEST_CASE(scope_glass_edge_is_soft_and_dark) {
+  VrVector3 straight = { 0.0f, 1.0f, 0.0f };
+  VrScopeGlass centre = vrComputeScopeGlass(northLens(), 0.0f, straight);
+  VrScopeGlass edge   = vrComputeScopeGlass(northLens(), 1.0f, straight);
+
+  CHECK_NEAR(centre.coverage, 1.0f, 1e-5);
+  CHECK_NEAR(edge.coverage, 0.0f, 1e-5);
+  CHECK(edge.transmission < centre.transmission * 0.5f);
+
+  // Barely a reflection when looking straight through
+  CHECK(centre.reflection[1] < 0.05f);
+}
+
+
+TEST_CASE(scope_glass_mirrors_more_at_a_grazing_angle) {
+  VrVector3 straight = { 0.0f, 1.0f, 0.0f };
+  VrVector3 grazing  = { 0.98f, 0.2f, 0.0f };
+
+  CHECK(vrComputeScopeGlass(northLens(), 0.5f, grazing).reflection[1]
+      > 2.0f * vrComputeScopeGlass(northLens(), 0.5f, straight).reflection[1]);
+}
+
+
+TEST_CASE(scope_shows_its_image_only_near_the_axis) {
+  VrScopeLens lens = northLens();
+
+  CHECK(vrScopeLensShowsImage(lens, eyeAt({ 0.0f, -9.0f, 0.0f }), wideFov()));
+
+  CHECK(vrScopeLensShowsImage(lens, eyeAt({ 3.0f, -9.0f, 0.0f }), wideFov()));
+
+  // The other eye, 4.5 units off at the distance the scope is designed for,
+  // sees the dark past the image's edge, as with a real scope
+  CHECK(!vrScopeLensShowsImage(lens, eyeAt({ 4.5f, -9.0f, 0.0f }), wideFov()));
+
+  // In front of the eyepiece, and too far to matter
+  CHECK(!vrScopeLensShowsImage(lens, eyeAt({ 0.0f, 3.0f, 0.0f }), wideFov()));
+  CHECK(!vrScopeLensShowsImage(lens, eyeAt({ 0.0f, -80.0f, 0.0f }), wideFov()));
+}
+
+
+TEST_CASE(scope_shows_no_image_outside_the_eyes_view) {
+  // Looking away from the lens, however well the eye is placed
+  VrGameCameraPose eye = eyeAt({ 0.0f, -30.0f, 0.0f });
+  eye.forward = { 1.0f, 0.0f, 0.0f };
+  eye.right   = { 0.0f, -1.0f, 0.0f };
+
+  CHECK(!vrScopeLensShowsImage(northLens(), eye, wideFov()));
+}
+
+
+TEST_CASE(scope_lens_bounds_enclose_its_rim) {
+  VrScopeLensMesh mesh;
+  VrScopeLensBounds bounds;
+  CHECK(vrComputeScopeLensMesh(northLens(), eyeAt({ 0.0f, -10.0f, 0.0f }), mesh));
+
+  VrFov fov = { -std::atan(1.0f), std::atan(1.0f), std::atan(1.0f), -std::atan(1.0f) };
+  CHECK(vrComputeScopeLensBounds(mesh, fov, bounds));
+
+  // 2 units at 10 units away: a tenth of the image each side of the middle
+  CHECK_NEAR(bounds.left, 0.4f, 0.01f);
+  CHECK_NEAR(bounds.right, 0.6f, 0.01f);
+  CHECK_NEAR(bounds.top, 0.4f, 0.01f);
+  CHECK_NEAR(bounds.bottom, 0.6f, 0.01f);
+}
+
+
+TEST_CASE(scope_lens_outside_the_image_has_no_bounds) {
+  VrScopeLensMesh mesh;
+  VrScopeLensBounds bounds;
+  CHECK(vrComputeScopeLensMesh(northLens(), eyeAt({ 50.0f, -10.0f, 0.0f }), mesh));
+
+  VrFov fov = { -std::atan(1.0f), std::atan(1.0f), std::atan(1.0f), -std::atan(1.0f) };
+  CHECK(!vrComputeScopeLensBounds(mesh, fov, bounds));
+}
+
+
+TEST_CASE(scope_lens_reaching_behind_the_eye_takes_the_whole_image) {
+  VrScopeLensMesh mesh;
+  VrScopeLensBounds bounds;
+
+  // Beside the lens and looking along it: part of the rim is behind the eye's plane
+  VrGameCameraPose eye = eyeAt({ 0.0f, -1.0f, 0.0f });
+  eye.forward = { 1.0f, 0.0f, 0.0f };
+  eye.right   = { 0.0f, -1.0f, 0.0f };
+
+  CHECK(vrComputeScopeLensMesh(northLens(), eye, mesh));
+
+  VrFov fov = { -std::atan(1.0f), std::atan(1.0f), std::atan(1.0f), -std::atan(1.0f) };
+  CHECK(vrComputeScopeLensBounds(mesh, fov, bounds));
+  CHECK_NEAR(bounds.left, 0.0f, 1e-5);
+  CHECK_NEAR(bounds.right, 1.0f, 1e-5);
 }
 
 
@@ -160,14 +301,14 @@ TEST_CASE(scope_model_without_a_reticle_names_none) {
 
 
 TEST_CASE(scope_lens_is_not_drawn_for_an_eye_in_front_of_it) {
-  VrScopeLensDisc disc;
-  CHECK(!vrComputeScopeLensDisc(northLens(), eyeAt({ 0.0f, 3.0f, 0.0f }), disc));
+  VrScopeLensMesh mesh;
+  CHECK(!vrComputeScopeLensMesh(northLens(), eyeAt({ 0.0f, 3.0f, 0.0f }), mesh));
 }
 
 
 TEST_CASE(eye_projection_maps_an_off_centre_view_to_the_image) {
   VrFov fov = { -std::atan(1.3f), std::atan(1.0f), std::atan(1.1f), -std::atan(0.9f) };
-  std::array<float, 16> m = vrComputeEyeProjection(fov);
+  std::array<float, 16> m = vrComputeEyeProjection(fov, 5.0f, 350000.0f);
 
   auto ndc = [&m] (float x, float y, float z, float& outX, float& outY) {
     float w = x * m[3] + y * m[7] + z * m[11] + m[15];
@@ -184,4 +325,17 @@ TEST_CASE(eye_projection_maps_an_off_centre_view_to_the_image) {
   ndc(-1.3f, -0.9f, 1.0f, x, y);
   CHECK_NEAR(x, -1.0f, 1e-5);
   CHECK_NEAR(y, -1.0f, 1e-5);
+}
+
+
+TEST_CASE(eye_projection_gives_the_games_depth) {
+  // Gamebryo's depth: 0 at the near distance, close to 1 far away
+  VrFov fov = { -std::atan(1.0f), std::atan(1.0f), std::atan(1.0f), -std::atan(1.0f) };
+  std::array<float, 16> m = vrComputeEyeProjection(fov, 5.0f, 1000.0f);
+
+  auto depth = [&m] (float z) { return (z * m[10] + m[14]) / z; };
+
+  CHECK_NEAR(depth(5.0f), 0.0f, 1e-5);
+  CHECK_NEAR(depth(1000.0f), 1.0f, 1e-5);
+  CHECK(depth(7.0f) < depth(9.0f));
 }
