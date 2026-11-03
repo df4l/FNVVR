@@ -2953,6 +2953,52 @@ namespace dxvk {
     constexpr uintptr_t ImageSpaceTextureIsRendered  = 0x1;
     constexpr uintptr_t ImageSpaceTextureObject      = 0x4;
 
+    /**
+     * The game's flat scope while it aims, findings/optics.md §5 and §10:
+     *
+     * - SetGunScopeVisible: HUDMainMenu::SetGunScopeVisible, __cdecl (visible).
+     *   Called from Interface::SetGunScopeVisible and twice from
+     *   HUDMainMenu::SetMenuMode, its only callers.
+     * - NodeChildAt: NiNode::GetAtChecked, __thiscall (index), called in
+     *   SetMenuMode to tell that a scope model is loaded, which selects
+     *   HMM_SNIPER_RIFLE and hides the HUD.
+     * - ObjectSetAppCulled: NiAVObject::SetAppCulled, __thiscall (culled), the
+     *   call culling the first-person root in Actor::SetIronSights.
+     * - ImageSpaceIronSights: PlayerCharacter::UpdateImageSpaceIronsights,
+     *   __thiscall, depth of field and full-screen motion blur.
+     * - WeaponHasNightScope: TESObjectWEAP::HasNightScope, __thiscall, its only
+     *   caller in PlayerCharacter::Update turns on the night vision.
+     * - ActorGetIronSights: Actor::GetIronSights, __thiscall, the call giving
+     *   the aim state to CombatFormulas::GetGunSpread in Actor::GetGunSkill.
+     */
+    constexpr uintptr_t SetGunScopeVisible           = 0x0077F3C0;
+    constexpr uintptr_t GunScopeVisibleCallSite      = 0x00709C48;
+    constexpr uintptr_t GunScopeShowCallSite         = 0x00771C36;
+    constexpr uintptr_t GunScopeHideCallSite         = 0x00771C57;
+    constexpr uintptr_t NodeChildAt                  = 0x0045BC00;
+    constexpr uintptr_t ScopeModelChildCallSite      = 0x007718C6;
+    constexpr uintptr_t ObjectSetAppCulled           = 0x00450F90;
+    constexpr uintptr_t IronSightsCullCallSite       = 0x008BB923;
+    constexpr uintptr_t ImageSpaceIronSights         = 0x009650A0;
+    constexpr uintptr_t ImageSpaceIronSightsCallSite = 0x00965056;
+    constexpr uintptr_t WeaponHasNightScope          = 0x009442C0;
+    constexpr uintptr_t NightScopeCallSite           = 0x0093F098;
+    constexpr uintptr_t ActorGetIronSights           = 0x008BBC10;
+    constexpr uintptr_t GunSkillIronSightsCallSite   = 0x008B0FBF;
+
+    /**
+     * ItemChange::HasModEffectActive 0x004BD8D0, __thiscall (effect, value out,
+     * ret 8), WEAPON_MOD_IRON_SITES its effect for a scope mod. TESObjectWEAP
+     * kData (+0xF4) + 0x38: flags2, HasModScope and HasNightScope.
+     * fDefaultWorldFOV:Display, the reference of the scope's magnification.
+     */
+    constexpr uintptr_t ItemModEffectValue           = 0x004BD8D0;
+    constexpr uint32_t  ModEffectIronSights          = 14;
+    constexpr uintptr_t WeaponFlags2                 = 0x12C;
+    constexpr uint32_t  WeaponFlag2NightScope        = 0x1000;
+    constexpr uint32_t  WeaponFlag2ModScope          = 0x2000;
+    constexpr uintptr_t SettingDefaultWorldFov       = 0x0120315C;
+
   }
 
 }
