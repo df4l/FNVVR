@@ -13,6 +13,7 @@
 - **Binoculars**: held in the fist as in the game's own animation. Bring them to your eyes, like a bottle to your mouth: both eyepieces open into one round magnified view, which then follows your head.
 - **Camera**: its back has a small pre-war picture tube showing the view from the lens, in green phosphor with scanlines, static and afterglow, readable from any angle. The trigger flashes and holds the picture.
 - **Two hands are steadier**: a weapon held with both hands has the precision of the game's aim, without its slower walk.
+- **Gauss rifles' reticle**: the Gauss rifle, the YCS/186 and the Faderator show their own graduated reticle, not a stretched sheet of its parts.
 - **Left hand on every pistol**: on pistols that skip the game's aim animations (Hunting Revolver, laser pistol, alien blaster, ...) or with a fitted scope mod, the left hand now comes onto the weapon as soon as it supports it, not only after a shot.
 
 ### Launcher and desktop

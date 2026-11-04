@@ -11,6 +11,7 @@
 #include "vr_game_memory.h"
 #include "vr_math.h"
 #include "vr_scope_render.h"
+#include "vr_scope_reticle.h"
 
 namespace dxvk {
 
@@ -120,6 +121,9 @@ namespace dxvk {
       Logger::warn(str::format("VR: The reticle '", texture, "' could not be read"));
       return VrImage();
     }
+
+    if (vrIsReticleSheet(texture))
+      image = vrComposeReticleSheet(image);
 
     Logger::info(str::format("VR: Scope model '", model, "' uses the reticle '", texture, "', ",
       image.width, "x", image.height));
