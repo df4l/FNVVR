@@ -760,6 +760,16 @@ namespace dxvk {
     constexpr uint32_t  RouletteStateBet     = 4;
 
     /**
+     * ShadowSceneNode::kLightingOffset, on the world's shadow scene node
+     * (ShadowSceneNodes[0]). The shaders add it to the position of every
+     * point light and to the eye, whatever scene they draw.
+     * DrawWorld_Setup1stPerson sets it to minus the player's position for
+     * the first-person pass, so that nothing else lit by a point light can
+     * be drawn with it: see findings/minigames.md §5.
+     */
+    constexpr uintptr_t ShadowSceneLightingOffset = 0x1E4;
+
+    /**
      * LockPickMenu: the pin's slider (tile, with the trait id held at
      * LockPickSliderTrait for its position) and the tile whose width is its
      * range.

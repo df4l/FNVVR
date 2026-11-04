@@ -114,7 +114,9 @@ namespace dxvk {
      *
      * The game's render group is active, so what clears the depth buffer
      * through the game's renderer does clear it, and the model is then
-     * tested against what is drawn here.
+     * tested against what is drawn here. With no model to draw (the game
+     * hides it while the player sits), it is called right after the scene,
+     * with the same render group and the world's depth buffer.
      */
     void setBeforeFirstPerson(std::function<void()> callback) {
       m_beforeFirstPerson = std::move(callback);

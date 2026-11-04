@@ -650,7 +650,21 @@ namespace dxvk {
     if (m_kind == Kind::Lock)
       VrMenuScenes::hideLockBackdrop(hidden);
 
+    // The first-person pass moves every point light by minus the player's
+    // position, this scene's too: it would have none
+    auto  shadowScene = global<uint8_t*>(VrGame::ShadowSceneNodes);
+    auto* offset      = shadowScene ? &field<VrVector3>(shadowScene, VrGame::ShadowSceneLightingOffset) : nullptr;
+    VrVector3 gameOffset;
+
+    if (offset) {
+      gameOffset = *offset;
+      *offset = { 0.0f, 0.0f, 0.0f };
+    }
+
     game<SceneFn>(sceneRender(id))();
+
+    if (offset)
+      *offset = gameOffset;
 
     VrMenuScenes::showHidden(hidden);
 
