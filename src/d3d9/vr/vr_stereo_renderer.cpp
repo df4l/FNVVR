@@ -335,6 +335,11 @@ namespace dxvk {
     if (!renderer->m_comfortSettings)
       Logger::info("VR: The idle and kill camera settings were not found, the game may leave the first person");
 
+    renderer->m_bodyView = VrBodyView::install();
+
+    if (!renderer->m_bodyView)
+      Logger::info("VR: The temporary third person was not found, sitting down is seen from behind the player");
+
     renderer->m_npcGaze = VrNpcGaze::install();
 
     if (!renderer->m_npcGaze)
@@ -674,12 +679,23 @@ namespace dxvk {
     // The game placed its first-person model for its own camera
     VrGameCameraPose modelCamera = m_gameCameraPose;
 
-    // A mini-game on an object of the world has brought the player to it
-    if (const VrGameCameraPose* seat = m_minigames ? m_minigames->seatCamera() : nullptr)
-      m_gameCameraPose = *seat;
+    if (m_bodyView)
+      m_bodyView->placeCamera(m_gameCameraPose);
 
     // The game turned its camera with the head already
     m_controls.updateCamera(m_gameCameraPose, dt);
+
+    if (m_bodyView)
+      m_bodyView->finishCamera(m_gameCameraPose, dt);
+
+    m_viewMoved = m_bodyView && m_bodyView->followsHead();
+
+    // A mini-game on an object of the world has brought the player to it. It
+    // comes last: its heading is the object's, not the body's.
+    if (const VrGameCameraPose* seat = m_minigames ? m_minigames->seatCamera() : nullptr) {
+      m_gameCameraPose = *seat;
+      m_viewMoved = true;
+    }
     updateNpcGaze();
     updateHolster(input, state);
     updateQuickWheel(input, state);
@@ -1967,7 +1983,12 @@ namespace dxvk {
     if (!m_hasReference || !m_hasHeadPose || !m_hasCullingFov)
       return false;
 
-    m_controls.adjustCamera(pose);
+    // The game passes its own camera, behind the player or far from a seat:
+    // the eyes' camera of the last frame is what is about to be seen
+    if (m_viewMoved)
+      pose = m_gameCameraPose;
+    else
+      m_controls.adjustCamera(pose);
 
     pose = vrComputeEyeCameraPose(pose,
       vrComputeEyeInReference(m_reference, m_headPose), VrGameUnitsPerMetre);

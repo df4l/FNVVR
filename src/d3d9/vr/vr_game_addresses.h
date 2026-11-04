@@ -946,6 +946,15 @@ namespace dxvk {
     constexpr uintptr_t TempThirdPersonReadSite   = 0x009503DA;
     constexpr uint8_t   TempThirdPersonRead[]     = { 0x0F, 0xB6, 0x88, 0x4D, 0x06, 0x00, 0x00 };
 
+    /**
+     * BaseProcess::GetKnockedState, a vtable slot (__thiscall, 0 if the
+     * actor is not knocked down), read in PlayerCharacter::UpdateTemp3rdPerson:
+     * mov eax, [edx+0x40C].
+     */
+    constexpr uintptr_t ProcessGetKnockedStateSlot = 0x40C;
+    constexpr uintptr_t ProcessGetKnockedStateSite = 0x0095040E;
+    constexpr uint8_t   ProcessGetKnockedStateRead[] = { 0x8B, 0x82, 0x0C, 0x04, 0x00, 0x00 };
+
     /** LoadingMenu*, not null while a loading screen is shown */
     constexpr uintptr_t LoadingMenu = 0x011DA0C0;
 

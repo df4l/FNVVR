@@ -11,6 +11,7 @@
 
 #include "vr_activate_target.h"
 #include "vr_backend.h"
+#include "vr_body_view.h"
 #include "vr_comfort_settings.h"
 #include "vr_controls.h"
 #include "vr_culling_camera.h"
@@ -427,6 +428,12 @@ namespace dxvk {
 
     // The idle camera off and the kill camera in first person
     std::unique_ptr<VrComfortSettings> m_comfortSettings;
+
+    // The eyes in the body's head while it sits down or gets up
+    std::unique_ptr<VrBodyView> m_bodyView;
+
+    // The eyes' base camera is no longer on the game's camera
+    bool                m_viewMoved = false;
 
     // The other actors look at the head
     std::unique_ptr<VrNpcGaze> m_npcGaze;

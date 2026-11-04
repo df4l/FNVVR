@@ -118,6 +118,53 @@ namespace dxvk {
   VrGameCameraPose vrComputeBodyCameraPose(float heading, const VrVector3& position);
 
   /**
+   * \brief Finds the heading a camera faces
+   *
+   * \param [in] pose A camera that does not look straight up or down
+   * \returns Heading in radians, 0 north, clockwise
+   */
+  float vrComputeCameraHeading(const VrGameCameraPose& pose);
+
+  /**
+   * \brief Finds where the eyes are in a third-person body's head
+   *
+   * \param [in] head World position of the head bone
+   * \param [in] rotation World rotation of the bone, 9 floats by rows. In the
+   *    game's skeletons its first column points to the top of the head and
+   *    its second one to the front.
+   * \param [in] scale World scale of the body
+   */
+  VrVector3 vrComputeHeadViewPosition(const VrVector3& head, const float* rotation, float scale);
+
+  /**
+   * \brief Softens the change between two ways of placing the camera
+   *
+   * The position and the heading continue from what the last frame showed and
+   * reach the new camera within a fraction of a second. Far apart, as after a
+   * loading screen, the camera is simply cut to.
+   */
+  class VrCameraBlend {
+
+  public:
+
+    /**
+     * \param [in] target The camera to show
+     * \param [in] changed Whether the target comes from somewhere else now
+     * \param [in] dt Time since the last frame, in seconds
+     * \returns The camera to show this frame
+     */
+    VrGameCameraPose update(const VrGameCameraPose& target, bool changed, float dt);
+
+  private:
+
+    VrGameCameraPose m_last;
+    bool             m_hasLast = false;
+    VrVector3        m_position = { 0.0f, 0.0f, 0.0f };
+    float            m_heading  = 0.0f;
+
+  };
+
+  /**
    * \brief Levels the camera of V.A.T.S. for a head that keeps its yaw
    *
    * The eyes add the head's yaw and pitch to the camera they are placed on.

@@ -6,11 +6,15 @@
 
 - **The menus keep showing the controller's buttons when you point with a laser**, instead of switching to keyboard shortcuts.
 
+### Sitting down
+
+- **Sitting down and getting up no longer leave your head**: the animation plays on your body and your eyes follow the head of that body, instead of a camera behind you. You see your own body sit, your head is hidden and the headset stays free to look around. The Sandman and Cannibal kills do the same. A chair or bed also no longer keeps the view tilted at the angle your head had when you sat down.
+
 ### Mini-games in the room
 
 - **The mini-games stand in front of you**, in 3D at their real size, instead of on a flat panel: the lock, the slot machine, the blackjack, roulette and Caravan tables, and the terminals with their hacking screen. Your hands are there too, in front of the table or behind it. Texts and buttons stay on a panel above the table, pointed at with the lasers. `d3d9.vrImmersiveMinigames = False` brings the flat panel back.
 - **Lockpicking**: the pin points at your right hand. Turn the screwdriver with the left trigger, or close the left grip and twist your wrist, the further the faster. The controllers vibrate while the lock turns and when the pin bends. The sticks still work.
-- **Slot machine**: close your grip on the lever's ball and pull it down.
+- **Slot machine**: close your grip on the lever's ball and pull it down. Your eyes are level with the reels, and the payout screen only appears when you ask for it.
 - **Blackjack**: tap the felt to hit, wave over the table to stay, as at a real table. Buttons and lasers still work.
 - **Roulette**: point the laser at the felt, the trigger places a chip or takes it back.
 - **Terminals and hacking**: the monitor stands in the room and the laser points directly at its screen.
