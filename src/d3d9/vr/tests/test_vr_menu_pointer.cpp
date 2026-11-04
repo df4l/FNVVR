@@ -192,3 +192,40 @@ TEST_CASE(pointer_is_off_without_a_panel) {
   CHECK(!state.button);
   CHECK(!state.beams[uint32_t(VrHand::Right)].visible);
 }
+
+
+TEST_CASE(a_surface_is_pointed_at_where_the_panel_is_not) {
+  VrMenuPointer pointer;
+
+  VrPanelPlacement panel = makePanel();
+  VrPanelPlacement surface = panel;
+  surface.pose.position.y = -1.0f;
+
+  VrPointerInput input;
+  input.panel   = &panel;
+  input.surface = &surface;
+  input.dt      = Frame;
+
+  // On the surface, below the panel: no cursor, the laser shows, the
+  // trigger belongs to the pointer
+  input.controllers[1] = pointingAt(0.0f, -1.0f);
+  VrPointerState state = pointer.update(input);
+
+  CHECK(state.surface.hit);
+  CHECK(!state.cursorActive);
+  CHECK(state.beams[1].visible);
+  CHECK(state.triggersTaken);
+  CHECK(state.surface.hand == VrHand::Right);
+  CHECK(!state.surface.trigger);
+
+  input.triggers[1] = true;
+  state = pointer.update(input);
+  CHECK(state.surface.trigger);
+
+  // The panel comes first
+  input.triggers[1] = false;
+  input.controllers[1] = pointingAt(0.0f, 1.5f);
+  state = pointer.update(input);
+  CHECK(!state.surface.hit);
+  CHECK(state.cursorActive);
+}

@@ -20,6 +20,28 @@ namespace dxvk {
   };
 
   /**
+   * \brief A mini-game's physical controls, as gamepad input
+   *
+   * See VrMinigames. What is driven replaces what the sticks and triggers of
+   * the controllers would give; buttons are added.
+   */
+  struct VrMinigamePad {
+    bool     active      = false;
+    /// Buttons pressed by a gesture
+    uint16_t buttons     = 0;
+    /// Left and right stick X, in [-1, 1]
+    bool     driveLeftX  = false;
+    float    leftX       = 0.0f;
+    bool     driveRightX = false;
+    float    rightX      = 0.0f;
+    /// Keeps the triggers from the game, which some of these menus bind to
+    /// debug tiles
+    bool     noTriggers  = false;
+    /// Same for the shoulder buttons, which are the grips
+    bool     noShoulders = false;
+  };
+
+  /**
    * \brief Game controls the VR actions stand for
    *
    * Values of the game's ControlCode, see findings/input.md. The game keeps
@@ -120,5 +142,10 @@ namespace dxvk {
    * \returns The image, or 0 if the game shows none for that input
    */
   uint32_t vrButtonIconForInput(uint8_t input);
+
+  /**
+   * \brief Adds a mini-game's controls to a gamepad state
+   */
+  void vrApplyMinigamePad(VrPadState& pad, const VrMinigamePad& minigame);
 
 }
