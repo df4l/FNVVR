@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <map>
 #include <string>
 
@@ -8,14 +9,33 @@
 namespace dxvk {
 
   /**
+   * \brief How an item with a scope in the game's data is looked through
+   */
+  enum class VrOpticKind : uint8_t {
+    /// One eyepiece on the weapon, an image at infinity
+    Scope,
+    /// Two eyepieces, brought to the eyes: the view is then held by the head
+    Binoculars,
+    /// A small picture tube on the back, showing the view from a lens
+    Screen,
+  };
+
+  /**
    * \brief Where a weapon's scope is in the weapon's model
    *
    * In the model's units and frame, which is the weapon node's. The lens lies
-   * square to the barrel, whichever axis of the model that is.
+   * square to the barrel, whichever axis of the model that is. Binoculars are
+   * placed in the hand by the mod, so theirs are in the hand's frame: x along
+   * the view, y up, z to the right.
    */
   struct VrScopePlacement {
-    /// Centre of the eyepiece's opening
+    VrOpticKind kind = VrOpticKind::Scope;
+    /// Centre of the eyepiece's opening, or of the screen
     VrVector3 eyepiece;
+    /// Centre of the second eyepiece of binoculars
+    VrVector3 otherEyepiece;
+    /// Where a view not taken along the shots is drawn from
+    VrVector3 objective;
     /// Half the opening's size, across and up. A disc if they are equal.
     float     halfWidth   = 0.0f;
     float     halfHeight  = 0.0f;
@@ -26,6 +46,21 @@ namespace dxvk {
     bool hasLens() const {
       return halfWidth > 0.0f && halfHeight > 0.0f;
     }
+  };
+
+  /**
+   * \brief How the game's binoculars model is held
+   *
+   * The model is made tilted and rolled, below and beside the weapon node, so
+   * the mod holds it by its right barrel (findings/optics.md §11).
+   */
+  struct VrHeldBinoculars {
+    /// The node holding the shape, its axes along the view, to the left and up
+    static constexpr char NodeName[]  = "##Binoculars";
+    /// A second shape, a marker at the model's origin that is no part of them
+    static constexpr char StrayName[] = "Binoculars:0";
+    /// Where that node is in the hand's frame
+    static const VrVector3 Origin;
   };
 
   /**

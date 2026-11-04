@@ -153,7 +153,9 @@ namespace dxvk {
     m_device->SetTextureStageState(stage, D3DTSS_COLORARG1, lens.image ? D3DTA_TEXTURE : D3DTA_TFACTOR);
     m_device->SetTextureStageState(stage, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
     m_device->SetTextureStageState(stage, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
-    m_device->SetSamplerState(stage, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+    m_device->SetSamplerState(stage, D3DSAMP_MIPFILTER, lens.imageMipmapped ? D3DTEXF_LINEAR : D3DTEXF_NONE);
+    m_device->SetSamplerState(stage, D3DSAMP_MINFILTER, lens.imageMipmapped ? D3DTEXF_ANISOTROPIC : D3DTEXF_LINEAR);
+    m_device->SetSamplerState(stage, D3DSAMP_MAXANISOTROPY, lens.imageMipmapped ? 8 : 1);
     m_device->SetSamplerState(stage, D3DSAMP_ADDRESSU, D3DTADDRESS_BORDER);
     m_device->SetSamplerState(stage, D3DSAMP_ADDRESSV, D3DTADDRESS_BORDER);
     m_device->SetSamplerState(stage, D3DSAMP_BORDERCOLOR, D3DCOLOR_ARGB(255, 0, 0, 0));
@@ -195,9 +197,65 @@ namespace dxvk {
     m_device->SetTextureStageState(stage, D3DTSS_COLOROP, D3DTOP_DISABLE);
     m_device->SetTextureStageState(stage, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
 
-    m_device->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, lens.vertexCount, lens.triangles,
-      lens.indices, D3DFMT_INDEX16, lens.vertices, lens.vertexStride);
+    for (UINT i = 0; i < lens.meshCount; i++) {
+      m_device->SetRenderState(D3DRS_ZENABLE, lens.meshOverDepth[i] ? D3DZB_FALSE : D3DZB_TRUE);
+      m_device->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, lens.vertexCount, lens.triangles,
+        lens.indices, D3DFMT_INDEX16, lens.meshes[i], lens.vertexStride);
+    }
 
+    restoreTargets(saved);
+    return true;
+  }
+
+
+  bool VrPainter::shade(
+          IDirect3DSurface9*     target,
+          IDirect3DPixelShader9* shader,
+          IDirect3DTexture9*     first,
+          IDirect3DTexture9*     second,
+    const float*                 constants) {
+    D3DSURFACE_DESC desc = { };
+
+    if (FAILED(target->GetDesc(&desc)) || !captureState())
+      return false;
+
+    SavedTargets saved;
+    saveTargets(saved, target);
+
+    setStates(desc.Width, desc.Height);
+    setBlend(VrPaintBlend::Copy);
+
+    m_device->SetPixelShader(shader);
+    m_device->SetPixelShaderConstantF(0, constants, 1);
+
+    IDirect3DTexture9* textures[2] = { first, second };
+
+    for (DWORD i = 0; i < 2; i++) {
+      m_device->SetTexture(i, textures[i]);
+      m_device->SetSamplerState(i, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+      m_device->SetSamplerState(i, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+      m_device->SetSamplerState(i, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+      m_device->SetSamplerState(i, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+      m_device->SetSamplerState(i, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+      m_device->SetSamplerState(i, D3DSAMP_SRGBTEXTURE, FALSE);
+    }
+
+    // Pre-transformed, moved by half a pixel as in paint
+    float x1 = float(desc.Width)  - 0.5f;
+    float y1 = float(desc.Height) - 0.5f;
+
+    D3DCOLOR white = D3DCOLOR_ARGB(255, 255, 255, 255);
+
+    const DeviceVertex quad[4] = {
+      { -0.5f, -0.5f, 0.0f, 1.0f, white, 0.0f, 0.0f },
+      { x1,    -0.5f, 0.0f, 1.0f, white, 1.0f, 0.0f },
+      { -0.5f, y1,    0.0f, 1.0f, white, 0.0f, 1.0f },
+      { x1,    y1,    0.0f, 1.0f, white, 1.0f, 1.0f },
+    };
+
+    m_device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, quad, sizeof(DeviceVertex));
+
+    m_device->SetTexture(1, nullptr);
     restoreTargets(saved);
     return true;
   }

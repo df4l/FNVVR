@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <chrono>
 #include <vector>
 
@@ -8,6 +9,7 @@
 #include "vr_game_addresses.h"
 #include "vr_game_file.h"
 #include "vr_game_memory.h"
+#include "vr_math.h"
 #include "vr_scope_render.h"
 
 namespace dxvk {
@@ -62,7 +64,7 @@ namespace dxvk {
 
 
   VrScopeRender::VrScopeRender(IDirect3DDevice9* device, uint32_t resolution)
-  : m_device(device), m_painter(device), m_resolution(resolution) { }
+  : m_device(device), m_painter(device), m_resolution(resolution), m_tubeScreen(device, m_painter) { }
 
 
   std::unique_ptr<VrScopeRender> VrScopeRender::install(IDirect3DDevice9* device, uint32_t resolution) {
@@ -125,7 +127,7 @@ namespace dxvk {
   }
 
 
-  bool VrScopeRender::prepareView(float magnification, float apparentTangent, VrFov& fov) {
+  bool VrScopeRender::prepareView(float magnification, float apparentTangent, VrOpticKind kind, VrFov& fov) {
     // The game's image has the size of its window
     Com<IDirect3DSurface9> target;
     D3DSURFACE_DESC desc = { };
@@ -136,7 +138,13 @@ namespace dxvk {
 
     m_targetWidth  = desc.Width;
     m_targetHeight = desc.Height;
-    m_area = vrComputeScopeArea(desc.Width, desc.Height, m_resolution);
+
+    // The default side of the image is meant for a scope seen at its usual distance
+    uint32_t side = kind == VrOpticKind::Binoculars ? m_resolution * 4 / 3
+                  : kind == VrOpticKind::Screen     ? m_resolution / 2
+                  : m_resolution;
+
+    m_area = vrComputeScopeArea(desc.Width, desc.Height, side);
     fov    = vrComputeScopeRenderFov(magnification, apparentTangent, desc.Width, desc.Height, m_area);
     return true;
   }
@@ -233,12 +241,6 @@ namespace dxvk {
           float               farDistance) {
     m_lensDrawn = false;
 
-    VrScopeLensMesh mesh;
-
-    if (!vrComputeScopeLensMesh(lens, eye, mesh)
-     || !vrComputeScopeLensBounds(mesh, eyeFov, m_lensBounds))
-      return;
-
     Com<IDirect3DSurface9> depth;
     D3DSURFACE_DESC depthDesc = { };
 
@@ -272,18 +274,74 @@ namespace dxvk {
       m_loggedLensProjection = true;
     }
 
+    // Binoculars have an eyepiece on each side, each eye looks through its
+    // own. Drawn last, it goes over the other as it grows.
+    EyeMesh meshes[2];
+    UINT meshCount = 0;
+
+    const VrScopeLens* single = lens.kind == VrOpticKind::Binoculars ? nullptr : &lens;
+
+    VrScopeLensBounds bounds;
+    bool hasBounds = false;
+
+    auto addMesh = [&] (const VrScopeLens& seen, bool overDepth) {
+      VrScopeLensBounds meshBounds;
+
+      if (!vrComputeScopeLensMesh(seen, eye, meshes[meshCount].vertices)
+       || !vrComputeScopeLensBounds(meshes[meshCount].vertices, eyeFov, meshBounds))
+        return;
+
+      bounds.left   = hasBounds ? std::min(bounds.left, meshBounds.left) : meshBounds.left;
+      bounds.top    = hasBounds ? std::min(bounds.top, meshBounds.top) : meshBounds.top;
+      bounds.right  = hasBounds ? std::max(bounds.right, meshBounds.right) : meshBounds.right;
+      bounds.bottom = hasBounds ? std::max(bounds.bottom, meshBounds.bottom) : meshBounds.bottom;
+      hasBounds = true;
+
+      meshes[meshCount].overDepth = overDepth;
+      meshCount += 1;
+    };
+
+    if (single) {
+      addMesh(*single, false);
+    } else {
+      constexpr float OverDepthRaised = 0.5f;
+
+      // The drawn near distance, as the depth row above gives it
+      float nearest = projection[10] > 0.0f ? -projection[14] / projection[10] : nearDistance;
+
+      addMesh(vrComputeBinocularsEyeLens(lens, eye, false, nearest), false);
+
+      VrScopeLens own = vrComputeBinocularsEyeLens(lens, eye, true, nearest);
+      addMesh(own, own.raised >= OverDepthRaised);
+    }
+
+    if (!meshCount)
+      return;
+
+    m_lensBounds = bounds;
+
+    const void* vertexLists[2] = { meshes[0].vertices.data(), meshes[1].vertices.data() };
+    bool overDepth[2] = { meshes[0].overDepth, meshes[1].overDepth };
+
+    bool onScreen = lens.kind == VrOpticKind::Screen;
+
     VrPainter::LensDrawing drawing = { };
-    drawing.target       = m_lensSurface.ptr();
-    drawing.depth        = depth.ptr();
-    drawing.image        = m_imageReady ? m_image.ptr() : nullptr;
-    drawing.overlay      = m_reticle;
-    drawing.projection   = projection.data();
-    drawing.vertices     = mesh.data();
-    drawing.vertexCount  = VrScopeLensVertexCount;
-    drawing.vertexStride = sizeof(VrScopeLensVertex);
-    drawing.indices      = vrScopeLensIndices().data();
-    drawing.triangles    = VrScopeLensTriangles;
-    drawing.amplified    = lens.nightVision;
+    drawing.target         = m_lensSurface.ptr();
+    drawing.depth          = depth.ptr();
+    drawing.image          = onScreen
+      ? (m_screenReady ? m_tubeScreen.picture() : nullptr)
+      : (m_imageReady ? m_image.ptr() : nullptr);
+    drawing.imageMipmapped = onScreen;
+    drawing.overlay        = m_reticle;
+    drawing.projection     = projection.data();
+    drawing.meshes         = vertexLists;
+    drawing.meshOverDepth  = overDepth;
+    drawing.meshCount      = meshCount;
+    drawing.vertexCount    = VrScopeLensVertexCount;
+    drawing.vertexStride   = sizeof(VrScopeLensVertex);
+    drawing.indices        = vrScopeLensIndices().data();
+    drawing.triangles      = VrScopeLensTriangles;
+    drawing.amplified      = lens.nightVision;
 
     if (!m_painter.drawLens(drawing))
       return;
@@ -298,6 +356,13 @@ namespace dxvk {
     }
 
     m_lensDrawn = true;
+  }
+
+
+  void VrScopeRender::updateScreen(bool viewIsNew, float shutterFlash) {
+    IDirect3DTexture9* view = viewIsNew && m_imageReady ? m_image.ptr() : nullptr;
+
+    m_screenReady = m_tubeScreen.update(view, shutterFlash);
   }
 
 
@@ -378,6 +443,15 @@ namespace dxvk {
     }
 
     uint32_t side = m_area.right - m_area.left;
+
+    if (m_image != nullptr) {
+      D3DSURFACE_DESC current = { };
+      m_image->GetLevelDesc(0, &current);
+
+      // Another kind of optic in hand
+      if (current.Width != side)
+        m_image = nullptr;
+    }
 
     if (m_image == nullptr && FAILED(m_device->CreateTexture(side, side, 1,
         D3DUSAGE_RENDERTARGET, desc.Format, D3DPOOL_DEFAULT, &m_image, nullptr)))

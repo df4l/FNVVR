@@ -1058,6 +1058,8 @@ namespace dxvk {
     lens.apparentTangent   = vrComputeScopeApparentTangent(m_scopeHalfWidth, m_scopeHalfHeight);
     lens.objective         = vrPointFromHand(hand, m_scopeObjective);
     lens.nightVision       = m_scopeNightVision;
+    lens.kind              = m_scopeKind;
+    lens.otherEyepiece     = vrPointFromHand(hand, m_scopeOtherEyepiece);
     return true;
   }
 
@@ -1071,8 +1073,7 @@ namespace dxvk {
     const VrVector3&        supportInHand) {
     VrEquippedScope equipped;
 
-    // Without a projectile node the weapon's model is not attached yet
-    if (!m_scopesEnabled || !form || !muzzle || !VrScopeGame::readEquipped(equipped))
+    if (!m_scopesEnabled || !form || !VrScopeGame::readEquipped(equipped))
       return;
 
     VrGameRotation modelRotation = readRotation(weapon, VrGame::ObjectWorldRotation);
@@ -1086,6 +1087,10 @@ namespace dxvk {
     VrScopePlacement placement;
 
     if (!m_scopeTable.find(equipped.weaponModel, placement)) {
+      // Without a projectile node the weapon's model is not attached yet
+      if (!muzzle)
+        return;
+
       placement = VrScopeTable::guess(
         vrTranspose(modelRotation) * (readVector(muzzle, VrGame::ObjectWorldTranslation) - modelOrigin) * (1.0f / modelScale));
 
@@ -1106,6 +1111,31 @@ namespace dxvk {
     if (!placement.hasLens())
       return;
 
+    m_scopeKind = placement.kind;
+
+    // Binoculars are held by the mod, along the hand
+    if (placement.kind == VrOpticKind::Binoculars) {
+      auto inHand = [&] (const VrVector3& point) {
+        return hand.position + (hand.forward * point.x + hand.up * point.y + hand.right * point.z) * modelScale;
+      };
+
+      m_scopeEyepiece      = vrPointToHand(hand, inHand(placement.eyepiece));
+      m_scopeOtherEyepiece = vrPointToHand(hand, inHand(placement.otherEyepiece));
+      m_scopeObjective     = vrPointToHand(hand, inHand(placement.objective));
+      m_scopeRotation      = vrTranspose(vrCameraRotation(hand)) * vrCameraRotation(hand);
+      m_scopeHalfWidth     = placement.halfWidth * modelScale;
+      m_scopeHalfHeight    = placement.halfHeight * modelScale;
+      m_scopeRectangular   = false;
+      m_scopeNightVision   = false;
+      m_scopeTwoHanded     = false;
+      m_hasScopeLens       = true;
+      return;
+    }
+
+    // Without a projectile node the weapon's model is not attached yet
+    if (!muzzle)
+      return;
+
     // Square to the barrel: the shots leave along the projectile node, whichever
     // axis of the model that is. The barrel, up and right are its y, z and x.
     // Stored as columns forward, up, right, see scopeLens.
@@ -1123,7 +1153,10 @@ namespace dxvk {
     // The render looks from the barrel's end along the shots, so that the
     // reticle's centre is where they go at any range: the offset of a
     // scope's axis from the barrel is a matter of zeroing in a real one
-    VrVector3 objective = readVector(muzzle, VrGame::ObjectWorldTranslation);
+    // A screen has a lens of its own to look from.
+    VrVector3 objective = placement.kind == VrOpticKind::Screen
+      ? toWorld(placement.objective)
+      : readVector(muzzle, VrGame::ObjectWorldTranslation);
 
     m_scopeEyepiece    = vrPointToHand(hand, eyepiece);
     m_scopeObjective   = vrPointToHand(hand, objective);
@@ -1135,6 +1168,66 @@ namespace dxvk {
     m_scopeTwoHanded   = pointedByBothHands;
     m_scopeSupport     = supportInHand;
     m_hasScopeLens     = true;
+  }
+
+
+  VrOpticKind VrWeaponHand::opticKind(const uint8_t* form) {
+    if (form == m_opticForm)
+      return m_opticKind;
+
+    VrEquippedScope equipped;
+    VrScopePlacement placement;
+
+    m_opticKind = VrOpticKind::Scope;
+    m_opticForm = nullptr;
+
+    // The weapon's data may not be there yet: asked again next time
+    if (form && VrScopeGame::readEquipped(equipped)) {
+      m_opticForm = form;
+
+      if (m_scopeTable.find(equipped.weaponModel, placement))
+        m_opticKind = placement.kind;
+    }
+
+    return m_opticKind;
+  }
+
+
+  void VrWeaponHand::holdBinoculars(uint8_t* weapon, const VrGameCameraPose& hand, void* updateData) {
+    uint8_t* node  = findObject(weapon, VrHeldBinoculars::NodeName);
+    uint8_t* model = node ? field<uint8_t*>(node, VrGame::ObjectParent) : nullptr;
+
+    if (!model)
+      return;
+
+    if (uint8_t* stray = findObject(weapon, VrHeldBinoculars::StrayName))
+      field<uint32_t>(stray, VrGame::ObjectFlags) |= VrGame::ObjectFlagAppCulled;
+
+    float scale = field<float>(weapon, VrGame::ObjectWorldScale);
+
+    // The node's axes: along the view, to the left and up. The file's transform
+    // controller only ever writes that node, so the model above it is the
+    // one that moves.
+    VrGameRotation wanted;
+
+    const VrVector3 axes[3] = { hand.forward, hand.right * -1.0f, hand.up };
+
+    for (uint32_t column = 0; column < 3; column++) {
+      wanted.m[0][column] = axes[column].x;
+      wanted.m[1][column] = axes[column].y;
+      wanted.m[2][column] = axes[column].z;
+    }
+
+    const VrVector3& origin = VrHeldBinoculars::Origin;
+
+    VrVector3 place = hand.position
+      + (hand.forward * origin.x + hand.up * origin.y + hand.right * origin.z) * scale;
+
+    VrGameTransform pose;
+    pose.rotate    = wanted * vrTranspose(readRotation(node, VrGame::ObjectLocalRotation));
+    pose.translate = place - pose.rotate * (readVector(node, VrGame::NodeLocalTranslate) * scale);
+
+    drawPart(model, pose, updateData);
   }
 
 
@@ -1334,7 +1427,10 @@ namespace dxvk {
     // two-handed melee weapon is swung by the right hand, the left hand
     // only rides on its handle.
     VrVector3 support = rig.rotate * (drawnHand - drawnWeapon);
-    GripKind  grip    = weaponGrip(object);
+    // Binoculars and the camera are not aimed: the left hand stays free and the
+    // game's aim state, with its animations and slow walk, stays out of them
+    VrOpticKind optic = opticKind(form);
+    GripKind    grip  = optic == VrOpticKind::Scope ? weaponGrip(object) : GripKind::None;
     updateGrip(grip, forearm != nullptr, support);
 
     VrVector3 supportInHand = vrTranspose(vrCameraRotation(hand)) * support;
@@ -1439,6 +1535,9 @@ namespace dxvk {
       drawPart(rack, rackPose, updateData);
 
     findHighlight(root, weapon, hinge, lock, action == ActionKind::Swing);
+
+    if (optic == VrOpticKind::Binoculars)
+      holdBinoculars(weapon, hand, updateData);
 
     uint8_t* muzzle = findObject(weapon, VrGame::ProjectileNodeName);
 

@@ -59,11 +59,18 @@ namespace dxvk {
       IDirect3DSurface9*  depth;
       /// Black past its edges, or \c nullptr for a dark glass
       IDirect3DTexture9*  image;
+      /// The image has mipmaps, seen from afar or at an angle
+      bool                imageMipmapped;
       /// Laid over the image by its own alpha, opaque black past its edges, or \c nullptr
       const VrImage*      overlay;
       /// In row-vector order
       const float*        projection;
-      const void*         vertices;
+      /// Drawn in turn, the later over the earlier
+      const void* const*  meshes;
+      /// Which of them are not tested against the depth buffer: an eye at an
+      /// eyepiece looks through it, whatever the model does around the eye
+      const bool*         meshOverDepth;
+      UINT                meshCount;
       UINT                vertexCount;
       UINT                vertexStride;
       const uint16_t*     indices;
@@ -81,6 +88,23 @@ namespace dxvk {
      * \returns \c false if nothing could be drawn
      */
     bool drawLens(const LensDrawing& lens);
+
+    /**
+     * \brief Fills a target with a pixel shader
+     *
+     * \param [in] target Render target surface
+     * \param [in] shader The pixel shader
+     * \param [in] first Its sampler 0, bilinear, clamped
+     * \param [in] second Its sampler 1, bilinear, clamped
+     * \param [in] constants Its constant 0
+     * \returns \c false if nothing could be drawn
+     */
+    bool shade(
+            IDirect3DSurface9*     target,
+            IDirect3DPixelShader9* shader,
+            IDirect3DTexture9*     first,
+            IDirect3DTexture9*     second,
+      const float*                 constants);
 
     /**
      * \brief Lays a part of a texture over the same part of a target

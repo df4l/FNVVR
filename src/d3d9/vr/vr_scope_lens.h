@@ -6,6 +6,7 @@
 #include <string>
 
 #include "vr_game_space.h"
+#include "vr_scope_table.h"
 
 namespace dxvk {
 
@@ -28,6 +29,11 @@ namespace dxvk {
     VrVector3 objective;
     /// The image is amplified and green
     bool nightVision = false;
+    VrOpticKind kind = VrOpticKind::Scope;
+    /// Centre of the second eyepiece of binoculars
+    VrVector3 otherEyepiece;
+    /// How far binoculars are brought to the eyes, from 0 to 1
+    float raised = 0.0f;
   };
 
   /**
@@ -144,6 +150,33 @@ namespace dxvk {
     uint32_t width, uint32_t height, const VrScopeArea& area);
 
   /**
+   * \brief Brings binoculars to the eyes
+   *
+   * Held against the face they move with it, not with the hands: as they come
+   * up, the view's direction and the place it is drawn from go over to the
+   * head's. This also keeps the hands' tremor out of a magnified view.
+   *
+   * \param [in,out] lens The binoculars, as held
+   * \param [in] head The head's pose in the game world, between the eyes
+   */
+  void vrRaiseBinoculars(VrScopeLens& lens, const VrGameCameraPose& head);
+
+  /**
+   * \brief One eyepiece of binoculars as an eye sees it
+   *
+   * Lowered, it is the small dark glass of the model. Raised, the eye looks
+   * through it: the opening grows into the wide round view of real binoculars,
+   * dark around it, centred on the eye so that both eyes' views fall on the same
+   * direction and merge into one, whatever the distance between the eyes.
+   *
+   * \param [in] lens The binoculars, after vrRaiseBinoculars
+   * \param [in] eye The eye's pose in the game world
+   * \param [in] own Whether this is the eyepiece on the eye's side
+   * \param [in] nearDistance Nearest distance from the eye that can be drawn
+   */
+  VrScopeLens vrComputeBinocularsEyeLens(const VrScopeLens& lens, const VrGameCameraPose& eye, bool own, float nearDistance);
+
+  /**
    * \brief Finds the reticle's texture in a scope's model
    *
    * The game's scope models name their reticle among their textures, next
@@ -165,7 +198,8 @@ namespace dxvk {
    *
    * Decides if the image is worth drawing: the lens is in the eye's view, not
    * too far to matter, and the eye is near enough to the axis that the
-   * eyepiece opens on the image and not on the dark past its edge.
+   * eyepiece opens on the image and not on the dark past its edge. A screen
+   * shows its picture from any side, binoculars once they are raised.
    *
    * \param [in] lens The scope
    * \param [in] eye The eye's pose in the game world
@@ -185,7 +219,8 @@ namespace dxvk {
   /**
    * \brief Computes the lens for an eye
    *
-   * The image lies at infinity: each point of the lens shows the direction
+   * A screen shows its picture across its face, in its frame. Otherwise the
+   * image lies at infinity: each point of the lens shows the direction
    * from the eye through it, relative to the axis, times the magnification.
    * The lens is flat and square to the axis, so these coordinates vary
    * linearly over it and the GPU interpolates them exactly. An eye off the

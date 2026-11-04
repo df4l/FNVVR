@@ -9,6 +9,7 @@
 
 #include "vr_painter.h"
 #include "vr_scope_lens.h"
+#include "vr_tube_screen.h"
 
 namespace dxvk {
 
@@ -61,10 +62,12 @@ namespace dxvk {
      *
      * \param [in] magnification How much the scope magnifies
      * \param [in] apparentTangent Tangent of the edge of the scope's image
+     * \param [in] kind What the view is for: binoculars fill most of the view
+     *    and deserve more pixels, a small screen needs fewer
      * \param [out] fov Field of view to draw the game's whole image with
      * \returns \c false if the size of the game's image is not known
      */
-    bool prepareView(float magnification, float apparentTangent, VrFov& fov);
+    bool prepareView(float magnification, float apparentTangent, VrOpticKind kind, VrFov& fov);
 
     /**
      * \brief The area chosen by prepareView, where the scene has to be drawn
@@ -85,10 +88,19 @@ namespace dxvk {
     bool render(void* main);
 
     /**
+     * \brief Draws the next picture of the tube screen
+     *
+     * \param [in] viewIsNew Whether render has just drawn a new view
+     * \param [in] shutterFlash The shutter's flash, from 0 to 1
+     */
+    void updateScreen(bool viewIsNew, float shutterFlash);
+
+    /**
      * \brief Forgets the image, the lens shows a dark glass until the next render
      */
     void forgetImage() {
-      m_imageReady = false;
+      m_imageReady  = false;
+      m_screenReady = false;
     }
 
     /**
@@ -120,9 +132,17 @@ namespace dxvk {
 
     VrScopeRender(IDirect3DDevice9* device, uint32_t resolution);
 
+    /// A lens as an eye sees it, ready for the device
+    struct EyeMesh {
+      VrScopeLensMesh vertices;
+      bool            overDepth = false;
+    };
+
     IDirect3DDevice9*      m_device;
     VrPainter              m_painter;
     uint32_t               m_resolution;
+    VrTubeScreen           m_tubeScreen;
+    bool                   m_screenReady  = false;
     Com<IDirect3DTexture9> m_image;
     Com<IDirect3DTexture9> m_savedAdaptation;
     /// The lens as seen by an eye, and the surface it is drawn on: a

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <memory>
 
 #include "../d3d9_include.h"
@@ -450,6 +451,13 @@ namespace dxvk {
     std::unique_ptr<VrScopeRender> m_scopeRender;
     bool m_scopesEnabled = true;
     bool m_scopeVisible = false;
+    // The camera's screen: its picture every other frame, the shutter held by the trigger
+    bool m_screenShown = false;
+    bool m_screenTurn = false;
+    bool m_shutterHeld = false;
+    bool m_shutterWasHeld = false;
+    float m_shutterLeft = 0.0f;
+    std::chrono::steady_clock::time_point m_screenClock;
     VrScopeLens m_scopeLens;
     const VrGameCameraPose* m_scopeCamera = nullptr;
 
@@ -580,6 +588,8 @@ namespace dxvk {
             void*                 main);
 
     void renderScope(VrGameStateKind state, void* main, const std::array<VrEyeView, VrEyeCount>& views);
+
+    bool updateScreenTurn(float& flash);
 
     void drawScopeLens();
 

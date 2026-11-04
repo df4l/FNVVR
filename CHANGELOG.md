@@ -7,9 +7,11 @@
 - **Real scopes**: the scopes of the game's weapons are now lenses on the weapon, showing a magnified view of the world with the weapon's own reticle.
   Bring the rifle to your eye, about 13 cm away, to see the whole reticle; off the axis the view closes in, as in a real scope, and the other eye sees a dark
   lens. Your hand and the scope's body hide the lens. The centre of the reticle is where the shots go, at any range. Works on all scoped weapons of the game and
-  its DLCs, and on scope mods, except the K9000, FIDO, the camera and the binoculars, which have nothing to look through. Night scopes show the dark in the lens only.
+  its DLCs, and on scope mods, except the K9000 and FIDO, which have nothing to look through. Night scopes show the dark in the lens only.
   `Settings > VR > Scope lens` turns the lens off, for a slower GPU: the scope then keeps the model's own glass. `d3d9.vrScopeResolution` sets the image's size (768 by default).
   The game's flat scope, its blur and its full-screen night vision are gone. A scoped weapon of another mod gets a guessed place: `fnvvr\\scopes.ini` corrects it.
+- **Binoculars**: they now sit straight in the right hand. Bring them to your eyes: both eyepieces open into one round magnified view, which then follows your head.
+- **Camera**: its back has a small pre-war picture tube showing the view from the lens, in green phosphor with scanlines, static and afterglow, readable from any angle. The trigger flashes and holds the picture.
 - **Two hands are steadier**: a weapon held with both hands has the precision of the game's aim, without its slower walk.
 
 ### Launcher and desktop

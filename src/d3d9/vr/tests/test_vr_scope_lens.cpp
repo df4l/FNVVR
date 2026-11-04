@@ -5,6 +5,7 @@
 
 #include "test.h"
 
+#include "../vr_math.h"
 #include "../vr_scope_lens.h"
 
 using namespace dxvk;
@@ -338,4 +339,135 @@ TEST_CASE(eye_projection_gives_the_games_depth) {
   CHECK_NEAR(depth(5.0f), 0.0f, 1e-5);
   CHECK_NEAR(depth(1000.0f), 1.0f, 1e-5);
   CHECK(depth(7.0f) < depth(9.0f));
+}
+
+namespace {
+
+  // Binoculars looking north, their right eyepiece on the east side
+  VrScopeLens northBinoculars() {
+    VrScopeLens lens = northLens();
+    lens.kind                = VrOpticKind::Binoculars;
+    lens.eyepiece.position   = { 3.0f, 0.0f, 0.0f };
+    lens.otherEyepiece       = { -3.0f, 0.0f, 0.0f };
+    lens.objective           = { 0.0f, 17.0f, 0.0f };
+    lens.halfWidth           = 1.0f;
+    lens.halfHeight          = 1.0f;
+    return lens;
+  }
+
+  VrScopeLens northScreen() {
+    VrScopeLens lens = northLens();
+    lens.kind        = VrOpticKind::Screen;
+    lens.halfWidth   = 4.0f;
+    lens.halfHeight  = 3.0f;
+    lens.rectangular = true;
+    return lens;
+  }
+
+}
+
+
+TEST_CASE(binoculars_held_away_stay_lowered) {
+  VrScopeLens lens = northBinoculars();
+  vrRaiseBinoculars(lens, eyeAt({ 0.0f, -40.0f, 0.0f }));
+  CHECK_NEAR(lens.raised, 0.0f, Tolerance);
+  CHECK(!vrScopeLensShowsImage(lens, eyeAt({ 0.0f, -40.0f, 0.0f }), wideFov()));
+}
+
+
+TEST_CASE(binoculars_at_the_eyes_follow_the_head) {
+  VrScopeLens lens = northBinoculars();
+
+  // The head a little behind them and turned 15 degrees to the east
+  VrGameCameraPose head = eyeAt({ 0.0f, -5.0f, 0.0f });
+  float angle = 15.0f * 3.14159265f / 180.0f;
+  head.forward = { std::sin(angle), std::cos(angle), 0.0f };
+  head.right   = { std::cos(angle), -std::sin(angle), 0.0f };
+
+  vrRaiseBinoculars(lens, head);
+
+  CHECK(lens.raised > 0.9f);
+  CHECK(vrScopeLensShowsImage(lens, head, wideFov()));
+
+  // The view is almost the head's, not the hands'
+  CHECK(vrDot(lens.eyepiece.forward, head.forward) > 0.999f);
+  CHECK(vrLength(lens.objective - head.position) < 3.0f);
+
+  // Still a rotation, with the right hand's order of forward, up and right
+  CHECK_NEAR(vrLength(lens.eyepiece.right), 1.0f, Tolerance);
+  CHECK_NEAR(vrDot(lens.eyepiece.right, lens.eyepiece.up), 0.0f, Tolerance);
+  CHECK(vrDot(lens.eyepiece.right, head.right) > 0.99f);
+}
+
+
+TEST_CASE(binoculars_views_of_both_eyes_merge) {
+  VrScopeLens lens = northBinoculars();
+  lens.raised = 1.0f;
+  lens.apparentTangent = 0.55f;
+
+  VrGameCameraPose left  = eyeAt({ -2.2f, -5.0f, 0.5f });
+  VrGameCameraPose right = eyeAt({ 2.2f, -5.0f, 0.5f });
+
+  VrScopeLensMesh leftMesh, rightMesh;
+  CHECK(vrComputeScopeLensMesh(vrComputeBinocularsEyeLens(lens, left, true, 2.0f), left, leftMesh));
+  CHECK(vrComputeScopeLensMesh(vrComputeBinocularsEyeLens(lens, right, true, 2.0f), right, rightMesh));
+
+  // The same place of the image straight ahead of each eye: one round view
+  CHECK_NEAR(leftMesh[0].u, 0.5f, Tolerance);
+  CHECK_NEAR(rightMesh[0].u, 0.5f, Tolerance);
+  CHECK_NEAR(leftMesh[0].v, 0.5f, Tolerance);
+  CHECK_NEAR(leftMesh[0].x, 0.0f, Tolerance);
+  CHECK_NEAR(rightMesh[0].x, 0.0f, Tolerance);
+}
+
+
+TEST_CASE(binoculars_lowered_keep_each_eyepiece_on_its_side) {
+  VrScopeLens lens = northBinoculars();
+
+  VrGameCameraPose left  = eyeAt({ -2.2f, -30.0f, 0.0f });
+  VrGameCameraPose right = eyeAt({ 2.2f, -30.0f, 0.0f });
+
+  VrScopeLens leftOwn   = vrComputeBinocularsEyeLens(lens, left, true, 2.0f);
+  VrScopeLens rightOwn  = vrComputeBinocularsEyeLens(lens, right, true, 2.0f);
+  VrScopeLens leftOther = vrComputeBinocularsEyeLens(lens, left, false, 2.0f);
+
+  CHECK_NEAR(leftOwn.eyepiece.position.x, -3.0f, Tolerance);
+  CHECK_NEAR(rightOwn.eyepiece.position.x, 3.0f, Tolerance);
+  CHECK_NEAR(leftOther.eyepiece.position.x, 3.0f, Tolerance);
+  CHECK_NEAR(leftOwn.halfWidth, 1.0f, Tolerance);
+}
+
+
+TEST_CASE(screen_shows_its_picture_across_its_face_from_any_side) {
+  VrScopeLens lens = northScreen();
+  VrScopeLensMesh straight, aside;
+
+  CHECK(vrComputeScopeLensMesh(lens, eyeAt({ 0.0f, -30.0f, 0.0f }), straight));
+  CHECK(vrComputeScopeLensMesh(lens, eyeAt({ 15.0f, -20.0f, 10.0f }), aside));
+
+  for (size_t i = 0; i < straight.size(); i++) {
+    CHECK_NEAR(straight[i].u, aside[i].u, Tolerance);
+    CHECK_NEAR(straight[i].v, aside[i].v, Tolerance);
+  }
+
+  CHECK_NEAR(straight[0].u, 0.5f, Tolerance);
+  CHECK(vrScopeLensShowsImage(lens, eyeAt({ 15.0f, -20.0f, 10.0f }), { -1.5f, 1.5f, 1.5f, -1.5f }));
+  CHECK(!vrScopeLensShowsImage(lens, eyeAt({ 0.0f, 10.0f, 0.0f }), wideFov()));
+}
+
+
+TEST_CASE(screen_housing_goes_past_the_picture) {
+  VrScopeLens lens = northScreen();
+  VrScopeLensMesh mesh;
+
+  CHECK(vrComputeScopeLensMesh(lens, eyeAt({ 0.0f, -30.0f, 0.0f }), mesh));
+
+  // Segment 0 points to the right. The housing is opaque black in the image.
+  const VrScopeLensVertex& housing = mesh[1 + 6 * VrScopeLensSegments];
+  CHECK(housing.u > 1.0f);
+  CHECK_NEAR(float(housing.transmitted >> 24), 255.0f, 1.0f);
+  CHECK_NEAR(float(housing.transmitted & 0xFFFFFF), 0.0f, 0.5f);
+
+  // Soft outer edge
+  CHECK_NEAR(float(mesh[mesh.size() - 1].transmitted >> 24), 0.0f, 1.0f);
 }

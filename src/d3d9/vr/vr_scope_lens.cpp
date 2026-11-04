@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstring>
 
+#include "vr_math.h"
 #include "vr_scope_lens.h"
 
 namespace dxvk {
@@ -56,6 +57,46 @@ namespace dxvk {
       0.2f, 0.4f, 0.6f, 0.72f, 0.82f, 0.9f, 0.95f, 0.98f, 1.0f,
     };
 
+    // Binoculars: the rings out to the opening's rim, then the dark around it
+    constexpr std::array<float, VrScopeLensRings> BinocularsRingRadii = {
+      0.25f, 0.5f, 0.7f, 0.82f, 0.9f, 0.96f, 1.0f, 1.7f, 2.6f,
+    };
+
+    // A screen: the glass, then the housing around it
+    constexpr std::array<float, VrScopeLensRings> ScreenRingRadii = {
+      0.35f, 0.7f, 0.9f, 0.98f, 1.0f, 1.002f, 1.08f, 1.17f, 1.2f,
+    };
+
+    constexpr float ScreenHousingStart = 1.001f;
+
+    // The view through raised binoculars: about 58 degrees across, as real ones
+    constexpr float BinocularsApparentTangent = 0.55f;
+
+    // Between the head and the middle of the eyepieces, and between the head's
+    // direction and the view's, as cosines
+    constexpr float RaisedFullDistance = 9.0f;
+    constexpr float RaisedNoneDistance = 20.0f;
+    constexpr float RaisedFullFacing   = 0.94f;
+    constexpr float RaisedNoneFacing   = 0.766f;
+
+    const std::array<float, VrScopeLensRings>& ringRadii(VrOpticKind kind) {
+      return kind == VrOpticKind::Binoculars ? BinocularsRingRadii
+           : kind == VrOpticKind::Screen     ? ScreenRingRadii
+           : RingRadii;
+    }
+
+    VrVector3 cross(const VrVector3& a, const VrVector3& b) {
+      return { a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x };
+    }
+
+    VrVector3 unit(const VrVector3& v) {
+      return v * (1.0f / vrLength(v));
+    }
+
+    VrVector3 mix(const VrVector3& a, const VrVector3& b, float t) {
+      return a * (1.0f - t) + b * t;
+    }
+
     float smoothstep(float from, float to, float value) {
       float t = std::min(std::max((value - from) / (to - from), 0.0f), 1.0f);
       return t * t * (3.0f - 2.0f * t);
@@ -102,10 +143,29 @@ namespace dxvk {
       vertex.x = vrDot(fromEye, eye.right);
       vertex.y = vrDot(fromEye, eye.up);
       vertex.z = vrDot(fromEye, eye.forward);
-      vertex.u = 0.5f + 0.5f * vrDot(fromEye, lens.eyepiece.right) / (depth * lens.apparentTangent);
-      vertex.v = 0.5f - 0.5f * vrDot(fromEye, lens.eyepiece.up) / (depth * lens.apparentTangent);
-
       VrScopeGlass glass = vrComputeScopeGlass(lens, radial, fromEye * (1.0f / vrLength(fromEye)));
+
+      if (lens.kind == VrOpticKind::Screen) {
+        // A picture on the glass, wherever the eye is
+        vertex.u = 0.5f + 0.5f * radial * across / lens.halfWidth;
+        vertex.v = 0.5f - 0.5f * radial * up / lens.halfHeight;
+
+        if (radial >= ScreenHousingStart) {
+          // The housing: dark painted metal, its lip in shadow, lit from above
+          float lip   = smoothstep(ScreenHousingStart, 1.08f, radial);
+          float metal = 0.016f + 0.05f * lip;
+
+          vertex.transmitted = packColour(0.0f, 0.0f, 0.0f, glass.coverage);
+          vertex.reflected   = packColour(
+            (metal + 0.5f * glass.reflection[0]) * glass.coverage,
+            (metal * 1.02f + 0.5f * glass.reflection[1]) * glass.coverage,
+            (metal * 0.9f + 0.5f * glass.reflection[2]) * glass.coverage, 0.0f);
+          return vertex;
+        }
+      } else {
+        vertex.u = 0.5f + 0.5f * vrDot(fromEye, lens.eyepiece.right) / (depth * lens.apparentTangent);
+        vertex.v = 0.5f - 0.5f * vrDot(fromEye, lens.eyepiece.up) / (depth * lens.apparentTangent);
+      }
 
       // The device multiplies these by four for night vision, see
       // VrPainter::drawLens: its image is amplified and green
@@ -225,6 +285,9 @@ namespace dxvk {
 
 
   bool vrScopeLensShowsImage(const VrScopeLens& lens, const VrGameCameraPose& eye, const VrFov& fov) {
+    if (lens.kind == VrOpticKind::Binoculars)
+      return lens.raised > 0.0f;
+
     VrVector3 fromEye = lens.eyepiece.position - eye.position;
 
     float depth = vrDot(fromEye, lens.eyepiece.forward);
@@ -247,12 +310,81 @@ namespace dxvk {
      || (upward - reach) / furthest > std::tan(fov.angleUp)    || (upward + reach) / furthest < std::tan(fov.angleDown))
       return false;
 
+    if (lens.kind == VrOpticKind::Screen)
+      return true;
+
     // Where the eyepiece opens in the image: this box against the image's edge
     float centreAcross = vrDot(fromEye, lens.eyepiece.right) / depth;
     float centreUp     = vrDot(fromEye, lens.eyepiece.up) / depth;
 
     return std::abs(centreAcross) - lens.halfWidth / depth < lens.apparentTangent
         && std::abs(centreUp) - lens.halfHeight / depth < lens.apparentTangent;
+  }
+
+
+  void vrRaiseBinoculars(VrScopeLens& lens, const VrGameCameraPose& head) {
+    VrVector3 middle = (lens.eyepiece.position + lens.otherEyepiece) * 0.5f;
+
+    float near   = 1.0f - smoothstep(RaisedFullDistance, RaisedNoneDistance, vrLength(middle - head.position));
+    float facing = smoothstep(RaisedNoneFacing, RaisedFullFacing, vrDot(lens.eyepiece.forward, head.forward));
+
+    lens.raised = near * facing;
+    lens.apparentTangent = BinocularsApparentTangent;
+
+    if (lens.raised <= 0.0f)
+      return;
+
+    VrVector3 forward = unit(mix(lens.eyepiece.forward, head.forward, lens.raised));
+    VrVector3 up      = mix(lens.eyepiece.up, head.up, lens.raised);
+
+    up = unit(up - forward * vrDot(up, forward));
+
+    lens.eyepiece.forward = forward;
+    lens.eyepiece.up      = up;
+    lens.eyepiece.right   = cross(forward, up);
+    lens.objective        = mix(lens.objective, head.position, lens.raised);
+  }
+
+
+  VrScopeLens vrComputeBinocularsEyeLens(const VrScopeLens& lens, const VrGameCameraPose& eye, bool own, float nearDistance) {
+    constexpr float MinDepth = 0.5f;
+
+    // Part of the image's edge the opening reaches when raised, so that the
+    // rim's darkening hides that edge
+    constexpr float RaisedOpening = 0.98f;
+
+    VrScopeLens seen = lens;
+    seen.raised = own ? lens.raised : 0.0f;
+
+    const VrGameCameraPose& axes = lens.eyepiece;
+
+    // The eyepiece listed first is the one on the right
+    VrVector3 middle = (lens.eyepiece.position + lens.otherEyepiece) * 0.5f;
+    bool rightEye = vrDot(eye.position - middle, axes.right) > 0.0f;
+
+    VrVector3 centre = (own == rightEye ? lens.eyepiece.position : lens.otherEyepiece) - eye.position;
+
+    float depth  = std::max(vrDot(centre, axes.forward), MinDepth);
+    float across = vrDot(centre, axes.right) / depth;
+    float upward = vrDot(centre, axes.up) / depth;
+
+    // Nearer than this the device would cut the disc, and nothing can be in
+    // front of an eye at the eyepiece anyway
+    float closest = 1.5f * nearDistance;
+    float plane   = std::max(depth + (closest - depth) * seen.raised, 1.1f * nearDistance);
+    float opening = lens.halfWidth / depth;
+
+    opening += (RaisedOpening * lens.apparentTangent - opening) * seen.raised;
+    across  *= 1.0f - seen.raised;
+    upward  *= 1.0f - seen.raised;
+
+    seen.eyepiece.position = eye.position
+      + axes.forward * plane
+      + axes.right   * (across * plane)
+      + axes.up      * (upward * plane);
+    seen.halfWidth  = opening * plane;
+    seen.halfHeight = opening * plane;
+    return seen;
   }
 
 
@@ -294,6 +426,33 @@ namespace dxvk {
     for (uint32_t i = 0; i < 3; i++)
       glass.reflection[i] = CoatingColour[i] * sheen + SkyColour[i] * (fresnel + highlight);
 
+    if (lens.kind == VrOpticKind::Screen) {
+      // A tube lights its own glass, and its curve keeps a broad soft shine
+      glass.coverage     = 1.0f - smoothstep(1.17f, 1.2f, radial);
+      glass.transmission = 1.0f;
+      return glass;
+    }
+
+    if (lens.kind == VrOpticKind::Binoculars) {
+      // The image comes up as the eyes settle, darkening a wider rim. Around
+      // the opening, the inside of the barrels, then the outside world again.
+      float settled = smoothstep(0.15f, 0.7f, lens.raised);
+
+      glass.transmission = settled * (1.0f - smoothstep(0.82f, 1.0f, radial));
+
+      if (radial >= 1.0f) {
+        glass.coverage = lens.raised * (1.0f - smoothstep(1.7f, 2.6f, radial));
+
+        for (float& channel : glass.reflection)
+          channel = 0.0f;
+      } else {
+        glass.coverage = std::max(glass.coverage, lens.raised);
+
+        for (float& channel : glass.reflection)
+          channel *= 1.0f - lens.raised;
+      }
+    }
+
     return glass;
   }
 
@@ -310,6 +469,8 @@ namespace dxvk {
     if (depth < MinDepth)
       return false;
 
+    const std::array<float, VrScopeLensRings>& radii = ringRadii(lens.kind);
+
     mesh[0] = lensVertex(lens, eye, depth, 0.0f, 0.0f, 0.0f);
 
     for (uint32_t segment = 0; segment < VrScopeLensSegments; segment++) {
@@ -317,7 +478,7 @@ namespace dxvk {
       rimPoint(lens, 2.0f * Pi * float(segment) / float(VrScopeLensSegments), across, up);
 
       for (uint32_t ring = 0; ring < VrScopeLensRings; ring++)
-        mesh[1 + ring * VrScopeLensSegments + segment] = lensVertex(lens, eye, depth, RingRadii[ring], across, up);
+        mesh[1 + ring * VrScopeLensSegments + segment] = lensVertex(lens, eye, depth, radii[ring], across, up);
     }
 
     return true;

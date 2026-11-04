@@ -33,8 +33,28 @@ TEST_CASE(scope_table_has_models_with_nothing_to_look_through) {
   VrScopeTable table;
   VrScopePlacement placement;
 
-  CHECK(table.find("weapons\\1handmelee\\binoculars.nif", placement));
+  CHECK(table.find("nvdlc03\\weapons\\2handhandle\\nvdlc03fidogun.nif", placement));
   CHECK(!placement.hasLens());
+}
+
+
+TEST_CASE(scope_table_knows_the_binoculars_and_the_camera) {
+  VrScopeTable table;
+  VrScopePlacement placement;
+
+  CHECK(table.find("Weapons\\1handmelee\\binoculars.nif", placement));
+  CHECK(placement.kind == VrOpticKind::Binoculars);
+  CHECK(placement.hasLens());
+  // The right eyepiece on the right, the other about 8 cm to its left
+  CHECK(placement.eyepiece.z > placement.otherEyepiece.z);
+  CHECK_NEAR(placement.eyepiece.z - placement.otherEyepiece.z, 5.88f, 1e-3);
+  CHECK(placement.objective.x > placement.eyepiece.x);
+
+  CHECK(table.find("weapons\\1handpistol\\camera.nif", placement));
+  CHECK(placement.kind == VrOpticKind::Screen);
+  CHECK(placement.rectangular);
+  CHECK_NEAR(placement.halfWidth / placement.halfHeight, 4.0f / 3.0f, 1e-3);
+  CHECK(placement.eyepiece.x < -5.31f);
 }
 
 

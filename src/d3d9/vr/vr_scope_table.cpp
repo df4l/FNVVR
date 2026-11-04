@@ -18,8 +18,7 @@ namespace dxvk {
 
     // The opening's rear plane. Discs have the radius of the opening's rim.
     // A model with a size of 0 has nothing to look through: the K9000's lens
-    // faces forward from the barrel, and the camera and the binoculars have no
-    // tube in their models.
+    // faces forward from the barrel.
     constexpr ShippedScope Scopes[] = {
       { "weapons\\2handrifle\\sniperrifle.nif",                              -2.692f, 11.843f,   0.009f, 1.475f, 1.475f, false },
       { "weapons\\2handrifle\\sniperrifleunique.nif",                        -2.692f, 11.843f,   0.009f, 1.475f, 1.475f, false },
@@ -48,9 +47,43 @@ namespace dxvk {
       { "nvdlc04\\weapons\\2handlauncher\\nvdlc04redglare.nif",              -1.580f,  1.900f, -19.855f, 0.850f, 0.560f, true  },
       { "nvdlc03\\weapons\\2handhandle\\nvdlc03cyberdoggun.nif",              0.0f, 0.0f, 0.0f, 0.0f, 0.0f, false },
       { "nvdlc03\\weapons\\2handhandle\\nvdlc03fidogun.nif",                  0.0f, 0.0f, 0.0f, 0.0f, 0.0f, false },
-      { "weapons\\1handpistol\\camera.nif",                                   0.0f, 0.0f, 0.0f, 0.0f, 0.0f, false },
-      { "weapons\\1handmelee\\binoculars.nif",                                0.0f, 0.0f, 0.0f, 0.0f, 0.0f, false },
     };
+
+    constexpr char BinocularsModel[] = "weapons\\1handmelee\\binoculars.nif";
+    constexpr char CameraModel[]     = "weapons\\1handpistol\\camera.nif";
+
+    // Measured on the model's rings of vertices, findings/optics.md §11. In the
+    // frame of the node holding them (along the view, left, up) the eyepieces
+    // are at (-5.26, -2.70, 1.78) and (-5.26, 3.18, 1.78), the objectives' middle
+    // at (11.63, 0.24, 0.88), and the right barrel's middle at (3.2, -3.48, 1.33).
+    // That middle is held 2.5 units above the weapon node, in the fist.
+    constexpr float HeldAlong = -3.2f;
+    constexpr float HeldUp    = 1.17f;
+    constexpr float HeldRight = -3.48f;
+
+    VrScopePlacement binocularsPlacement() {
+      VrScopePlacement placement;
+      placement.kind          = VrOpticKind::Binoculars;
+      placement.eyepiece      = { -5.26f + HeldAlong, 1.78f + HeldUp,  2.70f + HeldRight };
+      placement.otherEyepiece = { -5.26f + HeldAlong, 1.78f + HeldUp, -3.18f + HeldRight };
+      placement.objective     = { 11.63f + HeldAlong, 0.88f + HeldUp, -0.24f + HeldRight };
+      placement.halfWidth     = 1.13f;
+      placement.halfHeight    = 1.13f;
+      return placement;
+    }
+
+    // The back of the body, just behind the model's rearmost vertices (x -5.31),
+    // and the taking lens, the lower of the two on the front
+    VrScopePlacement cameraPlacement() {
+      VrScopePlacement placement;
+      placement.kind        = VrOpticKind::Screen;
+      placement.eyepiece    = { -5.42f, 1.6f, -7.6f };
+      placement.objective   = { 1.6f, 0.15f, -7.35f };
+      placement.halfWidth   = 3.0f;
+      placement.halfHeight  = 2.25f;
+      placement.rectangular = true;
+      return placement;
+    }
 
     std::string normalised(std::string path) {
       std::transform(path.begin(), path.end(), path.begin(), [] (unsigned char c) {
@@ -71,6 +104,9 @@ namespace dxvk {
     }
 
   }
+
+
+  const VrVector3 VrHeldBinoculars::Origin = { HeldAlong, HeldUp, HeldRight };
 
 
   size_t VrScopeTable::parse(const std::string& text) {
@@ -127,6 +163,16 @@ namespace dxvk {
 
     if (correction != m_corrections.end()) {
       placement = correction->second;
+      return true;
+    }
+
+    if (key == BinocularsModel) {
+      placement = binocularsPlacement();
+      return true;
+    }
+
+    if (key == CameraModel) {
+      placement = cameraPlacement();
       return true;
     }
 

@@ -626,6 +626,8 @@ namespace dxvk {
         m_scopeGame->setSteadied(m_weaponHand->leftHandOnWeapon());
     }
 
+    m_shutterHeld = input.hasActions && input.actions.isPressed(VrAction::Attack);
+
     m_controls.setSwingsWithHand((m_meleeSwing && m_meleeSwing->swingsWithHand())
       || (m_handThrow && m_handThrow->throwsWithHand()));
 
@@ -961,6 +963,7 @@ namespace dxvk {
 
   void VrStereoRenderer::renderScope(VrGameStateKind state, void* main, const std::array<VrEyeView, VrEyeCount>& views) {
     constexpr float FallbackDefaultFov = 75.0f;
+    constexpr float RadiansPerDegree   = 3.14159265f / 180.0f;
 
     m_scopeVisible = false;
 
@@ -974,6 +977,12 @@ namespace dxvk {
 
     m_scopeVisible = true;
 
+    if (m_scopeLens.kind == VrOpticKind::Binoculars) {
+      VrGameCameraPose head = eyeInGame(views[0]);
+      head.position = (head.position + eyeInGame(views[1]).position) * 0.5f;
+      vrRaiseBinoculars(m_scopeLens, head);
+    }
+
     // Without an eye at the eyepiece the lens is a dark glass, and costs no render
     bool seen = false;
 
@@ -984,21 +993,45 @@ namespace dxvk {
 
     if (!seen || !VrScopeGame::readEquipped(equipped)) {
       m_scopeRender->forgetImage();
+      m_screenShown = false;
       return;
     }
 
-    m_scopeRender->selectReticle(equipped.scopeModel);
+    bool onScreen = m_scopeLens.kind == VrOpticKind::Screen;
+    float screenFlash = 0.0f;
+    bool drawView = true;
 
-    float defaultFov = *reinterpret_cast<const float*>(VrGame::SettingDefaultWorldFov + VrGame::SettingValue);
+    if (onScreen)
+      drawView = updateScreenTurn(screenFlash);
 
-    if (!(defaultFov > equipped.sightFov && defaultFov < 170.0f))
-      defaultFov = std::max(FallbackDefaultFov, equipped.sightFov);
+    if (!drawView) {
+      // The held view still flickers and flashes on the tube
+      if (m_shutterLeft > 0.0f && m_screenTurn)
+        m_scopeRender->updateScreen(false, screenFlash);
+
+      return;
+    }
+
+    m_scopeRender->selectReticle(m_scopeLens.kind == VrOpticKind::Scope ? equipped.scopeModel : nullptr);
+
+    float magnification = 1.0f;
+    float imageTangent  = std::tan(0.5f * equipped.sightFov * RadiansPerDegree);
+
+    if (!onScreen) {
+      float defaultFov = *reinterpret_cast<const float*>(VrGame::SettingDefaultWorldFov + VrGame::SettingValue);
+
+      if (!(defaultFov > equipped.sightFov && defaultFov < 170.0f))
+        defaultFov = std::max(FallbackDefaultFov, equipped.sightFov);
+
+      magnification = vrComputeScopeMagnification(equipped.sightFov, defaultFov);
+      imageTangent  = m_scopeLens.apparentTangent;
+    }
 
     VrEyeView view;
 
-    if (!m_scopeRender->prepareView(vrComputeScopeMagnification(equipped.sightFov, defaultFov),
-        m_scopeLens.apparentTangent, view.fov)) {
+    if (!m_scopeRender->prepareView(magnification, imageTangent, m_scopeLens.kind, view.fov)) {
       m_scopeRender->forgetImage();
+      m_screenShown = false;
       return;
     }
 
@@ -1030,6 +1063,33 @@ namespace dxvk {
 
     if (m_cullingCamera)
       m_cullingCamera->cullAgain();
+
+    if (onScreen) {
+      m_scopeRender->updateScreen(true, screenFlash);
+      m_screenShown = true;
+    }
+  }
+
+
+  bool VrStereoRenderer::updateScreenTurn(float& flash) {
+    // The view held on the screen after the shutter, and how long the flash lasts
+    constexpr float HoldSeconds  = 0.7f;
+    constexpr float FlashSeconds = 0.25f;
+
+    auto now = std::chrono::steady_clock::now();
+    float elapsed = m_screenShown ? std::chrono::duration<float>(now - m_screenClock).count() : 0.0f;
+    m_screenClock = now;
+
+    bool pressed = m_shutterHeld && !m_shutterWasHeld;
+    m_shutterWasHeld = m_shutterHeld;
+
+    m_shutterLeft = pressed ? HoldSeconds : std::max(m_shutterLeft - elapsed, 0.0f);
+    flash = std::max((m_shutterLeft - (HoldSeconds - FlashSeconds)) / FlashSeconds, 0.0f);
+
+    m_screenTurn = !m_screenTurn;
+
+    // A view from the first frame on, or a picture would have nothing to show
+    return !m_screenShown || (m_shutterLeft <= 0.0f && m_screenTurn);
   }
 
 

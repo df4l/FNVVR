@@ -777,6 +777,10 @@ namespace dxvk {
     // The scope in the frame of the hand holding the weapon, see scopeLens
     bool             m_hasScopeLens = false;
     VrVector3        m_scopeEyepiece;
+    VrVector3        m_scopeOtherEyepiece;
+    VrOpticKind      m_scopeKind = VrOpticKind::Scope;
+    const uint8_t*   m_opticForm = nullptr;
+    VrOpticKind      m_opticKind = VrOpticKind::Scope;
     VrVector3        m_scopeObjective;
     VrGameRotation   m_scopeRotation;
     float            m_scopeHalfWidth = 0.0f;
@@ -1143,6 +1147,10 @@ namespace dxvk {
             int32_t               sequenceType);
 
     void placeModel(uint8_t* root, void* updateData);
+
+    VrOpticKind opticKind(const uint8_t* form);
+
+    void holdBinoculars(uint8_t* weapon, const VrGameCameraPose& hand, void* updateData);
 
     void placeScope(
             uint8_t*          weapon,
