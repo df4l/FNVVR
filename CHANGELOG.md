@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.12.0 (2026-11-04, since v0.11.0 `6a0ad2e`)
 
 ### Scopes
 
@@ -15,6 +15,7 @@
 - **Two hands are steadier**: a weapon held with both hands has the precision of the game's aim, without its slower walk.
 - **Gauss rifles' reticle**: the Gauss rifle, the YCS/186 and the Faderator show their own graduated reticle, not a stretched sheet of its parts.
 - **Left hand on every pistol**: on pistols that skip the game's aim animations (Hunting Revolver, laser pistol, alien blaster, ...) or with a fitted scope mod, the left hand now comes onto the weapon as soon as it supports it, not only after a shot.
+- **No more view jumps with a braced scope**: the game's scope sway no longer makes the view jump back and forth on scoped pistols, binoculars and the camera.
 
 ### Launcher and desktop
 
