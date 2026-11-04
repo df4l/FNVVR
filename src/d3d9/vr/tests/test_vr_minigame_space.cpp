@@ -115,6 +115,32 @@ TEST_CASE(scene_on_object_is_seen_where_the_object_is) {
 }
 
 
+TEST_CASE(a_body_in_the_table_or_on_the_seat_is_in_the_way) {
+  constexpr VrModelArea Areas[] = { { -30.0f, 46.0f, -70.0f, 66.0f } };
+
+  VrWorldObject object = turnedTable();
+  VrSceneFit fit = tableFit();
+  fit.areas     = Areas;
+  fit.areaCount = 1;
+
+  // The model's +X is the world's -Y
+  VrVector3 model = vrPointInObject(object, { 1010.0f, 1950.0f, 345.0f });
+  CHECK(same(model, { 50.0f, 10.0f, 45.0f }));
+
+  // Through the table, a little beyond its edge, and in the dealer's place
+  CHECK(vrBodyInTheWay(fit, { 10.0f, 5.0f, 45.0f }));
+  CHECK(vrBodyInTheWay(fit, { 50.0f, 10.0f, 45.0f }));
+  CHECK(!vrBodyInTheWay(fit, { 60.0f, 0.0f, 45.0f }));
+
+  // On the player's seat, and on the stool at the end of the table
+  CHECK(vrBodyInTheWay(fit, { -70.0f, 20.0f, 45.0f }));
+  CHECK(!vrBodyInTheWay(fit, { -49.0f, -74.0f, 45.0f }));
+
+  // Over the table, on the floor above
+  CHECK(!vrBodyInTheWay(fit, { 10.0f, 5.0f, 300.0f }));
+}
+
+
 TEST_CASE(table_camera_stands_on_the_head) {
   VrPose head = headAt(0.5f, 1.6f, -0.2f);
   VrVector3 camera = { -32.0f, 25.0f, 36.0f };

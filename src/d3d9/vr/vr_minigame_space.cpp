@@ -71,6 +71,15 @@ namespace dxvk {
     }
 
     // A direction of a model in the world
+    // Around a body's middle, in the units of the models, all at the world's
+    // scale. A dealer in place stands 13 units beyond this from a table.
+    constexpr float BodyRadius   = 6.0f;
+    // A head this close to the player's goes through the view
+    constexpr float SeatClearing = 25.0f;
+    // Bodies on another floor are not in the way
+    constexpr float BodyLowest   = -40.0f;
+    constexpr float BodyHighest  = 140.0f;
+
     VrVector3 modelToWorld(const VrWorldObject& object, const VrVector3& v) {
       return object.x * v.x + object.y * v.y + object.z * v.z;
     }
@@ -134,6 +143,38 @@ namespace dxvk {
     space.back               = inScene(camera.forward * -1.0f);
     space.unitsPerMetre      = unitsPerMetre / (fit.scale * object.scale);
     return space;
+  }
+
+
+  VrVector3 vrPointInObject(
+    const VrWorldObject&    object,
+    const VrVector3&        point) {
+    VrVector3 offset = (point - object.position) * (1.0f / object.scale);
+    return { vrDot(offset, object.x), vrDot(offset, object.y), vrDot(offset, object.z) };
+  }
+
+
+  bool vrBodyInTheWay(
+    const VrSceneFit&       fit,
+    const VrVector3&        body) {
+    if (body.z < BodyLowest || body.z > BodyHighest)
+      return false;
+
+    float seatX = body.x - fit.seat.x;
+    float seatY = body.y - fit.seat.y;
+
+    if (seatX * seatX + seatY * seatY < SeatClearing * SeatClearing)
+      return true;
+
+    for (uint32_t i = 0; i < fit.areaCount; i++) {
+      const VrModelArea& area = fit.areas[i];
+
+      if (body.x > area.minX - BodyRadius && body.x < area.maxX + BodyRadius
+       && body.y > area.minY - BodyRadius && body.y < area.maxY + BodyRadius)
+        return true;
+    }
+
+    return false;
   }
 
 

@@ -49,7 +49,8 @@ namespace dxvk {
    * A casino table or a slot machine of the world takes the scene on itself:
    * the scene is drawn where the object is, tested against the world, what
    * it replaces of the object is hidden, and the player is brought to the
-   * object's seat while the menu is open, by the view only.
+   * object's seat while the menu is open, by the view only. The player's own
+   * body and the characters frozen in the way of the scene are hidden too.
    *
    * Everything reaches the menus as the gamepad or the cursor would, and
    * the game's camera is put back after each draw, because the game's
@@ -89,9 +90,6 @@ namespace dxvk {
     bool showsTerminal() const { return m_kind == Kind::Terminal; }
 
     bool active() const { return m_kind != Kind::None; }
-
-    /// Whether the hands are shown, without the weapon
-    bool showsHands() const { return active() && m_kind != Kind::Terminal; }
 
     /// The gamepad input of the hands' gestures, for the next frame
     const VrMinigamePad& pad() const { return m_pad; }
@@ -148,14 +146,15 @@ namespace dxvk {
     // What the player would activate in the last frame without a menu
     void*             m_activateRef = nullptr;
 
-    // The object of the world the scene lies on, kept alive as long as its
-    // parts are hidden
+    // The object of the world the scene lies on. What is hidden is kept alive
+    // until it is shown again.
     bool              m_onObject = false;
     VrWorldObject     m_object;
     const VrSceneFit* m_fit = nullptr;
     VrGameCameraPose  m_seatCamera;
-    void*             m_objectRoot = nullptr;
+    std::vector<void*>     m_kept;
     std::vector<uint32_t*> m_objectHidden;
+    uint32_t*         m_bodyHidden = nullptr;
 
     // The button a gesture presses, held for a few frames
     uint16_t          m_pulse       = 0;
@@ -197,6 +196,14 @@ namespace dxvk {
     bool placeOnObject(uint32_t id, const VrMinigameFrame& frame);
 
     void standOnObject(const VrMinigameFrame& frame);
+
+    void keep(void* object);
+
+    void hideRoot(uint8_t* root);
+
+    void hidePlayerBody();
+
+    void hideActorsInTheWay();
 
     void placeRouletteSurface();
 

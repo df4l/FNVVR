@@ -787,6 +787,18 @@ namespace dxvk {
     constexpr uintptr_t ActivatorModelPath   = 0x40;
 
     /**
+     * TESObjectREFR::Get3D, not the player's override: __thiscall without
+     * arguments, it gives the third-person model of the player
+     * (PlayerCharacter::Get3D(false), 0x00950BB0, calls it). Checked against
+     * its first bytes.
+     */
+    constexpr uintptr_t RefGet3D             = 0x0043FCD0;
+    constexpr uint8_t   RefGet3DPrologue[]   = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C, 0x89, 0x4D, 0xFC, 0xA1 };
+
+    /// A character's body, where the skeleton has one
+    constexpr char      PelvisNodeName[]     = "Bip01 Pelvis";
+
+    /**
      * LockPickMenu: the pin's slider (tile, with the trait id held at
      * LockPickSliderTrait for its position) and the tile whose width is its
      * range.

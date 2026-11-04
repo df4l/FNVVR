@@ -11,6 +11,7 @@
 #include "vr_console_screen.h"
 #include "vr_game_addresses.h"
 #include "vr_game_memory.h"
+#include "vr_game_nodes.h"
 #include "vr_math.h"
 #include "vr_menu_scenes.h"
 #include "vr_minigames.h"
@@ -36,6 +37,7 @@ namespace dxvk {
     using ReturnFn        = void  (__thiscall*)(void* manager, void* texture);
     using Get3DFn         = void* (__thiscall*)(void* reference);
     using ClearFn         = void  (__fastcall*)(void* renderer, void* unused, const void* rect, uint32_t flags);
+    using IsActorFn       = bool  (__thiscall*)(void* reference);
 
     // The lock's keyhole, in the menu's space: the pin turns about it. The
     // lock is scaled so that the long screwdriver stays off the face.
@@ -85,25 +87,49 @@ namespace dxvk {
     // How the scenes lie on the casino's objects, in the models' space:
     // findings/minigames.md §6. The game's table is only a top, on the
     // world's, which holds it up. Its felt is above all of the world's top.
+    // The blackjack table is round on the players' side, the stools around
+    // it stay free. The roulette dealer stands in a recess of the table's
+    // side, from x = -24 to the table's ends.
+    constexpr VrModelArea BlackJackAreas[] = {
+      { -13.0f, 46.3f, -90.2f, 85.5f },
+      { -30.0f, 46.3f, -70.0f, 66.0f },
+      { -45.9f, 46.3f, -45.0f, 40.0f } };
+
+    constexpr VrModelArea RouletteAreas[] = {
+      { -24.0f, 63.8f, -86.4f, 87.2f } };
+
+    constexpr VrModelArea SlotMachineAreas[] = {
+      { -20.3f, 20.3f, -16.9f, 16.9f } };
+
     constexpr VrSceneFit BlackJackFit = {
       { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f },
       { 0.2f, -2.35f, 76.4f }, 2.0f,
-      { -62.0f, 16.0f, 0.0f }, { 1.0f, 0.0f, 0.0f } };
+      { -62.0f, 16.0f, 0.0f }, { 1.0f, 0.0f, 0.0f },
+      BlackJackAreas, 3 };
 
     constexpr VrSceneFit RouletteFit = {
       { 0.0f, 1.0f, 0.0f }, { -1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f },
       { 23.0f, 32.4f, 77.6f }, 1.28f,
-      { 80.0f, 32.4f, 0.0f }, { -1.0f, 0.0f, 0.0f } };
+      { 80.0f, 32.4f, 0.0f }, { -1.0f, 0.0f, 0.0f },
+      RouletteAreas, 1 };
 
     // The root of the scene is 175 units ahead of the menu's camera and 18
     // below it, and the machine's feet are 1.2 units below its origin
     constexpr VrSceneFit SlotMachineFit = {
       { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f },
       { 0.0f, -245.0f, 26.9f }, 1.4f,
-      { 0.0f, -45.0f, 0.0f }, { 0.0f, 1.0f, 0.0f } };
+      { 0.0f, -45.0f, 0.0f }, { 0.0f, 1.0f, 0.0f },
+      SlotMachineAreas, 1 };
 
     // The roulette wheel of the world stands above the game's table
     constexpr const char* RouletteWorldWheel = "Object02:0";
+
+    // More entries than this means the list was not read correctly
+    constexpr uint32_t  MaxProcessActors = 4096;
+    // The pelvis is two levels below a skeleton's root
+    constexpr uint32_t  PelvisDepth      = 6;
+    // Characters logged at the opening of a menu, to see who stands where
+    constexpr float     LoggedActorRange = 200.0f;
 
     VrMinigames* g_minigames = nullptr;
 
@@ -196,6 +222,9 @@ namespace dxvk {
       && VrGameMemory::matches(VrGame::IsTopMenu, VrGame::IsTopMenuPrologue, sizeof(VrGame::IsTopMenuPrologue))
       && VrGameMemory::matches(VrGame::RouletteHoveredBet, VrGame::RouletteHoveredBetPrologue, sizeof(VrGame::RouletteHoveredBetPrologue))
       && VrGameMemory::matches(VrGame::GetActivateRef, VrGame::GetActivateRefPrologue, sizeof(VrGame::GetActivateRefPrologue))
+      && VrGameMemory::matches(VrGame::RefGet3D, VrGame::RefGet3DPrologue, sizeof(VrGame::RefGet3DPrologue))
+      && VrGameMemory::readable(VrGame::ProcessActors, sizeof(uintptr_t))
+      && VrGameMemory::readable(VrGame::ProcessHighEnd, sizeof(uint32_t))
       && VrGameMemory::readable(VrGame::LockPickInstance, sizeof(uintptr_t))
       && VrGameMemory::readable(VrGame::BlackJackInstance, sizeof(uintptr_t))
       && VrGameMemory::readable(VrGame::RouletteInstance, sizeof(uintptr_t))
@@ -478,21 +507,16 @@ namespace dxvk {
       vrComputeEyeInReference(frame.reference, frame.head), frame.cameraHeight, VrGameUnitsPerMetre);
     m_onObject   = true;
 
-    game<AssignFn>(VrGame::NiPointerAssign)(&m_objectRoot, root);
+    keep(root);
 
     // The machine is whole in the scene. The tables' are only tops, and the
     // world's holds them up: only what stands above that top goes.
-    if (fit == &SlotMachineFit) {
-      auto flags = reinterpret_cast<uint32_t*>(root + VrGame::ObjectFlags);
-
-      if (!(*flags & VrGame::ObjectFlagAppCulled)) {
-        *flags |= VrGame::ObjectFlagAppCulled;
-        m_objectHidden.push_back(flags);
-      }
-    } else if (fit == &RouletteFit) {
+    if (fit == &SlotMachineFit)
+      hideRoot(root);
+    else if (fit == &RouletteFit)
       VrMenuScenes::hideObject(reinterpret_cast<uintptr_t>(root), RouletteWorldWheel, m_objectHidden);
-    }
 
+    hideActorsInTheWay();
     standOnObject(frame);
     return true;
   }
@@ -501,8 +525,97 @@ namespace dxvk {
   void VrMinigames::standOnObject(const VrMinigameFrame& frame) {
     m_space = vrSceneSpaceOnObject(frame.reference, m_seatCamera, m_object, *m_fit, VrGameUnitsPerMetre);
 
+    hidePlayerBody();
+
     if (m_fit == &RouletteFit)
       placeRouletteSurface();
+  }
+
+
+  void VrMinigames::keep(void* object) {
+    m_kept.push_back(nullptr);
+    game<AssignFn>(VrGame::NiPointerAssign)(&m_kept.back(), object);
+  }
+
+
+  void VrMinigames::hideRoot(uint8_t* root) {
+    auto flags = reinterpret_cast<uint32_t*>(root + VrGame::ObjectFlags);
+
+    if (!(*flags & VrGame::ObjectFlagAppCulled)) {
+      *flags |= VrGame::ObjectFlagAppCulled;
+      m_objectHidden.push_back(flags);
+    }
+  }
+
+
+  void VrMinigames::hidePlayerBody() {
+    // A player sitting is in third person: the body stays on its stool while
+    // the view is at the seat. The game turns it on and off with the view,
+    // which is why it is looked at every frame.
+    auto player = global<uint8_t*>(VrGame::Player);
+    auto root   = player ? static_cast<uint8_t*>(game<Get3DFn>(VrGame::RefGet3D)(player)) : nullptr;
+
+    if (!root)
+      return;
+
+    auto flags = reinterpret_cast<uint32_t*>(root + VrGame::ObjectFlags);
+
+    if (*flags & VrGame::ObjectFlagAppCulled)
+      return;
+
+    *flags |= VrGame::ObjectFlagAppCulled;
+
+    if (!m_bodyHidden) {
+      m_bodyHidden = flags;
+      keep(root);
+      Logger::info("VR: The player's body is hidden while the view is at the seat");
+    }
+  }
+
+
+  void VrMinigames::hideActorsInTheWay() {
+    auto actors = global<const uintptr_t*>(VrGame::ProcessActors);
+    auto end    = global<uint32_t>(VrGame::ProcessHighEnd);
+
+    if (!actors || end > MaxProcessActors)
+      return;
+
+    for (uint32_t i = 0; i < end; i++) {
+      auto actor = reinterpret_cast<uint8_t*>(actors[i]);
+
+      if (!actor)
+        continue;
+
+      auto vtable = field<uint8_t*>(actor, 0);
+
+      if (!(*reinterpret_cast<IsActorFn*>(vtable + VrGame::RefIsActorSlot))(actor))
+        continue;
+
+      auto root = static_cast<uint8_t*>((*reinterpret_cast<Get3DFn*>(vtable + VrGame::RefGet3DSlot))(actor));
+
+      if (!root)
+        continue;
+
+      // The root stays where the reference is, whatever an animation does
+      // with the body
+      auto pelvis = reinterpret_cast<uint8_t*>(vrFindGameObject(reinterpret_cast<uintptr_t>(root),
+        VrGame::PelvisNodeName, PelvisDepth));
+
+      VrVector3 body = vrPointInObject(m_object,
+        field<VrVector3>(pelvis ? pelvis : root, VrGame::ObjectWorldTranslation));
+
+      bool inTheWay = vrBodyInTheWay(*m_fit, body);
+
+      if (inTheWay) {
+        keep(root);
+        hideRoot(root);
+      }
+
+      if (std::abs(body.x) < LoggedActorRange && std::abs(body.y) < LoggedActorRange) {
+        Logger::info(str::format("VR: A character at (", body.x, ", ", body.y, ", ", body.z,
+          ") of the object", inTheWay ? " is in the way, it is hidden" : ""));
+      }
+    }
   }
 
 
@@ -522,8 +635,18 @@ namespace dxvk {
     VrMenuScenes::showHidden(m_objectHidden);
     m_objectHidden.clear();
 
-    if (m_objectRoot)
-      game<AssignFn>(VrGame::NiPointerAssign)(&m_objectRoot, nullptr);
+    // The game may have gone back to first person since, and wants it hidden
+    auto player = global<uint8_t*>(VrGame::Player);
+
+    if (m_bodyHidden && player && field<uint8_t>(player, VrGame::PlayerCurrentThirdPerson))
+      *m_bodyHidden &= ~VrGame::ObjectFlagAppCulled;
+
+    m_bodyHidden = nullptr;
+
+    for (void*& object : m_kept)
+      game<AssignFn>(VrGame::NiPointerAssign)(&object, nullptr);
+
+    m_kept.clear();
 
     m_onObject = false;
     m_fit      = nullptr;

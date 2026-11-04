@@ -1203,16 +1203,6 @@ namespace dxvk {
       return;
     }
 
-    // The hands act on a mini-game's scene, the weapon is put away
-    if (state == VrGameStateKind::Menu && m_minigames && m_minigames->showsHands()
-     && m_hasReference && right.isActive) {
-      VrGameCameraPose hand      = handInGame(right);
-      VrGameCameraPose otherHand = handInGame(left);
-      m_weaponHand->beginFrame(gameCamera, &hand, left.isActive ? &otherHand : nullptr,
-        false, VrFirstPersonMode::FreeHands, dt);
-      return;
-    }
-
     // Menus are pointed at with the lasers, and the game animates the arms
     // in front of its camera meanwhile. V.A.T.S. is driven by the sticks
     // and shows the weapon as the game does.
@@ -2002,9 +1992,9 @@ namespace dxvk {
     if (m_eye == NoEye || m_eyeCopied[m_eye])
       return;
 
-    // A mini-game's scene drawn at the last moment, over the hands: when
-    // the first-person pass did not run, and for the terminals, like the
-    // console's. The game's clear does nothing outside of its render group.
+    // A mini-game's scene drawn at the last moment: when the first-person
+    // pass did not run, and for the terminals, like the console's. The
+    // game's clear does nothing outside of its render group.
     if (m_minigames && m_minigames->active() && !m_minigameDrawn[m_eye]) {
       if (!m_minigames->showsTerminal())
         m_device->Clear(0, nullptr, D3DCLEAR_ZBUFFER, 0, 1.0f, 0);

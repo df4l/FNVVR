@@ -77,6 +77,16 @@ namespace dxvk {
   };
 
   /**
+   * \brief A rectangle of the ground a world's object stands on, in its model
+   */
+  struct VrModelArea {
+    float minX = 0.0f;
+    float maxX = 0.0f;
+    float minY = 0.0f;
+    float maxY = 0.0f;
+  };
+
+  /**
    * \brief How a menu's scene lies on the model of a world's object
    *
    * The axes are unit vectors of the model's space, with x cross y = z. A
@@ -94,6 +104,9 @@ namespace dxvk {
     VrVector3 seat;
     /// Direction the player looks in from there, level, in the model
     VrVector3 facing;
+    /// What the object takes of the ground, in the model
+    const VrModelArea* areas = nullptr;
+    uint32_t  areaCount = 0;
   };
 
   /**
@@ -132,6 +145,31 @@ namespace dxvk {
     const VrWorldObject&    object,
     const VrSceneFit&       fit,
           float             unitsPerMetre);
+
+  /**
+   * \brief Finds a point of the world in the model of an object
+   *
+   * \param [in] object The object
+   * \param [in] point The point, in the world
+   * \returns The point in the model's space
+   */
+  VrVector3 vrPointInObject(
+    const VrWorldObject&    object,
+    const VrVector3&        point);
+
+  /**
+   * \brief Checks whether a body at a point is in the way of a scene
+   *
+   * The game's AI is frozen while a menu is open, so someone walking by stays
+   * where the menu found them: inside the object, or on the player's seat.
+   *
+   * \param [in] fit How the scene lies on the object
+   * \param [in] body Where the body is, in the model's space
+   * \returns \c true if the body stands in the object or on the seat
+   */
+  bool vrBodyInTheWay(
+    const VrSceneFit&       fit,
+    const VrVector3&        body);
 
   VrVector3 vrSceneToRoom(const VrSceneSpace& space, const VrVector3& point);
 
