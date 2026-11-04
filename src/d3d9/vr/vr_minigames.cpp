@@ -113,16 +113,19 @@ namespace dxvk {
       { 80.0f, 32.4f, 0.0f }, { -1.0f, 0.0f, 0.0f },
       RouletteAreas, 1 };
 
-    // The root of the scene is 175 units ahead of the menu's camera and 18
-    // below it, and the machine's feet are 1.2 units below its origin. The
-    // head goes where the menu's camera is, level with the reels and with the
-    // payout screen once lowered: the height of the game's camera, a third-
-    // person one on a stool, is at the raised screen.
-    constexpr float SlotMachineEyeHeight = 26.9f;
+    // Above the object's origin, at the scene's size. The reels turn around
+    // 36 units, 38 from the seat: looking down on them by about 12 degrees, as
+    // from a stool, puts the head 22 units below the top of the machine. The
+    // menu's camera, far from the machine, is at 26.9: seen from the seat, that
+    // is from under it. The height of the game's camera, a third-person one on
+    // a stool, is at the raised screen.
+    constexpr float SlotMachineEyeHeight = 44.0f;
 
+    // The root of the scene is 175 units ahead of the menu's camera and 18
+    // below it, and the machine's feet are 1.2 units below its origin
     constexpr VrSceneFit SlotMachineFit = {
       { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f },
-      { 0.0f, -245.0f, SlotMachineEyeHeight }, 1.4f,
+      { 0.0f, -245.0f, 26.9f }, 1.4f,
       { 0.0f, -45.0f, 0.0f }, { 0.0f, 1.0f, 0.0f },
       SlotMachineAreas, 1, SlotMachineEyeHeight };
 
