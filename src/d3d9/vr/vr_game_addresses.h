@@ -756,6 +756,9 @@ namespace dxvk {
     constexpr uint32_t  LockStateTurning     = 3;
     constexpr uint32_t  LockStateTension     = 4;
     constexpr uint32_t  SlotMachineStateBet  = 6;
+    constexpr uint32_t  SlotMachineStatePayoutIn  = 4;
+    constexpr uint32_t  SlotMachineStatePayoutOut = 5;
+    constexpr char      SlotMachinePayoutScreen[] = "Payout_Screen";
     constexpr uint32_t  BlackJackStateTurn   = 4;
     constexpr uint32_t  RouletteStateBet     = 4;
 

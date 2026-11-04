@@ -107,6 +107,8 @@ namespace dxvk {
     /// What the object takes of the ground, in the model
     const VrModelArea* areas = nullptr;
     uint32_t  areaCount = 0;
+    /// Height of the head above the model's origin, 0 to keep the game camera's
+    float     eyeHeight = 0.0f;
   };
 
   /**
@@ -114,8 +116,9 @@ namespace dxvk {
    *
    * It takes the place of the game's camera, from which the eyes are placed
    * (vrComputeEyeCameraPose): the head as it is now gets to the seat, looking
-   * the way the fit says. Its height does not change: a player sitting stays
-   * low, a player standing keeps the floor under the feet.
+   * the way the fit says. Without an eye height in the fit, its height does
+   * not change: a player sitting stays low, a player standing keeps the floor
+   * under the feet. With one, the head as it is now gets to that height too.
    *
    * \param [in] object The object
    * \param [in] fit How the scene lies on it
@@ -318,7 +321,7 @@ namespace dxvk {
   public:
 
     /// Distance from the ball at which the grip takes the lever, in metres
-    constexpr static float Reach    = 0.16f;
+    constexpr static float Reach    = 0.20f;
     /// Way down of a pull, in metres
     constexpr static float PullDown = 0.10f;
 

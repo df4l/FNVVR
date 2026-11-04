@@ -50,7 +50,8 @@ namespace dxvk {
    * the scene is drawn where the object is, tested against the world, what
    * it replaces of the object is hidden, and the player is brought to the
    * object's seat while the menu is open, by the view only. The player's own
-   * body and the characters frozen in the way of the scene are hidden too.
+   * body and the characters frozen in the way of the scene are hidden too. The
+   * slot machine's payout screen is shown only while it is lowered.
    *
    * Everything reaches the menus as the gamepad or the cursor would, and
    * the game's camera is put back after each draw, because the game's
@@ -204,6 +205,8 @@ namespace dxvk {
     void hidePlayerBody();
 
     void hideActorsInTheWay();
+
+    void hideRaisedPayoutScreen(std::vector<uint32_t*>& hidden);
 
     void placeRouletteSurface();
 

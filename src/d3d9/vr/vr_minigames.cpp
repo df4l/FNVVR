@@ -114,12 +114,17 @@ namespace dxvk {
       RouletteAreas, 1 };
 
     // The root of the scene is 175 units ahead of the menu's camera and 18
-    // below it, and the machine's feet are 1.2 units below its origin
+    // below it, and the machine's feet are 1.2 units below its origin. The
+    // head goes where the menu's camera is, level with the reels and with the
+    // payout screen once lowered: the height of the game's camera, a third-
+    // person one on a stool, is at the raised screen.
+    constexpr float SlotMachineEyeHeight = 26.9f;
+
     constexpr VrSceneFit SlotMachineFit = {
       { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f },
-      { 0.0f, -245.0f, 26.9f }, 1.4f,
+      { 0.0f, -245.0f, SlotMachineEyeHeight }, 1.4f,
       { 0.0f, -45.0f, 0.0f }, { 0.0f, 1.0f, 0.0f },
-      SlotMachineAreas, 1 };
+      SlotMachineAreas, 1, SlotMachineEyeHeight };
 
     // The roulette wheel of the world stands above the game's table
     constexpr const char* RouletteWorldWheel = "Object02:0";
@@ -506,6 +511,9 @@ namespace dxvk {
     m_seatCamera = vrSeatCamera(m_object, *fit,
       vrComputeEyeInReference(frame.reference, frame.head), frame.cameraHeight, VrGameUnitsPerMetre);
     m_onObject   = true;
+
+    Logger::info(str::format("VR: The seat's camera is ", m_seatCamera.position.z - m_object.position.z,
+      " units above the object, the game's ", frame.cameraHeight - m_object.position.z));
 
     keep(root);
 
@@ -956,6 +964,9 @@ namespace dxvk {
     if (m_kind == Kind::Lock)
       VrMenuScenes::hideLockBackdrop(hidden);
 
+    if (m_kind == Kind::SlotMachine)
+      hideRaisedPayoutScreen(hidden);
+
     // The first-person pass moves every point light by minus the player's
     // position, this scene's too: it would have none
     auto  shadowScene = global<uint8_t*>(VrGame::ShadowSceneNodes);
@@ -982,6 +993,22 @@ namespace dxvk {
 
     if (culler)
       field<void*>(culler, VrGame::CullerCamera) = cullerCamera;
+  }
+
+
+  void VrMinigames::hideRaisedPayoutScreen(std::vector<uint32_t*>& hidden) {
+    void* menu = global<void*>(VrGame::SlotMachineInstance);
+    auto  root = global<uintptr_t>(VrGame::SlotMachineSceneRoot);
+
+    if (!menu || !root)
+      return;
+
+    // Raised, it is above the frame of the game's camera, floating over the
+    // machine for a head free to look up
+    uint32_t state = field<uint32_t>(menu, VrGame::MinigameState);
+
+    if (state != VrGame::SlotMachineStatePayoutIn && state != VrGame::SlotMachineStatePayoutOut)
+      VrMenuScenes::hideObject(root, VrGame::SlotMachinePayoutScreen, hidden);
   }
 
 

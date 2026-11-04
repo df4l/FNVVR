@@ -81,6 +81,22 @@ TEST_CASE(seat_brings_the_head_to_the_object) {
 }
 
 
+TEST_CASE(seat_with_an_eye_height_brings_the_head_to_it) {
+  VrPose reference = vrMakeRecenterReference(headAt(0.0f, 1.6f, 0.0f));
+  VrPose inReference = vrComputeEyeInReference(reference, headAt(0.0f, 1.3f, 0.0f));
+
+  VrWorldObject object = turnedTable();
+  VrSceneFit fit = tableFit();
+  fit.eyeHeight = 27.0f;
+
+  VrGameCameraPose camera = vrSeatCamera(object, fit, inReference, 420.0f, 70.0f);
+  VrGameCameraPose eye = vrComputeEyeCameraPose(camera, inReference, 70.0f);
+
+  // Whatever the game's camera and the head in the room, the eye is at the height
+  CHECK(std::abs(eye.position.z - 327.0f) < 1e-2f);
+}
+
+
 TEST_CASE(scene_on_object_is_seen_where_the_object_is) {
   VrPose reference = vrMakeRecenterReference(headAt(0.3f, 1.6f, -0.4f));
   VrPose head = headAt(0.1f, 1.5f, -0.2f);

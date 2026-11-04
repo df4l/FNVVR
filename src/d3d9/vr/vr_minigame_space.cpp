@@ -112,7 +112,10 @@ namespace dxvk {
                    + camera.forward * -headInReference.position.z;
 
     camera.position = seat - head * unitsPerMetre;
-    camera.position.z = cameraHeight;
+    camera.position.z = fit.eyeHeight > 0.0f
+      ? object.position.z + modelToWorld(object, VrVector3 { 0.0f, 0.0f, fit.eyeHeight }).z * object.scale
+        - headInReference.position.y * unitsPerMetre
+      : cameraHeight;
     return camera;
   }
 
