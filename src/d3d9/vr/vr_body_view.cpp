@@ -50,13 +50,12 @@ namespace dxvk {
       if (*reinterpret_cast<const uint32_t*>(VrGame::VatsCameraState))
         return false;
 
-      if (!readField<uint8_t>(player, VrGame::PlayerCurrentThirdPerson))
-        return false;
-
-      // The frame the game has not switched back to first person yet belongs
-      // here as well: its camera is still the one behind the player
+      // The frames the game has not switched yet, to third person or back to
+      // first person, belong here as well: its camera is already or still the
+      // one behind the player
       if (!readField<uint8_t>(player, VrGame::PlayerTempThirdPerson)
-       && readField<uint8_t>(player, VrGame::PlayerWantsThirdPerson))
+       && (!readField<uint8_t>(player, VrGame::PlayerCurrentThirdPerson)
+        || readField<uint8_t>(player, VrGame::PlayerWantsThirdPerson)))
         return false;
 
       if (readField<uint32_t>(player, VrGame::ActorLifeState))
@@ -86,53 +85,87 @@ namespace dxvk {
   }
 
 
-  void VrBodyView::placeCamera(VrGameCameraPose& camera) {
+  void VrBodyView::placeCamera(VrGameCameraPose& camera, float dt) {
+    // The head's small movements are not the body turning
+    constexpr float BodySoftness = 0.1f;
+
     auto player = *reinterpret_cast<const uintptr_t*>(VrGame::Player);
 
     if (!player)
       return;
 
     bool follow = shouldFollowHead(player);
+    bool wasOnBody = m_view == View::Body;
 
     // Looked for only when needed: this runs every frame
-    uintptr_t root = follow || m_following ? bodyRoot(player) : 0;
+    uintptr_t root = follow || wasOnBody ? bodyRoot(player) : 0;
     uintptr_t head = root ? vrFindGameObject(root, VrGame::HeadNodeName, MaxSkeletonDepth) : 0;
 
     follow = follow && head;
 
-    if (follow) {
-      VrVector3 position;
-      std::memcpy(&position, reinterpret_cast<const void*>(head + VrGame::ObjectWorldTranslation), sizeof(position));
+    View view = follow ? View::Body
+      : !*reinterpret_cast<const uint32_t*>(VrGame::VatsCameraState)
+        && virtualState(player, VrGame::GetSitStateSlot) ? View::Seat
+      : View::Game;
 
-      camera = vrComputeBodyCameraPose(readField<float>(player, VrGame::RefHeading),
-        vrComputeHeadViewPosition(position,
+    if (view != View::Game) {
+      float source = readField<float>(player, VrGame::RefHeading);
+
+      if (view == View::Body)
+        vrComputeHeadHeading(reinterpret_cast<const float*>(head + VrGame::ObjectWorldRotation), source);
+      else if (std::abs(camera.forward.x) + std::abs(camera.forward.y) > 1e-3f)
+        source = vrComputeCameraHeading(camera);
+
+      if (view != m_view)
+        m_heading.start(source, m_hasView ? m_viewHeading : source);
+
+      float heading = m_heading.update(source, view == View::Body ? BodySoftness : 0.0f, dt);
+
+      if (view == View::Body) {
+        VrVector3 position;
+        std::memcpy(&position, reinterpret_cast<const void*>(head + VrGame::ObjectWorldTranslation), sizeof(position));
+
+        camera = vrComputeBodyCameraPose(heading, vrComputeHeadViewPosition(position,
           reinterpret_cast<const float*>(head + VrGame::ObjectWorldRotation),
           readField<float>(root, VrGame::ObjectWorldScale)));
 
-      scaleHead(head, HeadShrunk);
+        scaleHead(head, HeadShrunk);
 
-      if (!m_logged) {
-        Logger::info("VR: The game shows the body for a moment, the eyes follow its head");
-        m_logged = true;
+        if (!m_logged) {
+          Logger::info("VR: The game shows the body for a moment, the eyes follow its head");
+          m_logged = true;
+        }
+      } else {
+        camera = vrComputeBodyCameraPose(heading, camera.position);
       }
-    } else if (!*reinterpret_cast<const uint32_t*>(VrGame::VatsCameraState)
-            && virtualState(player, VrGame::GetSitStateSlot)
-            && std::abs(camera.forward.x) + std::abs(camera.forward.y) > 1e-3f) {
-      camera = vrComputeBodyCameraPose(vrComputeCameraHeading(camera), camera.position);
     }
 
     // The menus can stop the game's logic, which would not bring the head back
-    if (m_following && !follow && head)
+    if (wasOnBody && !follow && head)
       scaleHead(head, 1.0f);
 
-    m_changed   = follow != m_following;
-    m_following = follow;
+    m_changed = follow != wasOnBody;
+    m_view    = view;
   }
 
 
-  void VrBodyView::finishCamera(VrGameCameraPose& camera, float dt) {
+  void VrBodyView::finishCamera(VrGameCameraPose& camera, bool headTurnsCamera, float dt) {
+    bool onBody = m_view == View::Body;
+
+    // Late in getting up, the head's look takes the view back
+    if (onBody && headTurnsCamera != m_headTurns)
+      m_changed = true;
+
+    if (m_view != View::Game && headTurnsCamera)
+      m_heading.keep(vrComputeCameraHeading(camera));
+
+    m_headTurns = headTurnsCamera;
+
     camera = m_blend.update(camera, m_changed, dt);
     m_changed = false;
+
+    m_viewHeading = vrComputeCameraHeading(camera);
+    m_hasView = true;
   }
 
 }

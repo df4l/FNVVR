@@ -8,7 +8,7 @@
 
 ### Sitting down
 
-- **Sitting down and getting up no longer leave your head**: the animation plays on your body and your eyes follow the head of that body, instead of a camera behind you. You see your own body sit, your head is hidden and the headset stays free to look around. The Sandman and Cannibal kills do the same. A chair or bed also no longer keeps the view tilted at the angle your head had when you sat down.
+- **Sitting down and getting up no longer leave your head**: the animation plays on your body and your eyes follow the head of that body, instead of a camera behind you. You see your own body sit, your head is hidden and the headset stays free to look around. The view turns with the body, wherever you stand in your room. The Sandman and Cannibal kills do the same. A chair or bed also no longer keeps the view tilted at the angle your head had when you sat down.
 
 ### Mini-games in the room
 

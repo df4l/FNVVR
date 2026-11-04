@@ -137,6 +137,53 @@ namespace dxvk {
   VrVector3 vrComputeHeadViewPosition(const VrVector3& head, const float* rotation, float scale);
 
   /**
+   * \brief Heading a head bone faces
+   *
+   * \param [in] rotation World rotation of the bone, nine floats by rows
+   * \param [out] heading The heading, unchanged without a result
+   * \returns \c false if the bone looks straight up or down
+   */
+  bool vrComputeHeadHeading(const float* rotation, float& heading);
+
+  /**
+   * \brief Turns the view as much as something else turns
+   *
+   * The eyes add the head's yaw to the camera they are placed on, and that yaw
+   * is measured in the room: it says nothing of where the player looks in the
+   * game. The view therefore keeps its heading when it starts following, then
+   * only takes the changes: whatever the player was looking at stays in front.
+   */
+  class VrViewHeading {
+
+  public:
+
+    /**
+     * \param [in] source Heading to follow from now on
+     * \param [in] view Heading the view has
+     */
+    void start(float source, float view);
+
+    /**
+     * \param [in] source Heading to follow
+     * \param [in] softness Time the difference takes to fall to about a third, in seconds
+     * \param [in] dt Time since the last frame, in seconds
+     * \returns Heading of the view
+     */
+    float update(float source, float softness, float dt);
+
+    /**
+     * \brief Takes the heading something else gave the view
+     */
+    void keep(float view);
+
+  private:
+
+    float m_source = 0.0f;
+    float m_offset = 0.0f;
+
+  };
+
+  /**
    * \brief Softens the change between two ways of placing the camera
    *
    * The position and the heading continue from what the last frame showed and

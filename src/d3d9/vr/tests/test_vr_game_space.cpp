@@ -425,6 +425,62 @@ TEST_CASE(camera_blend_continues_from_the_last_frame) {
 }
 
 
+TEST_CASE(head_heading_is_where_the_face_looks) {
+  // Column 1 is the face, facing east (heading of 90 degrees)
+  const float east[9] = {
+    0.0f, 1.0f, 0.0f,
+    1.0f, 0.0f, 0.0f,
+    0.0f, 0.0f, 1.0f,
+  };
+
+  float heading = -1.0f;
+  CHECK(vrComputeHeadHeading(east, heading));
+  CHECK_NEAR(heading, 1.5707963f, 1e-4);
+
+  // Looking straight down, it says nothing
+  const float down[9] = {
+    0.0f,  0.0f, 1.0f,
+    1.0f,  0.0f, 0.0f,
+    0.0f, -1.0f, 0.0f,
+  };
+
+  heading = -1.0f;
+  CHECK(!vrComputeHeadHeading(down, heading));
+  CHECK_NEAR(heading, -1.0f, 1e-6);
+}
+
+TEST_CASE(view_heading_starts_where_the_view_is) {
+  VrViewHeading heading;
+
+  // The head is turned in the room: the view has nothing to do with the body
+  heading.start(3.0f, 1.0f);
+  CHECK_NEAR(heading.update(3.0f, 0.0f, 0.01f), 1.0f, 1e-4);
+
+  // The body turns nearly around, the view with it
+  CHECK_NEAR(heading.update(3.0f + 3.0f, 0.0f, 0.01f), 1.0f + 3.0f, 1e-4);
+}
+
+TEST_CASE(view_heading_turns_the_short_way_softly) {
+  VrViewHeading heading;
+  heading.start(3.0f, 3.0f);
+
+  // Across the wrap of the angle: 3.0 to -3.0 is about a third of a radian
+  float soft = heading.update(-3.0f, 0.1f, 0.05f);
+  CHECK(soft > 3.0f && soft < 3.2831853f);
+
+  float settled = heading.update(-3.0f, 0.1f, 10.0f);
+  CHECK_NEAR(std::remainder(settled + 3.0f, 6.2831853f), 0.0f, 1e-3);
+}
+
+TEST_CASE(view_heading_keeps_what_something_else_gave_it) {
+  VrViewHeading heading;
+  heading.start(0.0f, 0.0f);
+
+  heading.keep(0.7f);
+  CHECK_NEAR(heading.update(0.0f, 0.0f, 0.01f), 0.7f, 1e-4);
+  CHECK_NEAR(heading.update(0.5f, 0.0f, 0.01f), 1.2f, 1e-4);
+}
+
 TEST_CASE(camera_blend_cuts_when_too_far) {
   VrCameraBlend blend;
 

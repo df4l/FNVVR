@@ -16,9 +16,11 @@ namespace dxvk {
    * placed from the head of the body, as Enhanced Camera does on a screen, and
    * the body is seen from inside: its head is shrunk to a point for the frame.
    *
-   * Only the position follows the animation. The orientation stays level and
-   * on the player's heading, the headset's own being added to it: an animation
-   * turning the view without the head turning is not bearable in a headset.
+   * The position follows the animation, and the heading follows the way the
+   * head of the body turns: its animation turns it around, which the player's
+   * heading only does at its end, in one go (findings/camera.md §8.3). The view
+   * stays level: an animation tilting it without the head is not bearable in a
+   * headset, and the headset's own rotation is added to it.
    *
    * The same goes for the Sandman and Cannibal kills, on the same temporary
    * third person. A knocked down player stays on the game's camera: the head of
@@ -43,28 +45,39 @@ namespace dxvk {
      * the one the head had when the player sat down, and would stay in the view.
      *
      * \param [in,out] camera The game's camera
+     * \param [in] dt Time since the last frame, in seconds
      */
-    void placeCamera(VrGameCameraPose& camera);
+    void placeCamera(VrGameCameraPose& camera, float dt);
 
     /**
      * \brief Blends the camera after a change of view
      *
      * \param [in,out] camera The camera the eyes are about to be placed from
+     * \param [in] headTurnsCamera Whether the head's look has just placed it
      * \param [in] dt Time since the last frame, in seconds
      */
-    void finishCamera(VrGameCameraPose& camera, float dt);
+    void finishCamera(VrGameCameraPose& camera, bool headTurnsCamera, float dt);
 
-    /// Whether the eyes follow the body's head
-    bool followsHead() const { return m_following; }
+    /// Whether the eyes are not on the game's camera: on the body or a seat
+    bool movesView() const { return m_view != View::Game; }
+
+    /// Heading of the camera the eyes were last placed from
+    float viewHeading() const { return m_viewHeading; }
 
   private:
 
     VrBodyView() = default;
 
+    enum class View { Game, Body, Seat };
+
     VrCameraBlend m_blend;
-    bool          m_following = false;
-    bool          m_changed   = false;
-    bool          m_logged    = false;
+    VrViewHeading m_heading;
+    View          m_view        = View::Game;
+    float         m_viewHeading = 0.0f;
+    bool          m_hasView     = false;
+    bool          m_headTurns   = false;
+    bool          m_changed     = false;
+    bool          m_logged      = false;
 
   };
 

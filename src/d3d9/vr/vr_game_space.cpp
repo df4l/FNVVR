@@ -91,6 +91,41 @@ namespace dxvk {
   }
 
 
+  bool vrComputeHeadHeading(const float* rotation, float& heading) {
+    constexpr float MinLevel = 0.2f;
+
+    // Column 1 of the bone's rotation is where the face looks
+    float x = rotation[1];
+    float y = rotation[4];
+
+    if (x * x + y * y < MinLevel * MinLevel)
+      return false;
+
+    heading = std::atan2(x, y);
+    return true;
+  }
+
+
+  void VrViewHeading::start(float source, float view) {
+    m_source = source;
+    keep(view);
+  }
+
+
+  float VrViewHeading::update(float source, float softness, float dt) {
+    constexpr float FullTurn = 6.2831853f;
+
+    float left = softness > 0.0f ? std::exp(-dt / softness) : 0.0f;
+    m_source += std::remainder(source - m_source, FullTurn) * (1.0f - left);
+    return m_source + m_offset;
+  }
+
+
+  void VrViewHeading::keep(float view) {
+    m_offset = view - m_source;
+  }
+
+
   VrGameCameraPose VrCameraBlend::update(const VrGameCameraPose& target, bool changed, float dt) {
     // Time for what is left of the difference to fall to about a third
     constexpr float Softness    = 0.15f;

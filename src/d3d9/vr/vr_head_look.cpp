@@ -120,6 +120,14 @@ namespace dxvk {
   }
 
 
+  void VrHeadLook::holdBodyHeading(const float* heading) {
+    m_holdsBody = heading != nullptr;
+
+    if (heading)
+      m_heldBody = *heading;
+  }
+
+
   bool VrHeadLook::adjustCamera(VrGameCameraPose& pose) const {
     const uint8_t* object = player();
 
@@ -221,7 +229,7 @@ namespace dxvk {
     // Whatever turned the player since the last update, the mouse
     // included, turns the body
     if (!m_active)
-      m_bodyHeading = heading - m_head.yaw;
+      m_bodyHeading = m_holdsBody ? m_heldBody : heading - m_head.yaw;
     else
       m_bodyHeading += angleDifference(heading, m_writtenHeading);
 

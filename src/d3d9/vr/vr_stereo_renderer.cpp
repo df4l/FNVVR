@@ -680,15 +680,19 @@ namespace dxvk {
     VrGameCameraPose modelCamera = m_gameCameraPose;
 
     if (m_bodyView)
-      m_bodyView->placeCamera(m_gameCameraPose);
+      m_bodyView->placeCamera(m_gameCameraPose, dt);
 
     // The game turned its camera with the head already
-    m_controls.updateCamera(m_gameCameraPose, dt);
+    bool headTurnsCamera = m_controls.updateCamera(m_gameCameraPose, dt);
 
-    if (m_bodyView)
-      m_bodyView->finishCamera(m_gameCameraPose, dt);
+    if (m_bodyView) {
+      m_bodyView->finishCamera(m_gameCameraPose, headTurnsCamera, dt);
 
-    m_viewMoved = m_bodyView && m_bodyView->followsHead();
+      float viewHeading = m_bodyView->viewHeading();
+      m_controls.holdBodyHeading(m_bodyView->movesView() ? &viewHeading : nullptr);
+    }
+
+    m_viewMoved = m_bodyView && m_bodyView->movesView();
 
     // A mini-game on an object of the world has brought the player to it. It
     // comes last: its heading is the object's, not the body's.
