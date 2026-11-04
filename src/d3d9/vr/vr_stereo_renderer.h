@@ -12,6 +12,7 @@
 #include "vr_activate_target.h"
 #include "vr_backend.h"
 #include "vr_comfort_settings.h"
+#include "vr_roomscale.h"
 #include "vr_controls.h"
 #include "vr_culling_camera.h"
 #include "vr_developer_mode.h"
@@ -231,6 +232,16 @@ namespace dxvk {
     }
 
     /**
+     * \brief Turns the capsule's following of the head on or off
+     *
+     * Called from the game's options page, on the game's thread.
+     */
+    void setRoomscale(bool enabled) {
+      if (m_roomscale)
+        m_roomscale->setEnabled(enabled);
+    }
+
+    /**
      * \brief Changes how the player sneaks
      *
      * Called from the game's options page, on the game's thread.
@@ -412,6 +423,9 @@ namespace dxvk {
 
     // The idle camera off and the kill camera in first person
     std::unique_ptr<VrComfortSettings> m_comfortSettings;
+
+    // The capsule goes where the player walks in the room
+    std::unique_ptr<VrRoomscale> m_roomscale;
 
     // The other actors look at the head
     std::unique_ptr<VrNpcGaze> m_npcGaze;

@@ -178,6 +178,7 @@ namespace dxvk {
     options.manualReload    = config.getOption<bool>("d3d9.vrManualReload", options.manualReload);
     options.physicalSneak   = config.getOption<bool>("d3d9.vrPhysicalSneak", options.physicalSneak);
     options.scopeLens       = config.getOption<bool>("d3d9.vrScopes", options.scopeLens);
+    options.roomscale       = config.getOption<bool>("d3d9.vrRoomscale", options.roomscale);
     VrOptionsFile::load(options);
     turn.smooth      = options.smoothTurn;
     turn.smoothSpeed = options.smoothTurnSpeed;
@@ -250,6 +251,7 @@ namespace dxvk {
     g_vrSystem->m_manualReload = options.manualReload;
     g_vrSystem->m_handPush = config.getOption<bool>("d3d9.vrHandPush", true);
     g_vrSystem->m_scopes = options.scopeLens;
+    g_vrSystem->m_roomscale = options.roomscale;
     g_vrSystem->m_sneakConfig.physical = options.physicalSneak;
     g_vrSystem->m_sneakConfig.crouch   = crouch;
     g_vrSystem->m_forceGameSettings = !emulated && config.getOption<bool>("d3d9.vrForceGameSettings", true);
@@ -323,9 +325,11 @@ namespace dxvk {
     m_manualReload = options.manualReload;
     m_sneakConfig.physical = options.physicalSneak;
     m_scopes = options.scopeLens;
+    m_roomscale = options.roomscale;
 
     if (m_stereoRenderer) {
       m_stereoRenderer->setScopesEnabled(m_scopes);
+      m_stereoRenderer->setRoomscale(m_roomscale);
       m_stereoRenderer->setTurnConfig(m_turnConfig);
       m_stereoRenderer->setPipBoyScale(m_pipBoyScale);
       m_stereoRenderer->setManualReload(m_manualReload);
@@ -391,6 +395,7 @@ namespace dxvk {
       m_stereoRenderer->setPipBoyScale(m_pipBoyScale);
       m_stereoRenderer->setScopesEnabled(m_scopes);
       m_stereoRenderer->setManualReload(m_manualReload);
+      m_stereoRenderer->setRoomscale(m_roomscale);
       m_stereoRenderer->setHandPush(m_handPush);
       m_stereoRenderer->setSneakConfig(m_sneakConfig);
     }

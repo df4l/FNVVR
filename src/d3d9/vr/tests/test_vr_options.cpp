@@ -158,3 +158,19 @@ TEST_CASE(options_round_trip_the_physical_sneak) {
   vrParseOptions("physicalsneak=0", read);
   CHECK(!read.physicalSneak);
 }
+
+
+TEST_CASE(options_round_trip_the_roomscale) {
+  VrOptions options;
+  CHECK(!options.roomscale);
+
+  VrOptions written;
+  written.roomscale = true;
+
+  VrOptions read;
+  vrParseOptions(vrFormatOptions(written), read);
+  CHECK(read.roomscale);
+
+  vrParseOptions("roomscale=0", read);
+  CHECK(!read.roomscale);
+}

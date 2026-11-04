@@ -335,6 +335,11 @@ namespace dxvk {
     if (!renderer->m_comfortSettings)
       Logger::info("VR: The idle and kill camera settings were not found, the game may leave the first person");
 
+    renderer->m_roomscale = VrRoomscale::install();
+
+    if (!renderer->m_roomscale)
+      Logger::info("VR: The player's move was not found, the capsule does not follow the head");
+
     renderer->m_npcGaze = VrNpcGaze::install();
 
     if (!renderer->m_npcGaze)
@@ -676,6 +681,12 @@ namespace dxvk {
 
     // The game turned its camera with the head already
     m_controls.updateCamera(m_gameCameraPose, dt);
+
+    if (m_roomscale && m_hasReference) {
+      m_roomscale->update(m_reference, m_gameCameraPose, m_hasHeadPose ? &m_headPose : nullptr,
+        state == VrGameStateKind::InGame && m_controls.cameraFollowsHead());
+    }
+
     updateNpcGaze();
     updateHolster(input, state);
     updateQuickWheel(input, state);

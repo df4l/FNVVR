@@ -46,6 +46,19 @@ namespace dxvk {
   }
 
 
+  VrPose vrShiftReference(
+    const VrPose&           reference,
+    const VrGameCameraPose& base,
+    const VrVector3&        shift,
+          float             unitsPerMetre) {
+    VrVector3 inReference = vrComputeGamePointInReference(base, base.position + shift, unitsPerMetre);
+
+    VrPose result = reference;
+    result.position = reference.position + vrRotate(reference.orientation, inReference);
+    return result;
+  }
+
+
   VrHeadAngles vrComputeHeadAngles(const VrPose& headInReference) {
     // Forward is -Z, right is +X and up is +Y in the reference frame
     VrVector3 forward = vrRotate(headInReference.orientation, { 0.0f, 0.0f, -1.0f });
