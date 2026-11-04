@@ -45,9 +45,10 @@ TEST_CASE(scope_table_knows_the_binoculars_and_the_camera) {
   CHECK(table.find("Weapons\\1handmelee\\binoculars.nif", placement));
   CHECK(placement.kind == VrOpticKind::Binoculars);
   CHECK(placement.hasLens());
-  // The right eyepiece on the right, the other about 8 cm to its left
-  CHECK(placement.eyepiece.z > placement.otherEyepiece.z);
-  CHECK_NEAR(placement.eyepiece.z - placement.otherEyepiece.z, 5.88f, 1e-3);
+  // In the frame of their node, whose y is to the left: the right eyepiece
+  // first, the other about 8 cm to its left
+  CHECK(placement.eyepiece.y < placement.otherEyepiece.y);
+  CHECK_NEAR(placement.otherEyepiece.y - placement.eyepiece.y, 5.88f, 1e-3);
   CHECK(placement.objective.x > placement.eyepiece.x);
 
   CHECK(table.find("weapons\\1handpistol\\camera.nif", placement));

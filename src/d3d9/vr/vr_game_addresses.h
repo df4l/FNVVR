@@ -2966,6 +2966,12 @@ namespace dxvk {
      * - PlayerModLooking, PlayerModHeading: MobileObject::ModLooking and
      *   ModHeading, __thiscall (angle), the calls of PlayerCharacter::AddGunWobble
      *   swaying the player's view while it aims with a scope.
+     * - WeaponUseFirstPersonAimAnims: TESObjectWEAP::GetUse1PISAnims, __thiscall,
+     *   false with flags1 bit 0x40. The calls in Actor::AdjustGroupIDForAiming and
+     *   Actor::SetIronSights choose the first-person aim group, the only one of
+     *   the two that puts the left hand on a pistol. Both are for the player only.
+     * - WeaponHasModScope: TESObjectWEAP::HasModScope, __thiscall, the call in
+     *   Actor::SetIronSights that keeps the aim group of a fitted scope mod.
      */
     constexpr uintptr_t SetGunScopeVisible           = 0x0077F3C0;
     constexpr uintptr_t GunScopeVisibleCallSite      = 0x00709C48;
@@ -2985,6 +2991,11 @@ namespace dxvk {
     constexpr uintptr_t ScopeWobbleLookingCallSite   = 0x009634A5;
     constexpr uintptr_t PlayerModHeading             = 0x00931D30;
     constexpr uintptr_t ScopeWobbleHeadingCallSite   = 0x009634C9;
+    constexpr uintptr_t WeaponUseFirstPersonAimAnims = 0x008B2BF0;
+    constexpr uintptr_t AimGroupAnimsCallSite        = 0x008B2BA2;
+    constexpr uintptr_t IronSightsAnimsCallSite      = 0x008BBB2E;
+    constexpr uintptr_t WeaponHasModScope            = 0x004AD030;
+    constexpr uintptr_t IronSightsModScopeCallSite   = 0x008BBB4A;
 
     /**
      * ItemChange::HasModEffectActive 0x004BD8D0, __thiscall (effect, value out,

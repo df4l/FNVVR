@@ -12,6 +12,7 @@ namespace dxvk {
     using IronSightsFn   = uint32_t (__fastcall*)(void* actor, void* unused);
     using WeaponEntryFn  = uint8_t* (__fastcall*)(void* process, void* unused);
     using ModEffectFn    = uint32_t (__fastcall*)(uint8_t* entry, void* unused, uint32_t effect, float* value);
+    using WeaponTestFn   = uint32_t (__fastcall*)(const void* weapon, void* unused);
 
     VrScopeGame* g_scopeGame = nullptr;
 
@@ -55,7 +56,10 @@ namespace dxvk {
       && VrGameMemory::callsTo(VrGame::NightScopeCallSite, VrGame::WeaponHasNightScope)
       && VrGameMemory::callsTo(VrGame::GunSkillIronSightsCallSite, VrGame::ActorGetIronSights)
       && VrGameMemory::callsTo(VrGame::ScopeWobbleLookingCallSite, VrGame::PlayerModLooking)
-      && VrGameMemory::callsTo(VrGame::ScopeWobbleHeadingCallSite, VrGame::PlayerModHeading);
+      && VrGameMemory::callsTo(VrGame::ScopeWobbleHeadingCallSite, VrGame::PlayerModHeading)
+      && VrGameMemory::callsTo(VrGame::AimGroupAnimsCallSite, VrGame::WeaponUseFirstPersonAimAnims)
+      && VrGameMemory::callsTo(VrGame::IronSightsAnimsCallSite, VrGame::WeaponUseFirstPersonAimAnims)
+      && VrGameMemory::callsTo(VrGame::IronSightsModScopeCallSite, VrGame::WeaponHasModScope);
 
     if (!found) {
       Logger::warn("VR: The game's scope calls were not found, its flat scope stays");
@@ -84,6 +88,12 @@ namespace dxvk {
       reinterpret_cast<const void*>(&VrScopeGame::scopeWobbleHook));
     VrGameMemory::redirectCall(VrGame::ScopeWobbleHeadingCallSite, VrGame::PlayerModHeading,
       reinterpret_cast<const void*>(&VrScopeGame::scopeWobbleHook));
+    VrGameMemory::redirectCall(VrGame::AimGroupAnimsCallSite, VrGame::WeaponUseFirstPersonAimAnims,
+      reinterpret_cast<const void*>(&VrScopeGame::useAimAnimsHook));
+    VrGameMemory::redirectCall(VrGame::IronSightsAnimsCallSite, VrGame::WeaponUseFirstPersonAimAnims,
+      reinterpret_cast<const void*>(&VrScopeGame::useAimAnimsHook));
+    VrGameMemory::redirectCall(VrGame::IronSightsModScopeCallSite, VrGame::WeaponHasModScope,
+      reinterpret_cast<const void*>(&VrScopeGame::aimModScopeHook));
 
     g_scopeGame = game.get();
 
@@ -171,6 +181,26 @@ namespace dxvk {
     // The head alone turns the view. This sway comes after the head's angles
     // are written and before the camera is placed, so VrHeadLook would take it
     // for something else turning the player and give up the head's camera.
+  }
+
+
+  uint32_t __fastcall VrScopeGame::useAimAnimsHook(const void* weapon, void* unused) {
+    // Weapons with a scope or a sight of their own skip the aim animations, where
+    // a flat screen shows no arms anyway. Held with both hands, those animations
+    // are what puts the left hand on the weapon.
+    if (g_scopeGame && g_scopeGame->m_steadied)
+      return 1;
+
+    return reinterpret_cast<WeaponTestFn>(VrGame::WeaponUseFirstPersonAimAnims)(weapon, nullptr);
+  }
+
+
+  uint32_t __fastcall VrScopeGame::aimModScopeHook(const void* weapon, void* unused) {
+    // A fitted scope mod would keep the animation already playing until a shot
+    if (g_scopeGame && g_scopeGame->m_steadied)
+      return 0;
+
+    return reinterpret_cast<WeaponTestFn>(VrGame::WeaponHasModScope)(weapon, nullptr);
   }
 
 }

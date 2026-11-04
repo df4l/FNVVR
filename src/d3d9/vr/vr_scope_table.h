@@ -24,9 +24,9 @@ namespace dxvk {
    * \brief Where a weapon's scope is in the weapon's model
    *
    * In the model's units and frame, which is the weapon node's. The lens lies
-   * square to the barrel, whichever axis of the model that is. Binoculars are
-   * placed in the hand by the mod, so theirs are in the hand's frame: x along
-   * the view, y up, z to the right.
+   * square to the barrel, whichever axis of the model that is. The animations
+   * move the binoculars' node within the model, so theirs are in that node's
+   * frame: x along the view, y to the left, z up.
    */
   struct VrScopePlacement {
     VrOpticKind kind = VrOpticKind::Scope;
@@ -49,18 +49,16 @@ namespace dxvk {
   };
 
   /**
-   * \brief How the game's binoculars model is held
+   * \brief The parts of the game's binoculars model
    *
-   * The model is made tilted and rolled, below and beside the weapon node, so
-   * the mod holds it by its right barrel (findings/optics.md §11).
+   * The game's animations hold them by the right barrel, in the fist, so the
+   * model stays where they put it (findings/optics.md §13).
    */
-  struct VrHeldBinoculars {
+  struct VrBinocularsModel {
     /// The node holding the shape, its axes along the view, to the left and up
-    static constexpr char NodeName[]  = "##Binoculars";
+    static constexpr char NodeName[]   = "##Binoculars";
     /// A second shape, a marker at the model's origin that is no part of them
-    static constexpr char StrayName[] = "Binoculars:0";
-    /// Where that node is in the hand's frame
-    static const VrVector3 Origin;
+    static constexpr char MarkerName[] = "Binoculars:0";
   };
 
   /**

@@ -52,21 +52,14 @@ namespace dxvk {
     constexpr char BinocularsModel[] = "weapons\\1handmelee\\binoculars.nif";
     constexpr char CameraModel[]     = "weapons\\1handpistol\\camera.nif";
 
-    // Measured on the model's rings of vertices, findings/optics.md §11. In the
-    // frame of the node holding them (along the view, left, up) the eyepieces
-    // are at (-5.26, -2.70, 1.78) and (-5.26, 3.18, 1.78), the objectives' middle
-    // at (11.63, 0.24, 0.88), and the right barrel's middle at (3.2, -3.48, 1.33).
-    // That middle is held 2.5 units above the weapon node, in the fist.
-    constexpr float HeldAlong = -3.2f;
-    constexpr float HeldUp    = 1.17f;
-    constexpr float HeldRight = -3.48f;
-
+    // Measured on the model's rings of vertices, findings/optics.md §13, in the
+    // frame of the node holding them: along the view, left, up
     VrScopePlacement binocularsPlacement() {
       VrScopePlacement placement;
       placement.kind          = VrOpticKind::Binoculars;
-      placement.eyepiece      = { -5.26f + HeldAlong, 1.78f + HeldUp,  2.70f + HeldRight };
-      placement.otherEyepiece = { -5.26f + HeldAlong, 1.78f + HeldUp, -3.18f + HeldRight };
-      placement.objective     = { 11.63f + HeldAlong, 0.88f + HeldUp, -0.24f + HeldRight };
+      placement.eyepiece      = { -5.26f, -2.70f, 1.78f };
+      placement.otherEyepiece = { -5.26f,  3.18f, 1.78f };
+      placement.objective     = { 11.63f,  0.24f, 0.88f };
       placement.halfWidth     = 1.13f;
       placement.halfHeight    = 1.13f;
       return placement;
@@ -104,9 +97,6 @@ namespace dxvk {
     }
 
   }
-
-
-  const VrVector3 VrHeldBinoculars::Origin = { HeldAlong, HeldUp, HeldRight };
 
 
   size_t VrScopeTable::parse(const std::string& text) {

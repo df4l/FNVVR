@@ -1113,16 +1113,37 @@ namespace dxvk {
 
     m_scopeKind = placement.kind;
 
-    // Binoculars are held by the mod, along the hand
+    // The game's animations hold the binoculars in the fist, along its axis:
+    // their place comes from the node they move
     if (placement.kind == VrOpticKind::Binoculars) {
-      auto inHand = [&] (const VrVector3& point) {
-        return hand.position + (hand.forward * point.x + hand.up * point.y + hand.right * point.z) * modelScale;
+      uint8_t* node = findObject(weapon, VrBinocularsModel::NodeName);
+
+      if (!node)
+        return;
+
+      if (uint8_t* marker = findObject(weapon, VrBinocularsModel::MarkerName))
+        field<uint32_t>(marker, VrGame::ObjectFlags) |= VrGame::ObjectFlagAppCulled;
+
+      VrGameRotation nodeRotation = readRotation(node, VrGame::ObjectWorldRotation);
+      VrVector3      nodeOrigin   = readVector(node, VrGame::ObjectWorldTranslation);
+
+      auto inNode = [&] (const VrVector3& point) {
+        return nodeRotation * (point * modelScale) + nodeOrigin;
       };
 
-      m_scopeEyepiece      = vrPointToHand(hand, inHand(placement.eyepiece));
-      m_scopeOtherEyepiece = vrPointToHand(hand, inHand(placement.otherEyepiece));
-      m_scopeObjective     = vrPointToHand(hand, inHand(placement.objective));
-      m_scopeRotation      = vrTranspose(vrCameraRotation(hand)) * vrCameraRotation(hand);
+      // Stored as columns forward, up, right, see scopeLens
+      VrGameRotation axes;
+
+      for (uint32_t row = 0; row < 3; row++) {
+        axes.m[row][0] =  nodeRotation.m[row][0];
+        axes.m[row][1] =  nodeRotation.m[row][2];
+        axes.m[row][2] = -nodeRotation.m[row][1];
+      }
+
+      m_scopeEyepiece      = vrPointToHand(hand, inNode(placement.eyepiece));
+      m_scopeOtherEyepiece = vrPointToHand(hand, inNode(placement.otherEyepiece));
+      m_scopeObjective     = vrPointToHand(hand, inNode(placement.objective));
+      m_scopeRotation      = vrTranspose(vrCameraRotation(hand)) * axes;
       m_scopeHalfWidth     = placement.halfWidth * modelScale;
       m_scopeHalfHeight    = placement.halfHeight * modelScale;
       m_scopeRectangular   = false;
@@ -1190,44 +1211,6 @@ namespace dxvk {
     }
 
     return m_opticKind;
-  }
-
-
-  void VrWeaponHand::holdBinoculars(uint8_t* weapon, const VrGameCameraPose& hand, void* updateData) {
-    uint8_t* node  = findObject(weapon, VrHeldBinoculars::NodeName);
-    uint8_t* model = node ? field<uint8_t*>(node, VrGame::ObjectParent) : nullptr;
-
-    if (!model)
-      return;
-
-    if (uint8_t* stray = findObject(weapon, VrHeldBinoculars::StrayName))
-      field<uint32_t>(stray, VrGame::ObjectFlags) |= VrGame::ObjectFlagAppCulled;
-
-    float scale = field<float>(weapon, VrGame::ObjectWorldScale);
-
-    // The node's axes: along the view, to the left and up. The file's transform
-    // controller only ever writes that node, so the model above it is the
-    // one that moves.
-    VrGameRotation wanted;
-
-    const VrVector3 axes[3] = { hand.forward, hand.right * -1.0f, hand.up };
-
-    for (uint32_t column = 0; column < 3; column++) {
-      wanted.m[0][column] = axes[column].x;
-      wanted.m[1][column] = axes[column].y;
-      wanted.m[2][column] = axes[column].z;
-    }
-
-    const VrVector3& origin = VrHeldBinoculars::Origin;
-
-    VrVector3 place = hand.position
-      + (hand.forward * origin.x + hand.up * origin.y + hand.right * origin.z) * scale;
-
-    VrGameTransform pose;
-    pose.rotate    = wanted * vrTranspose(readRotation(node, VrGame::ObjectLocalRotation));
-    pose.translate = place - pose.rotate * (readVector(node, VrGame::NodeLocalTranslate) * scale);
-
-    drawPart(model, pose, updateData);
   }
 
 
@@ -1535,9 +1518,6 @@ namespace dxvk {
       drawPart(rack, rackPose, updateData);
 
     findHighlight(root, weapon, hinge, lock, action == ActionKind::Swing);
-
-    if (optic == VrOpticKind::Binoculars)
-      holdBinoculars(weapon, hand, updateData);
 
     uint8_t* muzzle = findObject(weapon, VrGame::ProjectileNodeName);
 

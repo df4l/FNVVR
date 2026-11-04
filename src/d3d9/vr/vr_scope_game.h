@@ -29,7 +29,8 @@ namespace dxvk {
    *
    * The aim state itself makes a weapon more precise. It also plays other
    * animations and slows the player, so holding a weapon with both hands
-   * only brings its precision.
+   * only brings its precision. Pistols that skip the first-person aim
+   * animations get them while held with both hands: those put the left hand on.
    */
   class VrScopeGame {
 
@@ -80,6 +81,10 @@ namespace dxvk {
     static uint32_t __fastcall gunSkillIronSightsHook(void* actor, void* unused);
 
     static void __fastcall scopeWobbleHook(void* player, void* unused, float angle);
+
+    static uint32_t __fastcall useAimAnimsHook(const void* weapon, void* unused);
+
+    static uint32_t __fastcall aimModScopeHook(const void* weapon, void* unused);
 
   };
 

@@ -1150,7 +1150,6 @@ namespace dxvk {
 
     VrOpticKind opticKind(const uint8_t* form);
 
-    void holdBinoculars(uint8_t* weapon, const VrGameCameraPose& hand, void* updateData);
 
     void placeScope(
             uint8_t*          weapon,
