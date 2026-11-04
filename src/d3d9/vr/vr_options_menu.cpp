@@ -40,6 +40,7 @@ namespace dxvk {
     constexpr char SneakText[]      = "Sneak";
     constexpr char SneakButtonText[] = "Stick click";
     constexpr char SneakCrouchText[] = "Real crouch";
+    constexpr char ScopeText[]      = "Scope lens";
 
     // One name per size of VrPipBoyScaleSteps, from the game's size up
     constexpr const char* PipBoySizeNames[VrPipBoyScaleSteps] = {
@@ -224,6 +225,23 @@ namespace dxvk {
     }
 
 
+    void __cdecl onScopeChanged(void* option) {
+      if (!optionsInitialised()) {
+        optionValue(option)   = g_options.scopeLens ? 1u : 0u;
+        optionDefault(option) = 1u;
+        return;
+      }
+
+      bool lens = optionValue(option) != 0;
+
+      if (lens == g_options.scopeLens)
+        return;
+
+      g_options.scopeLens = lens;
+      notifyChanged();
+    }
+
+
     // Creates a user option and adds it to the game's list
     template<typename... Names>
     void* appendUserOption(const char* text, UserOptionCallback callback, int32_t type,
@@ -276,6 +294,8 @@ namespace dxvk {
         ReloadOffText, ReloadOnText);
       appendUserOption(SneakText, &onSneakChanged, ToggleType, ToggleValues, ArrowSpacing,
         SneakButtonText, SneakCrouchText);
+      appendUserOption(ScopeText, &onScopeChanged, ToggleType, ToggleValues, ArrowSpacing,
+        ReloadOffText, ReloadOnText);
     }
 
 

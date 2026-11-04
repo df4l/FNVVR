@@ -11,6 +11,9 @@
 #include "vr_melee.h"
 #include "vr_pipboy_size.h"
 #include "vr_reload_animation.h"
+#include "vr_scope_game.h"
+#include "vr_scope_lens.h"
+#include "vr_scope_table.h"
 #include "vr_throw.h"
 #include "vr_throw_animation.h"
 #include "vr_weapon_aim.h"
@@ -240,6 +243,36 @@ namespace dxvk {
     void beforePlaceCamera(
             void*                 main,
       const VrVector3&            eyePosition);
+
+    /**
+     * \brief The scope on the weapon in the right hand, for the frame set
+     *    with beginFrame
+     *
+     * Measured when the model was last drawn, in the previous frame, and
+     * placed on this frame's hands, as the scope's view is drawn before the
+     * model is placed. What the game animates, such as recoil, follows by a
+     * frame.
+     *
+     * \param [out] lens The scope in the game world
+     * \returns \c false if the weapon has no scope the mod knows
+     */
+    bool scopeLens(VrScopeLens& lens) const;
+
+    /**
+     * \brief Turns the scopes on, or off
+     *
+     * \param [in] enabled Whether the weapons' scopes are looked for
+     */
+    void setScopesEnabled(bool enabled) {
+      m_scopesEnabled = enabled;
+    }
+
+    /**
+     * \brief The table of the scopes' places, to read corrections into
+     */
+    VrScopeTable& scopeTable() {
+      return m_scopeTable;
+    }
 
     /**
      * \brief Whether the game's aim control should be pressed
@@ -741,6 +774,25 @@ namespace dxvk {
 
     // Muzzle relative to the first-person root, its rotation, and the
     // direction the hand pointed, when the weapon was last drawn in the hand
+    // The scope in the frame of the hand holding the weapon, see scopeLens
+    bool             m_hasScopeLens = false;
+    VrVector3        m_scopeEyepiece;
+    VrVector3        m_scopeOtherEyepiece;
+    VrOpticKind      m_scopeKind = VrOpticKind::Scope;
+    const uint8_t*   m_opticForm = nullptr;
+    VrOpticKind      m_opticKind = VrOpticKind::Scope;
+    VrVector3        m_scopeObjective;
+    VrGameRotation   m_scopeRotation;
+    float            m_scopeHalfWidth = 0.0f;
+    float            m_scopeHalfHeight = 0.0f;
+    bool             m_scopeRectangular = false;
+    bool             m_scopeNightVision = false;
+    bool             m_scopeTwoHanded = false;
+    VrVector3        m_scopeSupport;
+    bool             m_scopesEnabled = false;
+    VrScopeTable     m_scopeTable;
+    const uint8_t*   m_loggedScopeForm = nullptr;
+
     VrVector3        m_muzzleOffset;
     VrGameRotation   m_muzzleRotation;
     VrVector3        m_aimDirection;
@@ -1095,6 +1147,17 @@ namespace dxvk {
             int32_t               sequenceType);
 
     void placeModel(uint8_t* root, void* updateData);
+
+    VrOpticKind opticKind(const uint8_t* form);
+
+
+    void placeScope(
+            uint8_t*          weapon,
+            uint8_t*          muzzle,
+      const uint8_t*          form,
+      const VrGameCameraPose& hand,
+            bool              pointedByBothHands,
+      const VrVector3&        supportInHand);
 
     void placePipBoyArm(uint8_t* root, const VrVector3& shift, void* updateData);
 

@@ -25,6 +25,8 @@
 #include "vr_gamepad_hook.h"
 #include "vr_large_address.h"
 #include "vr_sound_focus.h"
+#include "vr_game_window.h"
+#include "vr_launcher_overlay.h"
 #include "vr_menu_cursor.h"
 #include "vr_options_file.h"
 #include "vr_options_menu.h"
@@ -36,6 +38,9 @@ namespace dxvk {
 
   static std::unique_ptr<VrSystem> g_vrSystem;
   static bool                      g_vrInitialized = false;
+
+  // Never deleted: it runs on its own thread until the launcher's process ends
+  static VrLauncherOverlay*        g_launcherOverlay = nullptr;
 
 
   namespace {
@@ -125,6 +130,18 @@ namespace dxvk {
     if (name == "off" || name.empty())
       return;
 
+    // The launcher loads this DLL too, and has no game to render
+    if (VrLauncherOverlay::isLauncherProcess()) {
+      if (name == "openvr" && config.getOption<bool>("d3d9.vrLauncherOverlay", true)) {
+        VrPanelConfig panel;
+        g_launcherOverlay = new VrLauncherOverlay(name,
+          config.getOption<float>("d3d9.vrPanelDistance", panel.distance),
+          config.getOption<float>("d3d9.vrPanelWidth", panel.width));
+      }
+
+      return;
+    }
+
     std::unique_ptr<IVRBackend> backend = vrCreateBackend(name);
 
     if (!backend) {
@@ -160,6 +177,7 @@ namespace dxvk {
       VrPipBoyScaleMin), vrPipBoyStepToScale(VrPipBoyScaleSteps - 1));
     options.manualReload    = config.getOption<bool>("d3d9.vrManualReload", options.manualReload);
     options.physicalSneak   = config.getOption<bool>("d3d9.vrPhysicalSneak", options.physicalSneak);
+    options.scopeLens       = config.getOption<bool>("d3d9.vrScopes", options.scopeLens);
     VrOptionsFile::load(options);
     turn.smooth      = options.smoothTurn;
     turn.smoothSpeed = options.smoothTurnSpeed;
@@ -201,6 +219,8 @@ namespace dxvk {
     VrRenderPassConfig passes;
     passes.shareShadows = config.getOption<bool>("d3d9.vrShareShadows", passes.shareShadows);
     passes.handsDepthTest = config.getOption<bool>("d3d9.vrHandsDepthTest", passes.handsDepthTest);
+    passes.scopeResolution = uint32_t(std::max<int32_t>(0,
+      config.getOption<int32_t>("d3d9.vrScopeResolution", int32_t(passes.scopeResolution))));
 
     VrDeveloperConfig developer;
     developer.enabled = config.getOption<bool>("d3d9.vrDeveloperMode", developer.enabled);
@@ -229,9 +249,12 @@ namespace dxvk {
     g_vrSystem->m_pipBoyScale = options.pipBoyScale;
     g_vrSystem->m_manualReload = options.manualReload;
     g_vrSystem->m_handPush = config.getOption<bool>("d3d9.vrHandPush", true);
+    g_vrSystem->m_scopes = options.scopeLens;
     g_vrSystem->m_sneakConfig.physical = options.physicalSneak;
     g_vrSystem->m_sneakConfig.crouch   = crouch;
     g_vrSystem->m_forceGameSettings = !emulated && config.getOption<bool>("d3d9.vrForceGameSettings", true);
+    g_vrSystem->m_hideGameWindow = !emulated && config.getOption<bool>("d3d9.vrHideGameWindow", true);
+    g_vrSystem->m_keepGameActive = g_vrSystem->m_hideGameWindow;
     DxvkInstance::registerExtensionProvider(g_vrSystem->m_extensionProvider.get());
 
     VrOptionsMenu::install(options, [] (const VrOptions& changed) {
@@ -247,6 +270,9 @@ namespace dxvk {
 
 
   void VrSystem::onInterfaceCreated() {
+    if (g_launcherOverlay)
+      g_launcherOverlay->start();
+
     if (!g_vrSystem)
       return;
 
@@ -255,6 +281,11 @@ namespace dxvk {
     if (g_vrSystem->m_forceGameSettings) {
       g_vrSystem->m_forceGameSettings = false;
       VrGameSettings::apply();
+    }
+
+    if (g_vrSystem->m_keepGameActive) {
+      g_vrSystem->m_keepGameActive = false;
+      VrGameSettings::keepActive();
     }
   }
 
@@ -291,8 +322,10 @@ namespace dxvk {
     m_pipBoyScale = options.pipBoyScale;
     m_manualReload = options.manualReload;
     m_sneakConfig.physical = options.physicalSneak;
+    m_scopes = options.scopeLens;
 
     if (m_stereoRenderer) {
+      m_stereoRenderer->setScopesEnabled(m_scopes);
       m_stereoRenderer->setTurnConfig(m_turnConfig);
       m_stereoRenderer->setPipBoyScale(m_pipBoyScale);
       m_stereoRenderer->setManualReload(m_manualReload);
@@ -312,7 +345,16 @@ namespace dxvk {
     if (!g_vrSystem || !g_vrSystem->m_stereoRenderer)
       return VrPresentMode::Game;
 
-    return g_vrSystem->m_stereoRenderer->onPresent(swapchain);
+    VrPresentMode mode = g_vrSystem->m_stereoRenderer->onPresent(swapchain);
+
+    if (!g_vrSystem->m_hideGameWindow || mode == VrPresentMode::Drop || !VrGameWindow::hide(swapchain))
+      return mode;
+
+    // Without a present, nothing else paces the frames the headset does not pace
+    if (mode == VrPresentMode::Game)
+      VrGameWindow::waitUnpacedFrame();
+
+    return VrPresentMode::Hidden;
   }
 
 
@@ -347,6 +389,7 @@ namespace dxvk {
 
     if (m_stereoRenderer) {
       m_stereoRenderer->setPipBoyScale(m_pipBoyScale);
+      m_stereoRenderer->setScopesEnabled(m_scopes);
       m_stereoRenderer->setManualReload(m_manualReload);
       m_stereoRenderer->setHandPush(m_handPush);
       m_stereoRenderer->setSneakConfig(m_sneakConfig);

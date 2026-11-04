@@ -102,6 +102,7 @@ namespace dxvk {
     VrTurnConfig                         m_turnConfig;
     float                                m_pipBoyScale = 1.0f;
     bool                                 m_manualReload = true;
+    bool                                 m_scopes = true;
     bool                                 m_handPush = true;
     VrSneakConfig                        m_sneakConfig;
     bool                                 m_weaponInHand;
@@ -113,6 +114,8 @@ namespace dxvk {
     bool                                 m_headsetResolution;
     bool                                 m_resolutionChosen = false;
     bool                                 m_forceGameSettings = false;
+    bool                                 m_hideGameWindow = false;
+    bool                                 m_keepGameActive = false;
     bool                                 m_hasSession = false;
 
     void chooseResolution();

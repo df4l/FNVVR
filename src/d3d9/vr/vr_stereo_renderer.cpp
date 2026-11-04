@@ -12,6 +12,7 @@
 #include "vr_game_memory.h"
 #include "vr_game_nodes.h"
 #include "vr_head_hud.h"
+#include "vr_options_file.h"
 #include "vr_math.h"
 #include "vr_stereo_renderer.h"
 #include "vr_weapon_types.h"
@@ -407,6 +408,24 @@ namespace dxvk {
     if (!renderer->m_renderPasses)
       Logger::info("VR: The world render's passes were not found, they are drawn for each eye and not timed");
 
+    renderer->m_scopeGame = VrScopeGame::install();
+
+    if (renderer->m_weaponHand && renderer->m_renderPasses) {
+      renderer->m_scopeRender = VrScopeRender::install(device, passes.scopeResolution);
+
+      if (renderer->m_scopeRender) {
+        std::string corrections;
+
+        if (VrOptionsFile::readText(L"scopes.ini", corrections)) {
+          size_t count = renderer->m_weaponHand->scopeTable().parse(corrections);
+          Logger::info(str::format("VR: ", count, " scope places read from fnvvr\\scopes.ini"));
+        }
+
+        renderer->m_renderPasses->setAfterFirstPerson([self] { self->drawScopeLens(); });
+        renderer->m_weaponHand->setScopesEnabled(renderer->m_scopesEnabled);
+      }
+    }
+
     if (!renderer->m_gameTimer)
       Logger::info("VR: The game's frame timer update was not found, it is not measured");
 
@@ -600,8 +619,14 @@ namespace dxvk {
     // The weapon hand decided on the previous frame whether the game aims,
     // the melee guard whether it blocks (the same control), and the gaze
     // whether the Pip-Boy closes
-    if (m_weaponHand)
+    if (m_weaponHand) {
       m_controls.setGameAim(m_weaponHand->wantsGameAim() || (m_meleeSwing && m_meleeSwing->wantsBlock()));
+
+      if (m_scopeGame)
+        m_scopeGame->setSteadied(m_weaponHand->leftHandOnWeapon());
+    }
+
+    m_shutterHeld = input.hasActions && input.actions.isPressed(VrAction::Attack);
 
     m_controls.setSwingsWithHand((m_meleeSwing && m_meleeSwing->swingsWithHand())
       || (m_handThrow && m_handThrow->throwsWithHand()));
@@ -671,6 +696,8 @@ namespace dxvk {
     m_hudMetersPlaced = m_hudMetersAvailable
       ? m_hudMeters.place(vrComputeInterfaceSize(targetDesc.Width, targetDesc.Height).y)
       : VrHudMetersPlaced();
+
+    renderScope(state, main, views);
 
     for (uint32_t eye = 0; eye < VrEyeCount; eye++) {
       m_eyeCopied[eye] = false;
@@ -920,12 +947,174 @@ namespace dxvk {
   }
 
 
+  void VrStereoRenderer::setScopesEnabled(bool enabled) {
+    m_scopesEnabled = enabled;
+
+    if (m_weaponHand && m_scopeRender)
+      m_weaponHand->setScopesEnabled(enabled);
+  }
+
+
+  VrGameCameraPose VrStereoRenderer::eyeInGame(const VrEyeView& view) const {
+    return vrComputeEyeCameraPose(m_gameCameraPose,
+      vrComputeEyeInReference(m_reference, view.pose), VrGameUnitsPerMetre);
+  }
+
+
+  void VrStereoRenderer::renderScope(VrGameStateKind state, void* main, const std::array<VrEyeView, VrEyeCount>& views) {
+    constexpr float FallbackDefaultFov = 75.0f;
+    constexpr float RadiansPerDegree   = 3.14159265f / 180.0f;
+
+    m_scopeVisible = false;
+
+    // The game's menu mode follows the Pip-Boy's state by a frame
+    if (!m_scopeRender || !m_scopesEnabled || state != VrGameStateKind::InGame || !m_hasReference
+     || !m_weaponHand || m_pipBoyControl.state() != VrPipBoyState::Closed)
+      return;
+
+    if (!m_weaponHand->scopeLens(m_scopeLens))
+      return;
+
+    m_scopeVisible = true;
+
+    if (m_scopeLens.kind == VrOpticKind::Binoculars) {
+      VrGameCameraPose head = eyeInGame(views[0]);
+      head.position = (head.position + eyeInGame(views[1]).position) * 0.5f;
+      vrRaiseBinoculars(m_scopeLens, head);
+    }
+
+    // Without an eye at the eyepiece the lens is a dark glass, and costs no render
+    bool seen = false;
+
+    for (uint32_t eye = 0; eye < VrEyeCount; eye++)
+      seen |= vrScopeLensShowsImage(m_scopeLens, eyeInGame(views[eye]), views[eye].fov);
+
+    VrEquippedScope equipped;
+
+    if (!seen || !VrScopeGame::readEquipped(equipped)) {
+      m_scopeRender->forgetImage();
+      m_screenShown = false;
+      return;
+    }
+
+    bool onScreen = m_scopeLens.kind == VrOpticKind::Screen;
+    float screenFlash = 0.0f;
+    bool drawView = true;
+
+    if (onScreen)
+      drawView = updateScreenTurn(screenFlash);
+
+    if (!drawView) {
+      // The held view still flickers and flashes on the tube
+      if (m_shutterLeft > 0.0f && m_screenTurn)
+        m_scopeRender->updateScreen(false, screenFlash);
+
+      return;
+    }
+
+    m_scopeRender->selectReticle(m_scopeLens.kind == VrOpticKind::Scope ? equipped.scopeModel : nullptr);
+
+    float magnification = 1.0f;
+    float imageTangent  = std::tan(0.5f * equipped.sightFov * RadiansPerDegree);
+
+    if (!onScreen) {
+      float defaultFov = *reinterpret_cast<const float*>(VrGame::SettingDefaultWorldFov + VrGame::SettingValue);
+
+      if (!(defaultFov > equipped.sightFov && defaultFov < 170.0f))
+        defaultFov = std::max(FallbackDefaultFov, equipped.sightFov);
+
+      magnification = vrComputeScopeMagnification(equipped.sightFov, defaultFov);
+      imageTangent  = m_scopeLens.apparentTangent;
+    }
+
+    VrEyeView view;
+
+    if (!m_scopeRender->prepareView(magnification, imageTangent, m_scopeLens.kind, view.fov)) {
+      m_scopeRender->forgetImage();
+      m_screenShown = false;
+      return;
+    }
+
+    VrGameCameraPose camera = vrComputeScopeCamera(m_scopeLens);
+
+    // The camera hooks keep the camera on this view while the world is drawn
+    m_eye         = NoEye;
+    m_eyeView     = &view;
+    m_scopeCamera = &camera;
+    applyEyePose();
+
+    if (m_skyAnchor)
+      m_skyAnchor->setEye(&m_eyePosition);
+
+    if (m_renderPasses)
+      m_renderPasses->setSceneScissor(&m_scopeRender->area());
+
+    m_scopeRender->render(main);
+
+    if (m_renderPasses)
+      m_renderPasses->setSceneScissor(nullptr);
+
+    if (m_skyAnchor)
+      m_skyAnchor->setEye(nullptr);
+
+    m_scopeCamera = nullptr;
+    m_eyeView     = nullptr;
+    m_renderCamera.restore(m_gameCamera);
+
+    if (m_cullingCamera)
+      m_cullingCamera->cullAgain();
+
+    if (onScreen) {
+      m_scopeRender->updateScreen(true, screenFlash);
+      m_screenShown = true;
+    }
+  }
+
+
+  bool VrStereoRenderer::updateScreenTurn(float& flash) {
+    // The view held on the screen after the shutter, and how long the flash lasts
+    constexpr float HoldSeconds  = 0.7f;
+    constexpr float FlashSeconds = 0.25f;
+
+    auto now = std::chrono::steady_clock::now();
+    float elapsed = m_screenShown ? std::chrono::duration<float>(now - m_screenClock).count() : 0.0f;
+    m_screenClock = now;
+
+    bool pressed = m_shutterHeld && !m_shutterWasHeld;
+    m_shutterWasHeld = m_shutterHeld;
+
+    m_shutterLeft = pressed ? HoldSeconds : std::max(m_shutterLeft - elapsed, 0.0f);
+    flash = std::max((m_shutterLeft - (HoldSeconds - FlashSeconds)) / FlashSeconds, 0.0f);
+
+    m_screenTurn = !m_screenTurn;
+
+    // A view from the first frame on, or a picture would have nothing to show
+    return !m_screenShown || (m_shutterLeft <= 0.0f && m_screenTurn);
+  }
+
+
+  void VrStereoRenderer::drawScopeLens() {
+    constexpr uint32_t NearIndex = 4;
+    constexpr uint32_t FarIndex  = 5;
+
+    if (!m_scopeVisible || m_eye == NoEye || !m_eyeView)
+      return;
+
+    VrGameCameraState camera = m_renderCamera.save();
+
+    m_scopeRender->drawLens(m_scopeLens, eyeInGame(*m_eyeView), m_eyeView->fov,
+      camera.frustum[NearIndex], camera.frustum[FarIndex]);
+  }
+
+
   void VrStereoRenderer::applyEyePose() {
     VrPose eyeInReference = m_hasReference
       ? vrComputeEyeInReference(m_reference, m_eyeView->pose)
       : VrPose();
 
-    VrGameCameraPose pose = vrComputeEyeCameraPose(m_gameCameraPose, eyeInReference, VrGameUnitsPerMetre);
+    VrGameCameraPose pose = m_scopeCamera
+      ? *m_scopeCamera
+      : vrComputeEyeCameraPose(m_gameCameraPose, eyeInReference, VrGameUnitsPerMetre);
     m_eyePosition = pose.position;
 
     if (m_screenPass)
@@ -1777,6 +1966,13 @@ namespace dxvk {
     logEyeCapture();
 
     m_eyeCopied[m_eye] = copyRenderTarget(m_eye);
+
+    if (m_eyeCopied[m_eye] && m_scopeVisible) {
+      Com<IDirect3DSurface9> eyeSurface;
+
+      if (SUCCEEDED(m_eyeTextures[m_eye]->GetSurfaceLevel(0, &eyeSurface)))
+        m_scopeRender->presentLens(eyeSurface.ptr());
+    }
 
     if (!m_eyeCopied[m_eye] && !m_loggedFailure) {
       Logger::err("VR: Failed to copy the rendered eye image");

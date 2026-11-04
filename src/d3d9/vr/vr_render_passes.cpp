@@ -17,6 +17,8 @@ namespace dxvk {
     using PassFn  = uintptr_t (__fastcall*)(void* main, void* unused);
     using Pass4Fn = uintptr_t (__fastcall*)(void* main, void* unused,
       uintptr_t a, uintptr_t b, uintptr_t c, uintptr_t d);
+    using EnableScissorFn  = void (__cdecl*)(int32_t left, int32_t top, int32_t right, int32_t bottom);
+    using DisableScissorFn = void (__cdecl*)();
 
     // Stereo frames covered by each logged window
     constexpr uint32_t WindowFrames = 900;
@@ -124,6 +126,8 @@ namespace dxvk {
       Logger::info("VR: Shadow maps are drawn once per frame for both eyes");
 
     std::unique_ptr<VrRenderPasses> passes(new VrRenderPasses(used, std::move(view)));
+    passes->m_scissorFound = VrGameMemory::callsTo(VrGame::EnableScissorCallSite, VrGame::EnableFullScreenScissor)
+                          && VrGameMemory::callsTo(VrGame::DisableScissorCallSite, VrGame::DisableFullScreenScissor);
     g_renderPasses = passes.get();
     return passes;
   }
@@ -154,6 +158,11 @@ namespace dxvk {
       m_profile.reset();
       m_shadowsReused = 0;
     }
+  }
+
+
+  void VrRenderPasses::setSceneScissor(const VrScopeArea* area) {
+    m_sceneScissor = area;
   }
 
 
@@ -205,6 +214,22 @@ namespace dxvk {
     if (m_eye == 0)
       m_shadowsDrawnForLeft = true;
 
+    return result;
+  }
+
+
+  template<typename Fn>
+  uintptr_t VrRenderPasses::runScene(Fn&& fn) {
+    if (!m_sceneScissor || !m_scissorFound)
+      return runPass(VrRenderPass::Scene, std::forward<Fn>(fn));
+
+    game<EnableScissorFn>(VrGame::EnableFullScreenScissor)(
+      int32_t(m_sceneScissor->left),  int32_t(m_sceneScissor->top),
+      int32_t(m_sceneScissor->right), int32_t(m_sceneScissor->bottom));
+
+    uintptr_t result = runPass(VrRenderPass::Scene, std::forward<Fn>(fn));
+
+    game<DisableScissorFn>(VrGame::DisableFullScreenScissor)();
     return result;
   }
 
@@ -262,7 +287,7 @@ namespace dxvk {
     if (!g_renderPasses)
       return original(main, nullptr, a, b, c, d);
 
-    return g_renderPasses->runPass(VrRenderPass::Scene,
+    return g_renderPasses->runScene(
       [&] { return original(main, nullptr, a, b, c, d); });
   }
 
@@ -274,8 +299,13 @@ namespace dxvk {
     if (!g_renderPasses)
       return original(main, nullptr, a, b, c, d);
 
-    return g_renderPasses->runPass(VrRenderPass::FirstPerson,
+    uintptr_t result = g_renderPasses->runPass(VrRenderPass::FirstPerson,
       [&] { return original(main, nullptr, a, b, c, d); });
+
+    if (g_renderPasses->m_afterFirstPerson)
+      g_renderPasses->m_afterFirstPerson();
+
+    return result;
   }
 
 

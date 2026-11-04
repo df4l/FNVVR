@@ -424,6 +424,16 @@ namespace dxvk {
     constexpr uint8_t SoundFlagsOrEcx[] = { 0x81, 0xC9, 0xA0, 0x02, 0x00, 0x00 };
     constexpr uint8_t SoundFlagsOrEdx[] = { 0x81, 0xCA, 0xA0, 0x02, 0x00, 0x00 };
 
+    /**
+     * BSWin32Audio::Shutdown (0x00AEA4D0) clears bInitialized, then
+     * BSAudio::Shutdown asks the audio thread to end and waits for it without
+     * a limit. BSAudioManager::ComposeMessage drops every message once
+     * bInitialized is clear, so with bMultiThreadAudio the game never exits.
+     * BSAudio::Shutdown clears the flag itself after the wait.
+     */
+    constexpr uintptr_t AudioShutdownClearInitialized = 0x00AEA4DC;
+    constexpr uint8_t   AudioShutdownClearInitializedCode[] = { 0xC6, 0x40, 0x05, 0x00 };
+
     /** State of the VATS camera, 0 when VATS is not running */
     constexpr uintptr_t VatsCameraState = 0x011F2258;
 
@@ -747,6 +757,9 @@ namespace dxvk {
     constexpr uintptr_t SettingDoHighDynamicRange         = 0x011C76C0;
     constexpr uintptr_t SettingUseBlurShader              = 0x011C7768;
     constexpr uintptr_t SettingLightEffectFadeDuration    = 0x011DB2BC;
+    /// bAlwaysActive:General, TESMain::SetActive (0x00871C90) keeps the game
+    /// running when its window is deactivated
+    constexpr uintptr_t SettingAlwaysActive               = 0x011DEED8;
 
     constexpr uintptr_t RendererSizeReadSite  = 0x004DA730;
     constexpr uint8_t   RendererSizeRead[] = {
@@ -1581,6 +1594,7 @@ namespace dxvk {
     constexpr uintptr_t FileFinderGetFile    = 0x00AFDF20;
     constexpr uint32_t  FileReadOnly         = 0;
     constexpr uint32_t  FileBufferSize       = 0x4000;
+    constexpr uint32_t  ArchiveMeshes        = 0x1;
     constexpr uint32_t  ArchiveTextures      = 0x2;
     constexpr uintptr_t FileGetSize          = 0x28;
     constexpr uintptr_t FileRead             = 0x08;
@@ -2875,6 +2889,126 @@ namespace dxvk {
     constexpr uintptr_t ActorGetWeaponPosition       = 0x008A5340;
     constexpr uintptr_t ObjectHitWeaponCallSite      = 0x008AEBCD;
     constexpr uintptr_t ProcessWeaponLastPosSlot     = 0x460;
+
+    /**
+     * The world drawn into a texture, as TESMain::RenderMenuBackground
+     * (0x00871DC0) does, findings/optics.md §7. Its calls are what install
+     * checks:
+     *
+     * - DrawWorld: __thiscall (destination, renderedMenuMode, skipFirstPerson);
+     * - BorrowRenderedTexture: __thiscall on the texture manager (renderer,
+     *   type, 0, 0, 0), ReturnRenderedTexture: __thiscall (texture);
+     * - RendererLock and RendererUnlock: __thiscall on the renderer;
+     * - ResetMultiBounds: TES::ResetAllMultiBoundNodes, __thiscall (landscape,
+     *   rooms), called before the visibility pass.
+     *
+     * Offsets: BSRenderedTexture spRenderedTextures[0], NiTexture renderer
+     * data, NiDX9TextureData's IDirect3DBaseTexture9. TESObjectWEAP fSightFOV is
+     * kData (+0xF4) + 0x1C.
+     */
+    constexpr uintptr_t DrawWorld                    = 0x008706B0;
+    constexpr uintptr_t RendererLock                 = 0x004A0370;
+    constexpr uintptr_t RendererUnlock               = 0x004A03C0;
+    constexpr uintptr_t ResetMultiBounds             = 0x0045BC80;
+    constexpr uintptr_t MenuBackgroundDrawWorldCall  = 0x008721A4;
+    constexpr uintptr_t MenuBackgroundBorrowCall     = 0x00871EBC;
+    constexpr uintptr_t MenuBackgroundReturnCall     = 0x00871EA2;
+    constexpr uintptr_t MenuBackgroundLockCall       = 0x00871E6C;
+    constexpr uintptr_t MenuBackgroundUnlockCall     = 0x0087232C;
+    constexpr uintptr_t ResetMultiBoundsCallSite     = 0x0086EBCC;
+    constexpr uintptr_t TesSingleton                 = 0x011DEA10;
+    constexpr uintptr_t TextureManager               = 0x011F91A8;
+    constexpr uintptr_t ImageSpaceEndOfFrameEnabled  = 0x011AD884;
+    constexpr uintptr_t MainRenderingMenuBackground  = 0x9C;
+    constexpr uint32_t  TextureMainMenuBackground    = 6;
+    constexpr uintptr_t RenderedTextureFirst         = 0x30;
+    constexpr uintptr_t WeaponSightFov               = 0x110;
+    /** Path of the weapon's scope model: TESModel at +0x1E8 (TESObjectWEAP::GetScopeModel 0x00504E60) */
+    constexpr uintptr_t WeaponScopeModelPath         = 0x1EC;
+
+    /**
+     * The scissor the game uses for its own scope (findings/optics.md §7):
+     * EnableFullScreenScissor is __cdecl (left, top, right, bottom), and locks
+     * the rectangle and the test until DisableFullScreenScissor, __cdecl ().
+     * The call sites are in TESMain::DrawWorldStandard.
+     */
+    constexpr uintptr_t EnableFullScreenScissor      = 0x00B4F540;
+    constexpr uintptr_t DisableFullScreenScissor     = 0x00B540D0;
+    constexpr uintptr_t EnableScissorCallSite        = 0x00870DFD;
+    constexpr uintptr_t DisableScissorCallSite       = 0x00871146;
+
+    /**
+     * ImageSpaceEffectHDR::kAdaptedLight, an ImageSpaceTexture replaced by
+     * each HDR render (ImageSpaceEffectHDR::Render 0x00BADB90). Its fields:
+     * bIsRenderedTexture, and spTexture, a BSRenderedTexture if that is set.
+     */
+    constexpr uintptr_t HdrAdaptedLight              = 0x012005A4;
+    constexpr uintptr_t ImageSpaceTextureIsRendered  = 0x1;
+    constexpr uintptr_t ImageSpaceTextureObject      = 0x4;
+
+    /**
+     * The game's flat scope while it aims, findings/optics.md §5 and §10:
+     *
+     * - SetGunScopeVisible: HUDMainMenu::SetGunScopeVisible, __cdecl (visible).
+     *   Called from Interface::SetGunScopeVisible and twice from
+     *   HUDMainMenu::SetMenuMode, its only callers.
+     * - NodeChildAt: NiNode::GetAtChecked, __thiscall (index), called in
+     *   SetMenuMode to tell that a scope model is loaded, which selects
+     *   HMM_SNIPER_RIFLE and hides the HUD.
+     * - ObjectSetAppCulled: NiAVObject::SetAppCulled, __thiscall (culled), the
+     *   call culling the first-person root in Actor::SetIronSights.
+     * - ImageSpaceIronSights: PlayerCharacter::UpdateImageSpaceIronsights,
+     *   __thiscall, depth of field and full-screen motion blur.
+     * - WeaponHasNightScope: TESObjectWEAP::HasNightScope, __thiscall, its only
+     *   caller in PlayerCharacter::Update turns on the night vision.
+     * - ActorGetIronSights: Actor::GetIronSights, __thiscall, the call giving
+     *   the aim state to CombatFormulas::GetGunSpread in Actor::GetGunSkill.
+     * - PlayerModLooking, PlayerModHeading: MobileObject::ModLooking and
+     *   ModHeading, __thiscall (angle), the calls of PlayerCharacter::AddGunWobble
+     *   swaying the player's view while it aims with a scope.
+     * - WeaponUseFirstPersonAimAnims: TESObjectWEAP::GetUse1PISAnims, __thiscall,
+     *   false with flags1 bit 0x40. The calls in Actor::AdjustGroupIDForAiming and
+     *   Actor::SetIronSights choose the first-person aim group, the only one of
+     *   the two that puts the left hand on a pistol. Both are for the player only.
+     * - WeaponHasModScope: TESObjectWEAP::HasModScope, __thiscall, the call in
+     *   Actor::SetIronSights that keeps the aim group of a fitted scope mod.
+     */
+    constexpr uintptr_t SetGunScopeVisible           = 0x0077F3C0;
+    constexpr uintptr_t GunScopeVisibleCallSite      = 0x00709C48;
+    constexpr uintptr_t GunScopeShowCallSite         = 0x00771C36;
+    constexpr uintptr_t GunScopeHideCallSite         = 0x00771C57;
+    constexpr uintptr_t NodeChildAt                  = 0x0045BC00;
+    constexpr uintptr_t ScopeModelChildCallSite      = 0x007718C6;
+    constexpr uintptr_t ObjectSetAppCulled           = 0x00450F90;
+    constexpr uintptr_t IronSightsCullCallSite       = 0x008BB923;
+    constexpr uintptr_t ImageSpaceIronSights         = 0x009650A0;
+    constexpr uintptr_t ImageSpaceIronSightsCallSite = 0x00965056;
+    constexpr uintptr_t WeaponHasNightScope          = 0x009442C0;
+    constexpr uintptr_t NightScopeCallSite           = 0x0093F098;
+    constexpr uintptr_t ActorGetIronSights           = 0x008BBC10;
+    constexpr uintptr_t GunSkillIronSightsCallSite   = 0x008B0FBF;
+    constexpr uintptr_t PlayerModLooking             = 0x00931E50;
+    constexpr uintptr_t ScopeWobbleLookingCallSite   = 0x009634A5;
+    constexpr uintptr_t PlayerModHeading             = 0x00931D30;
+    constexpr uintptr_t ScopeWobbleHeadingCallSite   = 0x009634C9;
+    constexpr uintptr_t WeaponUseFirstPersonAimAnims = 0x008B2BF0;
+    constexpr uintptr_t AimGroupAnimsCallSite        = 0x008B2BA2;
+    constexpr uintptr_t IronSightsAnimsCallSite      = 0x008BBB2E;
+    constexpr uintptr_t WeaponHasModScope            = 0x004AD030;
+    constexpr uintptr_t IronSightsModScopeCallSite   = 0x008BBB4A;
+
+    /**
+     * ItemChange::HasModEffectActive 0x004BD8D0, __thiscall (effect, value out,
+     * ret 8), WEAPON_MOD_IRON_SITES its effect for a scope mod. TESObjectWEAP
+     * kData (+0xF4) + 0x38: flags2, HasModScope and HasNightScope.
+     * fDefaultWorldFOV:Display, the reference of the scope's magnification.
+     */
+    constexpr uintptr_t ItemModEffectValue           = 0x004BD8D0;
+    constexpr uint32_t  ModEffectIronSights          = 14;
+    constexpr uintptr_t WeaponFlags2                 = 0x12C;
+    constexpr uint32_t  WeaponFlag2NightScope        = 0x1000;
+    constexpr uint32_t  WeaponFlag2ModScope          = 0x2000;
+    constexpr uintptr_t SettingDefaultWorldFov       = 0x0120315C;
 
   }
 

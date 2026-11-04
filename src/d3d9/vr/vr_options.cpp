@@ -14,6 +14,7 @@ namespace dxvk {
     constexpr char PipBoyScaleName[]     = "pipboyscale";
     constexpr char ManualReloadName[]    = "manualreload";
     constexpr char PhysicalSneakName[]   = "physicalsneak";
+    constexpr char ScopeLensName[]       = "scopelens";
 
     std::string trim(const std::string& text) {
       size_t begin = 0;
@@ -140,6 +141,8 @@ namespace dxvk {
         parseBool(value, options.manualReload);
       else if (name == PhysicalSneakName)
         parseBool(value, options.physicalSneak);
+      else if (name == ScopeLensName)
+        parseBool(value, options.scopeLens);
     }
   }
 
@@ -156,6 +159,9 @@ namespace dxvk {
     text += "\n";
     text += "PhysicalSneak=";
     text += options.physicalSneak ? "1" : "0";
+    text += "\n";
+    text += "ScopeLens=";
+    text += options.scopeLens ? "1" : "0";
     text += "\n";
     return text;
   }

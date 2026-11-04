@@ -2,12 +2,39 @@
 
 ## Unreleased
 
+### Scopes
+
+- **Real scopes**: the scopes of the game's weapons are now lenses on the weapon, showing a magnified view of the world with the weapon's own reticle.
+  Bring the rifle to your eye, about 13 cm away, to see the whole reticle; off the axis the view closes in, as in a real scope, and the other eye sees a dark
+  lens. Your hand and the scope's body hide the lens. The centre of the reticle is where the shots go, at any range. Works on all scoped weapons of the game and
+  its DLCs, and on scope mods, except the K9000 and FIDO, which have nothing to look through. Night scopes show the dark in the lens only.
+  `Settings > VR > Scope lens` turns the lens off, for a slower GPU: the scope then keeps the model's own glass. `d3d9.vrScopeResolution` sets the image's size (768 by default).
+  The game's flat scope, its blur and its full-screen night vision are gone. A scoped weapon of another mod gets a guessed place: `fnvvr\\scopes.ini` corrects it.
+- **Binoculars**: held in the fist as in the game's own animation. Bring them to your eyes, like a bottle to your mouth: both eyepieces open into one round magnified view, which then follows your head.
+- **Camera**: its back has a small pre-war picture tube showing the view from the lens, in green phosphor with scanlines, static and afterglow, readable from any angle. The trigger flashes and holds the picture.
+- **Two hands are steadier**: a weapon held with both hands has the precision of the game's aim, without its slower walk.
+- **Gauss rifles' reticle**: the Gauss rifle, the YCS/186 and the Faderator show their own graduated reticle, not a stretched sheet of its parts.
+- **Left hand on every pistol**: on pistols that skip the game's aim animations (Hunting Revolver, laser pistol, alien blaster, ...) or with a fitted scope mod, the left hand now comes onto the weapon as soon as it supports it, not only after a shot.
+
+### Launcher and desktop
+
+- **The launcher in the headset**: with the `openvr` backend, the game's launcher appears on a panel in front of the
+  player, and the lasers click its buttons, lists and dialogs (the trigger clicks, the right stick scrolls). It replaces
+  the flat copy of the window that SteamVR shows for a non-VR application. The launcher stays usable with the mouse on
+  the desktop, and stays there alone when no VR session can start. `d3d9.vrLauncherOverlay = False` turns this off. A
+  `dxvk.conf` from an earlier version that holds `d3d9.vrBackend = off` under `[FalloutNVLauncher.exe]` keeps the flat
+  launcher: remove that section. The panel and the lasers follow the headset's rate.
+- **No more giant window**: with a headset, the game's window is hidden from the desktop, and the game no longer copies
+  each frame to it. The game also keeps running when another window takes the focus. `d3d9.vrHideGameWindow = False`
+  brings the window back.
+
 ### Performance
 
 - **Game settings for VR**: with a headset, the mod replaces some game settings in memory at startup, with the values of the
   Viva New Vegas guide: no full scene water reflections, threaded audio with a larger cache, background lip files, faster
   cell unloading, the 3.0 grass vertex shader, HDR on, and the Pip-Boy light fade. Actor shadows, grass distance and
-  texture quality stay the player's choice. `d3d9.vrForceGameSettings = False` turns this off.
+  texture quality stay the player's choice. `d3d9.vrForceGameSettings = False` turns this off. The game's own bug that
+  freezes it on exit with threaded audio is fixed along with it.
 
 ### Fixes
 

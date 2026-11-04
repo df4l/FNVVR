@@ -23,6 +23,26 @@ namespace dxvk {
      */
     static void apply();
 
+    /**
+     * \brief Keeps the game running while its window is not active
+     *
+     * A deactivated window otherwise stops the game's timer. Same check of
+     * the setting's name as \ref apply.
+     */
+    static void keepActive();
+
+  private:
+
+    /**
+     * \brief Lets the game end its audio thread when it exits
+     *
+     * Without this, the game waits for that thread forever when it quits
+     * with bMultiThreadAudio on. See findings/game-settings.md.
+     *
+     * \returns \c true if the game's code was the expected one and is fixed
+     */
+    static bool fixAudioThreadExit();
+
   };
 
 }

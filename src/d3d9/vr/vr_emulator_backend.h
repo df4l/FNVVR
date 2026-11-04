@@ -95,7 +95,11 @@ namespace dxvk {
 
     void submitEmptyFrame(int64_t displayTime) override;
 
+    bool beginPanelSession() override;
+
     bool submitPanel(VrPanelId id, const VrPanelSubmission& panel) override;
+
+    bool submitPanelPixels(VrPanelId id, const VrPanelPixels& panel) override;
 
     void hidePanel(VrPanelId id) override;
 

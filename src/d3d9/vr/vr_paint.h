@@ -47,6 +47,8 @@ namespace dxvk {
     Mask,
     /// The image's colours, multiplied by the drawing's colour
     Picture,
+    /// The image's colours, filtered with mipmaps
+    PictureWithMipmaps,
   };
 
   /**

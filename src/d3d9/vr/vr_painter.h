@@ -45,6 +45,88 @@ namespace dxvk {
      */
     bool paint(IDirect3DTexture9* target, const VrPaintList& list, bool clear);
 
+    /**
+     * \brief What VrPainter::drawLens draws
+     *
+     * The vertices hold a position, a colour multiplied with the image, a
+     * colour added to it, and the texture coordinates of the image and the
+     * overlay.
+     */
+    struct LensDrawing {
+      /// Render target, the same size as the depth buffer
+      IDirect3DSurface9*  target;
+      /// Depth buffer to test against, not written to
+      IDirect3DSurface9*  depth;
+      /// Black past its edges, or \c nullptr for a dark glass
+      IDirect3DTexture9*  image;
+      /// The image has mipmaps, seen from afar or at an angle
+      bool                imageMipmapped;
+      /// Laid over the image by its own alpha, opaque black past its edges, or \c nullptr
+      const VrImage*      overlay;
+      /// In row-vector order
+      const float*        projection;
+      /// Drawn in turn, the later over the earlier
+      const void* const*  meshes;
+      /// Which of them are not tested against the depth buffer: an eye at an
+      /// eyepiece looks through it, whatever the model does around the eye
+      const bool*         meshOverDepth;
+      UINT                meshCount;
+      UINT                vertexCount;
+      UINT                vertexStride;
+      const uint16_t*     indices;
+      UINT                triangles;
+      /// The colours are multiplied by 4, to amplify the image
+      bool                amplified;
+    };
+
+    /**
+     * \brief Clears a target and draws a lens into it
+     *
+     * The target ends up with the lens, premultiplied, where the lens is not
+     * hidden, and transparent elsewhere.
+     *
+     * \returns \c false if nothing could be drawn
+     */
+    bool drawLens(const LensDrawing& lens);
+
+    /**
+     * \brief Fills a target with a pixel shader
+     *
+     * \param [in] target Render target surface
+     * \param [in] shader The pixel shader
+     * \param [in] first Its sampler 0, bilinear, clamped
+     * \param [in] second Its sampler 1, bilinear, clamped
+     * \param [in] constants Its constant 0
+     * \returns \c false if nothing could be drawn
+     */
+    bool shade(
+            IDirect3DSurface9*     target,
+            IDirect3DPixelShader9* shader,
+            IDirect3DTexture9*     first,
+            IDirect3DTexture9*     second,
+      const float*                 constants);
+
+    /**
+     * \brief Lays a part of a texture over the same part of a target
+     *
+     * The texture is premultiplied. The target's alpha stays.
+     *
+     * \param [in] target Render target surface
+     * \param [in] source Texture, covering the whole target at any size
+     * \param [in] left Left side of the part, from 0 to 1
+     * \param [in] top Top side of the part, from 0 to 1
+     * \param [in] right Right side of the part, from 0 to 1
+     * \param [in] bottom Bottom side of the part, from 0 to 1
+     * \returns \c false if nothing could be drawn
+     */
+    bool composite(
+            IDirect3DSurface9* target,
+            IDirect3DTexture9* source,
+            float              left,
+            float              top,
+            float              right,
+            float              bottom);
+
   private:
 
     struct DeviceVertex {
@@ -55,12 +137,24 @@ namespace dxvk {
 
     using TextureKey = std::tuple<const uint32_t*, uint32_t, uint32_t, VrPaintImageUse>;
 
+    /// The device's targets while something is drawn
+    struct SavedTargets {
+      Com<IDirect3DSurface9> colour[4];
+      Com<IDirect3DSurface9> depth;
+    };
+
     IDirect3DDevice9*                          m_device;
     Com<IDirect3DStateBlock9>                  m_state;
     std::map<TextureKey, Com<IDirect3DTexture9>> m_textures;
     std::vector<DeviceVertex>                  m_vertices;
 
     IDirect3DTexture9* texture(const VrImage& image, VrPaintImageUse use);
+
+    bool captureState();
+
+    void saveTargets(SavedTargets& saved, IDirect3DSurface9* target);
+
+    void restoreTargets(SavedTargets& saved);
 
     void setStates(UINT width, UINT height);
 
