@@ -76,7 +76,8 @@ namespace dxvk {
      *
      * In cursor mode the interface's own gamepad check reports no gamepad,
      * so the interface shows the cursor and follows the mouse (see
-     * VrMenuCursor), while the game itself still sees the controllers.
+     * VrMenuCursor), while the game itself still sees the controllers. The
+     * controls shown to the player stay those of the gamepad.
      * Called once per frame, on the game's thread.
      */
     static void setCursorMode(bool enabled);

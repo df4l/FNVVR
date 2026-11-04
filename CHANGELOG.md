@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Menus
+
+- **The menus keep showing the controller's buttons when you point with a laser**, instead of switching to keyboard shortcuts.
+
 ### Mini-games in the room
 
 - **The mini-games stand in front of you**, in 3D at their real size, instead of on a flat panel: the lock, the slot machine, the blackjack, roulette and Caravan tables, and the terminals with their hacking screen. Your hands are there too, in front of the table or behind it. Texts and buttons stay on a panel above the table, pointed at with the lasers. `d3d9.vrImmersiveMinigames = False` brings the flat panel back.

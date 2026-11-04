@@ -504,6 +504,23 @@ namespace dxvk {
     constexpr uintptr_t TileNameLabelCompareCallSite   = 0x007195EB;
 
     /**
+     * InterfaceManager::Has360Controller, __cdecl without arguments: the
+     * interface's gamepad flag, unless bDisable360Controller is set. These
+     * calls only choose what the player reads, the others also choose how a
+     * menu reacts to its input: the _Has360Controller trait (button icons or
+     * keyboard shortcuts), the _360Controller trait of those tiles, the names
+     * of the controls in messages, the help pages of the Xbox or the PC
+     * manual (help menu, tutorial menu) and the label of the Stats limb mode.
+     */
+    constexpr uintptr_t Has360Controller               = 0x004B71D0;
+    constexpr uintptr_t GamepadTraitCallSite           = 0x0071966F;
+    constexpr uintptr_t GamepadTileTraitCallSite       = 0x007195FC;
+    constexpr uintptr_t ControlNameCallSite            = 0x007039F3;
+    constexpr uintptr_t HelpManualCallSite             = 0x007D090E;
+    constexpr uintptr_t TutorialManualCallSite         = 0x007E8A05;
+    constexpr uintptr_t StatsLimbLabelCallSite         = 0x007DF6CD;
+
+    /**
      * isInStartMenu, __cdecl without arguments: true while the main menu is
      * shown (StartMenu exists without its in-game flag, so not the pause
      * menu). Checked against its first bytes before it is called.
