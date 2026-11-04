@@ -1,6 +1,8 @@
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstring>
+#include <string>
 #include <vector>
 
 #include "../../util/log/log.h"
@@ -32,6 +34,8 @@ namespace dxvk {
     using BorrowFn        = void* (__thiscall*)(void* manager, void* renderer, uint32_t type,
       uint32_t a, uint32_t b, uint32_t c);
     using ReturnFn        = void  (__thiscall*)(void* manager, void* texture);
+    using Get3DFn         = void* (__thiscall*)(void* reference);
+    using ClearFn         = void  (__fastcall*)(void* renderer, void* unused, const void* rect, uint32_t flags);
 
     // The lock's keyhole, in the menu's space: the pin turns about it. The
     // lock is scaled so that the long screwdriver stays off the face.
@@ -78,7 +82,34 @@ namespace dxvk {
     constexpr float     TerminalDistance = 0.7f;
     constexpr float     TerminalWidth    = 0.62f;
 
+    // How the scenes lie on the casino's objects, in the models' space:
+    // findings/minigames.md §6. The game's table is only a top, on the
+    // world's, which holds it up. Its felt is above all of the world's top.
+    constexpr VrSceneFit BlackJackFit = {
+      { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f },
+      { 0.2f, -2.35f, 76.4f }, 2.0f,
+      { -62.0f, 16.0f, 0.0f }, { 1.0f, 0.0f, 0.0f } };
+
+    constexpr VrSceneFit RouletteFit = {
+      { 0.0f, 1.0f, 0.0f }, { -1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f },
+      { 23.0f, 32.4f, 77.6f }, 1.28f,
+      { 80.0f, 32.4f, 0.0f }, { -1.0f, 0.0f, 0.0f } };
+
+    // The root of the scene is 175 units ahead of the menu's camera and 18
+    // below it, and the machine's feet are 1.2 units below its origin
+    constexpr VrSceneFit SlotMachineFit = {
+      { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f },
+      { 0.0f, -245.0f, 26.9f }, 1.4f,
+      { 0.0f, -45.0f, 0.0f }, { 0.0f, 1.0f, 0.0f } };
+
+    // The roulette wheel of the world stands above the game's table
+    constexpr const char* RouletteWorldWheel = "Object02:0";
+
     VrMinigames* g_minigames = nullptr;
+
+    // Set during the draw of a scene that lies on an object of the world
+    bool g_keepWorldDepth = false;
+    bool g_clearHooked    = false;
 
     template<typename T>
     T& field(void* object, uintptr_t offset) {
@@ -138,6 +169,25 @@ namespace dxvk {
       }
     }
 
+    bool hasName(const char* path, const char* lowerName) {
+      std::string lower = path;
+
+      for (char& c : lower)
+        c = char(std::tolower(static_cast<unsigned char>(c)));
+
+      return lower.find(lowerName) != std::string::npos;
+    }
+
+    // The game's clear of a scene: it stays out of the world's depth buffer
+    // when the scene lies on an object of the world
+    void __fastcall sceneClearHook(void* renderer, void* unused, const void* rect, uint32_t flags) {
+      if (g_keepWorldDepth)
+        flags &= ~VrGame::ClearDepthBuffer;
+
+      if (flags)
+        game<ClearFn>(VrGame::RendererClearBuffer)(renderer, nullptr, rect, flags);
+    }
+
   }
 
 
@@ -145,6 +195,7 @@ namespace dxvk {
     bool found = !g_minigames
       && VrGameMemory::matches(VrGame::IsTopMenu, VrGame::IsTopMenuPrologue, sizeof(VrGame::IsTopMenuPrologue))
       && VrGameMemory::matches(VrGame::RouletteHoveredBet, VrGame::RouletteHoveredBetPrologue, sizeof(VrGame::RouletteHoveredBetPrologue))
+      && VrGameMemory::matches(VrGame::GetActivateRef, VrGame::GetActivateRefPrologue, sizeof(VrGame::GetActivateRefPrologue))
       && VrGameMemory::readable(VrGame::LockPickInstance, sizeof(uintptr_t))
       && VrGameMemory::readable(VrGame::BlackJackInstance, sizeof(uintptr_t))
       && VrGameMemory::readable(VrGame::RouletteInstance, sizeof(uintptr_t))
@@ -162,6 +213,21 @@ namespace dxvk {
     // The world's terminals need the console's hook to get a screen for
     // both eyes; without it they stay on the panel
     VrConsoleScreen::setAfterOffscreen(&VrMinigames::afterOffscreen);
+
+    // The calls stay redirected if the option is turned off and on again
+    if (!g_clearHooked) {
+      auto clearHook = reinterpret_cast<const void*>(&sceneClearHook);
+
+      bool keepsDepth = VrGameMemory::redirectCall(VrGame::BlackJackDepthClearSite, VrGame::RendererClearBuffer, clearHook);
+      keepsDepth = VrGameMemory::redirectCall(VrGame::SlotMachineDepthClearSite, VrGame::RendererClearBuffer, clearHook) && keepsDepth;
+      keepsDepth = VrGameMemory::redirectCall(VrGame::RouletteDepthClearSite, VrGame::RendererClearBuffer, clearHook) && keepsDepth;
+
+      if (!keepsDepth)
+        Logger::warn("VR: A depth clear of the casino's scenes was not found, they are drawn over the world in front of them");
+
+      g_clearHooked = true;
+    }
+
     return minigames;
   }
 
@@ -169,6 +235,13 @@ namespace dxvk {
   VrMinigames::VrMinigames(IDirect3DDevice9* device, IVRBackend& backend)
   : m_device(device), m_backend(backend) {
 
+  }
+
+
+  VrMinigames::~VrMinigames() {
+    leaveObject();
+    g_keepWorldDepth = false;
+    g_minigames = nullptr;
   }
 
 
@@ -216,6 +289,10 @@ namespace dxvk {
     const VrPointerSurfaceState&  surface) {
     Kind kind = frame.stereo ? findKind() : Kind::None;
 
+    // The game may forget it as soon as a menu is open
+    if (!frame.stereo)
+      m_activateRef = game<PointerFn>(VrGame::GetActivateRef)();
+
     if (kind != m_kind) {
       close();
 
@@ -223,7 +300,8 @@ namespace dxvk {
         m_kind = kind;
         m_panelRevision++;
         Logger::info(str::format("VR: The ", kindName(menuId()),
-          " stands in the room, ", m_space.unitsPerMetre, " units per metre, the panel ", m_panel.width, " m wide"));
+          m_onObject ? " lies on the world's object, " : " stands in the room, ",
+          m_space.unitsPerMetre, " units per metre, the panel ", m_panel.width, " m wide"));
       }
     }
 
@@ -232,6 +310,9 @@ namespace dxvk {
 
     if (!active())
       return;
+
+    if (m_onObject)
+      standOnObject(frame);
 
     // A menu over the mini-game (a message, a quantity) has the input
     bool onTop = m_kind == Kind::Terminal || isTopMenu(menuId());
@@ -319,12 +400,20 @@ namespace dxvk {
         break;
 
       case Kind::SlotMachine:
-        m_space = vrSceneSpaceInFront(frame.head, SlotTarget, SlotDistance, SlotDrop, VrGameUnitsPerMetre);
+        if (!placeOnObject(id, frame))
+          m_space = vrSceneSpaceInFront(frame.head, SlotTarget, SlotDistance, SlotDrop, VrGameUnitsPerMetre);
+
         placeBoard(frame, false);
         break;
 
       case Kind::BlackJack:
       case Kind::Roulette:
+        if (!placeOnObject(id, frame))
+          m_space = vrSceneSpaceAroundHead(frame.head, pose.position, pose.forward, VrGameUnitsPerMetre);
+
+        placeBoard(frame, true);
+        break;
+
       case Kind::Caravan:
         m_space = vrSceneSpaceAroundHead(frame.head, pose.position, pose.forward, VrGameUnitsPerMetre);
         placeBoard(frame, true);
@@ -335,14 +424,7 @@ namespace dxvk {
     }
 
     if (kind == Kind::Roulette) {
-      VrVector3 centre = {
-        0.5f * (VrGame::RouletteSelectorMinX + VrGame::RouletteSelectorMaxX),
-        0.5f * (VrGame::RouletteSelectorMinY + VrGame::RouletteSelectorMaxY),
-        FeltHeight };
-
-      m_surface = vrSceneSurface(m_space, centre,
-        VrGame::RouletteSelectorMaxX - VrGame::RouletteSelectorMinX + 2.0f * RouletteFeltMargin,
-        VrGame::RouletteSelectorMaxY - VrGame::RouletteSelectorMinY + 2.0f * RouletteFeltMargin);
+      placeRouletteSurface();
       m_hasSurface = true;
     }
 
@@ -350,7 +432,108 @@ namespace dxvk {
   }
 
 
+  bool VrMinigames::placeOnObject(uint32_t id, const VrMinigameFrame& frame) {
+    auto reference = static_cast<uint8_t*>(m_activateRef);
+
+    if (!reference || !frame.hasReference)
+      return false;
+
+    uint8_t* base = field<uint8_t*>(reference, VrGame::RefBaseForm);
+
+    if (!base || field<uint8_t>(base, VrGame::FormType) != VrGame::FormTypeActivator)
+      return false;
+
+    const char* model = field<const char*>(base, VrGame::ActivatorModelPath);
+
+    if (!model)
+      return false;
+
+    const VrSceneFit* fit = nullptr;
+
+    if (id == VrGame::BlackJackMenuId && hasName(model, "cardtable01"))
+      fit = &BlackJackFit;
+    else if (id == VrGame::RouletteMenuId && hasName(model, "roulettetable01"))
+      fit = &RouletteFit;
+    else if (id == VrGame::SlotMachineMenuId && hasName(model, "slot_machine0"))
+      fit = &SlotMachineFit;
+
+    auto vtable = field<uint8_t*>(reference, 0);
+    auto root   = fit ? static_cast<uint8_t*>((*reinterpret_cast<Get3DFn*>(vtable + VrGame::RefGet3DSlot))(reference)) : nullptr;
+
+    if (!root) {
+      Logger::info(str::format("VR: No place for the scene on ", model, ", it stands in the room"));
+      return false;
+    }
+
+    auto rotation = reinterpret_cast<const float*>(root + VrGame::ObjectWorldRotation);
+
+    m_object.x        = { rotation[0], rotation[3], rotation[6] };
+    m_object.y        = { rotation[1], rotation[4], rotation[7] };
+    m_object.z        = { rotation[2], rotation[5], rotation[8] };
+    m_object.position = field<VrVector3>(root, VrGame::ObjectWorldTranslation);
+    m_object.scale    = field<float>(root, VrGame::ObjectWorldScale);
+
+    m_fit        = fit;
+    m_seatCamera = vrSeatCamera(m_object, *fit,
+      vrComputeEyeInReference(frame.reference, frame.head), frame.cameraHeight, VrGameUnitsPerMetre);
+    m_onObject   = true;
+
+    game<AssignFn>(VrGame::NiPointerAssign)(&m_objectRoot, root);
+
+    // The machine is whole in the scene. The tables' are only tops, and the
+    // world's holds them up: only what stands above that top goes.
+    if (fit == &SlotMachineFit) {
+      auto flags = reinterpret_cast<uint32_t*>(root + VrGame::ObjectFlags);
+
+      if (!(*flags & VrGame::ObjectFlagAppCulled)) {
+        *flags |= VrGame::ObjectFlagAppCulled;
+        m_objectHidden.push_back(flags);
+      }
+    } else if (fit == &RouletteFit) {
+      VrMenuScenes::hideObject(reinterpret_cast<uintptr_t>(root), RouletteWorldWheel, m_objectHidden);
+    }
+
+    standOnObject(frame);
+    return true;
+  }
+
+
+  void VrMinigames::standOnObject(const VrMinigameFrame& frame) {
+    m_space = vrSceneSpaceOnObject(frame.reference, m_seatCamera, m_object, *m_fit, VrGameUnitsPerMetre);
+
+    if (m_fit == &RouletteFit)
+      placeRouletteSurface();
+  }
+
+
+  void VrMinigames::placeRouletteSurface() {
+    VrVector3 centre = {
+      0.5f * (VrGame::RouletteSelectorMinX + VrGame::RouletteSelectorMaxX),
+      0.5f * (VrGame::RouletteSelectorMinY + VrGame::RouletteSelectorMaxY),
+      FeltHeight };
+
+    m_surface = vrSceneSurface(m_space, centre,
+      VrGame::RouletteSelectorMaxX - VrGame::RouletteSelectorMinX + 2.0f * RouletteFeltMargin,
+      VrGame::RouletteSelectorMaxY - VrGame::RouletteSelectorMinY + 2.0f * RouletteFeltMargin);
+  }
+
+
+  void VrMinigames::leaveObject() {
+    VrMenuScenes::showHidden(m_objectHidden);
+    m_objectHidden.clear();
+
+    if (m_objectRoot)
+      game<AssignFn>(VrGame::NiPointerAssign)(&m_objectRoot, nullptr);
+
+    m_onObject = false;
+    m_fit      = nullptr;
+  }
+
+
   void VrMinigames::close() {
+    // A try of open() that has to wait for the menu's scene may have started
+    leaveObject();
+
     if (m_kind == Kind::None)
       return;
 
@@ -661,7 +844,11 @@ namespace dxvk {
       *offset = { 0.0f, 0.0f, 0.0f };
     }
 
+    g_keepWorldDepth = m_onObject;
+
     game<SceneFn>(sceneRender(id))();
+
+    g_keepWorldDepth = false;
 
     if (offset)
       *offset = gameOffset;

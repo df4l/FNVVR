@@ -83,6 +83,15 @@ namespace dxvk {
 
     static void showHidden(const std::vector<uint32_t*>& hidden);
 
+    /**
+     * \brief Hides the objects of a name below an object
+     *
+     * \param [in] root The object it starts from
+     * \param [in] name Name of the objects
+     * \param [out] hidden Flags to pass to showHidden
+     */
+    static void hideObject(uintptr_t root, const char* name, std::vector<uint32_t*>& hidden);
+
   private:
 
     bool m_available         = false;

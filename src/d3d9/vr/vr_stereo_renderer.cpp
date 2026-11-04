@@ -674,6 +674,10 @@ namespace dxvk {
     // The game placed its first-person model for its own camera
     VrGameCameraPose modelCamera = m_gameCameraPose;
 
+    // A mini-game on an object of the world has brought the player to it
+    if (const VrGameCameraPose* seat = m_minigames ? m_minigames->seatCamera() : nullptr)
+      m_gameCameraPose = *seat;
+
     // The game turned its camera with the head already
     m_controls.updateCamera(m_gameCameraPose, dt);
     updateNpcGaze();
@@ -796,6 +800,11 @@ namespace dxvk {
       frame.panelWidth    = m_panelConfig.hudWidth;
       frame.panelDistance = m_panelConfig.hudDistance;
       frame.dt            = dt;
+      frame.hasReference  = m_hasReference;
+      frame.reference     = m_reference;
+
+      if (frame.stereo)
+        frame.cameraHeight = m_renderCamera.readPose().position.z;
 
       Com<IDirect3DSurface9> backBuffer;
       D3DSURFACE_DESC desc = { };

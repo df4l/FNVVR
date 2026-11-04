@@ -24,6 +24,97 @@ namespace {
 }
 
 
+namespace {
+
+  // A table turned a quarter of a turn: its model's +X is the world's -Y and
+  // its +Y the world's +X
+  VrWorldObject turnedTable() {
+    VrWorldObject object;
+    object.x        = { 0.0f, -1.0f, 0.0f };
+    object.y        = { 1.0f, 0.0f, 0.0f };
+    object.z        = { 0.0f, 0.0f, 1.0f };
+    object.position = { 1000.0f, 2000.0f, 300.0f };
+    return object;
+  }
+
+  VrSceneFit tableFit() {
+    VrSceneFit fit;
+    fit.sceneX = { 1.0f, 0.0f, 0.0f };
+    fit.sceneY = { 0.0f, 1.0f, 0.0f };
+    fit.sceneZ = { 0.0f, 0.0f, 1.0f };
+    fit.origin = { 0.0f, 0.0f, 70.0f };
+    fit.scale  = 2.0f;
+    fit.seat   = { -70.0f, 0.0f, 0.0f };
+    fit.facing = { 1.0f, 0.0f, 0.0f };
+    return fit;
+  }
+
+  // The eye's camera for a point of the scene, as the game would see it
+  VrVector3 sceneInWorld(const VrWorldObject& object, const VrSceneFit& fit, const VrVector3& point) {
+    VrVector3 model = fit.origin + (fit.sceneX * point.x + fit.sceneY * point.y + fit.sceneZ * point.z) * fit.scale;
+    return object.position + (object.x * model.x + object.y * model.y + object.z * model.z) * object.scale;
+  }
+
+}
+
+
+TEST_CASE(seat_brings_the_head_to_the_object) {
+  VrPose reference = vrMakeRecenterReference(headAt(0.0f, 1.6f, 0.0f));
+  // Half a metre to the right of the reference and turned to the right
+  VrPose head = headAt(0.5f, 1.6f, 0.0f);
+  head.orientation = vrQuaternionFromAxisAngle({ 0.0f, 1.0f, 0.0f }, -1.0f);
+
+  VrPose inReference = vrComputeEyeInReference(reference, head);
+  VrWorldObject object = turnedTable();
+  VrGameCameraPose camera = vrSeatCamera(object, tableFit(), inReference, 420.0f, 70.0f);
+
+  VrGameCameraPose eye = vrComputeEyeCameraPose(camera, inReference, 70.0f);
+
+  // The seat is 70 units along the model's -X, so the world's +Y
+  CHECK(std::abs(eye.position.x - 1000.0f) < 1e-2f);
+  CHECK(std::abs(eye.position.y - 2070.0f) < 1e-2f);
+  // The height is the game's camera's and the head's own in the reference
+  CHECK(std::abs(eye.position.z - 420.0f) < 1e-2f);
+  // Looking along the model's +X, the world's -Y
+  CHECK(same(eye.forward, { 0.0f, -1.0f, 0.0f }));
+  CHECK(same(eye.up, { 0.0f, 0.0f, 1.0f }));
+}
+
+
+TEST_CASE(scene_on_object_is_seen_where_the_object_is) {
+  VrPose reference = vrMakeRecenterReference(headAt(0.3f, 1.6f, -0.4f));
+  VrPose head = headAt(0.1f, 1.5f, -0.2f);
+  head.orientation = vrQuaternionFromAxisAngle({ 0.0f, 1.0f, 0.0f }, 0.6f);
+
+  VrWorldObject object = turnedTable();
+  VrSceneFit fit = tableFit();
+  VrPose inReference = vrComputeEyeInReference(reference, head);
+  VrGameCameraPose camera = vrSeatCamera(object, fit, inReference, 420.0f, 70.0f);
+
+  VrSceneSpace space = vrSceneSpaceOnObject(reference, camera, object, fit, 70.0f);
+
+  // A model scaled twice as much has half as many units per metre
+  CHECK(std::abs(space.unitsPerMetre - 35.0f) < Near);
+
+  for (const VrVector3& point : { VrVector3 { 0.0f, 0.0f, 0.0f }, VrVector3 { 20.0f, -30.0f, 5.0f } }) {
+    VrVector3 world = sceneInWorld(object, fit, point);
+    VrVector3 room  = vrTransformPoint(reference, vrComputeGamePointInReference(camera, world, 70.0f));
+
+    CHECK(same(vrSceneToRoom(space, point), room));
+    CHECK(same(vrRoomToScene(space, room), point));
+  }
+
+  // The scene's camera for the eye looks at the scene as the world's does
+  VrGameCameraPose scene = vrSceneCameraPose(space, head);
+  VrGameCameraPose eye   = vrComputeEyeCameraPose(camera, inReference, 70.0f);
+
+  VrVector3 sceneForward = sceneInWorld(object, fit, scene.forward) - sceneInWorld(object, fit, { 0.0f, 0.0f, 0.0f });
+
+  CHECK(same(sceneForward * (1.0f / fit.scale), eye.forward));
+  CHECK(same(sceneInWorld(object, fit, scene.position), eye.position));
+}
+
+
 TEST_CASE(table_camera_stands_on_the_head) {
   VrPose head = headAt(0.5f, 1.6f, -0.2f);
   VrVector3 camera = { -32.0f, 25.0f, 36.0f };

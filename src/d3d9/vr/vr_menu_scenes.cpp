@@ -166,6 +166,11 @@ namespace dxvk {
   }
 
 
+  void VrMenuScenes::hideObject(uintptr_t root, const char* name, std::vector<uint32_t*>& hidden) {
+    hideByName(root, name, 0, hidden);
+  }
+
+
   void VrMenuScenes::showHidden(const std::vector<uint32_t*>& hidden) {
     for (uint32_t* flags : hidden)
       *flags &= ~VrGame::ObjectFlagAppCulled;

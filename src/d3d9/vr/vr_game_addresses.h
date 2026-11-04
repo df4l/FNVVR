@@ -760,6 +760,15 @@ namespace dxvk {
     constexpr uint32_t  RouletteStateBet     = 4;
 
     /**
+     * The calls to NiRenderer::ClearBuffer (RendererClearBuffer) that clear
+     * the depth buffer at the start of the scenes that can lie on an object
+     * of the world: BlackJackMenu, SlotMachineMenu and RouletteMenu::DrawScene.
+     */
+    constexpr uintptr_t BlackJackDepthClearSite   = 0x00733530;
+    constexpr uintptr_t SlotMachineDepthClearSite = 0x007C19F0;
+    constexpr uintptr_t RouletteDepthClearSite    = 0x007BBD20;
+
+    /**
      * ShadowSceneNode::kLightingOffset, on the world's shadow scene node
      * (ShadowSceneNodes[0]). The shaders add it to the position of every
      * point light and to the eye, whatever scene they draw.
@@ -768,6 +777,14 @@ namespace dxvk {
      * be drawn with it: see findings/minigames.md §5.
      */
     constexpr uintptr_t ShadowSceneLightingOffset = 0x1E4;
+
+    /**
+     * TESObjectACTI: its form type and the path of its model
+     * (TESModelTextureSwap at +0x3C, then TESModel::strModel, whose
+     * BSStringT starts with the characters' pointer).
+     */
+    constexpr uint8_t   FormTypeActivator    = 0x15;
+    constexpr uintptr_t ActivatorModelPath   = 0x40;
 
     /**
      * LockPickMenu: the pin's slider (tile, with the trait id held at

@@ -70,6 +70,70 @@ namespace dxvk {
       return vrNormalize(q);
     }
 
+    // A direction of a model in the world
+    VrVector3 modelToWorld(const VrWorldObject& object, const VrVector3& v) {
+      return object.x * v.x + object.y * v.y + object.z * v.z;
+    }
+
+  }
+
+
+  VrGameCameraPose vrSeatCamera(
+    const VrWorldObject&    object,
+    const VrSceneFit&       fit,
+    const VrPose&           headInReference,
+          float             cameraHeight,
+          float             unitsPerMetre) {
+    VrVector3 seat   = object.position + modelToWorld(object, fit.seat) * object.scale;
+    VrVector3 facing = modelToWorld(object, fit.facing);
+
+    // The head may be turned from the reference: the camera is turned as
+    // much the other way, for the head to look where it has to
+    VrVector3 look = vrRotate(headInReference.orientation, VrVector3 { 0.0f, 0.0f, -1.0f });
+    float turn = std::abs(look.x) + std::abs(look.z) > 1e-6f ? std::atan2(look.x, -look.z) : 0.0f;
+    float c = std::cos(turn);
+    float s = std::sin(turn);
+
+    VrGameCameraPose camera;
+    camera.forward = { facing.x * c - facing.y * s, facing.x * s + facing.y * c, 0.0f };
+    camera.up      = { 0.0f, 0.0f, 1.0f };
+    camera.right   = { camera.forward.y, -camera.forward.x, 0.0f };
+
+    VrVector3 head = camera.right * headInReference.position.x
+                   + camera.forward * -headInReference.position.z;
+
+    camera.position = seat - head * unitsPerMetre;
+    camera.position.z = cameraHeight;
+    return camera;
+  }
+
+
+  VrSceneSpace vrSceneSpaceOnObject(
+    const VrPose&           reference,
+    const VrGameCameraPose& camera,
+    const VrWorldObject&    object,
+    const VrSceneFit&       fit,
+          float             unitsPerMetre) {
+    VrVector3 sceneX = modelToWorld(object, fit.sceneX);
+    VrVector3 sceneY = modelToWorld(object, fit.sceneY);
+    VrVector3 sceneZ = modelToWorld(object, fit.sceneZ);
+
+    // The camera's axes, which are the reference's, in the scene
+    auto inScene = [&] (const VrVector3& v) {
+      return VrVector3 { vrDot(v, sceneX), vrDot(v, sceneY), vrDot(v, sceneZ) };
+    };
+
+    VrVector3 origin = object.position + modelToWorld(object, fit.origin) * object.scale;
+
+    VrSceneSpace space;
+    space.anchor.position    = vrTransformPoint(reference, vrComputeGamePointInReference(camera, origin, unitsPerMetre));
+    space.anchor.orientation = reference.orientation;
+    space.origin             = { 0.0f, 0.0f, 0.0f };
+    space.right              = inScene(camera.right);
+    space.up                 = inScene(camera.up);
+    space.back               = inScene(camera.forward * -1.0f);
+    space.unitsPerMetre      = unitsPerMetre / (fit.scale * object.scale);
+    return space;
   }
 
 

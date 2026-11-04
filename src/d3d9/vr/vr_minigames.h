@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 #include "../d3d9_include.h"
 
@@ -27,6 +28,11 @@ namespace dxvk {
     /// Height of the panel's image over its width
     float  panelAspect = 0.75f;
     float  dt          = 0.0f;
+    /// The recenter reference, if there is one
+    bool   hasReference = false;
+    VrPose reference;
+    /// Height of the game's camera in the world, known when \c stereo is set
+    float  cameraHeight = 0.0f;
   };
 
   /**
@@ -39,6 +45,11 @@ namespace dxvk {
    * of the room the game's view gives it, instead of on the flat panel. The
    * interface's tiles stay on the panel, which is out of the way of the
    * scene. The controllers act on the scene: see findings/minigames.md.
+   *
+   * A casino table or a slot machine of the world takes the scene on itself:
+   * the scene is drawn where the object is, tested against the world, what
+   * it replaces of the object is hidden, and the player is brought to the
+   * object's seat while the menu is open, by the view only.
    *
    * Everything reaches the menus as the gamepad or the cursor would, and
    * the game's camera is put back after each draw, because the game's
@@ -54,6 +65,8 @@ namespace dxvk {
      * \returns \c nullptr if the executable is not the supported version
      */
     static std::unique_ptr<VrMinigames> create(IDirect3DDevice9* device, IVRBackend& backend);
+
+    ~VrMinigames();
 
     /**
      * \brief Follows the game's menus and reads the hands
@@ -92,6 +105,9 @@ namespace dxvk {
     /// Changes whenever the panel has to be placed again
     uint32_t panelRevision() const { return m_panelRevision; }
 
+    /// The camera the eyes are placed from, \c nullptr for the game's own
+    const VrGameCameraPose* seatCamera() const { return m_onObject ? &m_seatCamera : nullptr; }
+
     /**
      * \brief Draws the scene for an eye
      *
@@ -129,6 +145,18 @@ namespace dxvk {
     uint32_t          m_panelRevision = 0;
     VrMinigamePad     m_pad;
 
+    // What the player would activate in the last frame without a menu
+    void*             m_activateRef = nullptr;
+
+    // The object of the world the scene lies on, kept alive as long as its
+    // parts are hidden
+    bool              m_onObject = false;
+    VrWorldObject     m_object;
+    const VrSceneFit* m_fit = nullptr;
+    VrGameCameraPose  m_seatCamera;
+    void*             m_objectRoot = nullptr;
+    std::vector<uint32_t*> m_objectHidden;
+
     // The button a gesture presses, held for a few frames
     uint16_t          m_pulse       = 0;
     uint32_t          m_pulseFrames = 0;
@@ -165,6 +193,14 @@ namespace dxvk {
     void placeBoard(const VrMinigameFrame& frame, bool aboveTable);
 
     bool placeTerminal(const VrMinigameFrame& frame);
+
+    bool placeOnObject(uint32_t id, const VrMinigameFrame& frame);
+
+    void standOnObject(const VrMinigameFrame& frame);
+
+    void placeRouletteSurface();
+
+    void leaveObject();
 
     void updateLock(const VrInputState& input, float dt);
 

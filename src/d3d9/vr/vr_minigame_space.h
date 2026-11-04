@@ -62,6 +62,77 @@ namespace dxvk {
           float             drop,
           float             unitsPerMetre);
 
+  /**
+   * \brief An object of the world, as its model stands in it
+   *
+   * A point of the model at (x, y, z) is in the world at
+   * position + (this->x * x + this->y * y + this->z * z) * scale.
+   */
+  struct VrWorldObject {
+    VrVector3 x;
+    VrVector3 y;
+    VrVector3 z;
+    VrVector3 position;
+    float     scale = 1.0f;
+  };
+
+  /**
+   * \brief How a menu's scene lies on the model of a world's object
+   *
+   * The axes are unit vectors of the model's space, with x cross y = z. A
+   * point of the scene at (x, y, z) is in the model at
+   * origin + (sceneX * x + sceneY * y + sceneZ * z) * scale.
+   */
+  struct VrSceneFit {
+    VrVector3 sceneX;
+    VrVector3 sceneY;
+    VrVector3 sceneZ;
+    VrVector3 origin;
+    /// Model units per scene unit
+    float     scale = 1.0f;
+    /// Where the player's head goes, in the model. Its height is not used.
+    VrVector3 seat;
+    /// Direction the player looks in from there, level, in the model
+    VrVector3 facing;
+  };
+
+  /**
+   * \brief Finds the camera that puts the head at the seat of an object
+   *
+   * It takes the place of the game's camera, from which the eyes are placed
+   * (vrComputeEyeCameraPose): the head as it is now gets to the seat, looking
+   * the way the fit says. Its height does not change: a player sitting stays
+   * low, a player standing keeps the floor under the feet.
+   *
+   * \param [in] object The object
+   * \param [in] fit How the scene lies on it
+   * \param [in] headInReference Head pose, see vrComputeEyeInReference
+   * \param [in] cameraHeight Height of the game's camera in the world
+   * \param [in] unitsPerMetre World units per metre of the room
+   */
+  VrGameCameraPose vrSeatCamera(
+    const VrWorldObject&    object,
+    const VrSceneFit&       fit,
+    const VrPose&           headInReference,
+          float             cameraHeight,
+          float             unitsPerMetre);
+
+  /**
+   * \brief Stands a scene where an object of the world is seen
+   *
+   * \param [in] reference Recenter reference, see vrMakeRecenterReference
+   * \param [in] camera The camera the eyes are placed from
+   * \param [in] object The object
+   * \param [in] fit How the scene lies on it
+   * \param [in] unitsPerMetre World units per metre of the room
+   */
+  VrSceneSpace vrSceneSpaceOnObject(
+    const VrPose&           reference,
+    const VrGameCameraPose& camera,
+    const VrWorldObject&    object,
+    const VrSceneFit&       fit,
+          float             unitsPerMetre);
+
   VrVector3 vrSceneToRoom(const VrSceneSpace& space, const VrVector3& point);
 
   VrVector3 vrRoomToScene(const VrSceneSpace& space, const VrVector3& point);
