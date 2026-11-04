@@ -246,7 +246,7 @@ namespace dxvk {
     void __cdecl onRoomscaleChanged(void* option) {
       if (!optionsInitialised()) {
         optionValue(option)   = g_options.roomscale ? 1u : 0u;
-        optionDefault(option) = 1u;
+        optionDefault(option) = 0u;
         return;
       }
 

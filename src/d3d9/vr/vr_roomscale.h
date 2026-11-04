@@ -67,7 +67,7 @@ namespace dxvk {
 
     VrRoomscale() = default;
 
-    bool      m_enabled      = true;
+    bool      m_enabled      = false;
     bool      m_loggedActive = false;
 
     // In the world's ground plane, in game units

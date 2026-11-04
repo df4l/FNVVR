@@ -29,7 +29,7 @@ namespace dxvk {
     /// Scopes show the world on a lens, see findings/optics.md
     bool  scopeLens       = true;
     /// The capsule follows the player walking in the room, see findings/roomscale.md
-    bool  roomscale       = true;
+    bool  roomscale       = false;
   };
 
   /// Slowest smooth turning speed of the options page, in degrees per second
