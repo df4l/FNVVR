@@ -89,6 +89,23 @@ namespace dxvk {
           float             unitsPerMetre);
 
   /**
+   * \brief Moves the recenter reference along the game's world
+   *
+   * For the same base camera, an eye is drawn by \c shift further back
+   * than before, with the base camera having moved by that much.
+   *
+   * \param [in] reference Result of vrMakeRecenterReference
+   * \param [in] base Pose the game computed for its camera this frame
+   * \param [in] shift Displacement in the game world, in game units
+   * \param [in] unitsPerMetre Scale from metres to game units
+   */
+  VrPose vrShiftReference(
+    const VrPose&           reference,
+    const VrGameCameraPose& base,
+    const VrVector3&        shift,
+          float             unitsPerMetre);
+
+  /**
    * \brief Heading and pitch of the head in the game's convention
    *
    * The yaw is clockwise seen from above, like the game's heading, and the

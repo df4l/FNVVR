@@ -103,6 +103,7 @@ namespace dxvk {
     float                                m_pipBoyScale = 1.0f;
     bool                                 m_manualReload = true;
     bool                                 m_scopes = true;
+    bool                                 m_roomscale = true;
     bool                                 m_handPush = true;
     VrSneakConfig                        m_sneakConfig;
     bool                                 m_weaponInHand;

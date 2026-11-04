@@ -232,6 +232,15 @@ namespace dxvk {
     bool updateCamera(VrGameCameraPose& pose, float dt);
 
     /**
+     * \brief Whether the last updateCamera put the camera on the player's body
+     *
+     * Not in V.A.T.S., on furniture, when dead or in a dialogue camera.
+     */
+    bool cameraFollowsHead() const {
+      return m_cameraFollowsHead;
+    }
+
+    /**
      * \brief Adjusts a camera pose as the last updateCamera did
      */
     bool adjustCamera(VrGameCameraPose& pose) const;
@@ -264,6 +273,7 @@ namespace dxvk {
     IVRBackend&                 m_backend;
     std::unique_ptr<VrHeadLook> m_headLook;
     std::unique_ptr<VrSneak>    m_sneak;
+    bool                        m_cameraFollowsHead = false;
     VrActionFilter              m_filter;
     VrMenuPointer               m_pointer;
 

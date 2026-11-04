@@ -151,6 +151,7 @@ namespace dxvk {
     constexpr uintptr_t RefLocation       = 0x30;
     constexpr uintptr_t ActorLifeState    = 0x108;
     constexpr uintptr_t PlayerDisabledControls = 0x680;
+    constexpr uint8_t   ControlMovement   = 0x1;
     constexpr uint8_t   ControlLook       = 0x2;
     constexpr uint8_t   ControlSneak      = 0x40;
 
@@ -2821,6 +2822,16 @@ namespace dxvk {
      * touching an actor value, which a save would keep.
      */
     constexpr uintptr_t PlayerMoveSlot               = 0x0108AC8C;
+
+    /**
+     * MobileObject::Move (__thiscall: seconds, NiPoint3* move, flags), which
+     * the player's Actor::Move calls after the hook above, each frame the
+     * game runs (PlayerMover::Update): the move is in the actor's frame and
+     * goes to bhkCharacterController::Move, or stays out of it with the
+     * collisions off (findings/roomscale.md).
+     */
+    constexpr uintptr_t MobileObjectMove             = 0x0092F260;
+    constexpr uintptr_t ActorMoveMobileCallSite      = 0x008A6339;
 
     /**
      * The collision of the player's capsule with a held actor.

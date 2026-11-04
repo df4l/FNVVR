@@ -41,6 +41,7 @@ namespace dxvk {
     constexpr char SneakButtonText[] = "Stick click";
     constexpr char SneakCrouchText[] = "Real crouch";
     constexpr char ScopeText[]      = "Scope lens";
+    constexpr char RoomscaleText[]  = "Room-scale walking";
 
     // One name per size of VrPipBoyScaleSteps, from the game's size up
     constexpr const char* PipBoySizeNames[VrPipBoyScaleSteps] = {
@@ -242,6 +243,23 @@ namespace dxvk {
     }
 
 
+    void __cdecl onRoomscaleChanged(void* option) {
+      if (!optionsInitialised()) {
+        optionValue(option)   = g_options.roomscale ? 1u : 0u;
+        optionDefault(option) = 1u;
+        return;
+      }
+
+      bool roomscale = optionValue(option) != 0;
+
+      if (roomscale == g_options.roomscale)
+        return;
+
+      g_options.roomscale = roomscale;
+      notifyChanged();
+    }
+
+
     // Creates a user option and adds it to the game's list
     template<typename... Names>
     void* appendUserOption(const char* text, UserOptionCallback callback, int32_t type,
@@ -295,6 +313,8 @@ namespace dxvk {
       appendUserOption(SneakText, &onSneakChanged, ToggleType, ToggleValues, ArrowSpacing,
         SneakButtonText, SneakCrouchText);
       appendUserOption(ScopeText, &onScopeChanged, ToggleType, ToggleValues, ArrowSpacing,
+        ReloadOffText, ReloadOnText);
+      appendUserOption(RoomscaleText, &onRoomscaleChanged, ToggleType, ToggleValues, ArrowSpacing,
         ReloadOffText, ReloadOnText);
     }
 
