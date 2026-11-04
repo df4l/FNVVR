@@ -712,6 +712,67 @@ namespace dxvk {
     constexpr uintptr_t Renderer                   = 0x011F4748;
 
     constexpr uint32_t  LockPickMenuId    = 0x3F6;
+
+    /**
+     * The mini-games' scenes shown in the eye images, see
+     * findings/minigames.md: each menu's instance, its camera (NiCamera*,
+     * from the model of the casino tables) and the state field of each.
+     */
+    constexpr uintptr_t LockPickInstance     = 0x011DA204;
+    constexpr uintptr_t LockPickCamera       = 0x011DA224;
+    constexpr uintptr_t SlotMachineInstance  = 0x011DA9A4;
+    constexpr uintptr_t SlotMachineCamera    = 0x011DA9D0;
+    constexpr uintptr_t SlotMachineSceneRoot = 0x011DA9FC;
+    constexpr uintptr_t BlackJackInstance    = 0x011D9050;
+    constexpr uintptr_t BlackJackCamera      = 0x011D90BC;
+    constexpr uintptr_t RouletteInstance     = 0x011DA878;
+    constexpr uintptr_t RouletteCamera       = 0x011DA8D0;
+    constexpr uintptr_t CaravanCamera        = 0x011D91A8;
+
+    constexpr uint32_t  SlotMachineMenuId    = 0x438;
+    constexpr uint32_t  BlackJackMenuId      = 0x439;
+    constexpr uint32_t  RouletteMenuId       = 0x43A;
+    constexpr uint32_t  CaravanMenuId        = 0x43B;
+
+    /** Every one of these menus keeps its stage at this offset */
+    constexpr uintptr_t MinigameState        = 0x28;
+    constexpr uint32_t  LockStateTurning     = 3;
+    constexpr uint32_t  LockStateTension     = 4;
+    constexpr uint32_t  SlotMachineStateBet  = 6;
+    constexpr uint32_t  BlackJackStateTurn   = 4;
+    constexpr uint32_t  RouletteStateBet     = 4;
+
+    /**
+     * LockPickMenu: the pin's slider (tile, with the trait id held at
+     * LockPickSliderTrait for its position) and the tile whose width is its
+     * range.
+     */
+    constexpr uintptr_t LockPickSlider       = 0x68;
+    constexpr uintptr_t LockPickSliderRange  = 0x64;
+    constexpr uintptr_t LockPickSliderTrait  = 0x011DA1FC;
+
+    /**
+     * RouletteMenu: the bet selector's position on the felt, written by the
+     * menu while a stick or the mouse moves, within the limits of the
+     * RouletteSelector constants; the bets placed (BSSimpleList of
+     * RouletteBet*, the bet's id at +4); ComputeHoveredTileID (__thiscall on
+     * the menu, returns the bet under the selector, RouletteNoBet or more if
+     * none).
+     */
+    constexpr uintptr_t RouletteSelectorX    = 0x3FD4;
+    constexpr uintptr_t RouletteSelectorY    = 0x3FD8;
+    constexpr uintptr_t RouletteBetList      = 0x3E78;
+    constexpr uintptr_t RouletteBetId        = 0x04;
+    constexpr uintptr_t RouletteHoveredBet   = 0x007BF390;
+    constexpr uint8_t   RouletteHoveredBetPrologue[] = { 0x55, 0x8B, 0xEC };
+    constexpr uint32_t  RouletteNoBet        = 159;
+    constexpr float     RouletteSelectorMinX = -27.5f;
+    constexpr float     RouletteSelectorMaxX = 28.0f;
+    constexpr float     RouletteSelectorMinY = -13.3f;
+    constexpr float     RouletteSelectorMaxY = 13.1f;
+
+    /** The vtable that tells a world's terminal among the rendered menus */
+    constexpr uintptr_t TerminalVtable       = 0x0106EBE4;
     constexpr uintptr_t LockPickSceneRoot = 0x011DA24C;
     constexpr char      LockPickBackdrop[] = "shadow";
 

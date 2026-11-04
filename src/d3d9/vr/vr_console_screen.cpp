@@ -57,6 +57,8 @@ namespace dxvk {
 
     VrConsoleScreen* g_screen = nullptr;
 
+    void (__cdecl* g_afterOffscreen)() = nullptr;
+
     template<typename T>
     T& field(void* object, uintptr_t offset) {
       return *reinterpret_cast<T*>(static_cast<uint8_t*>(object) + offset);
@@ -424,6 +426,19 @@ namespace dxvk {
 
     if (g_screen)
       g_screen->renderScreen();
+
+    if (g_afterOffscreen)
+      g_afterOffscreen();
+  }
+
+
+  void VrConsoleScreen::setAfterOffscreen(void (__cdecl* callback)()) {
+    g_afterOffscreen = callback;
+  }
+
+
+  bool VrConsoleScreen::hooksOffscreen() {
+    return g_screen != nullptr;
   }
 
 

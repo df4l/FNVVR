@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdint>
+#include <vector>
+
 namespace dxvk {
 
   /**
@@ -58,10 +61,34 @@ namespace dxvk {
      */
     static bool movesRenderedMenu();
 
+    /**
+     * \brief Leaves a menu's scene to the eye images
+     *
+     * See VrMinigames. That scene is no longer drawn into the menu panel.
+     *
+     * \param [in] menuId The menu, or 0 for none
+     * \param [in] terminal Whether the rendered terminal is left out as well
+     */
+    void leaveToEyes(uint32_t menuId, bool terminal) {
+      m_eyeMenuId   = menuId;
+      m_eyeTerminal = terminal;
+    }
+
+    /**
+     * \brief Hides the dark disc of the lock model
+     *
+     * \param [out] hidden Flags to pass to showHidden after the draw
+     */
+    static void hideLockBackdrop(std::vector<uint32_t*>& hidden);
+
+    static void showHidden(const std::vector<uint32_t*>& hidden);
+
   private:
 
     bool m_available         = false;
     bool m_renderedMenuMoved = false;
+    uint32_t m_eyeMenuId     = 0;
+    bool m_eyeTerminal       = false;
 
     static void __fastcall renderedMenuHook(
             void*                 main,

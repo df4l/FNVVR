@@ -31,6 +31,7 @@
 #include "vr_quick_wheel.h"
 #include "vr_melee_swing.h"
 #include "vr_menu_scenes.h"
+#include "vr_minigames.h"
 #include "vr_manual_reload.h"
 #include "vr_part_highlight.h"
 #include "vr_npc_gaze.h"
@@ -211,6 +212,15 @@ namespace dxvk {
     }
 
     /**
+     * \brief Turns the mini-games' scenes in the eye images on or off
+     *
+     * Off, they stay on the menu panel. See VrMinigames.
+     *
+     * \param [in] enabled Whether they stand in the room
+     */
+    void setMinigamesEnabled(bool enabled);
+
+    /**
      * \brief Turns the reload with the hands on or off
      *
      * \param [in] enabled Off, every weapon is reloaded as in the game
@@ -385,6 +395,11 @@ namespace dxvk {
 
     // The game's console, typed in on a terminal with the lasers
     std::unique_ptr<VrConsoleTerminal> m_terminal;
+
+    // The scenes of the mini-games, in the eye images instead of the panel
+    std::unique_ptr<VrMinigames> m_minigames;
+    std::array<bool, VrEyeCount> m_minigameDrawn = { };
+    uint32_t            m_minigamePanelRevision = 0;
 
     // The activation target, picked along the hands instead of the view
     std::unique_ptr<VrHandActivatePick> m_handPick;
@@ -670,6 +685,8 @@ namespace dxvk {
             uint32_t              arg1);
 
     void renderMenuScenes();
+
+    void drawMinigame();
 
     void makeMenuSceneOpaque(bool depthTested);
 

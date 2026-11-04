@@ -699,6 +699,8 @@ namespace dxvk {
 
     renderScope(state, main, views);
 
+    m_minigameDrawn = { };
+
     for (uint32_t eye = 0; eye < VrEyeCount; eye++) {
       m_eyeCopied[eye] = false;
       renderEye(eye, views[eye], main);
@@ -787,6 +789,28 @@ namespace dxvk {
 
 
   void VrStereoRenderer::updateControls(const VrInputState& input, VrGameStateKind state, bool stereo, float dt) {
+    if (m_minigames) {
+      VrMinigameFrame frame;
+      frame.head          = m_headPose;
+      frame.stereo        = stereo && state == VrGameStateKind::Menu && m_hasHeadPose;
+      frame.panelWidth    = m_panelConfig.hudWidth;
+      frame.panelDistance = m_panelConfig.hudDistance;
+      frame.dt            = dt;
+
+      Com<IDirect3DSurface9> backBuffer;
+      D3DSURFACE_DESC desc = { };
+
+      if (SUCCEEDED(m_device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer))
+       && SUCCEEDED(backBuffer->GetDesc(&desc)) && desc.Width)
+        frame.panelAspect = float(desc.Height) / float(desc.Width);
+
+      m_minigames->update(frame, input, m_controls.pointerSurfaceState());
+
+      m_controls.setMinigamePad(m_minigames->pad());
+      m_controls.setPointerSurface(m_minigames->surface());
+      m_menuScenes.leaveToEyes(m_minigames->menuId(), m_minigames->showsTerminal());
+    }
+
     m_controls.setTerminalPanel(m_terminal ? m_terminal->placement() : nullptr);
     m_controls.update(input, state, m_hasReference ? &m_reference : nullptr, menuPanel(), dt);
 
@@ -1167,6 +1191,16 @@ namespace dxvk {
     if (state == VrGameStateKind::PipBoy && m_hasReference && left.isActive) {
       VrGameCameraPose otherHand = handInGame(left);
       m_weaponHand->beginFrame(gameCamera, nullptr, &otherHand, false, VrFirstPersonMode::PipBoy, dt);
+      return;
+    }
+
+    // The hands act on a mini-game's scene, the weapon is put away
+    if (state == VrGameStateKind::Menu && m_minigames && m_minigames->showsHands()
+     && m_hasReference && right.isActive) {
+      VrGameCameraPose hand      = handInGame(right);
+      VrGameCameraPose otherHand = handInGame(left);
+      m_weaponHand->beginFrame(gameCamera, &hand, left.isActive ? &otherHand : nullptr,
+        false, VrFirstPersonMode::FreeHands, dt);
       return;
     }
 
@@ -1959,6 +1993,16 @@ namespace dxvk {
     if (m_eye == NoEye || m_eyeCopied[m_eye])
       return;
 
+    // A mini-game's scene drawn at the last moment, over the hands: when
+    // the first-person pass did not run, and for the terminals, like the
+    // console's. The game's clear does nothing outside of its render group.
+    if (m_minigames && m_minigames->active() && !m_minigameDrawn[m_eye]) {
+      if (!m_minigames->showsTerminal())
+        m_device->Clear(0, nullptr, D3DCLEAR_ZBUFFER, 0, 1.0f, 0);
+
+      drawMinigame();
+    }
+
     // The console's terminal belongs to the 3D image, drawn with the eye
     if (m_terminal)
       m_terminal->drawEye(*m_eyeView);
@@ -1978,6 +2022,47 @@ namespace dxvk {
       Logger::err("VR: Failed to copy the rendered eye image");
       m_loggedFailure = true;
     }
+  }
+
+
+  void VrStereoRenderer::setMinigamesEnabled(bool enabled) {
+    if (enabled == (m_minigames != nullptr))
+      return;
+
+    m_menuScenes.leaveToEyes(0, false);
+
+    if (m_renderPasses)
+      m_renderPasses->setBeforeFirstPerson(nullptr);
+
+    if (!enabled) {
+      m_minigames = nullptr;
+      return;
+    }
+
+    m_minigames = VrMinigames::create(m_device, m_backend);
+
+    if (!m_minigames) {
+      Logger::warn("VR: The mini-games' data was not found, they stay on the menu panel");
+      return;
+    }
+
+    Logger::info("VR: The mini-games' scenes are drawn in the eye images");
+
+    if (m_renderPasses) {
+      m_renderPasses->setBeforeFirstPerson([this] {
+        if (m_minigames && m_minigames->drawsBeforeFirstPerson()
+         && m_eye != NoEye && m_eyeView && !m_minigameDrawn[m_eye])
+          drawMinigame();
+      });
+    }
+  }
+
+
+  void VrStereoRenderer::drawMinigame() {
+    m_minigameDrawn[m_eye] = true;
+
+    VrGameCameraState world = m_renderCamera.save();
+    m_minigames->drawEye(*m_eyeView, world.frustum[4], world.frustum[5]);
   }
 
 
@@ -2419,15 +2504,22 @@ namespace dxvk {
   void VrStereoRenderer::submitMenu() {
     // Placed once when it appears, again once the head is known, and again
     // when a dialogue's speaker is first known or changes
+    const VrPanelPlacement* minigamePanel = m_minigames ? m_minigames->panel() : nullptr;
+    uint32_t minigameRevision = m_minigames ? m_minigames->panelRevision() : 0;
+
     if (!m_panelShown || (!m_panelPlacedWithHead && m_hasHeadPose)
-     || (m_dialogueSpeaker && m_dialogueSpeaker != m_panelSpeaker))
+     || (m_dialogueSpeaker && m_dialogueSpeaker != m_panelSpeaker)
+     || minigameRevision != m_minigamePanelRevision)
       placeMenuPanel();
 
+    m_minigamePanelRevision = minigameRevision;
     m_panelShowsMenu = true;
 
+    float panelWidth = minigamePanel ? minigamePanel->width : m_panelConfig.hudWidth;
+
     m_panelShown = VrD3D9Bridge::submitPanel(m_device, m_backend, VrPanelId::Menu,
-      m_menuTexture.ptr(), m_panelPose, m_panelConfig.hudWidth, VrPanelAnchor::Room);
-    m_panelWidth = m_panelConfig.hudWidth;
+      m_menuTexture.ptr(), m_panelPose, panelWidth, VrPanelAnchor::Room);
+    m_panelWidth = panelWidth;
 
     if (!m_panelShown && !m_loggedPanelFailure) {
       Logger::err("VR: The backend rejected the menu panel");
@@ -2715,6 +2807,13 @@ namespace dxvk {
 
   void VrStereoRenderer::placeMenuPanel() {
     m_panelSpeaker = m_dialogueSpeaker;
+
+    // A mini-game keeps it out of the way of its scene
+    if (const VrPanelPlacement* panel = m_minigames ? m_minigames->panel() : nullptr) {
+      m_panelPose = panel->pose;
+      m_panelPlacedWithHead = true;
+      return;
+    }
 
     // The speaker can stand anywhere around the player, even behind, and
     // sit lower than the eyes. The middle of the dialogue menu is left

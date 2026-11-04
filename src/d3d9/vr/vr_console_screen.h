@@ -45,6 +45,21 @@ namespace dxvk {
      */
     static std::unique_ptr<VrConsoleScreen> install(IDirect3DDevice9* device);
 
+    /**
+     * \brief Sets what runs after the game's offscreen interface render
+     *
+     * For the world's terminals, which also need a screen for both eyes.
+     * Outside a frame of the game's renderer, as that render needs.
+     *
+     * \param [in] callback Called each time, as long as the hook is installed
+     */
+    static void setAfterOffscreen(void (__cdecl* callback)());
+
+    /**
+     * \brief Checks that the hook of the offscreen render is installed
+     */
+    static bool hooksOffscreen();
+
     ~VrConsoleScreen();
 
     VrConsoleScreen(const VrConsoleScreen&) = delete;

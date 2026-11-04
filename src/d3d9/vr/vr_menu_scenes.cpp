@@ -110,11 +110,11 @@ namespace dxvk {
     if (!m_available)
       return false;
 
-    if (isRenderedMenuOpen())
+    if (isRenderedMenuOpen() && !m_eyeTerminal)
       return true;
 
     for (const auto& scene : VrGame::MenuScenes) {
-      if (isMenuActive(scene.menuId))
+      if (scene.menuId != m_eyeMenuId && isMenuActive(scene.menuId))
         return true;
     }
 
@@ -130,25 +130,19 @@ namespace dxvk {
     // panel's alpha comes from depth, so the soft disc would show as an
     // opaque black ring around the lock
     std::vector<uint32_t*> hidden;
-
-    uintptr_t root = isMenuActive(VrGame::LockPickMenuId)
-      ? readField<uintptr_t>(VrGame::LockPickSceneRoot, 0) : 0;
-
-    if (root)
-      hideByName(root, VrGame::LockPickBackdrop, 0, hidden);
+    hideLockBackdrop(hidden);
 
     // Same order as the game's own dispatch
     for (const auto& scene : VrGame::MenuScenes) {
-      if (isMenuActive(scene.menuId))
+      if (scene.menuId != m_eyeMenuId && isMenuActive(scene.menuId))
         reinterpret_cast<RenderMenuSceneFn>(scene.render)();
     }
 
-    for (uint32_t* flags : hidden)
-      *flags &= ~VrGame::ObjectFlagAppCulled;
+    showHidden(hidden);
 
     auto main = readField<void*>(VrGame::MainSingleton, 0);
 
-    if (!main || !isRenderedMenuOpen())
+    if (!main || !isRenderedMenuOpen() || m_eyeTerminal)
       return;
 
     reinterpret_cast<MainFn>(VrGame::DrawRenderedMenuParent)(main, nullptr);
@@ -160,6 +154,21 @@ namespace dxvk {
 
     if (screen && renderer)
       reinterpret_cast<ScreenFn>(VrGame::RenderPipBoy)(main, nullptr, screen, renderer);
+  }
+
+
+  void VrMenuScenes::hideLockBackdrop(std::vector<uint32_t*>& hidden) {
+    uintptr_t root = isMenuActive(VrGame::LockPickMenuId)
+      ? readField<uintptr_t>(VrGame::LockPickSceneRoot, 0) : 0;
+
+    if (root)
+      hideByName(root, VrGame::LockPickBackdrop, 0, hidden);
+  }
+
+
+  void VrMenuScenes::showHidden(const std::vector<uint32_t*>& hidden) {
+    for (uint32_t* flags : hidden)
+      *flags &= ~VrGame::ObjectFlagAppCulled;
   }
 
 

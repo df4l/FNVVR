@@ -1,0 +1,332 @@
+#include <cmath>
+
+#include "test.h"
+
+#include "../vr_math.h"
+#include "../vr_minigame_space.h"
+
+using namespace dxvk;
+
+namespace {
+
+  constexpr float Near = 1e-3f;
+
+  bool same(const VrVector3& a, const VrVector3& b) {
+    return std::abs(a.x - b.x) < Near && std::abs(a.y - b.y) < Near && std::abs(a.z - b.z) < Near;
+  }
+
+  VrPose headAt(float x, float y, float z) {
+    VrPose head;
+    head.position = { x, y, z };
+    return head;
+  }
+
+}
+
+
+TEST_CASE(table_camera_stands_on_the_head) {
+  VrPose head = headAt(0.5f, 1.6f, -0.2f);
+  VrVector3 camera = { -32.0f, 25.0f, 36.0f };
+
+  // Looking east and down: the table's east is the room's ahead
+  VrSceneSpace space = vrSceneSpaceAroundHead(head, camera, { 0.7071f, 0.0f, -0.7071f }, 70.0f);
+
+  CHECK(same(vrSceneToRoom(space, camera), head.position));
+
+  // 70 units east of the camera is a metre ahead of the head
+  CHECK(same(vrSceneToRoom(space, { 38.0f, 25.0f, 36.0f }), { 0.5f, 1.6f, -1.2f }));
+  // 70 units below is a metre below
+  CHECK(same(vrSceneToRoom(space, { -32.0f, 25.0f, -34.0f }), { 0.5f, 0.6f, -0.2f }));
+  // Looking east, south is to the right
+  CHECK(same(vrSceneToRoom(space, { -32.0f, -45.0f, 36.0f }), { 1.5f, 1.6f, -0.2f }));
+}
+
+
+TEST_CASE(scene_and_room_points_convert_both_ways) {
+  VrPose head = headAt(0.2f, 1.5f, 0.3f);
+  head.orientation = vrQuaternionFromAxisAngle({ 0.0f, 1.0f, 0.0f }, 0.8f);
+
+  VrSceneSpace space = vrSceneSpaceAroundHead(head, { 1.0f, 2.0f, 3.0f }, { 0.3f, -0.8f, -0.5f }, 70.0f);
+  VrVector3 point = { 12.0f, -8.0f, 4.0f };
+
+  CHECK(same(vrRoomToScene(space, vrSceneToRoom(space, point)), point));
+}
+
+
+TEST_CASE(eye_camera_looks_at_the_scene_as_the_room_says) {
+  VrPose head = headAt(0.0f, 1.6f, 0.0f);
+  VrSceneSpace space = vrSceneSpaceInFront(head, { 140.0f, 0.6f, 0.0f }, 0.55f, 0.1f, 120.0f);
+
+  // The eye at the head, not turned
+  VrGameCameraPose camera = vrSceneCameraPose(space, head);
+
+  CHECK(same(camera.forward, { 1.0f, 0.0f, 0.0f }));
+  CHECK(same(camera.up,      { 0.0f, 1.0f, 0.0f }));
+  CHECK(same(camera.right,   { 0.0f, 0.0f, 1.0f }));
+  // 0.55 m before the target and 0.1 m above it, at 120 units per metre
+  CHECK(same(camera.position, { 140.0f - 66.0f, 0.6f + 12.0f, 0.0f }));
+
+  // Right-handed as the game's camera: right = forward x up
+  VrVector3 right = {
+    camera.forward.y * camera.up.z - camera.forward.z * camera.up.y,
+    camera.forward.z * camera.up.x - camera.forward.x * camera.up.z,
+    camera.forward.x * camera.up.y - camera.forward.y * camera.up.x };
+
+  CHECK(same(right, camera.right));
+}
+
+
+TEST_CASE(eye_camera_on_a_table_is_right_handed) {
+  VrSceneSpace space = vrSceneSpaceAroundHead(headAt(0.0f, 1.6f, 0.0f),
+    { 0.0f, 0.0f, 30.0f }, { 0.0f, 1.0f, -1.0f }, 70.0f);
+
+  VrPose eye = headAt(-0.03f, 1.6f, 0.0f);
+  VrGameCameraPose camera = vrSceneCameraPose(space, eye);
+
+  CHECK(same(camera.forward, { 0.0f, 1.0f, 0.0f }));
+  CHECK(same(camera.up,      { 0.0f, 0.0f, 1.0f }));
+  CHECK(same(camera.right,   { 1.0f, 0.0f, 0.0f }));
+  // The left eye is to the west when the table's north is ahead
+  CHECK(same(camera.position, { -0.03f * 70.0f, 0.0f, 30.0f }));
+}
+
+
+TEST_CASE(felt_is_pointed_at_from_above) {
+  VrSceneSpace space = vrSceneSpaceAroundHead(headAt(0.0f, 1.6f, 0.0f),
+    { 0.0f, -50.0f, 70.0f }, { 0.0f, 1.0f, -1.0f }, 70.0f);
+
+  VrVector3 centre = { 0.0f, 0.0f, 0.0f };
+  VrPanelPlacement felt = vrSceneSurface(space, centre, 70.0f, 35.0f);
+
+  CHECK_NEAR(felt.width, 1.0f, Near);
+  CHECK_NEAR(felt.height, 0.5f, Near);
+  CHECK(same(felt.pose.position, vrSceneToRoom(space, centre)));
+
+  // A ray straight down onto a point 14 units east and 7 north of the centre
+  VrVector3 target = vrSceneToRoom(space, { 14.0f, 7.0f, 0.0f });
+
+  VrPose ray;
+  ray.position = target + VrVector3 { 0.0f, 0.5f, 0.0f };
+  // The ray points along its -Z: turn it to point down
+  ray.orientation = vrQuaternionFromAxisAngle({ 1.0f, 0.0f, 0.0f }, -1.5707963f);
+
+  VrPanelHit hit = vrIntersectPanel(ray, felt);
+  CHECK(hit.hit);
+  CHECK_NEAR(hit.distance, 0.5f, Near);
+
+  VrVector3 point = vrSurfacePoint(centre, 70.0f, 35.0f, hit.uv);
+  CHECK_NEAR(point.x, 14.0f, 0.05f);
+  CHECK_NEAR(point.y, 7.0f, 0.05f);
+
+  // From below it is not hit
+  ray.position = target + VrVector3 { 0.0f, -0.5f, 0.0f };
+  ray.orientation = vrQuaternionFromAxisAngle({ 1.0f, 0.0f, 0.0f }, 1.5707963f);
+  CHECK(!(vrIntersectPanel(ray, felt).hit));
+}
+
+
+TEST_CASE(view_rectangle_gives_the_camera_cursor_position) {
+  VrPose head = headAt(0.0f, 1.6f, 0.0f);
+  VrSceneSpace space = vrSceneSpaceInFront(head, { 20.0f, 0.38f, 0.0f }, 0.7f, 0.0f, 9.63f);
+
+  VrGameFrustum frustum;
+  frustum.left = -0.149f;
+  frustum.right = 0.149f;
+  frustum.top = 0.112f;
+  frustum.bottom = -0.112f;
+
+  VrPanelPlacement view = vrSceneViewRectangle(space, 20.0f, frustum);
+
+  CHECK_NEAR(view.width, 2.0f * 20.0f * 0.149f / 9.63f, Near);
+  CHECK_NEAR(view.height, 2.0f * 20.0f * 0.112f / 9.63f, Near);
+
+  // A point of the scene on the plane
+  VrVector3 point = { 20.0f, 1.0f, 2.0f };
+  VrVector3 room  = vrSceneToRoom(space, point);
+
+  VrPose ray;
+  ray.position = room + VrVector3 { 0.0f, 0.0f, 0.3f };
+
+  VrPanelHit hit = vrIntersectPanel(ray, view);
+  CHECK(hit.hit);
+
+  // What the game's camera, at the scene's origin looking along +X, sees there
+  float u = (point.z / point.x - frustum.left) / (frustum.right - frustum.left);
+  float v = (frustum.top - point.y / point.x) / (frustum.top - frustum.bottom);
+
+  CHECK_NEAR(hit.uv.x, u, Near);
+  CHECK_NEAR(hit.uv.y, v, Near);
+}
+
+
+TEST_CASE(pin_points_at_the_hand) {
+  VrPose lock;
+  lock.position = { 0.0f, 1.4f, -0.5f };
+
+  CHECK_NEAR(vrLockPinAngle(lock, { 0.0f, 1.6f, -0.3f }, 7.0f), 0.0f, 0.01f);
+  CHECK_NEAR(vrLockPinAngle(lock, { 0.2f, 1.6f, -0.3f }, 7.0f), 45.0f, 0.01f);
+  CHECK_NEAR(vrLockPinAngle(lock, { -0.2f, 1.4f, -0.3f }, 7.0f), -90.0f, 0.01f);
+  // Below the lock it stays at the end of its half turn
+  CHECK_NEAR(vrLockPinAngle(lock, { 0.1f, 1.2f, -0.3f }, 7.0f), 90.0f, 0.01f);
+  // Too close: unknown
+  CHECK_NEAR(vrLockPinAngle(lock, { 0.01f, 1.41f, -0.3f }, 7.0f), 7.0f, 0.01f);
+
+  CHECK_NEAR(vrLockPinSlider(-90.0f, 400.0f), 0.0f, 0.01f);
+  CHECK_NEAR(vrLockPinSlider(0.0f, 400.0f), 200.0f, 0.01f);
+  CHECK_NEAR(vrLockPinSlider(90.0f, 400.0f), 400.0f, 0.01f);
+}
+
+
+TEST_CASE(pin_stick_moves_the_slider_as_the_game_does) {
+  // The game adds v^3 * 80
+  float stick = vrLockPinStick(100.0f, 120.0f);
+  CHECK_NEAR(stick * stick * stick * 80.0f, 20.0f, 0.01f);
+
+  stick = vrLockPinStick(100.0f, 90.0f);
+  CHECK_NEAR(stick * stick * stick * 80.0f, -10.0f, 0.01f);
+
+  // Outside the game's dead zone, or none
+  CHECK(std::abs(vrLockPinStick(100.0f, 101.2f)) * 32767.0f > 7849.0f);
+  CHECK((vrLockPinStick(100.0f, 100.5f)) == (0.0f));
+
+  // Far away it pushes the stick all the way
+  CHECK((vrLockPinStick(0.0f, 300.0f)) == (1.0f));
+  CHECK((vrLockPinStick(300.0f, 0.0f)) == (-1.0f));
+}
+
+
+TEST_CASE(tension_turns_from_the_trigger_or_the_wrist) {
+  VrLockTension tension;
+  VrQuaternion level;
+  VrVector3 axis = { 0.0f, 0.0f, -1.0f };
+
+  CHECK((tension.update(false, false, level)) == (0.0f));
+  CHECK((tension.update(true, false, level)) == (1.0f));
+
+  // Without the grip, the wrist does nothing
+  CHECK((tension.update(false, false, vrQuaternionFromAxisAngle(axis, 0.8f))) == (0.0f));
+
+  // The grip takes it where the hand is
+  VrQuaternion taken = vrQuaternionFromAxisAngle(axis, 0.5f);
+  CHECK((tension.update(false, true, taken)) == (0.0f));
+  CHECK((tension.update(false, true, vrQuaternionFromAxisAngle(axis, 0.6f))) == (0.0f));
+
+  float half = tension.update(false, true, vrQuaternionFromAxisAngle(axis, 0.5f + 0.475f));
+  CHECK_NEAR(half, 0.5f, 0.01f);
+
+  // Either way
+  CHECK_NEAR(tension.update(false, true, vrQuaternionFromAxisAngle(axis, 0.5f - 0.475f)), 0.5f, 0.01f);
+  CHECK((tension.update(false, true, vrQuaternionFromAxisAngle(axis, 2.0f))) == (1.0f));
+
+  // Stick values the game accepts
+  CHECK((vrLockTensionStick(0.0f)) == (0.0f));
+  CHECK(vrLockTensionStick(0.01f) * 32767.0f < -8689.0f);
+  CHECK_NEAR(vrLockTensionStick(1.0f), -1.0f, Near);
+}
+
+
+TEST_CASE(lever_is_pulled_with_a_closed_hand) {
+  VrLeverPull lever;
+  VrVector3 ball = { 0.2f, 1.5f, -0.6f };
+
+  // A hand passing by with an open grip
+  CHECK(!(lever.update(false, ball, ball)));
+  CHECK(!(lever.holds()));
+
+  // A grip closed elsewhere does not take it, even if it comes to the ball
+  CHECK(!(lever.update(true, { 0.8f, 1.5f, -0.6f }, ball)));
+  CHECK(!(lever.update(true, ball, ball)));
+  CHECK(!(lever.holds()));
+  CHECK(!(lever.update(false, ball, ball)));
+
+  // Closed on it, then down
+  CHECK(!(lever.update(true, ball, ball)));
+  CHECK(lever.holds());
+  CHECK(!(lever.update(true, ball + VrVector3 { 0.0f, -0.05f, 0.0f }, ball)));
+  CHECK(lever.update(true, ball + VrVector3 { 0.0f, -0.11f, 0.0f }, ball));
+
+  // One spin for one pull
+  CHECK(!(lever.update(true, ball + VrVector3 { 0.0f, -0.2f, 0.0f }, ball)));
+  CHECK(!(lever.update(false, ball, ball)));
+  CHECK(!(lever.holds()));
+}
+
+
+TEST_CASE(tap_on_the_felt_is_a_signal) {
+  VrTableSignals signals;
+  std::array<VrTableHand, VrHandCount> hands;
+  constexpr float Step = 1.0f / 90.0f;
+
+  hands[1].active = true;
+  hands[1].over   = true;
+  hands[1].height = 0.2f;
+
+  CHECK(signals.update(hands, Step) == VrTableSignal::None);
+
+  // Lowered slowly: the hand rests on the table
+  hands[1].height = 0.05f + Step * 0.2f;
+  CHECK(signals.update(hands, Step) == VrTableSignal::None);
+  hands[1].height = 0.05f - Step * 0.2f;
+  CHECK(signals.update(hands, Step) == VrTableSignal::None);
+
+  // Raised again, for a real tap the cooldown is free
+  hands[1].height = 0.2f;
+  CHECK(signals.update(hands, Step) == VrTableSignal::None);
+
+  hands[1].height = 0.06f;
+  CHECK(signals.update(hands, Step) == VrTableSignal::None);
+  hands[1].height = 0.04f;
+  CHECK(signals.update(hands, Step) == VrTableSignal::Tap);
+
+  // Not two at once
+  hands[1].height = 0.3f;
+  signals.update(hands, Step);
+  hands[1].height = 0.06f;
+  signals.update(hands, Step);
+  hands[1].height = 0.04f;
+  CHECK(signals.update(hands, Step) == VrTableSignal::None);
+
+  // Off the table it is nothing
+  VrTableSignals off;
+  hands[1].over = false;
+  hands[1].height = 0.3f;
+  off.update(hands, Step);
+  hands[1].height = 0.06f;
+  off.update(hands, Step);
+  hands[1].height = 0.04f;
+  CHECK(off.update(hands, Step) == VrTableSignal::None);
+}
+
+
+TEST_CASE(wave_over_the_table_is_a_signal) {
+  VrTableSignals signals;
+  std::array<VrTableHand, VrHandCount> hands;
+  constexpr float Step = 1.0f / 90.0f;
+
+  hands[0].active = true;
+  hands[0].over   = true;
+  hands[0].height = 0.2f;
+
+  VrTableSignal got = VrTableSignal::None;
+  float side = 0.0f;
+
+  // Back and forth at 1 m/s, 0.2 s each way
+  for (uint32_t i = 0; i < 90 && got == VrTableSignal::None; i++) {
+    float direction = (i / 18) % 2 ? -1.0f : 1.0f;
+    side += direction * 1.0f * Step;
+    hands[0].side = side;
+    got = signals.update(hands, Step);
+  }
+
+  CHECK(got == VrTableSignal::Wave);
+
+  // One move across the table is not a wave
+  VrTableSignals one;
+  side = 0.0f;
+
+  for (uint32_t i = 0; i < 40; i++) {
+    side += 1.0f * Step;
+    hands[0].side = side;
+    CHECK(one.update(hands, Step) == VrTableSignal::None);
+  }
+}
