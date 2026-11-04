@@ -53,7 +53,9 @@ namespace dxvk {
       && VrGameMemory::callsTo(VrGame::IronSightsCullCallSite, VrGame::ObjectSetAppCulled)
       && VrGameMemory::callsTo(VrGame::ImageSpaceIronSightsCallSite, VrGame::ImageSpaceIronSights)
       && VrGameMemory::callsTo(VrGame::NightScopeCallSite, VrGame::WeaponHasNightScope)
-      && VrGameMemory::callsTo(VrGame::GunSkillIronSightsCallSite, VrGame::ActorGetIronSights);
+      && VrGameMemory::callsTo(VrGame::GunSkillIronSightsCallSite, VrGame::ActorGetIronSights)
+      && VrGameMemory::callsTo(VrGame::ScopeWobbleLookingCallSite, VrGame::PlayerModLooking)
+      && VrGameMemory::callsTo(VrGame::ScopeWobbleHeadingCallSite, VrGame::PlayerModHeading);
 
     if (!found) {
       Logger::warn("VR: The game's scope calls were not found, its flat scope stays");
@@ -78,6 +80,10 @@ namespace dxvk {
       reinterpret_cast<const void*>(&VrScopeGame::nightScopeHook));
     VrGameMemory::redirectCall(VrGame::GunSkillIronSightsCallSite, VrGame::ActorGetIronSights,
       reinterpret_cast<const void*>(&VrScopeGame::gunSkillIronSightsHook));
+    VrGameMemory::redirectCall(VrGame::ScopeWobbleLookingCallSite, VrGame::PlayerModLooking,
+      reinterpret_cast<const void*>(&VrScopeGame::scopeWobbleHook));
+    VrGameMemory::redirectCall(VrGame::ScopeWobbleHeadingCallSite, VrGame::PlayerModHeading,
+      reinterpret_cast<const void*>(&VrScopeGame::scopeWobbleHook));
 
     g_scopeGame = game.get();
 
@@ -158,6 +164,13 @@ namespace dxvk {
     }
 
     return 1;
+  }
+
+
+  void __fastcall VrScopeGame::scopeWobbleHook(void* player, void* unused, float angle) {
+    // The head alone turns the view. This sway comes after the head's angles
+    // are written and before the camera is placed, so VrHeadLook would take it
+    // for something else turning the player and give up the head's camera.
   }
 
 }

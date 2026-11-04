@@ -2963,6 +2963,9 @@ namespace dxvk {
      *   caller in PlayerCharacter::Update turns on the night vision.
      * - ActorGetIronSights: Actor::GetIronSights, __thiscall, the call giving
      *   the aim state to CombatFormulas::GetGunSpread in Actor::GetGunSkill.
+     * - PlayerModLooking, PlayerModHeading: MobileObject::ModLooking and
+     *   ModHeading, __thiscall (angle), the calls of PlayerCharacter::AddGunWobble
+     *   swaying the player's view while it aims with a scope.
      */
     constexpr uintptr_t SetGunScopeVisible           = 0x0077F3C0;
     constexpr uintptr_t GunScopeVisibleCallSite      = 0x00709C48;
@@ -2978,6 +2981,10 @@ namespace dxvk {
     constexpr uintptr_t NightScopeCallSite           = 0x0093F098;
     constexpr uintptr_t ActorGetIronSights           = 0x008BBC10;
     constexpr uintptr_t GunSkillIronSightsCallSite   = 0x008B0FBF;
+    constexpr uintptr_t PlayerModLooking             = 0x00931E50;
+    constexpr uintptr_t ScopeWobbleLookingCallSite   = 0x009634A5;
+    constexpr uintptr_t PlayerModHeading             = 0x00931D30;
+    constexpr uintptr_t ScopeWobbleHeadingCallSite   = 0x009634C9;
 
     /**
      * ItemChange::HasModEffectActive 0x004BD8D0, __thiscall (effect, value out,

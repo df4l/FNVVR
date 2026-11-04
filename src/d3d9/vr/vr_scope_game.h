@@ -79,6 +79,8 @@ namespace dxvk {
 
     static uint32_t __fastcall gunSkillIronSightsHook(void* actor, void* unused);
 
+    static void __fastcall scopeWobbleHook(void* player, void* unused, float angle);
+
   };
 
 }
