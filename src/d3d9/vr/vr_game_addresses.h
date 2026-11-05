@@ -338,6 +338,22 @@ namespace dxvk {
     constexpr uintptr_t HighProcessCurrentWeapon    = 0x008D81E0;
 
     /**
+     * Blood and impact of a hit, Actor::CreateBlood (__thiscall, damage and
+     * HitData on the stack, ret 8) and Actor::CreateBloodOnWeapon (damage,
+     * HitData and target, ret 0xC). Both read the attacker's current weapon,
+     * not the hit's: CreateBlood takes the impact data set from it. When
+     * Actor::HitMe cannot create 3D at once (ShouldQueue3DTask), it queues
+     * them, and TaskQueueInterface::TaskUnpackFunc makes these two calls
+     * later, after the hit (findings/melee.md §15.1). The game's fists are
+     * the weapon form at FistsForm.
+     */
+    constexpr uintptr_t ActorCreateBlood            = 0x0088E8D0;
+    constexpr uintptr_t ActorCreateBloodOnWeapon    = 0x0088FB00;
+    constexpr uintptr_t QueuedCreateBloodSite       = 0x0087C105;
+    constexpr uintptr_t QueuedCreateBloodOnWeaponSite = 0x0087C138;
+    constexpr uintptr_t FistsForm                   = 0x011CA278;
+
+    /**
      * Animation sequences, see findings/weapon.md. Every sequence an actor
      * plays starts in AnimData::MorphOrBlendToSequence (__thiscall on
      * AnimData with three stack arguments: sequence, 16-bit group ID,
@@ -1906,6 +1922,7 @@ namespace dxvk {
     /// HitData fields
     constexpr uintptr_t HitAggressor            = 0x00;
     constexpr uintptr_t HitTarget               = 0x04;
+    constexpr uintptr_t HitProjectile           = 0x08;
     constexpr uintptr_t HitDamageLimb           = 0x10;
     constexpr uintptr_t HitHealthDamage         = 0x14;
     constexpr uintptr_t HitLimbDamage           = 0x20;

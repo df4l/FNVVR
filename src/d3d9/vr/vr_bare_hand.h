@@ -1,6 +1,5 @@
 #pragma once
 
-#include <atomic>
 #include <cstdint>
 #include <memory>
 
@@ -18,6 +17,10 @@ namespace dxvk {
    * the player's process gives no weapon. The HighProcess entry of that
    * virtual function is replaced; it answers as the game's outside a
    * strike, on the other threads and for the other actors.
+   *
+   * The blood and impact of a hit may run later, from the game's task queue,
+   * and read the current weapon again: they are given the same answer when
+   * the hit itself was dealt without a weapon.
    */
   class VrBareHand {
 
@@ -60,7 +63,9 @@ namespace dxvk {
 
     private:
 
-      VrBareHand* m_bareHand;
+      // What was hidden when this one started: it may be made inside another
+      uintptr_t m_previous = 0;
+      bool      m_hides    = false;
 
     };
 
@@ -68,15 +73,22 @@ namespace dxvk {
 
     VrBareHand() = default;
 
-    // The process and the thread of the strike running, or zero
-    std::atomic<uintptr_t> m_process = { 0 };
-    std::atomic<uint32_t>  m_thread  = { 0 };
-
-    bool hides(uintptr_t process) const;
-
     static void* __fastcall currentWeaponHook(
             uintptr_t             process,
             void*                 unused);
+
+    static void __fastcall queuedBloodHook(
+            void*                 target,
+            void*                 unused,
+            float                 damage,
+            const uint8_t*        hit);
+
+    static void __fastcall queuedBloodOnWeaponHook(
+            void*                 attacker,
+            void*                 unused,
+            float                 damage,
+            const uint8_t*        hit,
+            void*                 target);
 
   };
 
