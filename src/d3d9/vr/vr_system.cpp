@@ -24,6 +24,7 @@
 #include "vr_gamepad_head.h"
 #include "vr_gamepad_hook.h"
 #include "vr_large_address.h"
+#include "vr_live_casino.h"
 #include "vr_sound_focus.h"
 #include "vr_game_window.h"
 #include "vr_launcher_overlay.h"
@@ -267,6 +268,9 @@ namespace dxvk {
 
     VrLargeAddress::install();
     VrSoundFocus::install();
+
+    if (config.getOption<bool>("d3d9.vrRealTimeCasino", true))
+      VrLiveCasino::install();
   }
 
 

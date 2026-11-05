@@ -94,6 +94,7 @@ The rest of the DXVK documentation (HUD, device filters, shader cache, debugging
 ## Credits
 
 - Steam Frame controller bindings and control reference: Madison ([astromaddie/FNVVR](https://github.com/astromaddie/FNVVR)).
+- The study of which menu mode tests hold the world still, for the real-time casino: [Real Time Menus by WallSoGB](https://github.com/WallSoGB/Fallout-Real-Time-Menus) (read as a reference, no code copied).
 
 ## Licence
 

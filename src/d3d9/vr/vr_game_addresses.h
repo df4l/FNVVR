@@ -978,6 +978,45 @@ namespace dxvk {
     constexpr uintptr_t MenuMode = 0x011DEA2B;
 
     /**
+     * Interface::IsInMenuMode (__cdecl), what MenuMode is made from. It stays
+     * true while a casino game runs in real time, when MenuMode does not.
+     */
+    constexpr uintptr_t IsInMenuMode = 0x00702360;
+    constexpr uint8_t   IsInMenuModePrologue[] = { 0x55, 0x8B, 0xEC, 0xE8 };
+
+    /**
+     * What keeps the world running behind a casino game, findings/minigames.md
+     * §9. TESMain::OnIdle reads the menu mode twice. The first read decides
+     * on the player's update, and stays. The second decides on everything else
+     * (timer, animations, AI threads); LiveMenuModeFrameSite is that one.
+     * LiveMenuModeSites: the other tests that hold the world still (shader
+     * time, footsteps and jumps, sky sounds, actors' breath, the memory sort).
+     * With the AI threads running, the interface's idle runs on them
+     * (InterfaceIdleThreadSites); the menu has to stay on the main thread, so
+     * it runs before they start, at SetMainRenderingSite (__cdecl, one argument).
+     * Sounds: PreIdleStuff counts its pauses (SoundPauses and VoicePauses of
+     * InterfaceManager, read through its pointer), and only undoes those
+     * counted; BSAudio's four functions are __thiscall on the AudioSingleton.
+     */
+    constexpr uintptr_t LiveMenuModeFrameSite = 0x0086E79E;
+    constexpr uintptr_t LiveMenuModeSites[] = {
+      0x0063E0F8, 0x00837D05, 0x008387C5, 0x0086A4A1, 0x0086A4DE, 0x0086EEAF, 0x008898BD };
+    constexpr uintptr_t SetMainRendering      = 0x008C80E0;
+    constexpr uintptr_t SetMainRenderingSite  = 0x0086EC78;
+    constexpr uintptr_t InterfaceIdle         = 0x0086FD70;
+    constexpr uintptr_t InterfaceIdleThreadSites[] = { 0x008C7BE9, 0x008C7DB9 };
+    constexpr uintptr_t InterfaceLastMinuteUpdate = 0x007058E0;
+    constexpr uintptr_t InConsole             = 0x011DEA2E;
+    constexpr uintptr_t InterfaceManagerInstance = 0x011D8A80;
+    constexpr uintptr_t InterfaceSoundPauses  = 0x20;
+    constexpr uintptr_t InterfaceVoicePauses  = 0x21;
+    constexpr uintptr_t AudioPauseAnimationSounds   = 0x0070BBA0;
+    constexpr uintptr_t AudioUnpauseAnimationSounds = 0x0070BBC0;
+    constexpr uintptr_t AudioPauseWorldVoices       = 0x0070BBE0;
+    constexpr uintptr_t AudioUnpauseWorldVoices     = 0x0070BC00;
+    constexpr uintptr_t PlayerInCombat        = 0xDF0;
+
+    /**
      * HUDMainMenu*, the HUD. Its top-level element groups are Tile* fields,
      * see findings/hud.md. HUDMainMenu::Create reads the pointer before it
      * stores each group, which is checked at these sites

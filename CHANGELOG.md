@@ -18,6 +18,11 @@
 - **Blackjack**: tap the felt to hit, wave over the table to stay, as at a real table. Buttons and lasers still work.
 - **Roulette**: point the laser at the felt, the trigger places a chip or takes it back.
 - **Terminals and hacking**: the monitor stands in the room and the laser points directly at its screen.
+- **The casino runs in real time**: at a blackjack table, a roulette table or a slot machine, the world goes on around you, with its time, people and sounds. Dealers may walk away during a game. It stops as before when you are in combat, in the pause menu or in a message. `d3d9.vrRealTimeCasino = False` brings the pause back.
+
+### Fists
+
+- **A punch with a weapon equipped no longer throws the weapon's impact**: no more lightning from your fists with a Gauss rifle equipped.
 
 ## v0.12.0 (2026-11-04, since v0.11.0 `6a0ad2e`)
 
