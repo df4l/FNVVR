@@ -14,7 +14,8 @@ namespace dxvk {
   namespace {
 
     /// Exceptions logged at most: the last one before the game closes is
-    /// the crash, earlier ones may be caught by the game
+    /// the crash, earlier ones may be caught by the game. A crash logger
+    /// raises its own while it reads the crash, with its module on the stack.
     constexpr uint32_t MaxLogged = 8;
 
     /// Stack words searched for return addresses, and return addresses
