@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <cstring>
 
 #include "vr_tutorial_text.h"
 
@@ -165,6 +166,11 @@ namespace dxvk {
     }
 
     return formId;
+  }
+
+
+  bool vrIsStringSettingName(const char* name, const char* expected) {
+    return (name[0] == expected[0] || name[0] == 'S') && !std::strcmp(name + 1, expected + 1);
   }
 
 

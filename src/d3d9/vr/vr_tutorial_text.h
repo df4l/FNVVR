@@ -83,6 +83,20 @@ namespace dxvk {
 
 
   /**
+   * \brief Checks the name of one of the game's string settings
+   *
+   * Reading a string from an INI file moves the setting's name to a new
+   * block and turns its first letter into a capital 'S', so sLanguage:General
+   * then reads SLanguage:General.
+   *
+   * \param [in] name The setting's name
+   * \param [in] expected The name the game gave it, starting with 's'
+   * \returns \c true if it is that setting, read from a file or not
+   */
+  bool vrIsStringSettingName(const char* name, const char* expected);
+
+
+  /**
    * \brief Converts UTF-8 to the Windows-1252 encoding of the game's text
    *
    * \param [in] text The text in UTF-8

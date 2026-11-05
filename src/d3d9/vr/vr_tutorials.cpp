@@ -38,7 +38,7 @@ namespace dxvk {
       uintptr_t name = *reinterpret_cast<const uintptr_t*>(setting + VrGame::SettingName);
 
       if (!VrGameMemory::readable(name, sizeof(LanguageSettingName))
-       || std::memcmp(reinterpret_cast<const void*>(name), LanguageSettingName, sizeof(LanguageSettingName)))
+       || !vrIsStringSettingName(reinterpret_cast<const char*>(name), LanguageSettingName))
         return std::string();
 
       const char* value = settingText(setting);

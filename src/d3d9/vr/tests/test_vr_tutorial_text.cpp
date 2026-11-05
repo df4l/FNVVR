@@ -71,3 +71,11 @@ TEST_CASE(tutorial_text_converts_to_the_game_encoding) {
   CHECK(vrToGameEncoding("end\xC3") == "end?");
   CHECK(vrToGameEncoding("\xFF") == "?");
 }
+
+
+TEST_CASE(tutorial_text_knows_a_string_setting_read_from_a_file) {
+  CHECK(vrIsStringSettingName("sLanguage:General", "sLanguage:General"));
+  CHECK(vrIsStringSettingName("SLanguage:General", "sLanguage:General"));
+  CHECK(!vrIsStringSettingName("sLanguage:Other", "sLanguage:General"));
+  CHECK(!vrIsStringSettingName("xLanguage:General", "sLanguage:General"));
+}

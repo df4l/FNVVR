@@ -17,7 +17,7 @@
 ### Mini-games in the room
 
 - **The mini-games stand in front of you**, in 3D at their real size, instead of on a flat panel: the lock, the slot machine, the blackjack, roulette and Caravan tables, and the terminals with their hacking screen. They are played with the sticks and buttons, as on a gamepad, and your hands are hidden while they are open. Texts and buttons stay on a panel above the table, pointed at with the lasers. `d3d9.vrImmersiveMinigames = False` brings the flat panel back.
-- **Slot machine**: Your eyes look slightly down on the reels, as from a stool, and the payout screen only appears when you ask for it.
+- **Slot machine**: your eyes look slightly down on the reels, as from a stool, and the payout screen only appears when you ask for it.
 - **Terminals and hacking**: the monitor stands in the room and the laser points directly at its screen.
 - **The casino runs in real time**: at a blackjack table, a roulette table or a slot machine, the world goes on around you, with its time, people and sounds. Dealers may walk away during a game. It stops as before when you are in combat, in the pause menu or in a message. `d3d9.vrRealTimeCasino = False` brings the pause back.
 
