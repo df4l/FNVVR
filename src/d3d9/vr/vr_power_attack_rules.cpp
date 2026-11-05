@@ -70,7 +70,7 @@ namespace dxvk {
   std::unique_ptr<VrPowerAttackRules> VrPowerAttackRules::install(const VrPowerAttackCost& cost) {
     bool found = VrGameMemory::readable(VrGame::PowerAttackDelay, VrGame::SettingValue + sizeof(float))
       && VrGameMemory::readable(VrGame::AppTimer, VrGame::TimerSize)
-      && VrGameMemory::callsTo(VrGame::ActorIsSwimmingCallSite, VrGame::ActorIsSwimming)
+      && VrGameMemory::canChainCall(VrGame::ActorIsSwimmingCallSite, VrGame::ActorIsSwimming)
       && VrGameMemory::matches(VrGame::PlayerDamageActionPoints, VrGame::PlayerDamageActionPointsPrologue,
            sizeof(VrGame::PlayerDamageActionPointsPrologue))
       && VrGameMemory::matches(VrGame::PlayerIsGodMode, VrGame::PlayerIsGodModePrologue,

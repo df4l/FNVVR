@@ -935,11 +935,15 @@ namespace dxvk {
      * counts the time without input and turns the third-person camera
      * around the player past fVanityModeAutoDelay, unless the
      * bDisableAutoVanityMode:General setting (bool value at SettingValue)
-     * is set. The checked site is where it reads the setting.
+     * is set. The checked site is where it reads the setting, the call is
+     * SettingT::operator! (lStewieAl's Tweaks replaces it, and reads the same
+     * setting first).
      */
     constexpr uintptr_t DisableAutoVanitySetting = 0x011E09E0;
     constexpr uintptr_t AutoVanityCheckSite      = 0x0094358E;
-    constexpr uint8_t   AutoVanityCheck[] = { 0xB9, 0xE0, 0x09, 0x1E, 0x01, 0xE8, 0x98, 0x63, 0xB7, 0xFF };
+    constexpr uint8_t   AutoVanityCheck[] = { 0xB9, 0xE0, 0x09, 0x1E, 0x01 };
+    constexpr uintptr_t AutoVanityCallSite       = 0x00943593;
+    constexpr uintptr_t SettingIsOff             = 0x004B9930;
 
     /**
      * The kill camera, see findings/camera.md §7. The player's mode
@@ -1961,7 +1965,6 @@ namespace dxvk {
     constexpr uintptr_t BodyPartDataGetPartCallSite = 0x009B6AFB;
     /// BGSBodyPart::GetPartType, __thiscall without arguments
     constexpr uintptr_t BodyPartGetType         = 0x005E5300;
-    constexpr uintptr_t BodyPartGetTypeCallSite = 0x009B6ED7;
     /// CombatFormulas::CalcTargetedLimbDamage(ActorValueOwner*, BGSBodyPart*,
     /// float), __cdecl, float in ST0
     constexpr uintptr_t CalcTargetedLimbDamage  = 0x00647A30;

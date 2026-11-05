@@ -22,6 +22,7 @@ namespace dxvk {
   std::unique_ptr<VrComfortSettings> VrComfortSettings::install() {
     bool found = VrGameMemory::matches(VrGame::AutoVanityCheckSite,
         VrGame::AutoVanityCheck, sizeof(VrGame::AutoVanityCheck))
+      && VrGameMemory::canChainCall(VrGame::AutoVanityCallSite, VrGame::SettingIsOff)
       && VrGameMemory::matches(VrGame::KillCamModeStoreSite,
         VrGame::KillCamModeStore, sizeof(VrGame::KillCamModeStore))
       && VrGameMemory::matches(VrGame::SetKillCamModeCallback,
