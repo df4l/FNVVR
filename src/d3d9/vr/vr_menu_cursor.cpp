@@ -25,13 +25,16 @@ namespace dxvk {
 
     uintptr_t g_pluginMouseWheel = 0;
 
+    /// What the poll call reached before us, the game's function or a plugin's hook
+    uintptr_t g_poll = VrGame::Poll;
+
     template<typename T>
     T& field(void* object, uintptr_t offset) {
       return *reinterpret_cast<T*>(reinterpret_cast<uintptr_t>(object) + offset);
     }
 
     void __fastcall pollHook(void* input, void* unused) {
-      reinterpret_cast<PollFn>(VrGame::Poll)(input, unused);
+      reinterpret_cast<PollFn>(g_poll)(input, unused);
 
       if (!g_state.cursorActive)
         return;
@@ -83,10 +86,10 @@ namespace dxvk {
         VrGame::InterfaceSizePrologue, sizeof(VrGame::InterfaceSizePrologue));
 
     g_installed = sizes
-      && VrGameMemory::callsTo(VrGame::PollCallSite, VrGame::Poll)
+      && VrGameMemory::canChainCall(VrGame::PollCallSite, VrGame::Poll)
       && VrGameMemory::callsTo(VrGame::UpdateCursorCallSite, VrGame::UpdateCursor)
-      && VrGameMemory::redirectCall(VrGame::PollCallSite, VrGame::Poll,
-           reinterpret_cast<const void*>(&pollHook))
+      && VrGameMemory::chainCall(VrGame::PollCallSite, VrGame::Poll,
+           reinterpret_cast<const void*>(&pollHook), &g_poll)
       && VrGameMemory::redirectCall(VrGame::UpdateCursorCallSite, VrGame::UpdateCursor,
            reinterpret_cast<const void*>(&updateCursorHook));
 
