@@ -362,7 +362,6 @@ namespace dxvk {
     bool   m_menuDrawn     = false;
     bool   m_interfaceFailed = false;
     bool   m_loggedHudFailure = false;
-    bool   m_loggedCursorCulled = false;
 
     // The game's blurred, frozen menu background is turned off, so that the
     // world stays live and in stereo behind menus opened in game
