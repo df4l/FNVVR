@@ -1256,6 +1256,15 @@ namespace dxvk {
     constexpr uintptr_t InputMouseSwapped    = 0x1B4C;
 
     /**
+     * Controls::GetMouseAxis (__thiscall, axis, ret 4) returns the movement
+     * of one mouse axis from the fields above, 3 being the wheel, and
+     * InterfaceManager::Idle reads the wheel with it for the menus. yUI's
+     * touchpad fix takes this call.
+     */
+    constexpr uintptr_t MouseWheelCallSite   = 0x0070CE9E;
+    constexpr uintptr_t MouseAxis            = 0x00A239E0;
+
+    /**
      * InterfaceManager::UpdateCursor (__thiscall, no arguments), called by
      * InterfaceManager::Update while the interface is in mouse mode. It
      * moves the cursor tile's node by the mouse movement, clamps it to the

@@ -17,9 +17,13 @@ namespace dxvk {
 
     constexpr uint8_t ButtonDown = 0x80;
 
+    using MouseAxisFn = int32_t (__fastcall*)(void* input, void* unused, int32_t axis);
+
     bool g_installed = false;
 
     VrPointerState g_state;
+
+    uintptr_t g_pluginMouseWheel = 0;
 
     template<typename T>
     T& field(void* object, uintptr_t offset) {
@@ -58,6 +62,13 @@ namespace dxvk {
       reinterpret_cast<UpdateCursorFn>(VrGame::UpdateCursor)(interfaceManager, unused);
     }
 
+    // Only on a call a plugin holds: its reading of the wheel does not look
+    // at the input object, where the pointer's wheel is
+    int32_t __fastcall mouseWheelHook(void* input, void* unused, int32_t axis) {
+      uintptr_t read = g_state.cursorActive ? VrGame::MouseAxis : g_pluginMouseWheel;
+      return reinterpret_cast<MouseAxisFn>(read)(input, unused, axis);
+    }
+
     bool isMenuActive(uint32_t menuId) {
       return reinterpret_cast<IsMenuActiveFn>(VrGame::IsMenuActive)(menuId, 0);
     }
@@ -78,6 +89,14 @@ namespace dxvk {
            reinterpret_cast<const void*>(&pollHook))
       && VrGameMemory::redirectCall(VrGame::UpdateCursorCallSite, VrGame::UpdateCursor,
            reinterpret_cast<const void*>(&updateCursorHook));
+
+    uintptr_t wheelTarget = 0;
+
+    if (g_installed && VrGameMemory::callTarget(VrGame::MouseWheelCallSite, &wheelTarget)
+     && wheelTarget != VrGame::MouseAxis) {
+      VrGameMemory::chainCall(VrGame::MouseWheelCallSite, VrGame::MouseAxis,
+        reinterpret_cast<const void*>(&mouseWheelHook), &g_pluginMouseWheel);
+    }
 
     if (g_installed)
       Logger::info("VR: Menu cursor hooks installed, the controllers can point at the menu panel");

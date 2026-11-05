@@ -9,6 +9,7 @@
 - **JohnnyGuitar**: the mod no longer gives up on stereo rendering with it, the Pip-Boy keeps the live world behind it, the rendered menus work, and the cursor shows on the menu panel. Camera overlays drawn above or below the interface by scripts are not shown.
 - **kNVSE**: its animations keep playing, and the mod no longer gives up on its pistol brace animation call. With kNVSE's default blend fixes the aim still blends in when the left hand supports a pistol.
 - **lStewieAl's Tweaks and Engine Optimizations**: the comfort settings (no idle third-person camera, first-person kill camera) no longer stop with the tweaks, the bullet trails option no longer takes the weapon out of the hand, and the functions Engine Optimizations rewrites no longer stop stereo rendering and the features that call them. With its manual reload option, firing an empty weapon no longer refills a weapon reloaded by hand. Keep `bSmoothIronsightsCameraTransition`, `bScopeVisibilityDelay` and `bAlwaysShowWeaponAnimation` off in VR.
+- **yUI**: the right stick scrolls menus again with its touchpad fix, and its crosshair, hit markers, objective markers and loot menu no longer stick to the view. With ShowOff, its Loot Menu refuses containers and corpses opened with the controllers: set `bLootMenu = 0` in `Data/NVSE/Plugins/yUI.ini` (the log warns about it). Not tried in the game yet.
 - **The log names the other mod**: when another mod already patched a place in the game that the mod needs, the log says which file holds it (`is already patched`).
 
 ### Tutorials
