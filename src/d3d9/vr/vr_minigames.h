@@ -155,6 +155,9 @@ namespace dxvk {
     VrGameCameraPose  m_seatCamera;
     std::vector<void*>     m_kept;
     std::vector<uint32_t*> m_objectHidden;
+    // Characters hidden for now: they come and go while the world runs
+    std::vector<uint32_t*> m_actorsHidden;
+    uint32_t          m_actorsWait = 0;
     uint32_t*         m_bodyHidden = nullptr;
 
     // The button a gesture presses, held for a few frames
@@ -204,7 +207,7 @@ namespace dxvk {
 
     void hidePlayerBody();
 
-    void hideActorsInTheWay();
+    void updateActorsInTheWay(bool logActors);
 
     void hideRaisedPayoutScreen(std::vector<uint32_t*>& hidden);
 

@@ -138,6 +138,8 @@ namespace dxvk {
     constexpr uint32_t  PelvisDepth      = 6;
     // Characters logged at the opening of a menu, to see who stands where
     constexpr float     LoggedActorRange = 200.0f;
+    // Frames between two looks at who stands in the way
+    constexpr uint32_t  ActorsCheckFrames = 6;
 
     VrMinigames* g_minigames = nullptr;
 
@@ -527,7 +529,7 @@ namespace dxvk {
     else if (fit == &RouletteFit)
       VrMenuScenes::hideObject(reinterpret_cast<uintptr_t>(root), RouletteWorldWheel, m_objectHidden);
 
-    hideActorsInTheWay();
+    updateActorsInTheWay(true);
     standOnObject(frame);
     return true;
   }
@@ -537,6 +539,14 @@ namespace dxvk {
     m_space = vrSceneSpaceOnObject(frame.reference, m_seatCamera, m_object, *m_fit, VrGameUnitsPerMetre);
 
     hidePlayerBody();
+
+    // The world runs behind the casino's games, and people walk
+    if (!m_actorsWait) {
+      m_actorsWait = ActorsCheckFrames;
+      updateActorsInTheWay(false);
+    }
+
+    m_actorsWait--;
 
     if (m_fit == &RouletteFit)
       placeRouletteSurface();
@@ -584,7 +594,7 @@ namespace dxvk {
   }
 
 
-  void VrMinigames::hideActorsInTheWay() {
+  void VrMinigames::updateActorsInTheWay(bool logActors) {
     auto actors = global<const uintptr_t*>(VrGame::ProcessActors);
     auto end    = global<uint32_t>(VrGame::ProcessHighEnd);
 
@@ -617,12 +627,21 @@ namespace dxvk {
 
       bool inTheWay = vrBodyInTheWay(*m_fit, body);
 
-      if (inTheWay) {
-        keep(root);
-        hideRoot(root);
+      auto flags  = reinterpret_cast<uint32_t*>(root + VrGame::ObjectFlags);
+      auto hidden = std::find(m_actorsHidden.begin(), m_actorsHidden.end(), flags);
+
+      if (inTheWay && hidden == m_actorsHidden.end() && !(*flags & VrGame::ObjectFlagAppCulled)) {
+        if (std::find(m_kept.begin(), m_kept.end(), static_cast<void*>(root)) == m_kept.end())
+          keep(root);
+
+        *flags |= VrGame::ObjectFlagAppCulled;
+        m_actorsHidden.push_back(flags);
+      } else if (!inTheWay && hidden != m_actorsHidden.end()) {
+        *flags &= ~VrGame::ObjectFlagAppCulled;
+        m_actorsHidden.erase(hidden);
       }
 
-      if (std::abs(body.x) < LoggedActorRange && std::abs(body.y) < LoggedActorRange) {
+      if (logActors && std::abs(body.x) < LoggedActorRange && std::abs(body.y) < LoggedActorRange) {
         Logger::info(str::format("VR: A character at (", body.x, ", ", body.y, ", ", body.z,
           ") of the object", inTheWay ? " is in the way, it is hidden" : ""));
       }
@@ -645,6 +664,9 @@ namespace dxvk {
   void VrMinigames::leaveObject() {
     VrMenuScenes::showHidden(m_objectHidden);
     m_objectHidden.clear();
+    VrMenuScenes::showHidden(m_actorsHidden);
+    m_actorsHidden.clear();
+    m_actorsWait = 0;
 
     // The game may have gone back to first person since, and wants it hidden
     auto player = global<uint8_t*>(VrGame::Player);
