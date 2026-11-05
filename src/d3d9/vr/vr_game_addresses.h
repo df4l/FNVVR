@@ -564,7 +564,7 @@ namespace dxvk {
      * against its first bytes before it is called.
      */
     constexpr uintptr_t IsPipBoyShown = 0x00705A00;
-    constexpr uint8_t   IsPipBoyShownPrologue[] = { 0x55, 0x8B, 0xEC, 0x51 };
+    constexpr uint8_t   IsPipBoyShownPrologue[] = { 0x55, 0x8B, 0xEC, 0x51, 0xE8, 0x07, 0x18, 0xDB, 0xFF, 0x85, 0xC0, 0x74, 0x42 };
 
     /**
      * The Pip-Boy's state machine, InterfaceManager+0x4BC: 0 closed, 1 open
@@ -1156,7 +1156,7 @@ namespace dxvk {
      * bytes (push ebp / mov ebp,esp / call GetSingleton / test eax,eax / jz).
      */
     constexpr uintptr_t GetActivateRef = 0x00703350;
-    constexpr uint8_t   GetActivateRefPrologue[] = { 0x55, 0x8B, 0xEC };
+    constexpr uint8_t   GetActivateRefPrologue[] = { 0x55, 0x8B, 0xEC, 0xE8, 0xB8, 0x3E, 0xDB, 0xFF, 0x85, 0xC0, 0x74, 0x21 };
 
     /**
      * ViewCaster::FindActivateREFR, __thiscall on the ViewCaster at
@@ -1573,7 +1573,7 @@ namespace dxvk {
 
     /** First bytes of the console functions above; SetOpenConsoleRequest writes OpenConsoleRequest */
     constexpr uint8_t   SetOpenConsoleRequestBytes[] = { 0x55, 0x8B, 0xEC, 0x8A, 0x45, 0x08, 0xA2, 0x2F, 0xEA, 0x1D, 0x01 };
-    constexpr uint8_t   CloseConsolePrologue[]       = { 0x55, 0x8B, 0xEC };
+    constexpr uint8_t   CloseConsolePrologue[]       = { 0x55, 0x8B, 0xEC, 0xE8, 0x68, 0x34, 0xDB, 0xFF };
     constexpr uint8_t   ConsoleReadKeyPrologue[]     = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C, 0x89, 0x4D };
     constexpr uint8_t   GetDebugTextPrologue[]       = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x3C, 0x89, 0x4D };
 
@@ -1957,6 +1957,7 @@ namespace dxvk {
     constexpr uintptr_t BodyPartDataGetPartCallSite = 0x009B6AFB;
     /// BGSBodyPart::GetPartType, __thiscall without arguments
     constexpr uintptr_t BodyPartGetType         = 0x005E5300;
+    constexpr uintptr_t BodyPartGetTypeCallSite = 0x009B6ED7;
     /// CombatFormulas::CalcTargetedLimbDamage(ActorValueOwner*, BGSBodyPart*,
     /// float), __cdecl, float in ST0
     constexpr uintptr_t CalcTargetedLimbDamage  = 0x00647A30;
@@ -2455,7 +2456,7 @@ namespace dxvk {
      * wheel, shown while the gamepad's hotkey button (RB) is held.
      */
     constexpr uintptr_t IsTopMenu                  = 0x00702450;
-    constexpr uint8_t   IsTopMenuPrologue[]        = { 0x55, 0x8B, 0xEC, 0x51 };
+    constexpr uint8_t   IsTopMenuPrologue[]        = { 0x55, 0x8B, 0xEC, 0x51, 0xE8, 0xB7, 0x4D, 0xDB, 0xFF, 0x85, 0xC0, 0x74 };
     constexpr uint32_t  InventoryMenuId            = 0x3EA;
     constexpr uintptr_t InventoryMenuInstance      = 0x011D9EA4;
     constexpr uintptr_t InventoryMenuHotKeyWheel   = 0xE8;
@@ -2779,8 +2780,10 @@ namespace dxvk {
     constexpr uintptr_t MessageMenuGlobal            = 0x011DA4F0;
     constexpr uint32_t  MessageBoxStartMenuType      = 0x12;
     constexpr uintptr_t GetMessageMenuResult         = 0x00703FA0;
-    constexpr uint8_t   GetMessageMenuResultPrologue[] = { 0x55, 0x8B, 0xEC, 0x51 };
-    constexpr uint8_t   ShowMessageBoxPrologue[]     = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08 };
+    constexpr uint8_t   GetMessageMenuResultPrologue[] = {
+      0x55, 0x8B, 0xEC, 0x51, 0xE8, 0x67, 0x32, 0xDB, 0xFF, 0x8A, 0x80, 0xE4, 0x00, 0x00, 0x00 };
+    constexpr uint8_t   ShowMessageBoxPrologue[]     = {
+      0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0xE8, 0x85, 0x33, 0xDB, 0xFF };
 
     /**
      * A living actor's limb held by a hand (findings/grab.md §19): the

@@ -119,7 +119,6 @@ namespace dxvk {
      * \brief Checks the functions the hit limb uses by their calls in SetTargetedLimb
      *
      * Nothing is written, so a plugin's hook on a call changes nothing here.
-     * BodyPartGetType is left out: NVAC writes its code in place of that call.
      */
     bool findLimbFunctions() {
       struct Call {
@@ -131,6 +130,7 @@ namespace dxvk {
         { VrGame::ActorGetBaseCallSite,             VrGame::ActorGetBase },
         { VrGame::ActorGetDamageLocationCallSite,   VrGame::ActorGetDamageLocation },
         { VrGame::BodyPartDataGetPartCallSite,      VrGame::BodyPartDataGetPart },
+        { VrGame::BodyPartGetTypeCallSite,          VrGame::BodyPartGetType },
         { VrGame::CalcTargetedLimbDamageCallSite,   VrGame::CalcTargetedLimbDamage },
         { VrGame::WeaponGetLimbDamageMultCallSite,  VrGame::WeaponGetLimbDamageMult },
         { VrGame::HitDataSetBonusMultCallSite,      VrGame::HitDataSetBonusMult },

@@ -41,8 +41,7 @@ namespace dxvk {
      * clear of their changes. Engine Optimizations rewrites whole functions
      * in place (HeapAllocate, RefGet3D, FormById, TileGetNode, NiPointerAssign,
      * FindReferenceFor3D, IsInMenuMode, OptionArrayAppend): those are called
-     * without a check. NVAC writes code over the first call in others: their
-     * prologues stop before that call.
+     * without a check.
      *
      * \param [in] address Start of the range
      * \param [in] bytes Expected content
