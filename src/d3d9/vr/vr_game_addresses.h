@@ -877,6 +877,30 @@ namespace dxvk {
     constexpr uintptr_t SettingName           = 0x8;
 
     /**
+     * Text of the game's messages, see findings/tutorials.md.
+     *
+     * TESDescription::GetDescription (__thiscall, form or null, chunk) is
+     * reached through a virtual table; MessageDescriptionSlot is the entry of
+     * BGSMessage's, which changes messages only and not books or perks.
+     * MessageDescription is the TESDescription's place in a BGSMessage.
+     *
+     * ControlPushText (GetControlPushTextFor, __cdecl, action, buffer, with
+     * the prefix) gives the name of a control in a text's &sUActn...; tag, and
+     * has a single caller. Its prefixes are string settings ("press", and
+     * "pull" for a trigger), action ControlActionAttack being the trigger's.
+     * SettingLanguage is the string setting sLanguage:General.
+     */
+    constexpr uintptr_t DescriptionGetText          = 0x00482E90;
+    constexpr uintptr_t MessageDescriptionSlot      = 0x010337A4;
+    constexpr uintptr_t MessageDescription          = 0x24;
+    constexpr uintptr_t ControlPushText             = 0x007039B0;
+    constexpr uintptr_t ControlTextCallSite         = 0x00707118;
+    constexpr uint32_t  ControlActionAttack         = 4;
+    constexpr uintptr_t SettingControlTextPrefix    = 0x011D3FC4;
+    constexpr uintptr_t SettingControlTriggerPrefix = 0x011D4A08;
+    constexpr uintptr_t SettingLanguage             = 0x011C3CB4;
+
+    /**
      * Settings the VR layer replaces on the first D3D9 interface, see
      * findings/game-settings.md. WinMain has read the INI files by then; the
      * audio setup (TESMain::TESMain), TESRenderer::Init and the run-time

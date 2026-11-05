@@ -1,0 +1,107 @@
+# FNVVR : les tutoriels du jeu avec les commandes VR (UTF-8).
+# Voir tutorials_english.txt pour le format.
+
+[control Use]
+la gâchette droite
+
+[control Activate]
+le bouton A
+
+[control Rdyitem]
+le bouton X
+
+[control Crouch]
+le stick gauche (clic)
+
+[control Jump]
+le bouton B
+
+[control Vats]
+le stick droit (clic)
+
+[control Grab]
+la poignée droite
+
+# HelpGeneralXBox
+[message 0xBB215]
+Stick gauche : Déplacement, là où vous regardez
+Stick droit : Rotation
+Stick droit poussé vers le bas et maintenu : Vos raccourcis, à la main droite
+
+Gâchette droite : Attaque. Frappez avec le bras en corps à corps ; maintenez la gâchette pour charger une attaque puissante
+Poignée gauche sur l'arme : Tenue à deux mains, pour une visée plus stable
+
+A : Activation de ce que votre main désigne
+Gâchette gauche derrière le dos : Prendre des munitions pour recharger, puis les pousser dans l'arme
+X : Munitions en main gauche, type de munitions suivant
+B : Saut
+
+Regarder l'avant-bras gauche : Pip-Boy 3000
+Poignée droite au poignet gauche, maintenue : Éclairage du Pip-Boy
+Poignée droite à la hanche droite ou derrière l'épaule droite : Rengainer ou dégainer
+
+Stick gauche (clic) : Discrétion (bascule)
+Poignée droite : Saisie avec la main libre
+Stick droit (clic) : Système de visée assistée Vault-Tec
+Y : Attente ; maintenu, menu pause
+
+# HelpLockpickingXBox
+[message 0x184]
+Main droite : faire pivoter l'épingle à cheveux, qui pointe vers votre main
+Gâchette gauche, ou poignée gauche et rotation du poignet : exercer une pression à l'aide du tournevis
+X : forcer la serrure
+Les sticks fonctionnent aussi, comme avec une manette.
+
+Lorsqu'une pression est exercée, plus l'épingle à cheveux est proche du point sensible, plus la serrure pivotera avant que l'épingle à cheveux ne casse. La serrure ne pivotera entièrement et ne s'ouvrira que si l'épingle à cheveux est dans la bonne position.
+
+Vous pouvez également essayer d'ouvrir une serrure en la forçant, mais si vous échouez, la serrure cassera et seule une clé pourra l'ouvrir.
+
+# HelpAmmoXbox
+[message 0x18D]
+Presque toutes les armes à feu et armes à énergie utilisent des munitions, mais c'est le cas également pour d'autres types d'armes. Les munitions de base n'ont pas d'effet spécial, mais les sous-types de munitions peuvent augmenter les dégâts, réduire le Seuil de dégâts d'un adversaire ou bien la dispersion de son arme. Les effets sont affichés dans le sous-menu de munitions lorsque vous sélectionnez les munitions en question. La plupart des armes utilisent des sous-types de munitions dont le nom commence comme les munitions de base. Les sous-types de munitions les plus communs comprennent :
+
+* Perforation : ignore une grande partie du Seuil de dégâts de l'ennemi et inflige des dégâts légèrement accrus.
+
+* Pointe creuse : inflige beaucoup plus de dégâts, mais peut être facilement bloqué par une armure.
+
+* Surcharge : utilisé par des armes à énergie. Accroît les dégâts mais endommage l'arme plus rapidement.
+
+* Balle : utilisées par les fusils, des balles de plus gros calibre, plus précises, remplacent le gros plomb.
+
+Pour changer de sous-type de munitions, équipez-les dans ce menu. Hors du Pip-Boy, prenez des munitions derrière votre dos avec la gâchette gauche et appuyez sur X tant que votre main gauche les tient : les pousser dans l'arme charge ce type. Si le rechargement manuel est désactivé, la case du haut de votre roue de raccourcis change de type.
+
+# HelpHotkeysXBox
+[message 0x734EE]
+Vous pouvez affecter un raccourci à des objets de l'inventaire puis les utiliser ou vous en équiper sans passer par le Pip-Boy.
+
+Pour affecter un raccourci à un objet du Pip-Boy, sélectionnez-le, maintenez la poignée droite et poussez le stick gauche vers un emplacement de raccourci.
+
+Lorsque le Pip-Boy est fermé, poussez le stick droit vers le bas et maintenez-le : la roue de vos raccourcis apparaît à votre main droite. Déplacez votre main vers une case et relâchez le stick pour utiliser son objet ou vous en équiper.
+
+# CGTutorialPipboy
+[message 0x9871A]
+Pour afficher le Pip-Boy, regardez votre avant-bras gauche.
+
+# CGTutorialPipboyLight
+[message 0xACD94]
+Pour allumer ou éteindre l'éclairage du Pip-Boy, approchez la main droite de votre poignet gauche et maintenez la poignée droite.
+
+# CGTutorialAccessHelpXBox
+[message 0xABF9B]
+Pour plus d'informations, maintenez le bouton Y enfoncé et sélectionnez Aide.
+
+# CGTutorialFireWeapon2
+[message 0xABF9D]
+Pour viser, approchez la main gauche de l'arme et maintenez la poignée gauche. Ceci augmentera votre précision.
+
+# VCGTutorialGrab
+[message 0x104C20]
+Pour attraper le crâne de brahmine, approchez-en une main libre ou pointez-la vers lui, puis maintenez la poignée de cette main. Votre main droite est libre une fois votre arme rengainée.
+
+# VCGTutorialGrabSuccess
+[message 0x104C21]
+Bien ! Maintenant, relâchez la poignée pour lâcher le crâne.
+
+# VCGTutorialGrab2
+[message 0x16740F]
+Pour saisir un objet, approchez-en une main libre ou pointez-la vers lui, puis maintenez la poignée de cette main.

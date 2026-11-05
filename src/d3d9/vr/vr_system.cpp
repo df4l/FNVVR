@@ -257,6 +257,7 @@ namespace dxvk {
     g_vrSystem->m_sneakConfig.physical = options.physicalSneak;
     g_vrSystem->m_sneakConfig.crouch   = crouch;
     g_vrSystem->m_forceGameSettings = !emulated && config.getOption<bool>("d3d9.vrForceGameSettings", true);
+    g_vrSystem->m_rewriteTutorials = !emulated && config.getOption<bool>("d3d9.vrTutorials", true);
     g_vrSystem->m_hideGameWindow = !emulated && config.getOption<bool>("d3d9.vrHideGameWindow", true);
     g_vrSystem->m_keepGameActive = g_vrSystem->m_hideGameWindow;
     DxvkInstance::registerExtensionProvider(g_vrSystem->m_extensionProvider.get());
@@ -288,6 +289,11 @@ namespace dxvk {
     if (g_vrSystem->m_forceGameSettings) {
       g_vrSystem->m_forceGameSettings = false;
       VrGameSettings::apply();
+    }
+
+    if (g_vrSystem->m_rewriteTutorials) {
+      g_vrSystem->m_rewriteTutorials = false;
+      g_vrSystem->m_tutorials = VrTutorials::install();
     }
 
     if (g_vrSystem->m_keepGameActive) {
