@@ -20,6 +20,9 @@ namespace dxvk {
 
     VrBareHand* g_bareHand = nullptr;
 
+    /// What the queued blood call reached before us, the game's function or a plugin's hook
+    uintptr_t g_queuedBlood = VrGame::ActorCreateBlood;
+
     // The process whose weapon is hidden on this thread, or zero. The queued
     // blood can run on another thread during a strike.
     thread_local uintptr_t t_hiddenProcess = 0;
@@ -62,8 +65,8 @@ namespace dxvk {
         VrGame::HighProcessCurrentWeapon, reinterpret_cast<const void*>(&VrBareHand::currentWeaponHook)))
       return nullptr;
 
-    bool queued = VrGameMemory::redirectCall(VrGame::QueuedCreateBloodSite, VrGame::ActorCreateBlood,
-      reinterpret_cast<const void*>(&VrBareHand::queuedBloodHook));
+    bool queued = VrGameMemory::chainCall(VrGame::QueuedCreateBloodSite, VrGame::ActorCreateBlood,
+      reinterpret_cast<const void*>(&VrBareHand::queuedBloodHook), &g_queuedBlood);
     queued = VrGameMemory::redirectCall(VrGame::QueuedCreateBloodOnWeaponSite, VrGame::ActorCreateBloodOnWeapon,
       reinterpret_cast<const void*>(&VrBareHand::queuedBloodOnWeaponHook)) && queued;
 
@@ -99,7 +102,7 @@ namespace dxvk {
           float                 damage,
     const uint8_t*              hit) {
     Strike strike(g_bareHand, unarmedHitPlayer(hit));
-    reinterpret_cast<CreateBloodFn>(VrGame::ActorCreateBlood)(target, nullptr, damage, hit);
+    reinterpret_cast<CreateBloodFn>(g_queuedBlood)(target, nullptr, damage, hit);
   }
 
 
