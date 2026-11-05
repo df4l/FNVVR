@@ -382,7 +382,7 @@ namespace dxvk {
 
     bool found = VrGameMemory::matches(VrGame::PickDataConstruct,
         VrGame::PickDataConstructPrologue, sizeof(VrGame::PickDataConstructPrologue))
-      && VrGameMemory::matches(VrGame::FindReferenceFor3D,
+      && VrGameMemory::matchesUnlessRewritten(VrGame::FindReferenceFor3D,
         VrGame::FindReferenceFor3DPrologue, sizeof(VrGame::FindReferenceFor3DPrologue))
       && VrGameMemory::matches(VrGame::GetActivateRef,
         VrGame::GetActivateRefPrologue, sizeof(VrGame::GetActivateRefPrologue))
@@ -469,7 +469,7 @@ namespace dxvk {
       Logger::warn("VR: The actors' move mode was not found, hands keep living actors in place without moving them");
 
     // What a grip does to an actor, after PLANCK
-    grab->m_canKnockDown = VrGameMemory::callsTo(VrGame::ActorCanKnockDownCallSite, VrGame::ActorCanKnockDown);
+    grab->m_canKnockDown = VrGameMemory::canChainCall(VrGame::ActorCanKnockDownCallSite, VrGame::ActorCanKnockDown);
 
     grab->m_canSpendPoints = VrGameMemory::matches(VrGame::PlayerDamageActionPoints,
         VrGame::PlayerDamageActionPointsPrologue, sizeof(VrGame::PlayerDamageActionPointsPrologue))

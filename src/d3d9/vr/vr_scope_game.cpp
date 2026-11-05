@@ -16,6 +16,10 @@ namespace dxvk {
 
     VrScopeGame* g_scopeGame = nullptr;
 
+    // The function the gun skill's aim test called: the game's, or another
+    // mod's hook
+    uintptr_t g_gunSkillIronSights = VrGame::ActorGetIronSights;
+
     template<typename T>
     T readField(const void* object, uintptr_t offset) {
       return *reinterpret_cast<const T*>(reinterpret_cast<const uint8_t*>(object) + offset);
@@ -54,7 +58,7 @@ namespace dxvk {
       && VrGameMemory::callsTo(VrGame::IronSightsCullCallSite, VrGame::ObjectSetAppCulled)
       && VrGameMemory::callsTo(VrGame::ImageSpaceIronSightsCallSite, VrGame::ImageSpaceIronSights)
       && VrGameMemory::callsTo(VrGame::NightScopeCallSite, VrGame::WeaponHasNightScope)
-      && VrGameMemory::callsTo(VrGame::GunSkillIronSightsCallSite, VrGame::ActorGetIronSights)
+      && VrGameMemory::canChainCall(VrGame::GunSkillIronSightsCallSite, VrGame::ActorGetIronSights)
       && VrGameMemory::callsTo(VrGame::ScopeWobbleLookingCallSite, VrGame::PlayerModLooking)
       && VrGameMemory::callsTo(VrGame::ScopeWobbleHeadingCallSite, VrGame::PlayerModHeading)
       && VrGameMemory::callsTo(VrGame::AimGroupAnimsCallSite, VrGame::WeaponUseFirstPersonAimAnims)
@@ -82,8 +86,7 @@ namespace dxvk {
       reinterpret_cast<const void*>(&VrScopeGame::imageSpaceIronSightsHook));
     VrGameMemory::redirectCall(VrGame::NightScopeCallSite, VrGame::WeaponHasNightScope,
       reinterpret_cast<const void*>(&VrScopeGame::nightScopeHook));
-    VrGameMemory::redirectCall(VrGame::GunSkillIronSightsCallSite, VrGame::ActorGetIronSights,
-      reinterpret_cast<const void*>(&VrScopeGame::gunSkillIronSightsHook));
+    chainGunSkill();
     VrGameMemory::redirectCall(VrGame::ScopeWobbleLookingCallSite, VrGame::PlayerModLooking,
       reinterpret_cast<const void*>(&VrScopeGame::scopeWobbleHook));
     VrGameMemory::redirectCall(VrGame::ScopeWobbleHeadingCallSite, VrGame::PlayerModHeading,
@@ -99,6 +102,23 @@ namespace dxvk {
 
     Logger::info("VR: The game's flat scope, its blur and its night vision are off, scopes are lenses on the weapons");
     return game;
+  }
+
+
+  void VrScopeGame::setSteadied(bool steadied) {
+    // JIP LN's creature spread fix writes this call when xNVSE's deferred init
+    // runs, after install and without keeping the hook. Nothing is written
+    // while the hook is in place.
+    if (steadied && !m_steadied)
+      chainGunSkill();
+
+    m_steadied = steadied;
+  }
+
+
+  void VrScopeGame::chainGunSkill() {
+    VrGameMemory::chainCall(VrGame::GunSkillIronSightsCallSite, VrGame::ActorGetIronSights,
+      reinterpret_cast<const void*>(&VrScopeGame::gunSkillIronSightsHook), &g_gunSkillIronSights);
   }
 
 
@@ -163,7 +183,7 @@ namespace dxvk {
 
 
   uint32_t __fastcall VrScopeGame::gunSkillIronSightsHook(void* actor, void* unused) {
-    uint32_t aiming = reinterpret_cast<IronSightsFn>(VrGame::ActorGetIronSights)(actor, nullptr) & 0xFF;
+    uint32_t aiming = reinterpret_cast<IronSightsFn>(g_gunSkillIronSights)(actor, nullptr) & 0xFF;
 
     if (aiming || !g_scopeGame || !g_scopeGame->m_steadied || actor != player())
       return aiming;

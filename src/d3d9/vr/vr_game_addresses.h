@@ -730,6 +730,7 @@ namespace dxvk {
      * are __cdecl without arguments and return a FORenderedMenu*.
      */
     constexpr uintptr_t MainSingleton              = 0x011DEA0C;
+    constexpr uintptr_t MainWindow                 = 0x8;
     constexpr uintptr_t RenderedMenuParentCallSite = 0x00870967;
     constexpr uintptr_t DrawRenderedMenuParent     = 0x00875BF0;
     constexpr uintptr_t GetCurrentRenderedMenu     = 0x00707AD0;
@@ -935,11 +936,15 @@ namespace dxvk {
      * counts the time without input and turns the third-person camera
      * around the player past fVanityModeAutoDelay, unless the
      * bDisableAutoVanityMode:General setting (bool value at SettingValue)
-     * is set. The checked site is where it reads the setting.
+     * is set. The checked site is where it reads the setting, the call is
+     * SettingT::operator! (lStewieAl's Tweaks replaces it, and reads the same
+     * setting first).
      */
     constexpr uintptr_t DisableAutoVanitySetting = 0x011E09E0;
     constexpr uintptr_t AutoVanityCheckSite      = 0x0094358E;
-    constexpr uint8_t   AutoVanityCheck[] = { 0xB9, 0xE0, 0x09, 0x1E, 0x01, 0xE8, 0x98, 0x63, 0xB7, 0xFF };
+    constexpr uint8_t   AutoVanityCheck[] = { 0xB9, 0xE0, 0x09, 0x1E, 0x01 };
+    constexpr uintptr_t AutoVanityCallSite       = 0x00943593;
+    constexpr uintptr_t SettingIsOff             = 0x004B9930;
 
     /**
      * The kill camera, see findings/camera.md §7. The player's mode
@@ -1255,6 +1260,15 @@ namespace dxvk {
     constexpr uintptr_t InputMouseWheel      = 0x1B2C;
     constexpr uintptr_t InputMouseButtons    = 0x1B30;
     constexpr uintptr_t InputMouseSwapped    = 0x1B4C;
+
+    /**
+     * Controls::GetMouseAxis (__thiscall, axis, ret 4) returns the movement
+     * of one mouse axis from the fields above, 3 being the wheel, and
+     * InterfaceManager::Idle reads the wheel with it for the menus. yUI's
+     * touchpad fix takes this call.
+     */
+    constexpr uintptr_t MouseWheelCallSite   = 0x0070CE9E;
+    constexpr uintptr_t MouseAxis            = 0x00A239E0;
 
     /**
      * InterfaceManager::UpdateCursor (__thiscall, no arguments), called by
@@ -1597,7 +1611,10 @@ namespace dxvk {
      *   (__cdecl: name, text) and XmlCacheSetAt (__thiscall on XmlCache:
      *   name, storage), then read by TileReadFile (__thiscall on the parent
      *   tile: name), which frees the storage, and taken out of the cache
-     *   again with XmlCacheRemoveAt (__thiscall on XmlCache: name); TileGetChildByName (__thiscall: name), TileSetString
+     *   again with XmlCacheRemoveAt (__thiscall on XmlCache: name). It finds
+     *   the text in Tile::ParseFile (__cdecl: name, buffer, size), called at
+     *   TileParseFileCallSite, which UI Organizer replaces by a parser that
+     *   only reads files; TileGetChildByName (__thiscall: name), TileSetString
      *   (__thiscall: trait, text, propagate), traits below, a tile's
      *   destructor is vtable slot 0 (__thiscall, 1 frees);
      * - OffscreenInterfaceCallSite: DrawWorld_UpdateOffscreenBuffers calls
@@ -1644,6 +1661,8 @@ namespace dxvk {
     constexpr uintptr_t XmlCache                   = 0x011F34E0;
     constexpr uintptr_t XmlCacheRemoveAt           = 0x00A1E240;
     constexpr uintptr_t TileReadFile               = 0x00A01B00;
+    constexpr uintptr_t TileParseFileCallSite      = 0x00A01B87;
+    constexpr uintptr_t TileParseFile              = 0x00A01E20;
     constexpr uintptr_t TileGetChildByName         = 0x00A03DA0;
     constexpr uintptr_t TileSetString              = 0x00A01350;
     constexpr uint32_t  TileTraitVisible           = 0xFA3;

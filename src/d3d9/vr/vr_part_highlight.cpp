@@ -78,7 +78,6 @@ namespace dxvk {
         { VrGame::GetTextureManager,     VrGame::GetTextureManagerBytes,        sizeof(VrGame::GetTextureManagerBytes) },
         { VrGame::BorrowRenderedTexture, VrGame::BorrowRenderedTexturePrologue, sizeof(VrGame::BorrowRenderedTexturePrologue) },
         { VrGame::ReturnRenderedTexture, VrGame::ReturnRenderedTexturePrologue, sizeof(VrGame::ReturnRenderedTexturePrologue) },
-        { VrGame::NiPointerAssign,       VrGame::NiPointerAssignPrologue,       sizeof(VrGame::NiPointerAssignPrologue) },
       };
 
       for (const auto& prologue : prologues) {
@@ -86,7 +85,9 @@ namespace dxvk {
           return false;
       }
 
-      return VrGameMemory::readable(VrGame::MainSingleton, sizeof(uintptr_t))
+      return VrGameMemory::matchesUnlessRewritten(VrGame::NiPointerAssign,
+            VrGame::NiPointerAssignPrologue, sizeof(VrGame::NiPointerAssignPrologue))
+          && VrGameMemory::readable(VrGame::MainSingleton, sizeof(uintptr_t))
           && VrGameMemory::readable(VrGame::WorldSceneGraph, sizeof(uintptr_t))
           && VrGameMemory::readable(VrGame::VatsMaskTexture, sizeof(uintptr_t))
           && VrGameMemory::readable(VrGame::ShaderManagerCamera, sizeof(uintptr_t))

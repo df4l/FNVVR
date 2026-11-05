@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Other mods
+
+- **Manual reload works with xNVSE**: xNVSE takes the player's reload function before the mod starts, which turned manual reload off for everyone using it. The mod now goes through xNVSE's hook, and the scripts' reload control still applies to the game's own reloads.
+- **JIP LN**: the hands stay behind the world in front of them, and a weapon held with both hands keeps the game's precision with JIP's creature spread fix on.
+- **JohnnyGuitar**: the mod no longer gives up on stereo rendering with it, the Pip-Boy keeps the live world behind it, the rendered menus work, and the cursor shows on the menu panel. Camera overlays drawn above or below the interface by scripts are not shown.
+- **kNVSE**: its animations keep playing, and the mod no longer gives up on its pistol brace animation call. With kNVSE's default blend fixes the aim still blends in when the left hand supports a pistol.
+- **lStewieAl's Tweaks and Engine Optimizations**: the comfort settings (no idle third-person camera, first-person kill camera) no longer stop with the tweaks, the bullet trails option no longer takes the weapon out of the hand, and the functions Engine Optimizations rewrites no longer stop stereo rendering and the features that call them. With its manual reload option, firing an empty weapon no longer refills a weapon reloaded by hand. Keep `bSmoothIronsightsCameraTransition`, `bScopeVisibilityDelay` and `bAlwaysShowWeaponAnimation` off in VR.
+- **yUI**: the right stick scrolls menus again with its touchpad fix, and its crosshair, hit markers and objective markers no longer stick to the view. Not tried in the game yet.
+- **UI Organizer**: opening the console no longer crashes with it. Not tried in the game yet.
+- **ITR**: the lasers work in menus with it, the game keeps its sound although its window is hidden, and a bare fist shows its own impact. Not tried in the game yet.
+- **The log names the other mod**: when another mod already patched a place in the game that the mod needs, the log says which file holds it (`is already patched`).
+
 ### Tutorials
 
 - **The game's tutorials and help speak of the VR controls**: ammunition, hotkeys, the Pip-Boy and its light, aiming, grabbing and the Movement and Combat help page describe the controllers and gestures, in English and French, and the game's other sentences name the real buttons (the right stick for V.A.T.S., no more right bumper). The keyboard versions of these messages no longer appear when a laser is in use. Other languages show these texts in English: a `fnvvr\\texts_<language>.txt` file translates them. `d3d9.vrTutorials = False` brings the game's text back.

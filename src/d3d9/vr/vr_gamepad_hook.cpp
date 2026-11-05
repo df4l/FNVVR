@@ -1,3 +1,4 @@
+#include <iterator>
 #include <windows.h>
 #include <xinput.h>
 
@@ -44,12 +45,14 @@ namespace dxvk {
 
     using StringCompareFn = int (__cdecl*)(const char* first, const char* second);
 
+    uintptr_t g_previousStringCompare = VrGame::StringCompare;
+
     // The laser's cursor mode changes the interface's gamepad flag each time
     // it starts or ends, so the game's walk over the menu tiles runs far more
     // often than with a real gamepad and meets tiles that have no name
     int __cdecl compareTileName(const char* name, const char* expected) {
       if (name)
-        return reinterpret_cast<StringCompareFn>(VrGame::StringCompare)(name, expected);
+        return reinterpret_cast<StringCompareFn>(g_previousStringCompare)(name, expected);
 
       static bool logged = false;
 
@@ -240,10 +243,10 @@ namespace dxvk {
         VrGame::TileNameLabelCompareCallSite,
       };
 
-      for (uintptr_t site : tileNameSites) {
-        if (!VrGameMemory::redirectCall(site, VrGame::StringCompare, reinterpret_cast<const void*>(&compareTileName)))
-          Logger::warn(str::format("VR: Tile name comparison at 0x", std::hex, site, " was not found, a tile without a name can crash the game"));
-      }
+      // lStewieAl's Tweaks makes the same null check on both calls before us
+      if (!VrGameMemory::chainCalls(tileNameSites, std::size(tileNameSites), VrGame::StringCompare,
+          reinterpret_cast<const void*>(&compareTileName), &g_previousStringCompare))
+        Logger::warn("VR: The tile name comparisons were not found, a tile without a name can crash the game");
 
       const uintptr_t displaySites[] = {
         VrGame::GamepadTraitCallSite,

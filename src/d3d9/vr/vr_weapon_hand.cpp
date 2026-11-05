@@ -74,6 +74,13 @@ namespace dxvk {
     using PlaySequenceFn = void* (__fastcall*)(uint8_t* animData, void* unused,
       void* sequence, uint32_t groupId, int32_t sequenceType);
 
+    // What the game's calls reached before our hook: the game's function, or
+    // kNVSE's hook, which replaces animations and then calls it
+    uintptr_t g_previousPlaySequence = VrGame::PlaySequence;
+
+    // lStewieAl's Tweaks puts its bullet trails on this call before us
+    uintptr_t g_previousProjectileCreate = VrGame::ProjectileCreate;
+
     // The weapon node is a few levels below the skeleton's root, and the
     // muzzle a few levels below the weapon
     constexpr uint32_t MaxModelDepth = 16;
@@ -595,7 +602,7 @@ namespace dxvk {
         VrGame::FirstPersonZero, sizeof(VrGame::FirstPersonZero))
       && VrGameMemory::matches(VrGame::FirstPersonCameraSite,
         VrGame::FirstPersonCamera, sizeof(VrGame::FirstPersonCamera))
-      && VrGameMemory::callsTo(VrGame::ProjectileCreateCallSite, VrGame::ProjectileCreate);
+      && VrGameMemory::canChainCall(VrGame::ProjectileCreateCallSite, VrGame::ProjectileCreate);
 
     found = found && VrGameMemory::redirectCall(VrGame::FirstPersonUpdateCallSite,
       VrGame::ObjectUpdate, reinterpret_cast<const void*>(&VrWeaponHand::updateHook));
@@ -608,8 +615,8 @@ namespace dxvk {
 
     // If this one fails, the weapon is drawn in the hand but shoots from
     // the game's muzzle, along the head
-    if (found && !VrGameMemory::redirectCall(VrGame::ProjectileCreateCallSite,
-        VrGame::ProjectileCreate, reinterpret_cast<const void*>(&VrWeaponHand::createProjectileHook)))
+    if (found && !VrGameMemory::chainCall(VrGame::ProjectileCreateCallSite, VrGame::ProjectileCreate,
+        reinterpret_cast<const void*>(&VrWeaponHand::createProjectileHook), &g_previousProjectileCreate))
       Logger::warn("VR: The projectile call was not found, the weapon shoots along the head");
 
     // If this one fails, a grenade thrown by hand flies as fast as the
@@ -638,14 +645,9 @@ namespace dxvk {
       Logger::warn("VR: The auto-aim call was not found, shots bend towards where the head looks");
 
     if (found) {
-      bool redirected = true;
-
-      for (uintptr_t site : VrGame::PlaySequenceCallSites) {
-        redirected &= VrGameMemory::redirectCall(site,
-          VrGame::PlaySequence, reinterpret_cast<const void*>(&VrWeaponHand::playSequenceHook));
-      }
-
-      if (!redirected)
+      // kNVSE puts a single hook on the four calls
+      if (!VrGameMemory::chainCalls(VrGame::PlaySequenceCallSites, std::size(VrGame::PlaySequenceCallSites),
+          VrGame::PlaySequence, reinterpret_cast<const void*>(&VrWeaponHand::playSequenceHook), &g_previousPlaySequence))
         Logger::warn("VR: An animation call was not found, the left hand may reach for a pistol before aiming");
     }
 
@@ -803,7 +805,7 @@ namespace dxvk {
     if (g_weaponHand)
       g_weaponHand->m_handAimedShot = handAimed;
 
-    void* result = reinterpret_cast<ProjectileCreateFn>(VrGame::ProjectileCreate)(
+    void* result = reinterpret_cast<ProjectileCreateFn>(g_previousProjectileCreate)(
       projectile, shooter, target, weapon, x, y, z, heading, pitch,
       a9, a10, a11, a12, spreadHeading, spreadPitch, a15);
 
@@ -1000,7 +1002,7 @@ namespace dxvk {
           void*                 sequence,
           uint32_t              groupId,
           int32_t               sequenceType) {
-    auto playSequence = reinterpret_cast<PlaySequenceFn>(VrGame::PlaySequence);
+    auto playSequence = reinterpret_cast<PlaySequenceFn>(g_previousPlaySequence);
     uint8_t* object = player();
     uint8_t  group  = uint8_t(groupId & 0xFF);
 
@@ -1024,7 +1026,9 @@ namespace dxvk {
 
     g_weaponHand->m_snappedAim = true;
 
-    if (!g_weaponHand->m_loggedSnapAim) {
+    // kNVSE's aim blend fix crossfades these sequences itself by default and
+    // does not read the flag, so the line only stands for the game's function
+    if (!g_weaponHand->m_loggedSnapAim && g_previousPlaySequence == VrGame::PlaySequence) {
       Logger::info("VR: The aim animation starts without blending while the left hand supports the pistol");
       g_weaponHand->m_loggedSnapAim = true;
     }

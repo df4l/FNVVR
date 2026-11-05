@@ -47,6 +47,24 @@ namespace dxvk {
             size_t                size);
 
     /**
+     * \brief Checks a function the mod only calls and a plugin may rewrite
+     *
+     * Same as \ref matches, except that only readability counts while a plugin
+     * that rewrites functions in place is loaded. Engine Optimizations does it
+     * to HeapAllocate, RefGet3D, FormById, TileGetNode, NiPointerAssign,
+     * FindReferenceFor3D, IsInMenuMode and OptionArrayAppend, and keeps their
+     * conventions and results. Older NVTF releases rewrote common functions too.
+     *
+     * \param [in] address Start of the range
+     * \param [in] bytes Content without such a plugin
+     * \param [in] size Number of bytes
+     */
+    static bool matchesUnlessRewritten(
+            uintptr_t             address,
+      const uint8_t*              bytes,
+            size_t                size);
+
+    /**
      * \brief Checks that memory is committed and readable
      */
     static bool readable(
@@ -62,6 +80,15 @@ namespace dxvk {
     static bool callsTo(
             uintptr_t             site,
             uintptr_t             target);
+
+    /**
+     * \brief Checks that code belongs to neither the game nor this library
+     *
+     * \param [in] address Address of the code, a return address for instance
+     * \returns \c true if it is the code of another mod
+     */
+    static bool isOtherModule(
+            uintptr_t             address);
 
     /**
      * \brief Reads the function a relative call instruction reaches
@@ -88,6 +115,57 @@ namespace dxvk {
       const void*                 newTarget);
 
     /**
+     * \brief Checks that \ref chainCall can take a relative call instruction
+     *
+     * \param [in] site Address of a 5-byte call (opcode E8)
+     * \param [in] expectedTarget Function the call reaches without other mods
+     */
+    static bool canChainCall(
+            uintptr_t             site,
+            uintptr_t             expectedTarget);
+
+    /**
+     * \brief Redirects a relative call instruction, over another mod's hook
+     *
+     * xNVSE and its plugins patch the game before the first Direct3D call,
+     * so a call may already reach their code. That hook stays in the chain:
+     * the new function calls \c previous instead of the game's function.
+     *
+     * \param [in] site Address of a 5-byte call (opcode E8)
+     * \param [in] expectedTarget Function the call reaches without other mods
+     * \param [in] newTarget Function to call instead
+     * \param [out] previous Function the call reached, unchanged on failure
+     * \returns \c true if the call was redirected. A call that reaches another
+     *    function of the game, or this library, is left alone.
+     */
+    static bool chainCall(
+            uintptr_t             site,
+            uintptr_t             expectedTarget,
+      const void*                 newTarget,
+            uintptr_t*            previous);
+
+    /**
+     * \brief Takes several calls for one hook, see \ref chainCall
+     *
+     * A hook has one previous function, so the calls must all reach the same
+     * one: the game's, or a single hook a plugin put on all of them.
+     *
+     * \param [in] sites Addresses of 5-byte calls (opcode E8)
+     * \param [in] count Number of calls
+     * \param [in] expectedTarget Function the calls reach without other mods
+     * \param [in] newTarget Function to call instead
+     * \param [out] previous Function the calls reached, unchanged on failure
+     * \returns \c true if every call was redirected. Calls that differ are all
+     *    left alone, and whichever module holds them is logged.
+     */
+    static bool chainCalls(
+      const uintptr_t*            sites,
+            size_t                count,
+            uintptr_t             expectedTarget,
+      const void*                 newTarget,
+            uintptr_t*            previous);
+
+    /**
      * \brief Replaces an entry of a virtual function table
      *
      * \param [in] slot Address of the table entry
@@ -99,6 +177,26 @@ namespace dxvk {
             uintptr_t             slot,
             uintptr_t             expectedTarget,
       const void*                 newTarget);
+
+    /**
+     * \brief Replaces an entry of a virtual function table, over another mod's hook
+     *
+     * xNVSE and its plugins patch the game before the first Direct3D call,
+     * so an entry may already reach their code. That hook stays in the chain:
+     * the new function calls \c previous instead of the game's function.
+     *
+     * \param [in] slot Address of the table entry
+     * \param [in] expectedTarget Function the entry holds without other mods
+     * \param [in] newTarget Function to store instead
+     * \param [out] previous Function the entry held
+     * \returns \c true if the entry was replaced. An entry that holds another
+     *    function of the game means a different executable and is left alone.
+     */
+    static bool chainVirtual(
+            uintptr_t             slot,
+            uintptr_t             expectedTarget,
+      const void*                 newTarget,
+            uintptr_t*            previous);
 
     /**
      * \brief Replaces bytes of the game's code

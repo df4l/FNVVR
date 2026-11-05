@@ -232,7 +232,7 @@ namespace dxvk {
       && VrGameMemory::matches(VrGame::IsTopMenu, VrGame::IsTopMenuPrologue, sizeof(VrGame::IsTopMenuPrologue))
       && VrGameMemory::matches(VrGame::RouletteHoveredBet, VrGame::RouletteHoveredBetPrologue, sizeof(VrGame::RouletteHoveredBetPrologue))
       && VrGameMemory::matches(VrGame::GetActivateRef, VrGame::GetActivateRefPrologue, sizeof(VrGame::GetActivateRefPrologue))
-      && VrGameMemory::matches(VrGame::RefGet3D, VrGame::RefGet3DPrologue, sizeof(VrGame::RefGet3DPrologue))
+      && VrGameMemory::matchesUnlessRewritten(VrGame::RefGet3D, VrGame::RefGet3DPrologue, sizeof(VrGame::RefGet3DPrologue))
       && VrGameMemory::readable(VrGame::ProcessActors, sizeof(uintptr_t))
       && VrGameMemory::readable(VrGame::ProcessHighEnd, sizeof(uint32_t))
       && VrGameMemory::readable(VrGame::LockPickInstance, sizeof(uintptr_t))

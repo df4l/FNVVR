@@ -181,11 +181,9 @@ namespace dxvk {
         { VrGame::TileSetString,          VrGame::TileSetStringPrologue,          sizeof(VrGame::TileSetStringPrologue) },
         { VrGame::TileSetFloat,           VrGame::TileSetFloatPrologue,           sizeof(VrGame::TileSetFloatPrologue) },
         { VrGame::TileGetFloat,           VrGame::TileGetFloatPrologue,           sizeof(VrGame::TileGetFloatPrologue) },
-        { VrGame::HeapAllocate,           VrGame::HeapAllocatePrologue,           sizeof(VrGame::HeapAllocatePrologue) },
         { VrGame::GetTextureManager,      VrGame::GetTextureManagerBytes,         sizeof(VrGame::GetTextureManagerBytes) },
         { VrGame::BorrowRenderedTexture,  VrGame::BorrowRenderedTexturePrologue,  sizeof(VrGame::BorrowRenderedTexturePrologue) },
         { VrGame::ReturnRenderedTexture,  VrGame::ReturnRenderedTexturePrologue,  sizeof(VrGame::ReturnRenderedTexturePrologue) },
-        { VrGame::NiPointerAssign,        VrGame::NiPointerAssignPrologue,        sizeof(VrGame::NiPointerAssignPrologue) },
         { VrGame::DrawRenderedMenuParent, VrGame::DrawRenderedMenuParentPrologue, sizeof(VrGame::DrawRenderedMenuParentPrologue) },
         { VrGame::RenderPipBoy,           VrGame::RenderPipBoyPrologue,           sizeof(VrGame::RenderPipBoyPrologue) },
         { VrGame::ComputersHeaderUseSite, VrGame::ComputersHeaderUse,             sizeof(VrGame::ComputersHeaderUse) },
@@ -196,7 +194,11 @@ namespace dxvk {
           return false;
       }
 
-      return VrGameMemory::readable(VrGame::InterfaceManager, sizeof(uintptr_t))
+      return VrGameMemory::matchesUnlessRewritten(VrGame::HeapAllocate,
+            VrGame::HeapAllocatePrologue, sizeof(VrGame::HeapAllocatePrologue))
+          && VrGameMemory::matchesUnlessRewritten(VrGame::NiPointerAssign,
+            VrGame::NiPointerAssignPrologue, sizeof(VrGame::NiPointerAssignPrologue))
+          && VrGameMemory::readable(VrGame::InterfaceManager, sizeof(uintptr_t))
           && VrGameMemory::readable(VrGame::MainSingleton, sizeof(uintptr_t))
           && VrGameMemory::readable(VrGame::Renderer, sizeof(uintptr_t))
           && VrGameMemory::readable(VrGame::WorldSceneGraph, sizeof(uintptr_t))
@@ -462,7 +464,21 @@ namespace dxvk {
     if (!parent || !storeXml())
       return false;
 
+    // A parser put there by a plugin may not look in the game's cache, and
+    // the game then reads a null result from it
+    uintptr_t parser = VrGame::TileParseFile;
+    bool past = VrGameMemory::callTarget(VrGame::TileParseFileCallSite, &parser)
+      && VrGameMemory::isOtherModule(parser)
+      && VrGameMemory::redirectCall(VrGame::TileParseFileCallSite, parser,
+           reinterpret_cast<const void*>(VrGame::TileParseFile));
+
     m_root = game<ReadFileFn>(VrGame::TileReadFile)(parent, XmlName);
+
+    if (past) {
+      VrGameMemory::redirectCall(VrGame::TileParseFileCallSite, VrGame::TileParseFile,
+        reinterpret_cast<const void*>(parser));
+      Logger::info("VR: The console's tiles were read past another mod's XML parser");
+    }
 
     game<CacheRemoveAtFn>(VrGame::XmlCacheRemoveAt)(reinterpret_cast<void*>(VrGame::XmlCache), XmlName);
 

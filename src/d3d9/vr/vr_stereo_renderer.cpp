@@ -155,6 +155,7 @@ namespace dxvk {
 
     SwapFn            g_originalSwap            = reinterpret_cast<SwapFn>(VrGame::Swap);
     RenderInterfaceFn g_originalRenderInterface = reinterpret_cast<RenderInterfaceFn>(VrGame::RenderInterface);
+    uintptr_t         g_previousRenderInterface = VrGame::RenderInterface;
     InterfaceCullFn   g_originalInterfaceCull   = reinterpret_cast<InterfaceCullFn>(VrGame::InterfaceCull);
     AccumTaskFn       g_originalAccumTask       = reinterpret_cast<AccumTaskFn>(VrGame::AddAccumTask);
     PlaceCameraFn     g_originalPlaceCamera     = reinterpret_cast<PlaceCameraFn>(VrGame::PlaceCamera);
@@ -198,8 +199,10 @@ namespace dxvk {
     bool patched = VrGameMemory::redirectCall(VrGame::SwapCallSite, VrGame::Swap,
       reinterpret_cast<const void*>(&VrStereoRenderer::swapHook));
 
-    patched = patched && VrGameMemory::redirectCall(VrGame::RenderInterfaceCallSite,
-      VrGame::RenderInterface, reinterpret_cast<const void*>(&VrStereoRenderer::renderInterfaceHook));
+    // JohnnyGuitar holds this call for its camera overlays
+    patched = patched && VrGameMemory::chainCall(VrGame::RenderInterfaceCallSite,
+      VrGame::RenderInterface, reinterpret_cast<const void*>(&VrStereoRenderer::renderInterfaceHook),
+      &g_previousRenderInterface);
 
     patched = patched && VrGameMemory::redirectCall(VrGame::InterfaceCullCallSite,
       VrGame::InterfaceCull, reinterpret_cast<const void*>(&VrStereoRenderer::interfaceCullHook));
@@ -468,7 +471,7 @@ namespace dxvk {
         return;
     }
 
-    g_originalRenderInterface(interfaceManager, nullptr, arg0, arg1);
+    reinterpret_cast<RenderInterfaceFn>(g_previousRenderInterface)(interfaceManager, nullptr, arg0, arg1);
   }
 
 
@@ -2256,7 +2259,10 @@ namespace dxvk {
       m_device->Clear(0, nullptr, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 0, 0, 0), 1.0f, 0);
 
     // The other HUD groups were culled by isolateHud when the interface
-    // was culled, which may run on a worker thread that this pass waits for
+    // was culled, which may run on a worker thread that this pass waits for.
+    // This is the game's function, not a hook on its call: JohnnyGuitar's draws
+    // camera overlays with a flat camera on the bound target, which a panel
+    // must not get, and the cursor the game draws here without it.
     g_originalRenderInterface(interfaceManager, nullptr, arg0, arg1);
     m_hudLayers.restore();
 

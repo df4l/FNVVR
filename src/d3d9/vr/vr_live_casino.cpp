@@ -101,8 +101,8 @@ namespace dxvk {
 
 
   void VrLiveCasino::install() {
-    bool found = VrGameMemory::matches(VrGame::IsInMenuMode,
-        VrGame::IsInMenuModePrologue, sizeof(VrGame::IsInMenuModePrologue))
+    bool found = VrGameMemory::matchesUnlessRewritten(VrGame::IsInMenuMode,
+          VrGame::IsInMenuModePrologue, sizeof(VrGame::IsInMenuModePrologue))
       && VrGameMemory::matches(VrGame::IsTopMenu, VrGame::IsTopMenuPrologue, sizeof(VrGame::IsTopMenuPrologue))
       && VrGameMemory::callsTo(VrGame::LiveMenuModeFrameSite, VrGame::IsInMenuMode)
       && VrGameMemory::callsTo(VrGame::SetMainRenderingSite, VrGame::SetMainRendering);

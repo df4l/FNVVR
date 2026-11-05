@@ -1,3 +1,5 @@
+#include <windows.h>
+
 #include <algorithm>
 
 #include "vr_game_addresses.h"
@@ -9,6 +11,12 @@ namespace dxvk {
   namespace {
 
     using TileGetFloatFn = float (__thiscall*)(uintptr_t tile, uint32_t trait);
+    using TileGetChildFn = uintptr_t (__thiscall*)(uintptr_t tile, const char* name);
+
+    /// What yUI adds to the HUD's tile: crosshair, hit marker, hit indicator
+    /// and objective markers. They are placed for a flat screen around its
+    /// centre, and the head panel shows the whole HUD image.
+    constexpr const char* YuiTiles[] = { "JDC", "JHM", "JHI", "JVO" };
 
     template<typename T>
     T readField(uintptr_t base, uintptr_t offset) {
@@ -25,7 +33,7 @@ namespace dxvk {
         VrGame::HudQuestReminderStore, sizeof(VrGame::HudQuestReminderStore))
       && VrGameMemory::matches(VrGame::HudSubtitlesStoreSite,
         VrGame::HudSubtitlesStore, sizeof(VrGame::HudSubtitlesStore))
-      && VrGameMemory::matches(VrGame::TileGetNode,
+      && VrGameMemory::matchesUnlessRewritten(VrGame::TileGetNode,
         VrGame::TileGetNodePrologue, sizeof(VrGame::TileGetNodePrologue))
       && VrGameMemory::matches(VrGame::ObjectSetFlag,
         VrGame::ObjectSetFlagPrologue, sizeof(VrGame::ObjectSetFlagPrologue))
@@ -49,6 +57,10 @@ namespace dxvk {
         VrGame::HudActionPointsStore, sizeof(VrGame::HudActionPointsStore))
       && VrGameMemory::matches(VrGame::TileGetFloat,
         VrGame::TileGetFloatPrologue, sizeof(VrGame::TileGetFloatPrologue));
+
+    m_yuiLoaded = m_menusFound && GetModuleHandleW(L"yUI.dll")
+      && VrGameMemory::matches(VrGame::TileGetChildByName,
+        VrGame::TileGetChildByNamePrologue, sizeof(VrGame::TileGetChildByNamePrologue));
 
     return m_available;
   }
@@ -89,6 +101,15 @@ namespace dxvk {
     for (uintptr_t group : VrGame::HudGroups) {
       if (std::find(keep, keep + count, group) == keep + count)
         cullTile(readField<uintptr_t>(hud, group));
+    }
+
+    if (m_yuiLoaded) {
+      uintptr_t tiles   = readField<uintptr_t>(VrGame::MenuTiles, 0);
+      uintptr_t hudTile = tiles
+        ? readField<uintptr_t>(tiles, (VrGame::HudMenuId - VrGame::FirstMenuId) * sizeof(uintptr_t)) : 0;
+
+      for (uint32_t i = 0; hudTile && i < std::size(YuiTiles); i++)
+        cullTile(reinterpret_cast<TileGetChildFn>(VrGame::TileGetChildByName)(hudTile, YuiTiles[i]));
     }
 
     return true;

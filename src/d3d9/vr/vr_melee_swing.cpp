@@ -117,6 +117,8 @@ namespace dxvk {
 
     /**
      * \brief Checks the functions the hit limb uses by their calls in SetTargetedLimb
+     *
+     * Nothing is written, so a plugin's hook on a call changes nothing here.
      */
     bool findLimbFunctions() {
       struct Call {
@@ -135,7 +137,7 @@ namespace dxvk {
       };
 
       for (const Call& call : calls) {
-        if (!VrGameMemory::callsTo(call.site, call.target))
+        if (!VrGameMemory::canChainCall(call.site, call.target))
           return false;
       }
 

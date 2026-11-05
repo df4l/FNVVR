@@ -125,7 +125,7 @@ namespace dxvk {
       return nullptr;
 
     if (!VrGameMemory::matches(VrGame::WeaponFire, VrGame::WeaponFirePrologue, sizeof(VrGame::WeaponFirePrologue))
-     || !VrGameMemory::matches(VrGame::FormById, VrGame::FormByIdPrologue, sizeof(VrGame::FormByIdPrologue)))
+     || !VrGameMemory::matchesUnlessRewritten(VrGame::FormById, VrGame::FormByIdPrologue, sizeof(VrGame::FormByIdPrologue)))
       return nullptr;
 
     // Without it, throws are fired while the frame is drawn, as the AI
