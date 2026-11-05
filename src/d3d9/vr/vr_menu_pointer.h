@@ -55,6 +55,9 @@ namespace dxvk {
   struct VrPointerInput {
     /// Panel the lasers point at, \c nullptr if none can be used
     const VrPanelPlacement*                     panel = nullptr;
+    /// Surface of a 3D scene the lasers can also point at, where the panel
+    /// is not in the way, \c nullptr if there is none
+    const VrPanelPlacement*                     surface = nullptr;
     std::array<VrControllerState, VrHandCount>  controllers;
     /// Trigger of each hand
     std::array<bool, VrHandCount>               triggers = { };
@@ -64,6 +67,20 @@ namespace dxvk {
     float                                       wheel   = 0.0f;
     /// Time since the previous frame, in seconds
     float                                       dt      = 0.0f;
+  };
+
+  /**
+   * \brief Where the lasers point on the surface of a 3D scene
+   */
+  struct VrPointerSurfaceState {
+    /// A laser points at the surface and not at the panel
+    bool      hit     = false;
+    /// Point on the surface, see VrPanelHit::uv
+    VrVector2 uv;
+    /// Whether the trigger of that hand is held
+    bool      trigger = false;
+    /// Hand of that laser
+    VrHand    hand    = VrHand::Right;
   };
 
   /**
@@ -82,6 +99,7 @@ namespace dxvk {
     /// Whether the triggers belong to the pointer this frame, and must
     /// not reach the game as gamepad triggers
     bool      triggersTaken = false;
+    VrPointerSurfaceState surface;
   };
 
   /**
@@ -96,6 +114,10 @@ namespace dxvk {
    * stick hands the menus back to the gamepad, until the laser moves by
    * \ref MoveThreshold or the trigger is pressed. The cursor is also off
    * while no laser points at the panel.
+   *
+   * A surface, when there is one, is pointed at like the panel, with the
+   * panel in front of it. It does not move the game's cursor: the caller
+   * uses the point it reports.
    */
   class VrMenuPointer {
 

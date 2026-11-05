@@ -42,6 +42,7 @@ namespace dxvk {
     VrPointerState state;
 
     std::array<VrPanelHit, VrHandCount> hits;
+    std::array<VrPanelHit, VrHandCount> surfaceHits;
     std::array<bool, VrHandCount> pressed = { };
 
     for (uint32_t i = 0; i < VrHandCount; i++) {
@@ -50,19 +51,24 @@ namespace dxvk {
       if (input.panel && controller.isActive)
         hits[i] = vrIntersectPanel(controller.aimPose, *input.panel);
 
+      if (input.surface && controller.isActive && !hits[i].hit)
+        surfaceHits[i] = vrIntersectPanel(controller.aimPose, *input.surface);
+
       pressed[i] = input.triggers[i] && !m_triggers[i];
       m_triggers[i] = input.triggers[i];
     }
 
     // A press selects the hand, as long as it points at the panel
     for (uint32_t i = 0; i < VrHandCount; i++) {
-      if (pressed[i] && hits[i].hit)
+      if (pressed[i] && (hits[i].hit || surfaceHits[i].hit))
         m_hand = VrHand(i);
     }
 
     uint32_t other = 1u - uint32_t(m_hand);
 
     if (!hits[uint32_t(m_hand)].hit && hits[other].hit)
+      m_hand = VrHand(other);
+    else if (!hits[uint32_t(m_hand)].hit && !surfaceHits[uint32_t(m_hand)].hit && surfaceHits[other].hit)
       m_hand = VrHand(other);
 
     const VrPanelHit& hit = hits[uint32_t(m_hand)];
@@ -81,13 +87,23 @@ namespace dxvk {
     }
 
     for (uint32_t i = 0; i < VrHandCount; i++) {
-      state.beams[i].visible = hits[i].hit;
-      state.beams[i].length  = hits[i].distance;
-      state.beams[i].active  = m_cursorActive && VrHand(i) == m_hand;
+      const VrPanelHit& beamHit = hits[i].hit ? hits[i] : surfaceHits[i];
+      state.beams[i].visible = beamHit.hit;
+      state.beams[i].length  = beamHit.distance;
+      state.beams[i].active  = VrHand(i) == m_hand && (m_cursorActive || surfaceHits[i].hit);
+    }
+
+    const VrPanelHit& surfaceHit = surfaceHits[uint32_t(m_hand)];
+
+    if (surfaceHit.hit) {
+      state.surface.hit     = true;
+      state.surface.uv      = surfaceHit.uv;
+      state.surface.trigger = input.triggers[uint32_t(m_hand)];
+      state.surface.hand    = m_hand;
     }
 
     state.cursorActive  = m_cursorActive;
-    state.triggersTaken = m_cursorActive;
+    state.triggersTaken = m_cursorActive || state.surface.hit;
 
     if (m_cursorActive) {
       state.cursor = hit.uv;

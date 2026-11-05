@@ -34,6 +34,10 @@ namespace dxvk {
     VrPadState g_controllerPad;
     bool       g_loggedControllers = false;
 
+    // Set for good the first time the interface meets the controllers, so
+    // that losing their tracking does not bring the keyboard shortcuts back
+    bool       g_showsGamepadControls = false;
+
     // Replaces the gamepad connection message boxes. The caller pops the
     // arguments, so ignoring them is safe.
     void __cdecl skipMessageBox() { }
@@ -164,11 +168,28 @@ namespace dxvk {
     DWORD WINAPI getInterfaceStateHook(DWORD index, XINPUT_STATE* state) {
       DWORD result = getStateHook(index, state);
 
-      if (index != 0 || !g_cursorMode || !g_controllersActive)
+      if (index != 0 || !g_controllersActive)
+        return result;
+
+      // The game writes the displayed controls only when its flag changes,
+      // so the flag has to rise once, even with a laser already on a menu
+      bool firstReport = !g_showsGamepadControls;
+      g_showsGamepadControls = true;
+
+      if (firstReport || !g_cursorMode)
         return result;
 
       *state = XINPUT_STATE();
       return ERROR_DEVICE_NOT_CONNECTED;
+    }
+
+    using Has360ControllerFn = bool (__cdecl*)();
+
+    // What the player reads stays on the gamepad in cursor mode: the lasers
+    // are the mouse, but the buttons shown are still those of the controllers
+    bool __cdecl showsGamepadControls() {
+      return g_showsGamepadControls
+        || reinterpret_cast<Has360ControllerFn>(VrGame::Has360Controller)();
     }
 
   }
@@ -222,6 +243,20 @@ namespace dxvk {
       for (uintptr_t site : tileNameSites) {
         if (!VrGameMemory::redirectCall(site, VrGame::StringCompare, reinterpret_cast<const void*>(&compareTileName)))
           Logger::warn(str::format("VR: Tile name comparison at 0x", std::hex, site, " was not found, a tile without a name can crash the game"));
+      }
+
+      const uintptr_t displaySites[] = {
+        VrGame::GamepadTraitCallSite,
+        VrGame::GamepadTileTraitCallSite,
+        VrGame::ControlNameCallSite,
+        VrGame::HelpManualCallSite,
+        VrGame::TutorialManualCallSite,
+        VrGame::StatsLimbLabelCallSite,
+      };
+
+      for (uintptr_t site : displaySites) {
+        if (!VrGameMemory::redirectCall(site, VrGame::Has360Controller, reinterpret_cast<const void*>(&showsGamepadControls)))
+          Logger::warn(str::format("VR: Gamepad display check at 0x", std::hex, site, " was not found, keyboard controls can show with the lasers"));
       }
     }
 

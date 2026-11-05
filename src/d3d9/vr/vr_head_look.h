@@ -65,6 +65,16 @@ namespace dxvk {
     }
 
     /**
+     * \brief Gives the body heading to take when the head gets the look back
+     *
+     * Something else placed the view: taking it from the game's heading, the
+     * view would jump. Called once per frame.
+     *
+     * \param [in] heading The heading, \c nullptr to take the game's
+     */
+    void holdBodyHeading(const float* heading);
+
+    /**
      * \brief Replaces the game's camera rotation by the body's
      *
      * Only while the heading and look angle are still the ones written
@@ -120,6 +130,9 @@ namespace dxvk {
     float        m_writtenHeading = 0.0f;
     float        m_writtenPitch   = 0.0f;
     float        m_bodyHeading    = 0.0f;
+
+    bool         m_holdsBody      = false;
+    float        m_heldBody       = 0.0f;
 
     bool         m_loggedActive   = false;
 

@@ -1,0 +1,84 @@
+#pragma once
+
+#include <cstdint>
+#include <memory>
+
+#include "vr_game_space.h"
+
+namespace dxvk {
+
+  /**
+   * \brief Keeps the view in the player's head while the game shows the body
+   *
+   * The game plays sitting down and getting up on the third-person body, and
+   * moves its camera behind the player for that time (temporary third person,
+   * findings/camera.md §8.1). The animation is left to play, but the eyes are
+   * placed from the head of the body, as Enhanced Camera does on a screen, and
+   * the body is seen from inside: its head is shrunk to a point for the frame.
+   *
+   * The position follows the animation, and the heading follows the way the
+   * head of the body turns: its animation turns it around, which the player's
+   * heading only does at its end, in one go (findings/camera.md §8.3). The view
+   * stays level: an animation tilting it without the head is not bearable in a
+   * headset, and the headset's own rotation is added to it.
+   *
+   * The same goes for the Sandman and Cannibal kills, on the same temporary
+   * third person. A knocked down player stays on the game's camera: the head of
+   * a ragdoll cannot be followed. Going in and out of the view is blended.
+   *
+   * Only used on the game's main thread.
+   */
+  class VrBodyView {
+
+  public:
+
+    /**
+     * \returns \c nullptr if the executable is not the supported version
+     */
+    static std::unique_ptr<VrBodyView> install();
+
+    /**
+     * \brief Replaces the game's camera while the body is shown
+     *
+     * Called once per frame, before the head's look turns the camera. On a
+     * seat, where it does not, the game's own look angle is taken out: it is
+     * the one the head had when the player sat down, and would stay in the view.
+     *
+     * \param [in,out] camera The game's camera
+     * \param [in] dt Time since the last frame, in seconds
+     */
+    void placeCamera(VrGameCameraPose& camera, float dt);
+
+    /**
+     * \brief Blends the camera after a change of view
+     *
+     * \param [in,out] camera The camera the eyes are about to be placed from
+     * \param [in] headTurnsCamera Whether the head's look has just placed it
+     * \param [in] dt Time since the last frame, in seconds
+     */
+    void finishCamera(VrGameCameraPose& camera, bool headTurnsCamera, float dt);
+
+    /// Whether the eyes are not on the game's camera: on the body or a seat
+    bool movesView() const { return m_view != View::Game; }
+
+    /// Heading of the camera the eyes were last placed from
+    float viewHeading() const { return m_viewHeading; }
+
+  private:
+
+    VrBodyView() = default;
+
+    enum class View { Game, Body, Seat };
+
+    VrCameraBlend m_blend;
+    VrViewHeading m_heading;
+    View          m_view        = View::Game;
+    float         m_viewHeading = 0.0f;
+    bool          m_hasView     = false;
+    bool          m_headTurns   = false;
+    bool          m_changed     = false;
+    bool          m_logged      = false;
+
+  };
+
+}

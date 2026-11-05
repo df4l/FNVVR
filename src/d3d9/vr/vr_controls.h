@@ -4,6 +4,7 @@
 
 #include "vr_action_filter.h"
 #include "vr_backend.h"
+#include "vr_controller_pad.h"
 #include "vr_game_state.h"
 #include "vr_head_look.h"
 #include "vr_menu_pointer.h"
@@ -117,6 +118,31 @@ namespace dxvk {
     }
 
     /**
+     * \brief Adds a mini-game's physical controls to the virtual gamepad
+     *
+     * Applied in menus from the next update on.
+     */
+    void setMinigamePad(const VrMinigamePad& pad) {
+      m_minigamePad = pad;
+    }
+
+    /**
+     * \brief Sets the surface of a 3D scene the lasers can point at
+     *
+     * \param [in] surface Stays valid until the next call, or \c nullptr
+     */
+    void setPointerSurface(const VrPanelPlacement* surface) {
+      m_pointerSurface = surface;
+    }
+
+    /**
+     * \brief Where the lasers point on that surface in the last update
+     */
+    const VrPointerSurfaceState& pointerSurfaceState() const {
+      return m_pointerSurfaceState;
+    }
+
+    /**
      * \brief Makes the navigation stick pick a hotkey on the game's wheel
      *
      * \param [in] shown Whether the Pip-Boy's inventory shows its hotkey
@@ -218,6 +244,11 @@ namespace dxvk {
     }
 
     /**
+     * \brief See VrHeadLook::holdBodyHeading
+     */
+    void holdBodyHeading(const float* heading);
+
+    /**
      * \brief Adjusts the camera the game computed for this frame
      *
      * See VrHeadLook::adjustCamera; while the head drives the camera, it
@@ -267,6 +298,7 @@ namespace dxvk {
       const VrInputState&         input,
             VrActionState&        actions,
       const VrPanelPlacement*     panel,
+      const VrPanelPlacement*     surface,
             bool                  padUsed,
             float                 dt);
 
@@ -284,6 +316,9 @@ namespace dxvk {
     bool                        m_swingsWithHand = false;
     bool                        m_handsFree      = false;
     bool                        m_rightStickTaken = false;
+    VrMinigamePad               m_minigamePad;
+    const VrPanelPlacement*     m_pointerSurface = nullptr;
+    VrPointerSurfaceState       m_pointerSurfaceState;
     bool                        m_hotKeyWheelShown = false;
     bool                        m_menuBack = false;
     bool                        m_menuBackDown = false;

@@ -87,6 +87,104 @@ namespace dxvk {
   }
 
 
+  float vrComputeCameraHeading(const VrGameCameraPose& pose) {
+    return std::atan2(pose.forward.x, pose.forward.y);
+  }
+
+
+  VrVector3 vrComputeHeadViewPosition(const VrVector3& head, const float* rotation, float scale) {
+    // From the head bone, at the base of the skull, to between the eyes
+    constexpr float EyesAbove   = 6.0f;
+    constexpr float EyesInFront = 8.0f;
+
+    VrVector3 top   = { rotation[0], rotation[3], rotation[6] };
+    VrVector3 front = { rotation[1], rotation[4], rotation[7] };
+
+    return head + (top * EyesAbove + front * EyesInFront) * scale;
+  }
+
+
+  bool vrComputeHeadHeading(const float* rotation, float& heading) {
+    constexpr float MinLevel = 0.2f;
+
+    // Column 1 of the bone's rotation is where the face looks
+    float x = rotation[1];
+    float y = rotation[4];
+
+    if (x * x + y * y < MinLevel * MinLevel)
+      return false;
+
+    heading = std::atan2(x, y);
+    return true;
+  }
+
+
+  void VrViewHeading::start(float source, float view) {
+    m_source = source;
+    keep(view);
+  }
+
+
+  float VrViewHeading::update(float source, float softness, float dt) {
+    constexpr float FullTurn = 6.2831853f;
+
+    float left = softness > 0.0f ? std::exp(-dt / softness) : 0.0f;
+    m_source += std::remainder(source - m_source, FullTurn) * (1.0f - left);
+    return m_source + m_offset;
+  }
+
+
+  void VrViewHeading::keep(float view) {
+    m_offset = view - m_source;
+  }
+
+
+  VrGameCameraPose VrCameraBlend::update(const VrGameCameraPose& target, bool changed, float dt) {
+    // Time for what is left of the difference to fall to about a third
+    constexpr float Softness    = 0.15f;
+    // In game units, about three metres
+    constexpr float MaxDistance = 200.0f;
+    constexpr float Settled     = 1e-3f;
+
+    if (changed && m_hasLast) {
+      m_position = m_last.position - target.position;
+      m_heading  = std::remainder(vrComputeCameraHeading(m_last) - vrComputeCameraHeading(target), 6.2831853f);
+
+      if (vrLength(m_position) > MaxDistance) {
+        m_position = { 0.0f, 0.0f, 0.0f };
+        m_heading  = 0.0f;
+      }
+    }
+
+    float left = std::exp(-dt / Softness);
+    m_position = m_position * left;
+    m_heading *= left;
+
+    if (vrLength(m_position) < Settled && std::abs(m_heading) < Settled) {
+      m_position = { 0.0f, 0.0f, 0.0f };
+      m_heading  = 0.0f;
+    }
+
+    // Clockwise seen from above, as vrTurnAroundPivot
+    float s = std::sin(m_heading);
+    float c = std::cos(m_heading);
+
+    auto turn = [s, c] (const VrVector3& v) {
+      return VrVector3 { v.x * c + v.y * s, v.y * c - v.x * s, v.z };
+    };
+
+    VrGameCameraPose result;
+    result.forward  = turn(target.forward);
+    result.up       = turn(target.up);
+    result.right    = turn(target.right);
+    result.position = target.position + m_position;
+
+    m_last    = result;
+    m_hasLast = true;
+    return result;
+  }
+
+
   VrGameCameraPose vrComputeVatsCameraPose(const VrGameCameraPose& game, float headYaw) {
     // Looking straight up or down, the camera's up tells the heading
     VrVector3 facing = std::abs(game.forward.x) + std::abs(game.forward.y) > 1e-3f

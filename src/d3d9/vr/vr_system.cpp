@@ -24,6 +24,7 @@
 #include "vr_gamepad_head.h"
 #include "vr_gamepad_hook.h"
 #include "vr_large_address.h"
+#include "vr_live_casino.h"
 #include "vr_sound_focus.h"
 #include "vr_game_window.h"
 #include "vr_launcher_overlay.h"
@@ -252,6 +253,7 @@ namespace dxvk {
     g_vrSystem->m_handPush = config.getOption<bool>("d3d9.vrHandPush", true);
     g_vrSystem->m_scopes = options.scopeLens;
     g_vrSystem->m_roomscale = options.roomscale;
+    g_vrSystem->m_immersiveMinigames = config.getOption<bool>("d3d9.vrImmersiveMinigames", true);
     g_vrSystem->m_sneakConfig.physical = options.physicalSneak;
     g_vrSystem->m_sneakConfig.crouch   = crouch;
     g_vrSystem->m_forceGameSettings = !emulated && config.getOption<bool>("d3d9.vrForceGameSettings", true);
@@ -268,6 +270,9 @@ namespace dxvk {
 
     VrLargeAddress::install();
     VrSoundFocus::install();
+
+    if (config.getOption<bool>("d3d9.vrRealTimeCasino", true))
+      VrLiveCasino::install();
   }
 
 
@@ -393,6 +398,7 @@ namespace dxvk {
 
     if (m_stereoRenderer) {
       m_stereoRenderer->setPipBoyScale(m_pipBoyScale);
+      m_stereoRenderer->setMinigamesEnabled(m_immersiveMinigames);
       m_stereoRenderer->setScopesEnabled(m_scopes);
       m_stereoRenderer->setManualReload(m_manualReload);
       m_stereoRenderer->setRoomscale(m_roomscale);

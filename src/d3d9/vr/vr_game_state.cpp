@@ -10,6 +10,7 @@ namespace dxvk {
 
     using IsInStartMenuFn = bool (__cdecl*)();
     using IsPipBoyShownFn = bool (__cdecl*)();
+    using IsInMenuModeFn  = bool (__cdecl*)();
 
   }
 
@@ -20,6 +21,8 @@ namespace dxvk {
       && VrGameMemory::matches(VrGame::IsPipBoyShown,
         VrGame::IsPipBoyShownPrologue, sizeof(VrGame::IsPipBoyShownPrologue))
       && VrGameMemory::readable(VrGame::LoadingMenu, sizeof(uintptr_t))
+      && VrGameMemory::matches(VrGame::IsInMenuMode,
+        VrGame::IsInMenuModePrologue, sizeof(VrGame::IsInMenuModePrologue))
       && VrGameMemory::readable(VrGame::MenuMode, sizeof(uint8_t));
 
     return m_available;
@@ -38,7 +41,9 @@ namespace dxvk {
     if (*reinterpret_cast<const uintptr_t*>(VrGame::LoadingMenu))
       return VrGameStateKind::Loading;
 
-    if (*reinterpret_cast<const uint8_t*>(VrGame::MenuMode)) {
+    // The flag is cleared while a menu lets the world run (VrLiveCasino)
+    if (*reinterpret_cast<const uint8_t*>(VrGame::MenuMode)
+     || reinterpret_cast<IsInMenuModeFn>(VrGame::IsInMenuMode)()) {
       return reinterpret_cast<IsPipBoyShownFn>(VrGame::IsPipBoyShown)()
         ? VrGameStateKind::PipBoy
         : VrGameStateKind::Menu;

@@ -193,3 +193,33 @@ TEST_CASE(button_icons_match_the_hud_prompt) {
   CHECK(vrButtonIconForInput(0x07) == 0);
   CHECK(vrButtonIconForInput(0xFF) == 0);
 }
+
+
+TEST_CASE(minigame_controls_change_the_gamepad) {
+  VrPadState pad;
+  pad.buttons      = VrGamepadButton::LeftShoulder | VrGamepadButton::X;
+  pad.leftTrigger  = 0xFF;
+  pad.thumbLeftX   = 1000;
+  pad.thumbRightX  = 2000;
+
+  VrMinigamePad minigame;
+  vrApplyMinigamePad(pad, minigame);
+
+  CHECK(pad.buttons == (VrGamepadButton::LeftShoulder | VrGamepadButton::X));
+  CHECK(pad.leftTrigger == 0xFF);
+  CHECK(pad.thumbLeftX == 1000);
+
+  minigame.buttons     = VrGamepadButton::A;
+  minigame.driveLeftX  = true;
+  minigame.leftX       = 1.0f;
+  minigame.driveRightX = true;
+  minigame.rightX      = -1.0f;
+  minigame.noTriggers  = true;
+  minigame.noShoulders = true;
+  vrApplyMinigamePad(pad, minigame);
+
+  CHECK(pad.buttons == (VrGamepadButton::X | VrGamepadButton::A));
+  CHECK(pad.leftTrigger == 0);
+  CHECK(pad.thumbLeftX == 32767);
+  CHECK(pad.thumbRightX <= -32767);
+}

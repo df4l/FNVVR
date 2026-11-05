@@ -130,12 +130,23 @@ namespace dxvk {
     for (VrAction action : MenuButtons)
       padUsed |= actions.isPressed(action);
 
-    VrPointerState pointer = updatePointer(input, actions, panel, padUsed, dt);
+    bool minigame = m_context == VrInputContext::Menu && m_minigamePad.active;
+
+    // A mini-game's own controls are buttons of the gamepad
+    padUsed |= minigame && m_minigamePad.buttons;
+
+    const VrPanelPlacement* surface = m_context == VrInputContext::Menu ? m_pointerSurface : nullptr;
+
+    VrPointerState pointer = updatePointer(input, actions, panel, surface, padUsed, dt);
+    m_pointerSurfaceState = pointer.surface;
     VrGamepadHook::setCursorMode(pointer.cursorActive);
     VrMenuCursor::update(pointer);
 
     VrMenuNavigation navigation = m_hotKeyWheelShown ? VrMenuNavigation::HotKeyWheel : VrMenuNavigation::List;
     VrPadState pad = vrComputePadState(actions, m_context, gameBindings(), navigation);
+
+    if (minigame)
+      vrApplyMinigamePad(pad, m_minigamePad);
 
     if (m_gameAim && m_context == VrInputContext::Game)
       vrPressGameControl(pad, VrGameControl::Aim, gameBindings());
@@ -161,7 +172,7 @@ namespace dxvk {
     m_terminalBackDown = back;
 
     // The sticks and buttons never take the lasers off the terminal
-    m_terminalPointer = updatePointer(input, actions, m_terminalPanel, false, dt);
+    m_terminalPointer = updatePointer(input, actions, m_terminalPanel, nullptr, false, dt);
 
     // The console has the input: the game's cursor rests and the game's
     // menus see a gamepad at rest
@@ -175,12 +186,14 @@ namespace dxvk {
     const VrInputState&         input,
           VrActionState&        actions,
     const VrPanelPlacement*     panel,
+    const VrPanelPlacement*     surface,
           bool                  padUsed,
           float                 dt) {
     VrPointerInput pointerInput;
     pointerInput.controllers = input.controllers;
     pointerInput.dt          = dt;
     pointerInput.panel       = panel;
+    pointerInput.surface     = surface;
     pointerInput.padUsed     = padUsed;
 
     pointerInput.triggers[uint32_t(VrHand::Left)]  = actions.isPressed(VrAction::MenuLeftTrigger);
@@ -211,6 +224,12 @@ namespace dxvk {
     }
 
     return pointer;
+  }
+
+
+  void VrControls::holdBodyHeading(const float* heading) {
+    if (m_headLook)
+      m_headLook->holdBodyHeading(heading);
   }
 
 

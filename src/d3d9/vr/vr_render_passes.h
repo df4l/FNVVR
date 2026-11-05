@@ -109,6 +109,19 @@ namespace dxvk {
       m_afterFirstPerson = std::move(callback);
     }
 
+    /**
+     * \brief Sets what is drawn right before the first-person model of an eye
+     *
+     * The game's render group is active, so what clears the depth buffer
+     * through the game's renderer does clear it, and the model is then
+     * tested against what is drawn here. With no model to draw (the game
+     * hides it while the player sits), it is called right after the scene,
+     * with the same render group and the world's depth buffer.
+     */
+    void setBeforeFirstPerson(std::function<void()> callback) {
+      m_beforeFirstPerson = std::move(callback);
+    }
+
   private:
 
     VrRenderPasses(const VrRenderPassConfig& config, ViewFn view);
@@ -123,6 +136,7 @@ namespace dxvk {
 
     const VrScopeArea* m_sceneScissor = nullptr;
     std::function<void()> m_afterFirstPerson;
+    std::function<void()> m_beforeFirstPerson;
     bool     m_scissorFound        = false;
 
     bool     m_shadowsDrawnForLeft = false;

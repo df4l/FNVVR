@@ -287,8 +287,15 @@ namespace dxvk {
     if (!g_renderPasses)
       return original(main, nullptr, a, b, c, d);
 
-    return g_renderPasses->runScene(
+    uintptr_t result = g_renderPasses->runScene(
       [&] { return original(main, nullptr, a, b, c, d); });
+
+    // The second argument is the game's bRenderHands, a bool. Without it,
+    // the first-person pass does not run.
+    if (!(b & 0xFF) && g_renderPasses->m_beforeFirstPerson)
+      g_renderPasses->m_beforeFirstPerson();
+
+    return result;
   }
 
 
@@ -298,6 +305,9 @@ namespace dxvk {
 
     if (!g_renderPasses)
       return original(main, nullptr, a, b, c, d);
+
+    if (g_renderPasses->m_beforeFirstPerson)
+      g_renderPasses->m_beforeFirstPerson();
 
     uintptr_t result = g_renderPasses->runPass(VrRenderPass::FirstPerson,
       [&] { return original(main, nullptr, a, b, c, d); });

@@ -11,6 +11,7 @@
 
 #include "vr_activate_target.h"
 #include "vr_backend.h"
+#include "vr_body_view.h"
 #include "vr_comfort_settings.h"
 #include "vr_roomscale.h"
 #include "vr_controls.h"
@@ -32,6 +33,7 @@
 #include "vr_quick_wheel.h"
 #include "vr_melee_swing.h"
 #include "vr_menu_scenes.h"
+#include "vr_minigames.h"
 #include "vr_manual_reload.h"
 #include "vr_part_highlight.h"
 #include "vr_npc_gaze.h"
@@ -210,6 +212,15 @@ namespace dxvk {
     void setPipBoyScale(float scale) {
       m_pipBoyScale = scale;
     }
+
+    /**
+     * \brief Turns the mini-games' scenes in the eye images on or off
+     *
+     * Off, they stay on the menu panel. See VrMinigames.
+     *
+     * \param [in] enabled Whether they stand in the room
+     */
+    void setMinigamesEnabled(bool enabled);
 
     /**
      * \brief Turns the reload with the hands on or off
@@ -397,6 +408,11 @@ namespace dxvk {
     // The game's console, typed in on a terminal with the lasers
     std::unique_ptr<VrConsoleTerminal> m_terminal;
 
+    // The scenes of the mini-games, in the eye images instead of the panel
+    std::unique_ptr<VrMinigames> m_minigames;
+    std::array<bool, VrEyeCount> m_minigameDrawn = { };
+    uint32_t            m_minigamePanelRevision = 0;
+
     // The activation target, picked along the hands instead of the view
     std::unique_ptr<VrHandActivatePick> m_handPick;
     VrVector3           m_eyePosition;
@@ -426,6 +442,12 @@ namespace dxvk {
 
     // The capsule goes where the player walks in the room
     std::unique_ptr<VrRoomscale> m_roomscale;
+
+    // The eyes in the body's head while it sits down or gets up
+    std::unique_ptr<VrBodyView> m_bodyView;
+
+    // The eyes' base camera is no longer on the game's camera
+    bool                m_viewMoved = false;
 
     // The other actors look at the head
     std::unique_ptr<VrNpcGaze> m_npcGaze;
@@ -684,6 +706,8 @@ namespace dxvk {
             uint32_t              arg1);
 
     void renderMenuScenes();
+
+    void drawMinigame();
 
     void makeMenuSceneOpaque(bool depthTested);
 

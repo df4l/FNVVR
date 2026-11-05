@@ -339,6 +339,22 @@ namespace dxvk {
     constexpr uintptr_t HighProcessCurrentWeapon    = 0x008D81E0;
 
     /**
+     * Blood and impact of a hit, Actor::CreateBlood (__thiscall, damage and
+     * HitData on the stack, ret 8) and Actor::CreateBloodOnWeapon (damage,
+     * HitData and target, ret 0xC). Both read the attacker's current weapon,
+     * not the hit's: CreateBlood takes the impact data set from it. When
+     * Actor::HitMe cannot create 3D at once (ShouldQueue3DTask), it queues
+     * them, and TaskQueueInterface::TaskUnpackFunc makes these two calls
+     * later, after the hit (findings/melee.md §15.1). The game's fists are
+     * the weapon form at FistsForm.
+     */
+    constexpr uintptr_t ActorCreateBlood            = 0x0088E8D0;
+    constexpr uintptr_t ActorCreateBloodOnWeapon    = 0x0088FB00;
+    constexpr uintptr_t QueuedCreateBloodSite       = 0x0087C105;
+    constexpr uintptr_t QueuedCreateBloodOnWeaponSite = 0x0087C138;
+    constexpr uintptr_t FistsForm                   = 0x011CA278;
+
+    /**
      * Animation sequences, see findings/weapon.md. Every sequence an actor
      * plays starts in AnimData::MorphOrBlendToSequence (__thiscall on
      * AnimData with three stack arguments: sequence, 16-bit group ID,
@@ -503,6 +519,23 @@ namespace dxvk {
     constexpr uintptr_t StringCompare                  = 0x00408B20;
     constexpr uintptr_t TileNameButtonCompareCallSite  = 0x007195D1;
     constexpr uintptr_t TileNameLabelCompareCallSite   = 0x007195EB;
+
+    /**
+     * InterfaceManager::Has360Controller, __cdecl without arguments: the
+     * interface's gamepad flag, unless bDisable360Controller is set. These
+     * calls only choose what the player reads, the others also choose how a
+     * menu reacts to its input: the _Has360Controller trait (button icons or
+     * keyboard shortcuts), the _360Controller trait of those tiles, the names
+     * of the controls in messages, the help pages of the Xbox or the PC
+     * manual (help menu, tutorial menu) and the label of the Stats limb mode.
+     */
+    constexpr uintptr_t Has360Controller               = 0x004B71D0;
+    constexpr uintptr_t GamepadTraitCallSite           = 0x0071966F;
+    constexpr uintptr_t GamepadTileTraitCallSite       = 0x007195FC;
+    constexpr uintptr_t ControlNameCallSite            = 0x007039F3;
+    constexpr uintptr_t HelpManualCallSite             = 0x007D090E;
+    constexpr uintptr_t TutorialManualCallSite         = 0x007E8A05;
+    constexpr uintptr_t StatsLimbLabelCallSite         = 0x007DF6CD;
 
     /**
      * isInStartMenu, __cdecl without arguments: true while the main menu is
@@ -713,6 +746,109 @@ namespace dxvk {
     constexpr uintptr_t Renderer                   = 0x011F4748;
 
     constexpr uint32_t  LockPickMenuId    = 0x3F6;
+
+    /**
+     * The mini-games' scenes shown in the eye images, see
+     * findings/minigames.md: each menu's instance, its camera (NiCamera*,
+     * from the model of the casino tables) and the state field of each.
+     */
+    constexpr uintptr_t LockPickInstance     = 0x011DA204;
+    constexpr uintptr_t LockPickCamera       = 0x011DA224;
+    constexpr uintptr_t SlotMachineInstance  = 0x011DA9A4;
+    constexpr uintptr_t SlotMachineCamera    = 0x011DA9D0;
+    constexpr uintptr_t SlotMachineSceneRoot = 0x011DA9FC;
+    constexpr uintptr_t BlackJackInstance    = 0x011D9050;
+    constexpr uintptr_t BlackJackCamera      = 0x011D90BC;
+    constexpr uintptr_t RouletteInstance     = 0x011DA878;
+    constexpr uintptr_t RouletteCamera       = 0x011DA8D0;
+    constexpr uintptr_t CaravanCamera        = 0x011D91A8;
+
+    constexpr uint32_t  SlotMachineMenuId    = 0x438;
+    constexpr uint32_t  BlackJackMenuId      = 0x439;
+    constexpr uint32_t  RouletteMenuId       = 0x43A;
+    constexpr uint32_t  CaravanMenuId        = 0x43B;
+
+    /** Every one of these menus keeps its stage at this offset */
+    constexpr uintptr_t MinigameState        = 0x28;
+    constexpr uint32_t  LockStateTurning     = 3;
+    constexpr uint32_t  LockStateTension     = 4;
+    constexpr uint32_t  SlotMachineStateBet  = 6;
+    constexpr uint32_t  SlotMachineStatePayoutIn  = 4;
+    constexpr uint32_t  SlotMachineStatePayoutOut = 5;
+    constexpr char      SlotMachinePayoutScreen[] = "Payout_Screen";
+    constexpr uint32_t  BlackJackStateTurn   = 4;
+    constexpr uint32_t  RouletteStateBet     = 4;
+
+    /**
+     * The calls to NiRenderer::ClearBuffer (RendererClearBuffer) that clear
+     * the depth buffer at the start of the scenes that can lie on an object
+     * of the world: BlackJackMenu, SlotMachineMenu and RouletteMenu::DrawScene.
+     */
+    constexpr uintptr_t BlackJackDepthClearSite   = 0x00733530;
+    constexpr uintptr_t SlotMachineDepthClearSite = 0x007C19F0;
+    constexpr uintptr_t RouletteDepthClearSite    = 0x007BBD20;
+
+    /**
+     * ShadowSceneNode::kLightingOffset, on the world's shadow scene node
+     * (ShadowSceneNodes[0]). The shaders add it to the position of every
+     * point light and to the eye, whatever scene they draw.
+     * DrawWorld_Setup1stPerson sets it to minus the player's position for
+     * the first-person pass, so that nothing else lit by a point light can
+     * be drawn with it: see findings/minigames.md §5.
+     */
+    constexpr uintptr_t ShadowSceneLightingOffset = 0x1E4;
+
+    /**
+     * TESObjectACTI: its form type and the path of its model
+     * (TESModelTextureSwap at +0x3C, then TESModel::strModel, whose
+     * BSStringT starts with the characters' pointer).
+     */
+    constexpr uint8_t   FormTypeActivator    = 0x15;
+    constexpr uintptr_t ActivatorModelPath   = 0x40;
+
+    /**
+     * TESObjectREFR::Get3D, not the player's override: __thiscall without
+     * arguments, it gives the third-person model of the player
+     * (PlayerCharacter::Get3D(false), 0x00950BB0, calls it). Checked against
+     * its first bytes.
+     */
+    constexpr uintptr_t RefGet3D             = 0x0043FCD0;
+    constexpr uint8_t   RefGet3DPrologue[]   = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C, 0x89, 0x4D, 0xFC, 0xA1 };
+
+    /// A character's body, where the skeleton has one
+    constexpr char      PelvisNodeName[]     = "Bip01 Pelvis";
+
+    /**
+     * LockPickMenu: the pin's slider (tile, with the trait id held at
+     * LockPickSliderTrait for its position) and the tile whose width is its
+     * range.
+     */
+    constexpr uintptr_t LockPickSlider       = 0x68;
+    constexpr uintptr_t LockPickSliderRange  = 0x64;
+    constexpr uintptr_t LockPickSliderTrait  = 0x011DA1FC;
+
+    /**
+     * RouletteMenu: the bet selector's position on the felt, written by the
+     * menu while a stick or the mouse moves, within the limits of the
+     * RouletteSelector constants; the bets placed (BSSimpleList of
+     * RouletteBet*, the bet's id at +4); ComputeHoveredTileID (__thiscall on
+     * the menu, returns the bet under the selector, RouletteNoBet or more if
+     * none).
+     */
+    constexpr uintptr_t RouletteSelectorX    = 0x3FD4;
+    constexpr uintptr_t RouletteSelectorY    = 0x3FD8;
+    constexpr uintptr_t RouletteBetList      = 0x3E78;
+    constexpr uintptr_t RouletteBetId        = 0x04;
+    constexpr uintptr_t RouletteHoveredBet   = 0x007BF390;
+    constexpr uint8_t   RouletteHoveredBetPrologue[] = { 0x55, 0x8B, 0xEC };
+    constexpr uint32_t  RouletteNoBet        = 159;
+    constexpr float     RouletteSelectorMinX = -27.5f;
+    constexpr float     RouletteSelectorMaxX = 28.0f;
+    constexpr float     RouletteSelectorMinY = -13.3f;
+    constexpr float     RouletteSelectorMaxY = 13.1f;
+
+    /** The vtable that tells a world's terminal among the rendered menus */
+    constexpr uintptr_t TerminalVtable       = 0x0106EBE4;
     constexpr uintptr_t LockPickSceneRoot = 0x011DA24C;
     constexpr char      LockPickBackdrop[] = "shadow";
 
@@ -827,11 +963,59 @@ namespace dxvk {
     constexpr uintptr_t TempThirdPersonReadSite   = 0x009503DA;
     constexpr uint8_t   TempThirdPersonRead[]     = { 0x0F, 0xB6, 0x88, 0x4D, 0x06, 0x00, 0x00 };
 
+    /**
+     * BaseProcess::GetKnockedState, a vtable slot (__thiscall, 0 if the
+     * actor is not knocked down), read in PlayerCharacter::UpdateTemp3rdPerson:
+     * mov eax, [edx+0x40C].
+     */
+    constexpr uintptr_t ProcessGetKnockedStateSlot = 0x40C;
+    constexpr uintptr_t ProcessGetKnockedStateSite = 0x0095040E;
+    constexpr uint8_t   ProcessGetKnockedStateRead[] = { 0x8B, 0x82, 0x0C, 0x04, 0x00, 0x00 };
+
     /** LoadingMenu*, not null while a loading screen is shown */
     constexpr uintptr_t LoadingMenu = 0x011DA0C0;
 
     /** Main::bInMenuMode, a bool set while any menu (Pip-Boy included) pauses the game */
     constexpr uintptr_t MenuMode = 0x011DEA2B;
+
+    /**
+     * Interface::IsInMenuMode (__cdecl), what MenuMode is made from. It stays
+     * true while a casino game runs in real time, when MenuMode does not.
+     */
+    constexpr uintptr_t IsInMenuMode = 0x00702360;
+    constexpr uint8_t   IsInMenuModePrologue[] = { 0x55, 0x8B, 0xEC, 0xE8 };
+
+    /**
+     * What keeps the world running behind a casino game, findings/minigames.md
+     * §9. TESMain::OnIdle reads the menu mode twice. The first read decides
+     * on the player's update, and stays. The second decides on everything else
+     * (timer, animations, AI threads); LiveMenuModeFrameSite is that one.
+     * LiveMenuModeSites: the other tests that hold the world still (shader
+     * time, footsteps and jumps, sky sounds, actors' breath, the memory sort).
+     * With the AI threads running, the interface's idle runs on them
+     * (InterfaceIdleThreadSites); the menu has to stay on the main thread, so
+     * it runs before they start, at SetMainRenderingSite (__cdecl, one argument).
+     * Sounds: PreIdleStuff counts its pauses (SoundPauses and VoicePauses of
+     * InterfaceManager, read through its pointer), and only undoes those
+     * counted; BSAudio's four functions are __thiscall on the AudioSingleton.
+     */
+    constexpr uintptr_t LiveMenuModeFrameSite = 0x0086E79E;
+    constexpr uintptr_t LiveMenuModeSites[] = {
+      0x0063E0F8, 0x00837D05, 0x008387C5, 0x0086A4A1, 0x0086A4DE, 0x0086EEAF, 0x008898BD };
+    constexpr uintptr_t SetMainRendering      = 0x008C80E0;
+    constexpr uintptr_t SetMainRenderingSite  = 0x0086EC78;
+    constexpr uintptr_t InterfaceIdle         = 0x0086FD70;
+    constexpr uintptr_t InterfaceIdleThreadSites[] = { 0x008C7BE9, 0x008C7DB9 };
+    constexpr uintptr_t InterfaceLastMinuteUpdate = 0x007058E0;
+    constexpr uintptr_t InConsole             = 0x011DEA2E;
+    constexpr uintptr_t InterfaceManagerInstance = 0x011D8A80;
+    constexpr uintptr_t InterfaceSoundPauses  = 0x20;
+    constexpr uintptr_t InterfaceVoicePauses  = 0x21;
+    constexpr uintptr_t AudioPauseAnimationSounds   = 0x0070BBA0;
+    constexpr uintptr_t AudioUnpauseAnimationSounds = 0x0070BBC0;
+    constexpr uintptr_t AudioPauseWorldVoices       = 0x0070BBE0;
+    constexpr uintptr_t AudioUnpauseWorldVoices     = 0x0070BC00;
+    constexpr uintptr_t PlayerInCombat        = 0xDF0;
 
     /**
      * HUDMainMenu*, the HUD. Its top-level element groups are Tile* fields,
@@ -1778,6 +1962,7 @@ namespace dxvk {
     /// HitData fields
     constexpr uintptr_t HitAggressor            = 0x00;
     constexpr uintptr_t HitTarget               = 0x04;
+    constexpr uintptr_t HitProjectile           = 0x08;
     constexpr uintptr_t HitDamageLimb           = 0x10;
     constexpr uintptr_t HitHealthDamage         = 0x14;
     constexpr uintptr_t HitLimbDamage           = 0x20;
