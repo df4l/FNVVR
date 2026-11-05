@@ -728,6 +728,7 @@ namespace dxvk {
      * are __cdecl without arguments and return a FORenderedMenu*.
      */
     constexpr uintptr_t MainSingleton              = 0x011DEA0C;
+    constexpr uintptr_t MainWindow                 = 0x8;
     constexpr uintptr_t RenderedMenuParentCallSite = 0x00870967;
     constexpr uintptr_t DrawRenderedMenuParent     = 0x00875BF0;
     constexpr uintptr_t GetCurrentRenderedMenu     = 0x00707AD0;

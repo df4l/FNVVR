@@ -11,6 +11,7 @@
 - **lStewieAl's Tweaks and Engine Optimizations**: the comfort settings (no idle third-person camera, first-person kill camera) no longer stop with the tweaks, the bullet trails option no longer takes the weapon out of the hand, and the functions Engine Optimizations rewrites no longer stop stereo rendering and the features that call them. With its manual reload option, firing an empty weapon no longer refills a weapon reloaded by hand. Keep `bSmoothIronsightsCameraTransition`, `bScopeVisibilityDelay` and `bAlwaysShowWeaponAnimation` off in VR.
 - **yUI**: the right stick scrolls menus again with its touchpad fix, and its crosshair, hit markers and objective markers no longer stick to the view. Not tried in the game yet.
 - **UI Organizer**: opening the console no longer crashes with it. Not tried in the game yet.
+- **ITR**: the lasers work in menus with it, the game keeps its sound although its window is hidden, and a bare fist shows its own impact. Not tried in the game yet.
 - **The log names the other mod**: when another mod already patched a place in the game that the mod needs, the log says which file holds it (`is already patched`).
 
 ### Tutorials
