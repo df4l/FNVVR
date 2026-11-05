@@ -35,6 +35,7 @@
 #include "vr_system.h"
 #include "vr_text_files.h"
 #include "vr_weapon_types.h"
+#include "vr_yui_loot_menu.h"
 
 namespace dxvk {
 
@@ -272,6 +273,7 @@ namespace dxvk {
     });
 
     VrLargeAddress::install(g_vrSystem->m_texts);
+    VrYuiLootMenu::install(g_vrSystem->m_texts);
     VrSoundFocus::install();
 
     if (config.getOption<bool>("d3d9.vrRealTimeCasino", true))

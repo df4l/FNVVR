@@ -1,9 +1,6 @@
 #include <windows.h>
 
 #include <algorithm>
-#include <string>
-
-#include "../../util/log/log.h"
 
 #include "vr_game_addresses.h"
 #include "vr_game_memory.h"
@@ -24,23 +21,6 @@ namespace dxvk {
     template<typename T>
     T readField(uintptr_t base, uintptr_t offset) {
       return *reinterpret_cast<const T*>(base + offset);
-    }
-
-    /**
-     * \brief Tells whether yUI's Loot Menu is on
-     *
-     * Only reads yUI's settings, it is on when they do not mention it.
-     */
-    bool yuiLootMenuEnabled() {
-      char path[MAX_PATH] = { };
-      DWORD length = GetModuleFileNameA(nullptr, path, MAX_PATH);
-
-      if (!length || length >= MAX_PATH)
-        return true;
-
-      std::string ini(path, length);
-      ini = ini.substr(0, ini.find_last_of("\\/") + 1) + "Data\\NVSE\\Plugins\\yUI.ini";
-      return GetPrivateProfileIntA("General", "bLootMenu", 1, ini.c_str()) != 0;
     }
 
   }
@@ -79,11 +59,6 @@ namespace dxvk {
     m_yuiLoaded = m_menusFound && GetModuleHandleW(L"yUI.dll")
       && VrGameMemory::matches(VrGame::TileGetChildByName,
         VrGame::TileGetChildByNamePrologue, sizeof(VrGame::TileGetChildByNamePrologue));
-
-    if (GetModuleHandleW(L"yUI.dll") && yuiLootMenuEnabled()) {
-      Logger::warn("VR: yUI's Loot Menu is on. With ShowOff it reads the real gamepad and refuses containers "
-        "opened with the controllers: set bLootMenu = 0 in Data/NVSE/Plugins/yUI.ini");
-    }
 
     return m_available;
   }
