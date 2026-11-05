@@ -155,6 +155,35 @@ namespace dxvk {
   }
 
 
+  bool VrGameMemory::canChainCall(
+          uintptr_t             site,
+          uintptr_t             expectedTarget) {
+    uintptr_t current = 0;
+
+    return readCallTarget(site, &current)
+        && (current == expectedTarget || isForeignCode(current));
+  }
+
+
+  bool VrGameMemory::chainCall(
+          uintptr_t             site,
+          uintptr_t             expectedTarget,
+    const void*                 newTarget,
+          uintptr_t*            previous) {
+    uintptr_t current = 0;
+
+    if (!canChainCall(site, expectedTarget) || !readCallTarget(site, &current))
+      return false;
+
+    if (!redirectCall(site, current, newTarget))
+      return false;
+
+    reportForeignCode(site, current);
+    *previous = current;
+    return true;
+  }
+
+
   bool VrGameMemory::replaceCode(
           uintptr_t             site,
     const uint8_t*              expected,

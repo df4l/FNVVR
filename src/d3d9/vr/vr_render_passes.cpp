@@ -25,6 +25,10 @@ namespace dxvk {
 
     VrRenderPasses* g_renderPasses = nullptr;
 
+    // The function the first-person depth clear called: the game's, or
+    // another mod's hook
+    uintptr_t g_clearBuffer = VrGame::RendererClearBuffer;
+
     template<typename Fn>
     Fn game(uintptr_t address) {
       return reinterpret_cast<Fn>(address);
@@ -114,8 +118,10 @@ namespace dxvk {
       reinterpret_cast<const void*>(&VrRenderPasses::imageSpaceHook), "image space");
 
     if (used.handsDepthTest) {
-      used.handsDepthTest = VrGameMemory::redirectCall(VrGame::FirstPersonDepthClearSite,
-        VrGame::RendererClearBuffer, reinterpret_cast<const void*>(&VrRenderPasses::firstPersonClearHook));
+      // JIP LN holds this call for its ToggleDepthClear command
+      used.handsDepthTest = VrGameMemory::chainCall(VrGame::FirstPersonDepthClearSite,
+        VrGame::RendererClearBuffer, reinterpret_cast<const void*>(&VrRenderPasses::firstPersonClearHook),
+        &g_clearBuffer);
 
       Logger::info(used.handsDepthTest
         ? "VR: The hands and the weapon are hidden by the world in front of them"
@@ -338,7 +344,7 @@ namespace dxvk {
       flags &= ~VrGame::ClearDepthBuffer;
 
     if (flags)
-      game<ClearFn>(VrGame::RendererClearBuffer)(renderer, nullptr, rect, flags);
+      game<ClearFn>(g_clearBuffer)(renderer, nullptr, rect, flags);
   }
 
 }

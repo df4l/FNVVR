@@ -88,6 +88,36 @@ namespace dxvk {
       const void*                 newTarget);
 
     /**
+     * \brief Checks that \ref chainCall can take a relative call instruction
+     *
+     * \param [in] site Address of a 5-byte call (opcode E8)
+     * \param [in] expectedTarget Function the call reaches without other mods
+     */
+    static bool canChainCall(
+            uintptr_t             site,
+            uintptr_t             expectedTarget);
+
+    /**
+     * \brief Redirects a relative call instruction, over another mod's hook
+     *
+     * xNVSE and its plugins patch the game before the first Direct3D call,
+     * so a call may already reach their code. That hook stays in the chain:
+     * the new function calls \c previous instead of the game's function.
+     *
+     * \param [in] site Address of a 5-byte call (opcode E8)
+     * \param [in] expectedTarget Function the call reaches without other mods
+     * \param [in] newTarget Function to call instead
+     * \param [out] previous Function the call reached, unchanged on failure
+     * \returns \c true if the call was redirected. A call that reaches another
+     *    function of the game, or this library, is left alone.
+     */
+    static bool chainCall(
+            uintptr_t             site,
+            uintptr_t             expectedTarget,
+      const void*                 newTarget,
+            uintptr_t*            previous);
+
+    /**
      * \brief Replaces an entry of a virtual function table
      *
      * \param [in] slot Address of the table entry
