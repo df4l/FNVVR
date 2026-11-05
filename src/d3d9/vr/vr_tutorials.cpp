@@ -19,8 +19,19 @@ namespace dxvk {
     using DescriptionFn = const char* (__fastcall*)(uint8_t* description, void* unused, void* form, uint32_t chunk);
     using ControlTextFn = void (__cdecl*)(uint32_t action, char* text, bool withPrefix);
     using FormByIdFn    = uint8_t* (__cdecl*)(uint32_t formId);
+    using CreateMenuFn  = bool (__cdecl*)(uint8_t* message, bool withManual);
+    using AssignFn      = void* (__fastcall*)(void* string, void* unused, const char* text);
 
     const VrTutorialTexts* g_texts = nullptr;
+
+    // An unused message of the game (HelpPipBoyRepair): its slot is never
+    // raised, so it only opens when a pop-up of the mod asks for it
+    constexpr uint32_t TipMessage = 0x0000016E;
+
+    constexpr wchar_t SeenFile[] = L"tutorials_seen.txt";
+
+    // The text the pop-up's message reads
+    const std::string* g_tipBody = nullptr;
 
     constexpr char LanguageSettingName[] = "sLanguage:General";
 
@@ -74,6 +85,7 @@ namespace dxvk {
 
   VrTutorials::~VrTutorials() {
     g_texts = nullptr;
+    g_tipBody = nullptr;
   }
 
 
@@ -104,11 +116,56 @@ namespace dxvk {
           reinterpret_cast<const void*>(&VrTutorials::controlTextHook)))
       Logger::warn("VR: The control name function was not found, messages can name the gamepad's buttons");
 
+    std::string seen;
+
+    if (VrOptionsFile::readText(SeenFile, seen))
+      tutorials->m_tips.parseSeen(seen);
+
+    tutorials->m_canShowTips =
+         VrGameMemory::matches(VrGame::TutorialMenuCreate, VrGame::TutorialMenuCreatePrologue, sizeof(VrGame::TutorialMenuCreatePrologue))
+      && VrGameMemory::matches(VrGame::GameStringAssign, VrGame::GameStringAssignPrologue, sizeof(VrGame::GameStringAssignPrologue));
+
+    if (!tutorials->m_canShowTips)
+      Logger::warn("VR: The tutorial window was not found, the mod's pop-ups stay hidden");
+
     Logger::info(str::format("VR: Tutorials: ", tutorials->m_texts.messageCount(), " messages and ",
       tutorials->m_texts.controlCount(), " control names, game language '", language, "'",
       hasLanguage || language == "english" ? "" : ", shown in English"));
 
     return tutorials;
+  }
+
+
+  void VrTutorials::update(const VrTipInput& input, float dt) {
+    if (!m_canShowTips)
+      return;
+
+    VrTip tip = m_tips.update(input, dt);
+
+    if (tip != VrTip::None)
+      show(tip);
+  }
+
+
+  void VrTutorials::show(VrTip tip) {
+    // Seen whatever comes next: a pop-up that fails must not come back each frame
+    VrOptionsFile::writeText(SeenFile, m_tips.formatSeen());
+
+    const VrTipText* text = m_texts.tip(vrTipName(tip));
+    uint8_t* message = reinterpret_cast<FormByIdFn>(VrGame::FormById)(TipMessage);
+
+    if (!text || !message) {
+      Logger::warn(str::format("VR: The pop-up '", vrTipName(tip), "' has no text or no message"));
+      return;
+    }
+
+    reinterpret_cast<AssignFn>(VrGame::GameStringAssign)(message + VrGame::MessageNameString, nullptr, text->title.c_str());
+    g_tipBody = &text->body;
+
+    if (reinterpret_cast<CreateMenuFn>(VrGame::TutorialMenuCreate)(message, false))
+      Logger::info(str::format("VR: The pop-up '", vrTipName(tip), "' is shown"));
+    else
+      Logger::warn(str::format("VR: The pop-up '", vrTipName(tip), "' could not open"));
   }
 
 
@@ -122,6 +179,9 @@ namespace dxvk {
     uint8_t* message = description - VrGame::MessageDescription;
     uint32_t formId = *reinterpret_cast<const uint32_t*>(message + VrGame::FormId);
     uint32_t source = vrTutorialTextSource(formId);
+
+    if (formId == TipMessage && g_tipBody)
+      return g_tipBody->c_str();
 
     if (g_texts) {
       if (const std::string* text = g_texts->message(source))

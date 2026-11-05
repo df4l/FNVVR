@@ -723,6 +723,7 @@ namespace dxvk {
     updatePhysicsGrab(input, state);
     updateHandPick(input, state);
     updatePipBoyGaze(input, state, dt);
+    updateTips(state, dt);
 
     // Before the interface's tiles are updated for this frame
     D3DSURFACE_DESC targetDesc = { };
@@ -1360,6 +1361,45 @@ namespace dxvk {
 
     if (m_ammoLabel)
       m_ammoLabel->hide();
+  }
+
+
+  void VrStereoRenderer::updateTips(VrGameStateKind state, float dt) {
+    if (!m_tutorials)
+      return;
+
+    // The game's weapon types: melee, then the ones with a magazine or a tube
+    constexpr int32_t FirstMelee    = 1;
+    constexpr int32_t LastMelee     = 2;
+    constexpr int32_t FirstFirearm  = 3;
+    constexpr int32_t LastFirearm   = 9;
+
+    VrTipInput tips;
+
+    if (m_minigames) {
+      switch (m_minigames->kind()) {
+        case VrMinigames::Kind::SlotMachine: tips.minigame = VrTip::SlotMachine; break;
+        case VrMinigames::Kind::BlackJack:   tips.minigame = VrTip::BlackJack;   break;
+        case VrMinigames::Kind::Roulette:    tips.minigame = VrTip::Roulette;    break;
+        default: break;
+      }
+    }
+
+    auto player = *reinterpret_cast<const uint8_t* const*>(VrGame::Player);
+
+    if (state == VrGameStateKind::InGame && player) {
+      tips.playing = !(*(player + VrGame::PlayerDisabledControls) & VrGame::ControlMovement)
+                  && !*(player + VrGame::PlayerInCombat);
+
+      int32_t type = -1;
+
+      if (VrWeaponDrawn::equippedWeapon(type)) {
+        tips.meleeWeapon = type >= FirstMelee && type <= LastMelee;
+        tips.firearm     = type >= FirstFirearm && type <= LastFirearm && m_manualReload && m_manualReload->enabled();
+      }
+    }
+
+    m_tutorials->update(tips, dt);
   }
 
 

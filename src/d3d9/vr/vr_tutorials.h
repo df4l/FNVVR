@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <memory>
 
+#include "vr_tips.h"
 #include "vr_tutorial_text.h"
 
 namespace dxvk {
@@ -33,11 +34,25 @@ namespace dxvk {
      */
     static std::unique_ptr<VrTutorials> install();
 
+    /**
+     * \brief Shows the mod's pop-up that the situation calls for
+     *
+     * Only on the game's main thread, outside the rendering of a pass.
+     *
+     * \param [in] input The frame's situation
+     * \param [in] dt Time since the last frame, in seconds
+     */
+    void update(const VrTipInput& input, float dt);
+
   private:
 
     VrTutorials() = default;
 
     VrTutorialTexts m_texts;
+    VrTipQueue      m_tips;
+    bool            m_canShowTips = false;
+
+    void show(VrTip tip);
 
     static const char* __fastcall descriptionHook(
             uint8_t*              description,

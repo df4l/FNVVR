@@ -901,6 +901,20 @@ namespace dxvk {
     constexpr uintptr_t SettingLanguage             = 0x011C3CB4;
 
     /**
+     * Opening a tutorial's window for a message, as the script function
+     * ShowTutorialMenu does in the middle of a game: TutorialMenu::Create
+     * (__cdecl, message, with the help manual's buttons). The title is
+     * the message's TESFullName string at MessageNameString, replaced with
+     * BSStringT::operator= (__thiscall, text). Checked against their first
+     * bytes before they are called. See findings/tutorials.md.
+     */
+    constexpr uintptr_t TutorialMenuCreate          = 0x007E8890;
+    constexpr uint8_t   TutorialMenuCreatePrologue[] = { 0x55, 0x8B, 0xEC, 0x6A, 0xFF };
+    constexpr uintptr_t GameStringAssign            = 0x00438390;
+    constexpr uint8_t   GameStringAssignPrologue[]  = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC };
+    constexpr uintptr_t MessageNameString           = 0x1C;
+
+    /**
      * Settings the VR layer replaces on the first D3D9 interface, see
      * findings/game-settings.md. WinMain has read the INI files by then; the
      * audio setup (TESMain::TESMain), TESRenderer::Init and the run-time

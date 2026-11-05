@@ -34,6 +34,15 @@ namespace dxvk {
     static bool save(const VrOptions& options);
 
     /**
+     * \brief Writes a text file of the options' folder, creating it if needed
+     *
+     * \param [in] name The file's name
+     * \param [in] text The file's text
+     * \returns \c true if the file was written
+     */
+    static bool writeText(const wchar_t* name, const std::string& text);
+
+    /**
      * \brief Reads a text file of the options' folder
      *
      * \param [in] name The file's name

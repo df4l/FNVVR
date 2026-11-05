@@ -14,6 +14,7 @@
 #include "vr_body_view.h"
 #include "vr_comfort_settings.h"
 #include "vr_roomscale.h"
+#include "vr_tutorials.h"
 #include "vr_controls.h"
 #include "vr_culling_camera.h"
 #include "vr_developer_mode.h"
@@ -227,6 +228,10 @@ namespace dxvk {
      *
      * \param [in] enabled Off, every weapon is reloaded as in the game
      */
+    void setTutorials(VrTutorials* tutorials) {
+      m_tutorials = tutorials;
+    }
+
     void setManualReload(bool enabled) {
       if (m_manualReload)
         m_manualReload->setEnabled(enabled);
@@ -410,6 +415,9 @@ namespace dxvk {
 
     // The scenes of the mini-games, in the eye images instead of the panel
     std::unique_ptr<VrMinigames> m_minigames;
+
+    // Owned by the VR system, null without the mod's texts
+    VrTutorials*        m_tutorials = nullptr;
     std::array<bool, VrEyeCount> m_minigameDrawn = { };
     uint32_t            m_minigamePanelRevision = 0;
 
@@ -649,6 +657,8 @@ namespace dxvk {
     void updateHandThrow(const VrInputState& input, VrGameStateKind state, float dt);
 
     void updateManualReload(const VrInputState& input, VrGameStateKind state, float dt);
+
+    void updateTips(VrGameStateKind state, float dt);
 
     void updateHolster(const VrInputState& input, VrGameStateKind state);
 

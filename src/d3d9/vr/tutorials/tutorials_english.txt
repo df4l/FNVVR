@@ -112,3 +112,46 @@ Good! Now let go of the grip to drop the skull.
 # VCGTutorialGrab2
 [message 0x16740F]
 To grab an object, reach for it or point at it with a free hand and hold that hand's grip.
+
+# The mod's own pop-ups: the first line is the title. Each is shown once;
+# fnvvr\tutorials_seen.txt remembers them, deleting it shows them again.
+
+[tip welcome]
+Welcome to FNVVR
+Your hands are the controls here.
+
+* Look at your left forearm: your Pip-Boy opens.
+* A: activate what your hand points at. In menus the lasers point and the trigger clicks.
+* Push the right stick down and hold it: your hotkeys appear at your right hand.
+* Right grip at your right hip or behind your right shoulder: holster or draw your weapon.
+* Y: wait. Hold Y: pause menu, where Help lists all the controls.
+
+[tip melee_weapon]
+Melee weapons
+Swing the weapon with your arm: a fast enough swing hits what the weapon touches.
+
+Hold the right trigger until the ring beside your right hand is full: your next hit is a power attack, which costs Action Points.
+
+[tip firearm]
+Firearms
+Shots follow the barrel, so aim with the weapon itself. Hold the left grip with your left hand at the weapon to steady it with both hands.
+
+You reload by hand, with the left trigger: pull the magazine out of its well, take new ammunition behind your back and push it into the weapon, then work the bolt if it needs it. The part to handle lights up.
+
+Settings > VR turns the manual reload off.
+
+[tip slot_machine]
+Slot machine
+Close your grip on the ball of the lever and pull it down to spin the reels.
+
+The buttons and the lasers still work.
+
+[tip blackjack]
+Blackjack
+Tap the felt to hit. Wave your hand over the table to stay.
+
+The buttons and the lasers still work.
+
+[tip roulette]
+Roulette
+Point a laser at the felt to move your selection. The trigger places a chip or takes it back.
