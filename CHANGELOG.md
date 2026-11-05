@@ -16,11 +16,8 @@
 
 ### Mini-games in the room
 
-- **The mini-games stand in front of you**, in 3D at their real size, instead of on a flat panel: the lock, the slot machine, the blackjack, roulette and Caravan tables, and the terminals with their hacking screen. Your hands are there too, in front of the table or behind it. Texts and buttons stay on a panel above the table, pointed at with the lasers. `d3d9.vrImmersiveMinigames = False` brings the flat panel back.
-- **Lockpicking**: the pin points at your right hand. Turn the screwdriver with the left trigger, or close the left grip and twist your wrist, the further the faster. The controllers vibrate while the lock turns and when the pin bends. The sticks still work.
-- **Slot machine**: close your grip on the lever's ball and pull it down. Your eyes look slightly down on the reels, as from a stool, and the payout screen only appears when you ask for it.
-- **Blackjack**: tap the felt to hit, wave over the table to stay, as at a real table. Buttons and lasers still work.
-- **Roulette**: point the laser at the felt, the trigger places a chip or takes it back.
+- **The mini-games stand in front of you**, in 3D at their real size, instead of on a flat panel: the lock, the slot machine, the blackjack, roulette and Caravan tables, and the terminals with their hacking screen. They are played with the sticks and buttons, as on a gamepad, and your hands are hidden while they are open. Texts and buttons stay on a panel above the table, pointed at with the lasers. `d3d9.vrImmersiveMinigames = False` brings the flat panel back.
+- **Slot machine**: Your eyes look slightly down on the reels, as from a stool, and the payout screen only appears when you ask for it.
 - **Terminals and hacking**: the monitor stands in the room and the laser points directly at its screen.
 - **The casino runs in real time**: at a blackjack table, a roulette table or a slot machine, the world goes on around you, with its time, people and sounds. Dealers may walk away during a game. It stops as before when you are in combat, in the pause menu or in a message. `d3d9.vrRealTimeCasino = False` brings the pause back.
 
