@@ -105,29 +105,3 @@ Bien ! Maintenant, relâchez la poignée pour lâcher le crâne.
 # VCGTutorialGrab2
 [message 0x16740F]
 Pour saisir un objet, approchez-en une main libre ou pointez-la vers lui, puis maintenez la poignée de cette main.
-
-# Les pop-ups du mod : la première ligne est le titre.
-
-[tip welcome]
-Bienvenue dans FNVVR
-Ici, vos mains sont les commandes.
-
-* Regardez votre avant-bras gauche : votre Pip-Boy s'ouvre.
-* A : activer ce que votre main désigne. Dans les menus, les lasers pointent et la gâchette clique.
-* Poussez le stick droit vers le bas et maintenez-le : vos raccourcis apparaissent à votre main droite.
-* Poignée droite à la hanche droite ou derrière l'épaule droite : rengainer ou dégainer votre arme.
-* Y : attendre. Y maintenu : menu pause, dont l'Aide liste toutes les commandes.
-
-[tip melee_weapon]
-Armes de corps à corps
-Frappez avec le bras : un geste assez rapide touche ce que l'arme rencontre.
-
-Maintenez la gâchette droite jusqu'à ce que l'anneau près de votre main droite soit plein : le coup suivant est une attaque puissante, qui coûte des Points d'action.
-
-[tip firearm]
-Armes à feu
-Les tirs suivent le canon : visez avec l'arme elle-même. Maintenez la poignée gauche, la main gauche sur l'arme, pour la stabiliser à deux mains.
-
-Le rechargement se fait à la main, avec la gâchette gauche : retirez le chargeur de son logement, prenez de nouvelles munitions derrière votre dos et poussez-les dans l'arme, puis actionnez la culasse si nécessaire. La pièce à manipuler s'éclaire.
-
-Options > VR permet de désactiver le rechargement manuel.

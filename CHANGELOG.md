@@ -5,7 +5,6 @@
 ### Tutorials
 
 - **The game's tutorials and help speak of the VR controls**: V.A.T.S., lockpicking, ammunition, hotkeys, the Pip-Boy and its light, aiming, grabbing and the Movement and Combat help page describe the controllers and gestures, in English and French, and the game's other sentences name the real buttons (the right stick for V.A.T.S., no more right bumper). The keyboard versions of these messages no longer appear when a laser is in use. Other languages show these texts in English: a `fnvvr\\tutorials_<language>.txt` file translates them. `d3d9.vrTutorials = False` brings the game's text back.
-- **Pop-ups for the mod's features**: once each, a window explains the hands on the first moment in game, and melee weapons and firearms the first time one is equipped. Delete `fnvvr\\tutorials_seen.txt` to see them again.
 
 ### Menus
 

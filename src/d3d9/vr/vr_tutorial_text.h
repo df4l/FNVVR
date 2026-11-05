@@ -7,15 +7,6 @@
 namespace dxvk {
 
   /**
-   * \brief A pop-up of the mod, in the game's encoding
-   */
-  struct VrTipText {
-    std::string title;
-    std::string body;
-  };
-
-
-  /**
    * \brief The VR wording of the game's tutorials, read from text files
    *
    * A file holds sections, one per text, in UTF-8:
@@ -27,10 +18,6 @@ namespace dxvk {
    *   [message 0x183]
    *   The whole text of the message,
    *   over as many lines as it needs.
-   *
-   *   [tip welcome]
-   *   The title of a pop-up of the mod
-   *   Its text, over as many lines as it needs.
    *
    * Reading a second file replaces the texts it holds and keeps the others,
    * so a partial translation falls back on the first file.
@@ -65,14 +52,6 @@ namespace dxvk {
      */
     const std::string* control(uint32_t action) const;
 
-    /**
-     * \brief The text of a pop-up
-     *
-     * \param [in] name The pop-up's name
-     * \returns Its text, or \c nullptr if it has none
-     */
-    const VrTipText* tip(const std::string& name) const;
-
     size_t messageCount() const {
       return m_messages.size();
     }
@@ -85,7 +64,6 @@ namespace dxvk {
 
     std::map<uint32_t, std::string> m_messages;
     std::map<uint32_t, std::string> m_controls;
-    std::map<std::string, VrTipText> m_tips;
 
   };
 

@@ -410,7 +410,6 @@ namespace dxvk {
       m_stereoRenderer->setRoomscale(m_roomscale);
       m_stereoRenderer->setHandPush(m_handPush);
       m_stereoRenderer->setSneakConfig(m_sneakConfig);
-      m_stereoRenderer->setTutorials(m_tutorials.get());
     }
 
     return true;

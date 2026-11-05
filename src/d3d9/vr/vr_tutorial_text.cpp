@@ -78,11 +78,10 @@ namespace dxvk {
 
 
   void VrTutorialTexts::parse(const std::string& text) {
-    enum class Section { None, Message, Control, Tip };
+    enum class Section { None, Message, Control };
 
     Section section = Section::None;
     uint32_t key = 0;
-    std::string tipName;
     std::string body;
 
     auto finish = [&] {
@@ -93,12 +92,6 @@ namespace dxvk {
         m_messages[key] = std::move(value);
       else if (section == Section::Control && !value.empty() && value.size() <= MaxControlName)
         m_controls[key] = std::move(value);
-      else if (section == Section::Tip) {
-        size_t end = value.find("\r\n");
-
-        if (end != std::string::npos)
-          m_tips[tipName] = { value.substr(0, end), trimmed(value.substr(end)) };
-      }
     };
 
     size_t start = text.compare(0, 3, "\xEF\xBB\xBF") ? 0 : 3;
@@ -139,9 +132,6 @@ namespace dxvk {
             section = Section::Control;
             key = uint32_t(action);
           }
-        } else if (!header.compare(0, 4, "tip ")) {
-          section = Section::Tip;
-          tipName = header.substr(4);
         }
 
         continue;
@@ -165,12 +155,6 @@ namespace dxvk {
   const std::string* VrTutorialTexts::control(uint32_t action) const {
     auto entry = m_controls.find(action);
     return entry != m_controls.end() ? &entry->second : nullptr;
-  }
-
-
-  const VrTipText* VrTutorialTexts::tip(const std::string& name) const {
-    auto entry = m_tips.find(name);
-    return entry != m_tips.end() ? &entry->second : nullptr;
   }
 
 
