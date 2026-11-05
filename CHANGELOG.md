@@ -5,6 +5,8 @@
 ### Other mods
 
 - **Manual reload works with xNVSE**: xNVSE takes the player's reload function before the mod starts, which turned manual reload off for everyone using it. The mod now goes through xNVSE's hook, and the scripts' reload control still applies to the game's own reloads.
+- **JIP LN**: the hands stay behind the world in front of them, and a weapon held with both hands keeps the game's precision with JIP's creature spread fix on.
+- **JohnnyGuitar**: the Pip-Boy keeps the live world behind it, the rendered menus work, and the cursor shows on the menu panel.
 - **The log names the other mod**: when another mod already patched a place in the game that the mod needs, the log says which file holds it (`is already patched`).
 
 ### Tutorials
