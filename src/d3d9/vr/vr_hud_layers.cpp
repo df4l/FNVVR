@@ -13,10 +13,10 @@ namespace dxvk {
     using TileGetFloatFn = float (__thiscall*)(uintptr_t tile, uint32_t trait);
     using TileGetChildFn = uintptr_t (__thiscall*)(uintptr_t tile, const char* name);
 
-    /// What yUI adds to the HUD's tile: crosshair, hit marker, hit indicator,
-    /// objective markers and loot menu. They are placed for a flat screen
-    /// around its centre, and the head panel shows the whole HUD image.
-    constexpr const char* YuiTiles[] = { "JDC", "JHM", "JHI", "JVO", "JLM" };
+    /// What yUI adds to the HUD's tile: crosshair, hit marker, hit indicator
+    /// and objective markers. They are placed for a flat screen around its
+    /// centre, and the head panel shows the whole HUD image.
+    constexpr const char* YuiTiles[] = { "JDC", "JHM", "JHI", "JVO" };
 
     template<typename T>
     T readField(uintptr_t base, uintptr_t offset) {

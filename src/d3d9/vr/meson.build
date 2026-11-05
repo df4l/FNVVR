@@ -140,8 +140,6 @@ vr_dxvk_src = files([
   'vr_hand_body.cpp',
   'vr_crash_log.cpp',
   'vr_large_address.cpp',
-  'vr_main_menu_prompts.cpp',
-  'vr_yui_loot_menu.cpp',
   'vr_npc_reaction.cpp',
   'vr_melee_object_hit.cpp',
 ])

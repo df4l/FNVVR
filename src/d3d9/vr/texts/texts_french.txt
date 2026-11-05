@@ -170,29 +170,6 @@ OK
 Tant que ce fichier existe, FNVVR ne propose pas à FalloutNV.exe d'utiliser 4 Go de mémoire.
 Supprimez-le pour que la question soit reposée.
 
-# Le Loot Menu de yUI, au menu principal.
-[text yuilootmenu.prompt]
-Le Loot Menu de yUI ne fonctionne pas avec les manettes VR : les conteneurs et les cadavres peuvent ne plus s'ouvrir. FNVVR peut le désactiver, le reste de yUI reste actif : bLootMenu passe à 0 dans yUI.ini.
-
-[text yuilootmenu.turnoff]
-Le désactiver
-
-[text yuilootmenu.later]
-Plus tard
-
-[text yuilootmenu.never]
-Ne plus demander
-
-[text yuilootmenu.failed]
-yUI.ini n'a pas pu être modifié, le journal d3d9 en donne la raison. Passez vous-même bLootMenu à 0 dans Data\NVSE\Plugins\yUI.ini.
-
-[text yuilootmenu.ok]
-OK
-
-[text yuilootmenu.declinedfile]
-Tant que ce fichier existe, FNVVR ne propose pas de désactiver le Loot Menu de yUI.
-Supprimez-le pour que la question soit reposée.
-
 # Les touches du clavier de la console, courtes et sans accents : la place manque.
 [text key.ESC]
 ECH

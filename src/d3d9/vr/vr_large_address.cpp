@@ -8,21 +8,32 @@
 #include "../../util/sha1/sha1_util.h"
 #include "../../util/util_string.h"
 
+#include "vr_game_addresses.h"
+#include "vr_game_memory.h"
 #include "vr_large_address.h"
 #include "vr_large_address_patch.h"
-#include "vr_main_menu_prompts.h"
 #include "vr_module_path.h"
 
 namespace dxvk {
 
   namespace {
 
+    using MainMenuIdleFn   = uint8_t (__fastcall*)(void* menu, void* unused);
+    using MessageBoxFn     = bool (__cdecl*)(const char* text, const char* icon, const char* title,
+      void (__cdecl* callback)(), uint32_t firstButton, uint32_t type, float alpha, float width, ...);
+    using MessageResultFn  = int8_t (__cdecl*)();
+
     /// Highest address a process without the large address aware flag gets, plus one
     constexpr uintptr_t TwoGigabytes = 0x80000000u;
 
-    /// Indices of the prompt's buttons
-    constexpr int32_t PatchButton = 0;
-    constexpr int32_t NeverButton = 2;
+    /// Frames the main menu stays idle before the prompt, so it does not
+    /// appear while the menu settles
+    constexpr uint32_t ReadyFrames = 30;
+
+    /// Values of the prompt's buttons: the first one gets FirstButton
+    constexpr int8_t FirstButton = 1;
+    constexpr int8_t PatchButton = FirstButton;
+    constexpr int8_t NeverButton = FirstButton + 2;
 
     constexpr wchar_t DeclinedFileName[] = L"no_large_address_prompt.txt";
     constexpr wchar_t BackupName[]       = L"FalloutNV_backup.exe";
@@ -42,8 +53,9 @@ namespace dxvk {
       Done,
     };
 
-    Step g_step    = Step::WaitForMenu;
-    bool g_patched = false;
+    Step     g_step        = Step::WaitForMenu;
+    uint32_t g_readyFrames = 0;
+    bool     g_patched     = false;
 
     std::wstring executablePath() {
       std::vector<WCHAR> buffer(MAX_PATH);
@@ -194,7 +206,7 @@ namespace dxvk {
     }
 
     void __cdecl onPromptAnswered() {
-      int32_t button = VrMainMenuPrompts::answer();
+      int8_t button = reinterpret_cast<MessageResultFn>(VrGame::GetMessageMenuResult)();
 
       if (button == PatchButton) {
         g_patched = patchExecutable();
@@ -209,30 +221,46 @@ namespace dxvk {
       }
     }
 
+    void showMessageBox(const char* text, void (__cdecl* callback)(), const char* button) {
+      reinterpret_cast<MessageBoxFn>(VrGame::ShowMessageBox)(text, nullptr, nullptr, callback,
+        FirstButton, VrGame::MessageBoxStartMenuType, 0.0f, 0.0f, button, nullptr);
+    }
+
     void showPrompt() {
-      VrMainMenuPrompts::show(
+      reinterpret_cast<MessageBoxFn>(VrGame::ShowMessageBox)(
         text("largeaddress.prompt",
           "Fallout: New Vegas can only use 2 GB of memory. VR and mods fill it quickly, and the game then crashes. "
           "FNVVR can let it use 4 GB, as the FNV 4GB Patcher does: FalloutNV.exe is modified and the original is "
           "kept as FalloutNV_backup.exe. The change takes effect the next time the game starts."),
-        &onPromptAnswered,
+        nullptr, nullptr, &onPromptAnswered,
+        FirstButton, VrGame::MessageBoxStartMenuType, 0.0f, 0.0f,
         text("largeaddress.patch", "Use 4 GB"), text("largeaddress.later", "Not now"),
-        text("largeaddress.never", "Don't ask again"));
+        text("largeaddress.never", "Don't ask again"), nullptr);
     }
 
-    bool promptStep(bool ready) {
+    /// The main menu has faded in, has no message box and is not loading content
+    bool menuReady(const uint8_t* menu) {
+      uint32_t flags = *reinterpret_cast<const uint32_t*>(menu + VrGame::StartMenuFlags);
+      uint32_t busy = VrGame::StartMenuFadeIn | VrGame::StartMenuContentMessage | VrGame::StartMenuPreFade;
+
+      return !(flags & busy) && !*reinterpret_cast<void* const*>(VrGame::MessageMenuGlobal);
+    }
+
+    void onMainMenu(const uint8_t* menu) {
       switch (g_step) {
         case Step::WaitForMenu:
-          if (ready) {
+          g_readyFrames = menuReady(menu) ? g_readyFrames + 1 : 0;
+
+          if (g_readyFrames >= ReadyFrames) {
             g_step = Step::Asked;
             showPrompt();
           }
-          return true;
+          break;
 
         case Step::Report:
-          if (ready) {
+          if (menuReady(menu)) {
             g_step = Step::Done;
-            VrMainMenuPrompts::show(g_patched
+            showMessageBox(g_patched
               ? text("largeaddress.done",
                   "FalloutNV.exe can now use 4 GB of memory. Quit and start the game again for the change to take effect.")
               : text("largeaddress.failed",
@@ -240,16 +268,21 @@ namespace dxvk {
                   "The FNV 4GB Patcher from Nexus Mods makes the same change."),
               nullptr, text("largeaddress.ok", "OK"));
           }
-          return true;
+          break;
 
         case Step::Asked:
-          return true;
-
         case Step::Done:
           break;
       }
+    }
 
-      return false;
+    uint8_t __fastcall mainMenuIdleHook(void* menu, void* unused) {
+      uint8_t inMainMenu = reinterpret_cast<MainMenuIdleFn>(VrGame::MainMenuIdle)(menu, unused);
+
+      if (inMainMenu)
+        onMainMenu(static_cast<const uint8_t*>(menu));
+
+      return inMainMenu;
     }
 
   }
@@ -298,7 +331,12 @@ namespace dxvk {
       return false;
     }
 
-    if (!VrMainMenuPrompts::add(&promptStep)) {
+    if (!VrGameMemory::matches(VrGame::ShowMessageBox,
+          VrGame::ShowMessageBoxPrologue, sizeof(VrGame::ShowMessageBoxPrologue))
+     || !VrGameMemory::matches(VrGame::GetMessageMenuResult,
+          VrGame::GetMessageMenuResultPrologue, sizeof(VrGame::GetMessageMenuResultPrologue))
+     || !VrGameMemory::redirectCall(VrGame::MainMenuIdleCallSite, VrGame::MainMenuIdle,
+          reinterpret_cast<const void*>(&mainMenuIdleHook))) {
       Logger::warn("VR: The main menu was not found, the 4 GB patch is not offered");
       return false;
     }
