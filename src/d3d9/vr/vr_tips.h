@@ -12,9 +12,6 @@ namespace dxvk {
     Welcome,
     MeleeWeapon,
     Firearm,
-    SlotMachine,
-    BlackJack,
-    Roulette,
     Count,
     None = Count,
   };
@@ -29,8 +26,6 @@ namespace dxvk {
     bool  meleeWeapon  = false;
     /// A weapon reloaded by hand is equipped
     bool  firearm      = false;
-    /// The pop-up of the mini-game that is open
-    VrTip minigame     = VrTip::None;
   };
 
   /**

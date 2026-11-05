@@ -131,19 +131,3 @@ Les tirs suivent le canon : visez avec l'arme elle-même. Maintenez la poignée 
 Le rechargement se fait à la main, avec la gâchette gauche : retirez le chargeur de son logement, prenez de nouvelles munitions derrière votre dos et poussez-les dans l'arme, puis actionnez la culasse si nécessaire. La pièce à manipuler s'éclaire.
 
 Options > VR permet de désactiver le rechargement manuel.
-
-[tip slot_machine]
-Machine à sous
-Fermez la poignée sur la boule du levier et tirez-la vers le bas pour lancer les rouleaux.
-
-Les boutons et les lasers fonctionnent toujours.
-
-[tip blackjack]
-Blackjack
-Tapez sur le tapis pour tirer une carte. Passez la main au-dessus de la table pour rester.
-
-Les boutons et les lasers fonctionnent toujours.
-
-[tip roulette]
-Roulette
-Pointez un laser vers le tapis pour déplacer votre sélection. La gâchette place un jeton ou le reprend.

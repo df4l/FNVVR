@@ -139,19 +139,3 @@ Shots follow the barrel, so aim with the weapon itself. Hold the left grip with 
 You reload by hand, with the left trigger: pull the magazine out of its well, take new ammunition behind your back and push it into the weapon, then work the bolt if it needs it. The part to handle lights up.
 
 Settings > VR turns the manual reload off.
-
-[tip slot_machine]
-Slot machine
-Close your grip on the ball of the lever and pull it down to spin the reels.
-
-The buttons and the lasers still work.
-
-[tip blackjack]
-Blackjack
-Tap the felt to hit. Wave your hand over the table to stay.
-
-The buttons and the lasers still work.
-
-[tip roulette]
-Roulette
-Point a laser at the felt to move your selection. The trigger places a chip or takes it back.

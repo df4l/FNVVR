@@ -10,9 +10,6 @@ namespace dxvk {
       "welcome",
       "melee_weapon",
       "firearm",
-      "slot_machine",
-      "blackjack",
-      "roulette",
     };
 
   }
@@ -24,9 +21,6 @@ namespace dxvk {
 
 
   VrTip VrTipQueue::choose(const VrTipInput& input) const {
-    if (input.minigame != VrTip::None)
-      return seen(input.minigame) ? VrTip::None : input.minigame;
-
     if (!input.playing)
       return VrTip::None;
 

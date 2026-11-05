@@ -119,6 +119,8 @@ namespace dxvk {
     /// Whether the scene can be drawn before the first-person pass
     bool drawsBeforeFirstPerson() const { return active() && m_kind != Kind::Terminal; }
 
+  private:
+
     enum class Kind {
       None,
       Lock,
@@ -128,10 +130,6 @@ namespace dxvk {
       Caravan,
       Terminal,
     };
-
-    Kind kind() const { return m_kind; }
-
-  private:
 
     VrMinigames(IDirect3DDevice9* device, IVRBackend& backend);
 

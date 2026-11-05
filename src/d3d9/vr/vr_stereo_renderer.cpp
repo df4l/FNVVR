@@ -1376,15 +1376,6 @@ namespace dxvk {
 
     VrTipInput tips;
 
-    if (m_minigames) {
-      switch (m_minigames->kind()) {
-        case VrMinigames::Kind::SlotMachine: tips.minigame = VrTip::SlotMachine; break;
-        case VrMinigames::Kind::BlackJack:   tips.minigame = VrTip::BlackJack;   break;
-        case VrMinigames::Kind::Roulette:    tips.minigame = VrTip::Roulette;    break;
-        default: break;
-      }
-    }
-
     auto player = *reinterpret_cast<const uint8_t* const*>(VrGame::Player);
 
     if (state == VrGameStateKind::InGame && player) {

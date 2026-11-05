@@ -68,29 +68,18 @@ TEST_CASE(tips_of_weapons_wait_for_the_player_to_be_free) {
 }
 
 
-TEST_CASE(tips_of_minigames_need_no_welcome) {
-  VrTipQueue queue;
-  VrTipInput input;
-  input.minigame = VrTip::Roulette;
-
-  CHECK(run(queue, input, 3.0f) == VrTip::Roulette);
-  CHECK(run(queue, input, 3.0f) == VrTip::None);
-  CHECK(!queue.seen(VrTip::Welcome));
-}
-
-
 TEST_CASE(tips_seen_are_kept_in_text) {
   VrTipQueue queue;
-  queue.parseSeen("welcome\r\nblackjack\nunknown\n");
+  queue.parseSeen("welcome\r\nfirearm\nunknown\n");
 
   CHECK(queue.seen(VrTip::Welcome));
-  CHECK(queue.seen(VrTip::BlackJack));
-  CHECK(!queue.seen(VrTip::Firearm));
-  CHECK(queue.formatSeen() == "welcome\nblackjack\n");
+  CHECK(queue.seen(VrTip::Firearm));
+  CHECK(!queue.seen(VrTip::MeleeWeapon));
+  CHECK(queue.formatSeen() == "welcome\nfirearm\n");
 
   VrTipQueue other;
   other.parseSeen(queue.formatSeen());
-  CHECK(other.seen(VrTip::BlackJack));
+  CHECK(other.seen(VrTip::Firearm));
 }
 
 
