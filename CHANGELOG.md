@@ -4,12 +4,8 @@
 
 ### Mini-games in the room
 
-- **The mini-games leave the flat panel**: the lock, the slot machine, the blackjack, roulette and Caravan tables, and the terminals with their hacking screen are now in 3D in the world around you. They are played with the sticks and buttons, as on a gamepad, and your hands are hidden while they are open. Texts and buttons stay on a panel out of the way, pointed at with the lasers. `d3d9.vrImmersiveMinigames = False` brings the flat panel back.
-- **Casino tables and slot machines use the world's objects**: the game's table top lies on the world's table, and its slot machine replaces the world's. The view is brought to the player's seat while the game is open and comes back when you leave; your character does not move. Your own seated body and anyone inside the table or on the seat are hidden for that time. A table or machine with another mod's model stands in the room instead.
-- **The lock, Caravan and the terminals stand in front of you**. They do not sit on the world's door or terminal yet.
-- **Slot machine**: your eyes look slightly down on the reels, as from a stool, and the payout screen only appears when you ask for it.
-- **Terminals and hacking**: the monitor stands in the room and the laser points directly at its screen.
-- **The casino runs in real time**: at a blackjack table, a roulette table or a slot machine, the world goes on around you, with its time, people and sounds. Dealers may walk away during a game. The world stops when you are in combat, or in the pause menu, a message or the console. `d3d9.vrRealTimeCasino = False` brings the pause back.
+- **The mini-games leave the flat panel**: the lock, the slot machine, blackjack, roulette, Caravan and the terminals (hacking included) are now in 3D in the world around you, played as on a gamepad. Casino tables and slot machines sit on the world's objects, with the view brought to the seat while you play; the lock, Caravan and the terminals stand in front of you. `d3d9.vrImmersiveMinigames = False` brings the flat panel back.
+- **The casino runs in real time**: the world goes on around you at the blackjack and roulette tables and the slot machines, and dealers may walk away. It stops in combat, the pause menu, a message or the console. `d3d9.vrRealTimeCasino = False` brings the pause back.
 
 ### Sitting down
 
