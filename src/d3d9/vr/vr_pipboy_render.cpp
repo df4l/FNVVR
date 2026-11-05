@@ -38,6 +38,9 @@ namespace dxvk {
 
     VrPipBoyRender* g_pipBoyRender = nullptr;
 
+    // The function the world branch called: the game's, or another mod's hook
+    uintptr_t g_worldRender = VrGame::Render;
+
     // Read instead of the thread count while the world is drawn behind the
     // Pip-Boy
     int32_t g_noThreads = 0;
@@ -80,24 +83,30 @@ namespace dxvk {
     const Redirect redirects[] = {
       { VrGame::PipBoyBackgroundCallSite,       VrGame::PipBoyBackground,   reinterpret_cast<const void*>(&backgroundHook) },
       { VrGame::RaceSexBackgroundCallSite,      VrGame::PipBoyBackground,   reinterpret_cast<const void*>(&backgroundHook) },
-      { VrGame::WorldRenderCallSite,            VrGame::Render,             reinterpret_cast<const void*>(&worldRenderHook) },
-      { VrGame::RenderedMenuTargetCallSite,     VrGame::InitRenderTexture,  reinterpret_cast<const void*>(&targetHook) },
+      { VrGame::RenderedMenuTargetCallSite,    VrGame::InitRenderTexture,  reinterpret_cast<const void*>(&targetHook) },
       { VrGame::RenderedMenuBackgroundCallSite, VrGame::CopyMenuBackground, reinterpret_cast<const void*>(&copyBackgroundHook) },
       { VrGame::DrawSceneThreadsCallSite,       VrGame::SettingInt,         reinterpret_cast<const void*>(&threadsSettingHook) },
       { VrGame::PipBoyScreenCallSite,           VrGame::RenderPipBoy,       reinterpret_cast<const void*>(&screenHook) },
     };
 
     // All sites are checked before any is patched, so that a different
-    // executable is left as it is
-    for (const auto& redirect : redirects) {
-      if (!VrGameMemory::callsTo(redirect.site, redirect.target)) {
-        Logger::info("VR: The Pip-Boy render was not found, the Pip-Boy shows a frozen background");
-        return nullptr;
-      }
+    // executable is left as it is. JohnnyGuitar holds the world branch's call
+    // for its render events, and its hook stays in the chain.
+    bool found = VrGameMemory::canChainCall(VrGame::WorldRenderCallSite, VrGame::Render);
+
+    for (const auto& redirect : redirects)
+      found = found && VrGameMemory::callsTo(redirect.site, redirect.target);
+
+    if (!found) {
+      Logger::info("VR: The Pip-Boy render was not found, the Pip-Boy shows a frozen background");
+      return nullptr;
     }
 
     for (const auto& redirect : redirects)
       VrGameMemory::redirectCall(redirect.site, redirect.target, redirect.hook);
+
+    VrGameMemory::chainCall(VrGame::WorldRenderCallSite, VrGame::Render,
+      reinterpret_cast<const void*>(&worldRenderHook), &g_worldRender);
 
     std::unique_ptr<VrPipBoyRender> render(new VrPipBoyRender());
     render->m_screenPass = std::move(screenPass);
@@ -127,7 +136,7 @@ namespace dxvk {
     if (g_pipBoyRender && returnsTrue(VrGame::IsPipBoyOpen))
       renderedMenu = 1;
 
-    game<RenderFn>(VrGame::Render)(main, nullptr, target, renderedMenu, flag);
+    game<RenderFn>(g_worldRender)(main, nullptr, target, renderedMenu, flag);
   }
 
 
