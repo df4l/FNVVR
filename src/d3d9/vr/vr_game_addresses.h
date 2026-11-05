@@ -255,8 +255,6 @@ namespace dxvk {
      * bHasImpacted at +0x90; the player's reference id is 0x14.
      */
     constexpr uintptr_t FormById              = 0x004839C0;
-    constexpr uint8_t   FormByIdPrologue[]    = { 0x55, 0x8B, 0xEC, 0x51, 0xC7, 0x45, 0xFC, 0x00, 0x00, 0x00, 0x00,
-                                                  0x83, 0x3D, 0xC0, 0x54, 0x1C };
     constexpr uintptr_t FormId                = 0x0C;
     constexpr uintptr_t ProjectileImpacts     = 0x88;
     constexpr uintptr_t ProjectileHasImpacted = 0x90;
@@ -566,7 +564,7 @@ namespace dxvk {
      * against its first bytes before it is called.
      */
     constexpr uintptr_t IsPipBoyShown = 0x00705A00;
-    constexpr uint8_t   IsPipBoyShownPrologue[] = { 0x55, 0x8B, 0xEC, 0x51, 0xE8, 0x07, 0x18, 0xDB, 0xFF, 0x85, 0xC0, 0x74, 0x42 };
+    constexpr uint8_t   IsPipBoyShownPrologue[] = { 0x55, 0x8B, 0xEC, 0x51 };
 
     /**
      * The Pip-Boy's state machine, InterfaceManager+0x4BC: 0 closed, 1 open
@@ -813,7 +811,6 @@ namespace dxvk {
      * its first bytes.
      */
     constexpr uintptr_t RefGet3D             = 0x0043FCD0;
-    constexpr uint8_t   RefGet3DPrologue[]   = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C, 0x89, 0x4D, 0xFC, 0xA1 };
 
     /// A character's body, where the skeleton has one
     constexpr char      PelvisNodeName[]     = "Bip01 Pelvis";
@@ -1011,7 +1008,6 @@ namespace dxvk {
      * true while a casino game runs in real time, when MenuMode does not.
      */
     constexpr uintptr_t IsInMenuMode = 0x00702360;
-    constexpr uint8_t   IsInMenuModePrologue[] = { 0x55, 0x8B, 0xEC, 0xE8 };
 
     /**
      * What keeps the world running behind a casino game, findings/minigames.md
@@ -1160,7 +1156,7 @@ namespace dxvk {
      * bytes (push ebp / mov ebp,esp / call GetSingleton / test eax,eax / jz).
      */
     constexpr uintptr_t GetActivateRef = 0x00703350;
-    constexpr uint8_t   GetActivateRefPrologue[] = { 0x55, 0x8B, 0xEC, 0xE8, 0xB8, 0x3E, 0xDB, 0xFF, 0x85, 0xC0, 0x74, 0x21 };
+    constexpr uint8_t   GetActivateRefPrologue[] = { 0x55, 0x8B, 0xEC };
 
     /**
      * ViewCaster::FindActivateREFR, __thiscall on the ViewCaster at
@@ -1224,7 +1220,6 @@ namespace dxvk {
      * its first bytes (... add ecx,0x2C)
      */
     constexpr uintptr_t TileGetNode = 0x0056C7F0;
-    constexpr uint8_t   TileGetNodePrologue[] = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x4D, 0xFC, 0x83, 0xC1, 0x2C };
     constexpr uintptr_t TileNode = 0x2C;
 
     /**
@@ -1527,12 +1522,10 @@ namespace dxvk {
     constexpr uint8_t   OptionConstructPrologue[]     = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B };
     constexpr uint8_t   UserOptionConstructPrologue[] = { 0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x18, 0xEA };
     constexpr uint8_t   PopulateOptionsPrologue[]     = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x44, 0x89, 0x4D };
-    constexpr uint8_t   OptionArrayAppendPrologue[]   = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0x89, 0x4D };
     constexpr uint8_t   TileGetFloatPrologue[]        = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C, 0x89, 0x4D };
     constexpr uint8_t   TileSetFloatPrologue[]        = { 0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x62, 0xCD };
     constexpr uint8_t   AddUserTraitPrologue[]        = { 0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x94, 0xCC };
     constexpr uint8_t   OptionIsForModesPrologue[]    = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x45, 0xFC, 0x8B, 0x40, 0x0C };
-    constexpr uint8_t   HeapAllocatePrologue[]        = { 0x55, 0x8B, 0xEC, 0x8B, 0x45, 0x08, 0x50, 0xE8 };
     constexpr uint8_t   SetListEnabledPrologue[]      = { 0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x4E, 0xEA };
     constexpr uint8_t   ListBoxInitializePrologue[]   = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B };
 
@@ -1580,7 +1573,7 @@ namespace dxvk {
 
     /** First bytes of the console functions above; SetOpenConsoleRequest writes OpenConsoleRequest */
     constexpr uint8_t   SetOpenConsoleRequestBytes[] = { 0x55, 0x8B, 0xEC, 0x8A, 0x45, 0x08, 0xA2, 0x2F, 0xEA, 0x1D, 0x01 };
-    constexpr uint8_t   CloseConsolePrologue[]       = { 0x55, 0x8B, 0xEC, 0xE8, 0x68, 0x34, 0xDB, 0xFF };
+    constexpr uint8_t   CloseConsolePrologue[]       = { 0x55, 0x8B, 0xEC };
     constexpr uint8_t   ConsoleReadKeyPrologue[]     = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C, 0x89, 0x4D };
     constexpr uint8_t   GetDebugTextPrologue[]       = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x3C, 0x89, 0x4D };
 
@@ -1678,7 +1671,6 @@ namespace dxvk {
     constexpr uint8_t   GetTextureManagerBytes[]       = { 0x55, 0x8B, 0xEC, 0xA1, 0xA8, 0x91, 0x1F, 0x01, 0x5D, 0xC3 };
     constexpr uint8_t   BorrowRenderedTexturePrologue[] = { 0x6A, 0xFF, 0x68, 0xB8, 0x89, 0xF2, 0x00 };
     constexpr uint8_t   ReturnRenderedTexturePrologue[] = { 0x6A, 0xFF, 0x68, 0xD0, 0x88, 0xF2, 0x00 };
-    constexpr uint8_t   NiPointerAssignPrologue[]      = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x45, 0xFC };
     constexpr uint8_t   DrawRenderedMenuParentPrologue[] = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x38, 0x56, 0x89, 0x4D, 0xE0 };
     constexpr uint8_t   RenderPipBoyPrologue[]         = { 0x55, 0x8B, 0xEC, 0x81, 0xEC, 0xD0, 0x00, 0x00, 0x00 };
     constexpr uint8_t   ComputersHeaderUse[]           = { 0xB9, 0x78, 0x3D, 0x1D, 0x01 };
@@ -2463,7 +2455,7 @@ namespace dxvk {
      * wheel, shown while the gamepad's hotkey button (RB) is held.
      */
     constexpr uintptr_t IsTopMenu                  = 0x00702450;
-    constexpr uint8_t   IsTopMenuPrologue[]        = { 0x55, 0x8B, 0xEC, 0x51, 0xE8, 0xB7, 0x4D, 0xDB, 0xFF, 0x85, 0xC0, 0x74 };
+    constexpr uint8_t   IsTopMenuPrologue[]        = { 0x55, 0x8B, 0xEC, 0x51 };
     constexpr uint32_t  InventoryMenuId            = 0x3EA;
     constexpr uintptr_t InventoryMenuInstance      = 0x011D9EA4;
     constexpr uintptr_t InventoryMenuHotKeyWheel   = 0xE8;
@@ -2484,7 +2476,6 @@ namespace dxvk {
     constexpr uintptr_t ListFormItems              = 0x18;
     constexpr uintptr_t ProcessSetCurrentAmmoSlot  = 0x168;
     constexpr uintptr_t GameAllocate               = 0x00401000;
-    constexpr uint8_t   GameAllocatePrologue[]     = { 0x55, 0x8B, 0xEC, 0x8B, 0x45, 0x08, 0x50, 0xE8, 0x14, 0x00, 0x00, 0x00 };
     constexpr uintptr_t InventoryEntryConstruct    = 0x004BC550;
     constexpr uint8_t   InventoryEntryConstructPrologue[] = { 0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x4B, 0xD6, 0xEE, 0x00, 0x64, 0xA1 };
     constexpr uintptr_t SetAmmoForHotKey           = 0x004BFB70;
@@ -2546,7 +2537,6 @@ namespace dxvk {
     constexpr uintptr_t CollisionObjectForBody     = 0x004B5A20;
     constexpr uintptr_t CollisionSceneObject       = 0x08;
     constexpr uintptr_t FindReferenceFor3D         = 0x0056F930;
-    constexpr uint8_t   FindReferenceFor3DPrologue[] = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x14, 0x8B, 0x45, 0x08, 0x89, 0x45, 0xFC };
     constexpr uintptr_t RefGetParentCell           = 0x008D6F30;
     constexpr uintptr_t CellGetWorld               = 0x004543C0;
     constexpr uintptr_t RefObjectHavok             = 0x08;
@@ -2789,10 +2779,8 @@ namespace dxvk {
     constexpr uintptr_t MessageMenuGlobal            = 0x011DA4F0;
     constexpr uint32_t  MessageBoxStartMenuType      = 0x12;
     constexpr uintptr_t GetMessageMenuResult         = 0x00703FA0;
-    constexpr uint8_t   GetMessageMenuResultPrologue[] = {
-      0x55, 0x8B, 0xEC, 0x51, 0xE8, 0x67, 0x32, 0xDB, 0xFF, 0x8A, 0x80, 0xE4, 0x00, 0x00, 0x00 };
-    constexpr uint8_t   ShowMessageBoxPrologue[]     = {
-      0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0xE8, 0x85, 0x33, 0xDB, 0xFF };
+    constexpr uint8_t   GetMessageMenuResultPrologue[] = { 0x55, 0x8B, 0xEC, 0x51 };
+    constexpr uint8_t   ShowMessageBoxPrologue[]     = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08 };
 
     /**
      * A living actor's limb held by a hand (findings/grab.md §19): the

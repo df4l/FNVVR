@@ -37,6 +37,13 @@ namespace dxvk {
     /**
      * \brief Checks that memory is readable and holds the given bytes
      *
+     * Plugins change functions that the mod only calls, so these checks stay
+     * clear of their changes. Engine Optimizations rewrites whole functions
+     * in place (HeapAllocate, RefGet3D, FormById, TileGetNode, NiPointerAssign,
+     * FindReferenceFor3D, IsInMenuMode, OptionArrayAppend): those are called
+     * without a check. NVAC writes code over the first call in others: their
+     * prologues stop before that call.
+     *
      * \param [in] address Start of the range
      * \param [in] bytes Expected content
      * \param [in] size Number of bytes

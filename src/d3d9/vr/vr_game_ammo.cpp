@@ -81,7 +81,6 @@ namespace dxvk {
         function(VrGame::InventoryEntryName,      VrGame::InventoryEntryNamePrologue),
         function(VrGame::InventoryEntryHotKey,    VrGame::InventoryEntryHotKeyPrologue),
         function(VrGame::SetAmmoForHotKey,        VrGame::SetAmmoForHotKeyPrologue),
-        function(VrGame::GameAllocate,            VrGame::GameAllocatePrologue),
         function(VrGame::InventoryEntryConstruct, VrGame::InventoryEntryConstructPrologue),
         function(VrGame::AmmoSwapHelper,          VrGame::AmmoSwapHelperPrologue),
       };

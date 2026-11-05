@@ -21,8 +21,6 @@ namespace dxvk {
       && VrGameMemory::matches(VrGame::IsPipBoyShown,
         VrGame::IsPipBoyShownPrologue, sizeof(VrGame::IsPipBoyShownPrologue))
       && VrGameMemory::readable(VrGame::LoadingMenu, sizeof(uintptr_t))
-      && VrGameMemory::matches(VrGame::IsInMenuMode,
-        VrGame::IsInMenuModePrologue, sizeof(VrGame::IsInMenuModePrologue))
       && VrGameMemory::readable(VrGame::MenuMode, sizeof(uint8_t));
 
     return m_available;

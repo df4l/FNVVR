@@ -73,8 +73,6 @@ namespace dxvk {
         VrGame::TempThirdPersonRead, sizeof(VrGame::TempThirdPersonRead))
       && VrGameMemory::matches(VrGame::ProcessGetKnockedStateSite,
         VrGame::ProcessGetKnockedStateRead, sizeof(VrGame::ProcessGetKnockedStateRead))
-      && VrGameMemory::matches(VrGame::RefGet3D,
-        VrGame::RefGet3DPrologue, sizeof(VrGame::RefGet3DPrologue))
       && VrGameMemory::readable(VrGame::VatsCameraState, sizeof(uint32_t))
       && VrGameMemory::readable(VrGame::Player, sizeof(uintptr_t));
 

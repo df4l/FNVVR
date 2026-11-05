@@ -78,7 +78,6 @@ namespace dxvk {
         { VrGame::GetTextureManager,     VrGame::GetTextureManagerBytes,        sizeof(VrGame::GetTextureManagerBytes) },
         { VrGame::BorrowRenderedTexture, VrGame::BorrowRenderedTexturePrologue, sizeof(VrGame::BorrowRenderedTexturePrologue) },
         { VrGame::ReturnRenderedTexture, VrGame::ReturnRenderedTexturePrologue, sizeof(VrGame::ReturnRenderedTexturePrologue) },
-        { VrGame::NiPointerAssign,       VrGame::NiPointerAssignPrologue,       sizeof(VrGame::NiPointerAssignPrologue) },
       };
 
       for (const auto& prologue : prologues) {

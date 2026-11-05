@@ -382,8 +382,6 @@ namespace dxvk {
 
     bool found = VrGameMemory::matches(VrGame::PickDataConstruct,
         VrGame::PickDataConstructPrologue, sizeof(VrGame::PickDataConstructPrologue))
-      && VrGameMemory::matches(VrGame::FindReferenceFor3D,
-        VrGame::FindReferenceFor3DPrologue, sizeof(VrGame::FindReferenceFor3DPrologue))
       && VrGameMemory::matches(VrGame::GetActivateRef,
         VrGame::GetActivateRefPrologue, sizeof(VrGame::GetActivateRefPrologue))
       && VrGameMemory::matches(VrGame::FindFirstCollisionObject,
