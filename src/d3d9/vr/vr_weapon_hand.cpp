@@ -74,6 +74,10 @@ namespace dxvk {
     using PlaySequenceFn = void* (__fastcall*)(uint8_t* animData, void* unused,
       void* sequence, uint32_t groupId, int32_t sequenceType);
 
+    // What the game's calls reached before our hook: the game's function, or
+    // kNVSE's hook, which replaces animations and then calls it
+    uintptr_t g_previousPlaySequence = VrGame::PlaySequence;
+
     // The weapon node is a few levels below the skeleton's root, and the
     // muzzle a few levels below the weapon
     constexpr uint32_t MaxModelDepth = 16;
@@ -638,11 +642,25 @@ namespace dxvk {
       Logger::warn("VR: The auto-aim call was not found, shots bend towards where the head looks");
 
     if (found) {
-      bool redirected = true;
+      // One hook serves the four calls, so they must all reach the same
+      // function: the game's, or the single hook kNVSE puts on all of them
+      uintptr_t held = 0;
+      bool redirected = VrGameMemory::callTarget(VrGame::PlaySequenceCallSites[0], &held);
 
       for (uintptr_t site : VrGame::PlaySequenceCallSites) {
-        redirected &= VrGameMemory::redirectCall(site,
-          VrGame::PlaySequence, reinterpret_cast<const void*>(&VrWeaponHand::playSequenceHook));
+        uintptr_t target = 0;
+        redirected = redirected && VrGameMemory::callTarget(site, &target) && target == held
+          && VrGameMemory::canChainCall(site, VrGame::PlaySequence);
+      }
+
+      // When they differ, the check logs which mods hold them
+      for (uintptr_t site : VrGame::PlaySequenceCallSites) {
+        if (redirected) {
+          redirected = VrGameMemory::chainCall(site, VrGame::PlaySequence,
+            reinterpret_cast<const void*>(&VrWeaponHand::playSequenceHook), &g_previousPlaySequence);
+        } else {
+          VrGameMemory::callsTo(site, VrGame::PlaySequence);
+        }
       }
 
       if (!redirected)
@@ -1000,7 +1018,7 @@ namespace dxvk {
           void*                 sequence,
           uint32_t              groupId,
           int32_t               sequenceType) {
-    auto playSequence = reinterpret_cast<PlaySequenceFn>(VrGame::PlaySequence);
+    auto playSequence = reinterpret_cast<PlaySequenceFn>(g_previousPlaySequence);
     uint8_t* object = player();
     uint8_t  group  = uint8_t(groupId & 0xFF);
 
@@ -1024,7 +1042,9 @@ namespace dxvk {
 
     g_weaponHand->m_snappedAim = true;
 
-    if (!g_weaponHand->m_loggedSnapAim) {
+    // kNVSE's aim blend fix crossfades these sequences itself by default and
+    // does not read the flag, so the line only stands for the game's function
+    if (!g_weaponHand->m_loggedSnapAim && g_previousPlaySequence == VrGame::PlaySequence) {
       Logger::info("VR: The aim animation starts without blending while the left hand supports the pistol");
       g_weaponHand->m_loggedSnapAim = true;
     }
