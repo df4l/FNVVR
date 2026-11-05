@@ -37,17 +37,29 @@ namespace dxvk {
     /**
      * \brief Checks that memory is readable and holds the given bytes
      *
-     * Plugins change functions that the mod only calls, so these checks stay
-     * clear of their changes. Engine Optimizations rewrites whole functions
-     * in place (HeapAllocate, RefGet3D, FormById, TileGetNode, NiPointerAssign,
-     * FindReferenceFor3D, IsInMenuMode, OptionArrayAppend): those are called
-     * without a check.
-     *
      * \param [in] address Start of the range
      * \param [in] bytes Expected content
      * \param [in] size Number of bytes
      */
     static bool matches(
+            uintptr_t             address,
+      const uint8_t*              bytes,
+            size_t                size);
+
+    /**
+     * \brief Checks a function the mod only calls and a plugin may rewrite
+     *
+     * Same as \ref matches, except that only readability counts while a plugin
+     * that rewrites functions in place is loaded. Engine Optimizations does it
+     * to HeapAllocate, RefGet3D, FormById, TileGetNode, NiPointerAssign,
+     * FindReferenceFor3D, IsInMenuMode and OptionArrayAppend, and keeps their
+     * conventions and results. Older NVTF releases rewrote common functions too.
+     *
+     * \param [in] address Start of the range
+     * \param [in] bytes Content without such a plugin
+     * \param [in] size Number of bytes
+     */
+    static bool matchesUnlessRewritten(
             uintptr_t             address,
       const uint8_t*              bytes,
             size_t                size);

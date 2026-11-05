@@ -85,13 +85,20 @@ namespace dxvk {
         function(VrGame::AmmoSwapHelper,          VrGame::AmmoSwapHelperPrologue),
       };
 
+      auto refuse = [] (uintptr_t address) {
+        Logger::warn(str::format("VR: The game's ammunition function at 0x", std::hex, address,
+          " is not the expected one, the ammunition cannot be chosen by hand"));
+        return false;
+      };
+
       for (const Function& f : functions) {
-        if (!VrGameMemory::matches(f.address, f.prologue, f.size)) {
-          Logger::warn(str::format("VR: The game's ammunition function at 0x", std::hex, f.address,
-            " is not the expected one, the ammunition cannot be chosen by hand"));
-          return false;
-        }
+        if (!VrGameMemory::matches(f.address, f.prologue, f.size))
+          return refuse(f.address);
       }
+
+      if (!VrGameMemory::matchesUnlessRewritten(VrGame::GameAllocate,
+          VrGame::GameAllocatePrologue, sizeof(VrGame::GameAllocatePrologue)))
+        return refuse(VrGame::GameAllocate);
 
       return true;
     } ();

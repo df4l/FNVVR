@@ -32,11 +32,17 @@ namespace dxvk {
 
     /**
      * \brief Checks that code belongs to neither the game nor this library
+     *
+     * Only executable memory counts: a different executable can hold data or
+     * a stray displacement where a call is expected, and that is no plugin.
      */
     bool isForeignCode(uintptr_t target) {
+      constexpr DWORD Executable = PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
+
       MEMORY_BASIC_INFORMATION info = { };
 
-      if (!VirtualQuery(reinterpret_cast<void*>(target), &info, sizeof(info)) || info.State != MEM_COMMIT)
+      if (!VirtualQuery(reinterpret_cast<void*>(target), &info, sizeof(info))
+       || info.State != MEM_COMMIT || !(info.Protect & Executable))
         return false;
 
       HMODULE self = nullptr;
@@ -99,6 +105,17 @@ namespace dxvk {
           size_t                size) {
     return isReadable(address, size)
         && !std::memcmp(reinterpret_cast<const void*>(address), bytes, size);
+  }
+
+
+  bool VrGameMemory::matchesUnlessRewritten(
+          uintptr_t             address,
+    const uint8_t*              bytes,
+          size_t                size) {
+    if (GetModuleHandleW(L"EngineOptimizations.dll") || GetModuleHandleW(L"NVTF.dll"))
+      return isReadable(address, size);
+
+    return matches(address, bytes, size);
   }
 
 

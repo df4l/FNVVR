@@ -194,7 +194,11 @@ namespace dxvk {
           return false;
       }
 
-      return VrGameMemory::readable(VrGame::InterfaceManager, sizeof(uintptr_t))
+      return VrGameMemory::matchesUnlessRewritten(VrGame::HeapAllocate,
+            VrGame::HeapAllocatePrologue, sizeof(VrGame::HeapAllocatePrologue))
+          && VrGameMemory::matchesUnlessRewritten(VrGame::NiPointerAssign,
+            VrGame::NiPointerAssignPrologue, sizeof(VrGame::NiPointerAssignPrologue))
+          && VrGameMemory::readable(VrGame::InterfaceManager, sizeof(uintptr_t))
           && VrGameMemory::readable(VrGame::MainSingleton, sizeof(uintptr_t))
           && VrGameMemory::readable(VrGame::Renderer, sizeof(uintptr_t))
           && VrGameMemory::readable(VrGame::WorldSceneGraph, sizeof(uintptr_t))

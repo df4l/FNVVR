@@ -387,6 +387,8 @@ namespace dxvk {
           VrGame::UserOptionConstructPrologue, sizeof(VrGame::UserOptionConstructPrologue))
         && VrGameMemory::matches(VrGame::PopulateOptions,
           VrGame::PopulateOptionsPrologue, sizeof(VrGame::PopulateOptionsPrologue))
+        && VrGameMemory::matchesUnlessRewritten(VrGame::OptionArrayAppend,
+          VrGame::OptionArrayAppendPrologue, sizeof(VrGame::OptionArrayAppendPrologue))
         && VrGameMemory::matches(VrGame::SetListEnabled,
           VrGame::SetListEnabledPrologue, sizeof(VrGame::SetListEnabledPrologue))
         && VrGameMemory::matches(VrGame::TileGetFloat,
@@ -395,6 +397,8 @@ namespace dxvk {
           VrGame::TileSetFloatPrologue, sizeof(VrGame::TileSetFloatPrologue))
         && VrGameMemory::matches(VrGame::AddUserTrait,
           VrGame::AddUserTraitPrologue, sizeof(VrGame::AddUserTraitPrologue))
+        && VrGameMemory::matchesUnlessRewritten(VrGame::HeapAllocate,
+          VrGame::HeapAllocatePrologue, sizeof(VrGame::HeapAllocatePrologue))
         && VrGameMemory::matches(VrGame::ListBoxInitialize,
           VrGame::ListBoxInitializePrologue, sizeof(VrGame::ListBoxInitializePrologue))
         && VrGameMemory::matches(VrGame::OptionIsForModes,

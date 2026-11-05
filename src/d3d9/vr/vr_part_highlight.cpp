@@ -85,7 +85,9 @@ namespace dxvk {
           return false;
       }
 
-      return VrGameMemory::readable(VrGame::MainSingleton, sizeof(uintptr_t))
+      return VrGameMemory::matchesUnlessRewritten(VrGame::NiPointerAssign,
+            VrGame::NiPointerAssignPrologue, sizeof(VrGame::NiPointerAssignPrologue))
+          && VrGameMemory::readable(VrGame::MainSingleton, sizeof(uintptr_t))
           && VrGameMemory::readable(VrGame::WorldSceneGraph, sizeof(uintptr_t))
           && VrGameMemory::readable(VrGame::VatsMaskTexture, sizeof(uintptr_t))
           && VrGameMemory::readable(VrGame::ShaderManagerCamera, sizeof(uintptr_t))
