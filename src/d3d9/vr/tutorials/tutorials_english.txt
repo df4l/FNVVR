@@ -52,17 +52,6 @@ Right grip: Grab with your free hand
 Right stick (click): Vault-Tec Assisted Targeting System
 Y: Wait; held, pause menu
 
-# HelpLockpickingXBox
-[message 0x184]
-Right hand: Rotate the bobby pin, which points at your hand
-Left trigger, or left grip and a twist of the wrist: Apply torque with the screwdriver
-X: Force Lock
-The sticks also work, as on a gamepad.
-
-When torque is applied, the closer the bobby pin is to the correct position, or "sweet spot," the more the lock will rotate before the bobby pin breaks. Only when the bobby pin is in the correct position will the lock rotate fully, and open.
-
-You can also try to open a lock by forcing it, but if you fail the lock will be permanently broken and can only be opened with a key.
-
 # HelpAmmoXbox
 [message 0x18D]
 Ammunition is used by almost all Guns and Energy Weapons but is sometimes used by other weapon types. Basic ammo types have no special effects, but ammo subtypes may increase damage, reduce an enemy's Damage Threshold, or even decrease spread. Effects are listed on the ammo submenu when the ammo is highlighted. Most weapons can use any ammo subtype that starts with the same name as the base ammo. Common ammo subtypes include:

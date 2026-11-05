@@ -45,17 +45,6 @@ Poignée droite : Saisie avec la main libre
 Stick droit (clic) : Système de visée assistée Vault-Tec
 Y : Attente ; maintenu, menu pause
 
-# HelpLockpickingXBox
-[message 0x184]
-Main droite : faire pivoter l'épingle à cheveux, qui pointe vers votre main
-Gâchette gauche, ou poignée gauche et rotation du poignet : exercer une pression à l'aide du tournevis
-X : forcer la serrure
-Les sticks fonctionnent aussi, comme avec une manette.
-
-Lorsqu'une pression est exercée, plus l'épingle à cheveux est proche du point sensible, plus la serrure pivotera avant que l'épingle à cheveux ne casse. La serrure ne pivotera entièrement et ne s'ouvrira que si l'épingle à cheveux est dans la bonne position.
-
-Vous pouvez également essayer d'ouvrir une serrure en la forçant, mais si vous échouez, la serrure cassera et seule une clé pourra l'ouvrir.
-
 # HelpAmmoXbox
 [message 0x18D]
 Presque toutes les armes à feu et armes à énergie utilisent des munitions, mais c'est le cas également pour d'autres types d'armes. Les munitions de base n'ont pas d'effet spécial, mais les sous-types de munitions peuvent augmenter les dégâts, réduire le Seuil de dégâts d'un adversaire ou bien la dispersion de son arme. Les effets sont affichés dans le sous-menu de munitions lorsque vous sélectionnez les munitions en question. La plupart des armes utilisent des sous-types de munitions dont le nom commence comme les munitions de base. Les sous-types de munitions les plus communs comprennent :
