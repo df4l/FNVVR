@@ -22,7 +22,7 @@
 
 ### Other mods
 
-- **Compatibility pass on xNVSE and its plugins**: xNVSE and 23 plugins were checked one by one against the mod, with about 20 patches so that they work together. The mod needs none of them, and behaves as before without them. xNVSE, JIP LN, JohnnyGuitar and kNVSE were confirmed in the headset; lStewieAl's Tweaks and Engine Optimizations were tried without their options; all the others were checked by reading their code, without running them.
+- **Compatibility pass on xNVSE and its plugins**: xNVSE and 23 plugins were checked one by one against the mod, with about 20 patches so that they work together. The mod needs none of them, and behaves as before without them.
 - **Checked**: xNVSE, JIP LN, JohnnyGuitar, kNVSE, lStewieAl's Tweaks, NVTF, ShowOff, yUI, CrashLogger, UI Organizer, ITR, hNVSE, ROOGNVSE, Shader Loader, Alpha Rendering Tweaks, HighResWaterDepth, External Emittance Fix, Muzzle Flash Fix, Fast Weapon Lag Fix, VATS Lag Fix, Mod Limit Fix, Cell Offset Generator, ActorCause Save Bloat Fix and SUP, and Engine Optimizations for the functions it rewrites.
 - **The log names the other mod**: when another mod already patched a place in the game that the mod needs, the log says which file holds it (`is already patched`).
 
