@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Other mods
+
+- **Manual reload works with xNVSE**: xNVSE takes the player's reload function before the mod starts, which turned manual reload off for everyone using it. The mod now goes through xNVSE's hook, and the scripts' reload control still applies to the game's own reloads.
+- **The log names the other mod**: when another mod already patched a place in the game that the mod needs, the log says which file holds it (`is already patched`).
+
 ### Tutorials
 
 - **The game's tutorials and help speak of the VR controls**: ammunition, hotkeys, the Pip-Boy and its light, aiming, grabbing and the Movement and Combat help page describe the controllers and gestures, in English and French, and the game's other sentences name the real buttons (the right stick for V.A.T.S., no more right bumper). The keyboard versions of these messages no longer appear when a laser is in use. Other languages show these texts in English: a `fnvvr\\texts_<language>.txt` file translates them. `d3d9.vrTutorials = False` brings the game's text back.

@@ -101,6 +101,26 @@ namespace dxvk {
       const void*                 newTarget);
 
     /**
+     * \brief Replaces an entry of a virtual function table, over another mod's hook
+     *
+     * xNVSE and its plugins patch the game before the first Direct3D call,
+     * so an entry may already reach their code. That hook stays in the chain:
+     * the new function calls \c previous instead of the game's function.
+     *
+     * \param [in] slot Address of the table entry
+     * \param [in] expectedTarget Function the entry holds without other mods
+     * \param [in] newTarget Function to store instead
+     * \param [out] previous Function the entry held
+     * \returns \c true if the entry was replaced. An entry that holds another
+     *    function of the game means a different executable and is left alone.
+     */
+    static bool chainVirtual(
+            uintptr_t             slot,
+            uintptr_t             expectedTarget,
+      const void*                 newTarget,
+            uintptr_t*            previous);
+
+    /**
      * \brief Replaces bytes of the game's code
      *
      * \param [in] site Address of the bytes

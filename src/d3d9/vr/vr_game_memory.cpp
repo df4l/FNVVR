@@ -1,6 +1,11 @@
 #include <cstring>
+#include <mutex>
+#include <set>
 
 #include <windows.h>
+
+#include "../../util/log/log.h"
+#include "../../util/util_string.h"
 
 #include "vr_game_memory.h"
 
@@ -23,6 +28,50 @@ namespace dxvk {
       // The range must not leave the region that was just checked
       uintptr_t regionEnd = reinterpret_cast<uintptr_t>(info.BaseAddress) + info.RegionSize;
       return address + size <= regionEnd;
+    }
+
+    /**
+     * \brief Checks that code belongs to neither the game nor this library
+     */
+    bool isForeignCode(uintptr_t target) {
+      MEMORY_BASIC_INFORMATION info = { };
+
+      if (!VirtualQuery(reinterpret_cast<void*>(target), &info, sizeof(info)) || info.State != MEM_COMMIT)
+        return false;
+
+      HMODULE self = nullptr;
+      GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        reinterpret_cast<const char*>(&isForeignCode), &self);
+
+      return info.AllocationBase != GetModuleHandleA(nullptr) && info.AllocationBase != self;
+    }
+
+    /**
+     * \brief Logs which module holds a site of ours, once per site
+     *
+     * A feature that does not start names no other mod by itself, this
+     * line does.
+     */
+    void reportForeignCode(uintptr_t site, uintptr_t target) {
+      static std::mutex         mutex;
+      static std::set<uintptr_t> reported;
+
+      if (!isForeignCode(target))
+        return;
+
+      std::lock_guard<std::mutex> lock(mutex);
+
+      if (!reported.insert(site).second)
+        return;
+
+      MEMORY_BASIC_INFORMATION info = { };
+      char name[MAX_PATH] = { };
+
+      if (VirtualQuery(reinterpret_cast<void*>(target), &info, sizeof(info)))
+        GetModuleFileNameA(reinterpret_cast<HMODULE>(info.AllocationBase), name, sizeof(name));
+
+      Logger::info(str::format("VR: Game code at 0x", std::hex, site, " is already patched, it reaches 0x", target,
+        std::dec, " in '", name[0] ? name : "unnamed memory", "'"));
     }
 
     bool readCallTarget(uintptr_t site, uintptr_t* target) {
@@ -64,7 +113,15 @@ namespace dxvk {
           uintptr_t             site,
           uintptr_t             target) {
     uintptr_t currentTarget = 0;
-    return readCallTarget(site, &currentTarget) && currentTarget == target;
+
+    if (!readCallTarget(site, &currentTarget))
+      return false;
+
+    if (currentTarget == target)
+      return true;
+
+    reportForeignCode(site, currentTarget);
+    return false;
   }
 
 
@@ -129,8 +186,10 @@ namespace dxvk {
 
     uintptr_t* entry = reinterpret_cast<uintptr_t*>(slot);
 
-    if (*entry != expectedTarget)
+    if (*entry != expectedTarget) {
+      reportForeignCode(slot, *entry);
       return false;
+    }
 
     DWORD oldProtect = 0;
 
@@ -140,6 +199,28 @@ namespace dxvk {
     *entry = reinterpret_cast<uintptr_t>(newTarget);
 
     VirtualProtect(entry, sizeof(*entry), oldProtect, &oldProtect);
+    return true;
+  }
+
+
+  bool VrGameMemory::chainVirtual(
+          uintptr_t             slot,
+          uintptr_t             expectedTarget,
+    const void*                 newTarget,
+          uintptr_t*            previous) {
+    if (!isReadable(slot, sizeof(uintptr_t)))
+      return false;
+
+    uintptr_t current = *reinterpret_cast<const uintptr_t*>(slot);
+
+    if (current != expectedTarget && !isForeignCode(current))
+      return false;
+
+    if (!redirectVirtual(slot, current, newTarget))
+      return false;
+
+    reportForeignCode(slot, current);
+    *previous = current;
     return true;
   }
 

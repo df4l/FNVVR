@@ -73,6 +73,10 @@ namespace dxvk {
 
     VrManualReload* g_manualReload = nullptr;
 
+    // What the player's reload entry held: xNVSE's hook when it is installed,
+    // which then still sees every reload
+    uintptr_t g_previousReload = VrGame::PlayerReloadWeapon;
+
     // StartAttack's clip reads were redirected: jams can be held
     bool g_holdsJams = false;
 
@@ -208,8 +212,8 @@ namespace dxvk {
     if (g_manualReload)
       return nullptr;
 
-    if (!VrGameMemory::redirectVirtual(VrGame::PlayerReloadWeaponSlot, VrGame::PlayerReloadWeapon,
-        reinterpret_cast<const void*>(&VrManualReload::reloadHook)))
+    if (!VrGameMemory::chainVirtual(VrGame::PlayerReloadWeaponSlot, VrGame::PlayerReloadWeapon,
+        reinterpret_cast<const void*>(&VrManualReload::reloadHook), &g_previousReload))
       return nullptr;
 
     if (!VrGameMemory::redirectCall(VrGame::JamAnimGroupCallSite, VrGame::ActorGetAnimGroup,
@@ -958,7 +962,7 @@ namespace dxvk {
 
     // No animation: the clip is filled through the equipment queue at the
     // next frame, and the action points are spent as in the game
-    uint32_t result = reinterpret_cast<ReloadWeaponFn>(VrGame::PlayerReloadWeapon)(
+    uint32_t result = reinterpret_cast<ReloadWeaponFn>(g_previousReload)(
       player, nullptr, weapon, 0, extended, 0);
 
     Logger::info(str::format("VR: The clip of '", weaponName(weapon), "' is filled (extended magazine ",
@@ -1000,7 +1004,7 @@ namespace dxvk {
       return 0;
     }
 
-    uint32_t result = reinterpret_cast<ReloadWeaponFn>(VrGame::PlayerReloadWeapon)(
+    uint32_t result = reinterpret_cast<ReloadWeaponFn>(g_previousReload)(
       player, nullptr, weapon, animation, useMod, fromInventory);
 
     int32_t after = clipCount(player);
