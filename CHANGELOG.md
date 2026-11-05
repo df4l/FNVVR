@@ -1,38 +1,48 @@
 # Changelog
 
-## Unreleased
+## v0.13.0 (2026-11-05, since v0.12.0 `24a1b26`)
+
+### Mini-games in the room
+
+- **The mini-games leave the flat panel**: the lock, the slot machine, the blackjack, roulette and Caravan tables, and the terminals with their hacking screen are now in 3D in the world around you. They are played with the sticks and buttons, as on a gamepad, and your hands are hidden while they are open. Texts and buttons stay on a panel out of the way, pointed at with the lasers. `d3d9.vrImmersiveMinigames = False` brings the flat panel back.
+- **Casino tables and slot machines use the world's objects**: the game's table top lies on the world's table, and its slot machine replaces the world's. The view is brought to the player's seat while the game is open and comes back when you leave; your character does not move. Your own seated body and anyone inside the table or on the seat are hidden for that time. A table or machine with another mod's model stands in the room instead.
+- **The lock, Caravan and the terminals stand in front of you**. They do not sit on the world's door or terminal yet.
+- **Slot machine**: your eyes look slightly down on the reels, as from a stool, and the payout screen only appears when you ask for it.
+- **Terminals and hacking**: the monitor stands in the room and the laser points directly at its screen.
+- **The casino runs in real time**: at a blackjack table, a roulette table or a slot machine, the world goes on around you, with its time, people and sounds. Dealers may walk away during a game. The world stops when you are in combat, or in the pause menu, a message or the console. `d3d9.vrRealTimeCasino = False` brings the pause back.
+
+### Sitting down
+
+- **Sitting down and getting up no longer leave your head**: the animation plays on your body and your eyes follow the head of that body, instead of a camera behind you. You see your own body sit, your head is hidden and the headset stays free to look around. The view turns with the body, wherever you stand in your room. The Sandman and Cannibal kills do the same. A seat also no longer keeps the view tilted at the angle your head had when you sat down.
+
+### Room-scale walking
+
+- **Your character follows you when you walk in your room**, an option off by default: `Settings > VR > Room-scale walking`. Your head no longer goes through walls and hills, and door frames no longer catch a body left behind. Against a wall, the view stops a short distance from the body. Leaning and looking down do not move the character.
+
+### Tutorials and languages
+
+- **The game's tutorials and help speak of the VR controls**: ammunition, hotkeys, the Pip-Boy and its light, aiming, grabbing and the Movement and Combat help page describe the controllers and gestures, in English and French, and the game's other sentences name the real buttons (the right stick for V.A.T.S., no more right bumper). The keyboard versions of these messages no longer appear when a laser is in use. Other languages show these texts and button names in English: a `fnvvr\texts_<language>.txt` file translates them. `d3d9.vrTutorials = False` brings the game's text back.
+- **The mod speaks the game's language**: the Settings > VR page, the 4 GB memory prompt and the keys of the console's keyboard are in French on a French game, and a `fnvvr\texts_<language>.txt` file translates them for other languages. The action names in SteamVR's bindings have a French version too, which follows SteamVR's own language.
 
 ### Other mods
 
-- **Manual reload works with xNVSE**: xNVSE takes the player's reload function before the mod starts, which turned manual reload off for everyone using it. The mod now goes through xNVSE's hook, and the scripts' reload control still applies to the game's own reloads.
+The mod does not need any of these, and behaves as before without them.
+
+- **xNVSE**: manual reload works with it. xNVSE takes the player's reload function before the mod starts, which turned manual reload off for everyone using it. The scripts' reload control still applies to the game's own reloads.
 - **JIP LN**: the hands stay behind the world in front of them, and a weapon held with both hands keeps the game's precision with JIP's creature spread fix on.
-- **JohnnyGuitar**: the mod no longer gives up on stereo rendering with it, the Pip-Boy keeps the live world behind it, the rendered menus work, and the cursor shows on the menu panel. Camera overlays drawn above or below the interface by scripts are not shown.
+- **JohnnyGuitar**: the mod no longer gives up on stereo rendering with it, the Pip-Boy keeps the live world behind it, and the rendered menus and the cursor work. Camera overlays drawn by scripts do not work in VR: those above or below the interface are not shown, the others are drawn flat.
 - **kNVSE**: its animations keep playing, and the mod no longer gives up on its pistol brace animation call. With kNVSE's default blend fixes the aim still blends in when the left hand supports a pistol.
-- **lStewieAl's Tweaks and Engine Optimizations**: the comfort settings (no idle third-person camera, first-person kill camera) no longer stop with the tweaks, the bullet trails option no longer takes the weapon out of the hand, and the functions Engine Optimizations rewrites no longer stop stereo rendering and the features that call them. With its manual reload option, firing an empty weapon no longer refills a weapon reloaded by hand. Keep `bSmoothIronsightsCameraTransition`, `bScopeVisibilityDelay` and `bAlwaysShowWeaponAnimation` off in VR.
+- **lStewieAl's Tweaks**: the comfort settings (no idle third-person camera, first-person kill camera) no longer stop with the tweaks. The bullet trails option no longer takes the weapon out of the hand, `bNoPipBoyInCombat` no longer reopens the Pip-Boy when you look away, and the options on knockdowns, charged attacks and sneak criticals no longer turn off the knocked-down state, the power attack rules and the melee limb damage. With its manual reload option, firing an empty weapon no longer refills a weapon reloaded by hand. Keep `bSmoothIronsightsCameraTransition`, `bScopeVisibilityDelay` and `bAlwaysShowWeaponAnimation` off in VR.
+- **Engine Optimizations**: the functions it rewrites no longer stop stereo rendering and the features that call them.
 - **yUI**: the right stick scrolls menus again with its touchpad fix, and its crosshair, hit markers and objective markers no longer stick to the view. Not tried in the game yet.
 - **UI Organizer**: opening the console no longer crashes with it. Not tried in the game yet.
 - **ITR**: the lasers work in menus with it, the game keeps its sound although its window is hidden, and a bare fist shows its own impact. Not tried in the game yet.
+- **Read against the mod, no conflict found, not tried in the game**: NVTF, ShowOff, hNVSE, ROOGNVSE, Shader Loader, Alpha Rendering Tweaks, HighResWaterDepth, External Emittance Fix, Muzzle Flash Fix, Fast Weapon Lag Fix, VATS Lag Fix, Mod Limit Fix, Cell Offset Generator, ActorCause Save Bloat Fix, SUP and CrashLogger.
 - **The log names the other mod**: when another mod already patched a place in the game that the mod needs, the log says which file holds it (`is already patched`).
-
-### Tutorials
-
-- **The game's tutorials and help speak of the VR controls**: ammunition, hotkeys, the Pip-Boy and its light, aiming, grabbing and the Movement and Combat help page describe the controllers and gestures, in English and French, and the game's other sentences name the real buttons (the right stick for V.A.T.S., no more right bumper). The keyboard versions of these messages no longer appear when a laser is in use. Other languages show these texts in English: a `fnvvr\\texts_<language>.txt` file translates them. `d3d9.vrTutorials = False` brings the game's text back.
-- **The mod speaks the game's language**: the Settings > VR page, the 4 GB memory prompt, the keys of the console's keyboard and the SteamVR action names are in French on a French game, and a `fnvvr\\texts_<language>.txt` file translates them for other languages.
 
 ### Menus
 
 - **The menus keep showing the controller's buttons when you point with a laser**, instead of switching to keyboard shortcuts.
-
-### Sitting down
-
-- **Sitting down and getting up no longer leave your head**: the animation plays on your body and your eyes follow the head of that body, instead of a camera behind you. You see your own body sit, your head is hidden and the headset stays free to look around. The view turns with the body, wherever you stand in your room. The Sandman and Cannibal kills do the same. A chair or bed also no longer keeps the view tilted at the angle your head had when you sat down.
-
-### Mini-games in the room
-
-- **The mini-games stand in front of you**, in 3D at their real size, instead of on a flat panel: the lock, the slot machine, the blackjack, roulette and Caravan tables, and the terminals with their hacking screen. They are played with the sticks and buttons, as on a gamepad, and your hands are hidden while they are open. Texts and buttons stay on a panel above the table, pointed at with the lasers. `d3d9.vrImmersiveMinigames = False` brings the flat panel back.
-- **Slot machine**: your eyes look slightly down on the reels, as from a stool, and the payout screen only appears when you ask for it.
-- **Terminals and hacking**: the monitor stands in the room and the laser points directly at its screen.
-- **The casino runs in real time**: at a blackjack table, a roulette table or a slot machine, the world goes on around you, with its time, people and sounds. Dealers may walk away during a game. It stops as before when you are in combat, in the pause menu or in a message. `d3d9.vrRealTimeCasino = False` brings the pause back.
 
 ### Fists
 
