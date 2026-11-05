@@ -460,7 +460,21 @@ namespace dxvk {
     if (!parent || !storeXml())
       return false;
 
+    // A parser put there by a plugin may not look in the game's cache, and
+    // the game then reads a null result from it
+    uintptr_t parser = VrGame::TileParseFile;
+    bool past = VrGameMemory::callTarget(VrGame::TileParseFileCallSite, &parser)
+      && VrGameMemory::isOtherModule(parser)
+      && VrGameMemory::redirectCall(VrGame::TileParseFileCallSite, parser,
+           reinterpret_cast<const void*>(VrGame::TileParseFile));
+
     m_root = game<ReadFileFn>(VrGame::TileReadFile)(parent, XmlName);
+
+    if (past) {
+      VrGameMemory::redirectCall(VrGame::TileParseFileCallSite, VrGame::TileParseFile,
+        reinterpret_cast<const void*>(parser));
+      Logger::info("VR: The console's tiles were read past another mod's XML parser");
+    }
 
     game<CacheRemoveAtFn>(VrGame::XmlCacheRemoveAt)(reinterpret_cast<void*>(VrGame::XmlCache), XmlName);
 

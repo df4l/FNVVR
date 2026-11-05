@@ -1603,7 +1603,10 @@ namespace dxvk {
      *   (__cdecl: name, text) and XmlCacheSetAt (__thiscall on XmlCache:
      *   name, storage), then read by TileReadFile (__thiscall on the parent
      *   tile: name), which frees the storage, and taken out of the cache
-     *   again with XmlCacheRemoveAt (__thiscall on XmlCache: name); TileGetChildByName (__thiscall: name), TileSetString
+     *   again with XmlCacheRemoveAt (__thiscall on XmlCache: name). It finds
+     *   the text in Tile::ParseFile (__cdecl: name, buffer, size), called at
+     *   TileParseFileCallSite, which UI Organizer replaces by a parser that
+     *   only reads files; TileGetChildByName (__thiscall: name), TileSetString
      *   (__thiscall: trait, text, propagate), traits below, a tile's
      *   destructor is vtable slot 0 (__thiscall, 1 frees);
      * - OffscreenInterfaceCallSite: DrawWorld_UpdateOffscreenBuffers calls
@@ -1650,6 +1653,8 @@ namespace dxvk {
     constexpr uintptr_t XmlCache                   = 0x011F34E0;
     constexpr uintptr_t XmlCacheRemoveAt           = 0x00A1E240;
     constexpr uintptr_t TileReadFile               = 0x00A01B00;
+    constexpr uintptr_t TileParseFileCallSite      = 0x00A01B87;
+    constexpr uintptr_t TileParseFile              = 0x00A01E20;
     constexpr uintptr_t TileGetChildByName         = 0x00A03DA0;
     constexpr uintptr_t TileSetString              = 0x00A01350;
     constexpr uint32_t  TileTraitVisible           = 0xFA3;
