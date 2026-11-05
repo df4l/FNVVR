@@ -2255,10 +2255,17 @@ namespace dxvk {
     else
       m_device->Clear(0, nullptr, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 0, 0, 0), 1.0f, 0);
 
-    // JohnnyGuitar culls the cursor around this call and draws it afterwards
-    // on the game's target, which the panel never shows
-    auto cursorRoot = *reinterpret_cast<uint8_t**>(static_cast<uint8_t*>(interfaceManager) + VrGame::InterfaceCursorRoot);
-    auto cursorFlags = layer == InterfaceLayer::Menu && cursorRoot
+    // JohnnyGuitar holds the game's call to this hook, culls the cursor around
+    // it and draws it afterwards on the game's target, which the panel never
+    // shows. While the call reaches this hook directly, the flag is the game's.
+    uintptr_t interfaceCall = 0;
+    bool interfaceHeld = layer == InterfaceLayer::Menu
+      && VrGameMemory::callTarget(VrGame::RenderInterfaceCallSite, &interfaceCall)
+      && interfaceCall != reinterpret_cast<uintptr_t>(&VrStereoRenderer::renderInterfaceHook);
+
+    auto cursorRoot = interfaceHeld
+      ? *reinterpret_cast<uint8_t**>(static_cast<uint8_t*>(interfaceManager) + VrGame::InterfaceCursorRoot) : nullptr;
+    auto cursorFlags = cursorRoot
       ? reinterpret_cast<uint32_t*>(cursorRoot + VrGame::ObjectFlags) : nullptr;
     bool cursorCulled = cursorFlags && (*cursorFlags & VrGame::ObjectFlagAppCulled);
 

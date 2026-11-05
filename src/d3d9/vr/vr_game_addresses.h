@@ -1270,10 +1270,10 @@ namespace dxvk {
 
     /**
      * InterfaceManager::pCursorRoot, the node drawn with the interface that
-     * holds the cursor. The game only culls it in its glow and Pip-Boy
-     * isolation passes (Interface::IsolateMenuElements 0x00702C80), which
-     * undo it. JohnnyGuitar culls it around RenderInterface and draws it
-     * after. See findings/nvse-compat.md §5.2.
+     * holds the cursor. The game culls it in InterfaceManager::PickMenus
+     * (0x007126C0), when the Pip-Boy opens and in its isolation passes
+     * (Interface::IsolateMenuElements 0x00702C80). JohnnyGuitar culls it around
+     * RenderInterface and draws it after. See findings/nvse-compat.md §5.2.
      */
     constexpr uintptr_t InterfaceCursorRoot  = 0x84;
 
