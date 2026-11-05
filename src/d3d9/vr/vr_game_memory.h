@@ -70,6 +70,15 @@ namespace dxvk {
             uintptr_t             target);
 
     /**
+     * \brief Checks that code belongs to neither the game nor this library
+     *
+     * \param [in] address Address of the code, a return address for instance
+     * \returns \c true if it is the code of another mod
+     */
+    static bool isOtherModule(
+            uintptr_t             address);
+
+    /**
      * \brief Reads the function a relative call instruction reaches
      *
      * \param [in] site Address of a 5-byte call (opcode E8)

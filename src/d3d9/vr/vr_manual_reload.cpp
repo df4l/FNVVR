@@ -176,7 +176,7 @@ namespace dxvk {
       switch (returnAddress) {
         case VrGame::ReloadReturnControl:   return "reload control";
         case VrGame::ReloadReturnEmptyClip: return "empty clip";
-        default:                            return "game";
+        default:                            return VrGameMemory::isOtherModule(returnAddress) ? "other mod" : "game";
       }
     }
 
@@ -993,9 +993,12 @@ namespace dxvk {
     // The weapons reloaded by hand are not reloaded by the control or when
     // a shot empties the clip: an empty clip clicks. V.A.T.S. plays its
     // queued shots on its own and waits for the game's reload, so there
-    // the game reloads as it does without the hands.
+    // the game reloads as it does without the hands. lStewieAl's Tweaks calls
+    // this entry itself when an empty weapon is fired (bManualReload with
+    // bReloadWhenFiringWithEmptyClip); the mod's own fill never comes this way.
     bool byHand = g_manualReload && weapon && weapon == g_manualReload->m_handWeapon.load()
-      && (caller == VrGame::ReloadReturnControl || caller == VrGame::ReloadReturnEmptyClip)
+      && (caller == VrGame::ReloadReturnControl || caller == VrGame::ReloadReturnEmptyClip
+       || VrGameMemory::isOtherModule(caller))
       && !inVats();
 
     if (byHand) {

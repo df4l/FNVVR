@@ -109,6 +109,12 @@ namespace dxvk {
   }
 
 
+  bool VrGameMemory::isOtherModule(
+          uintptr_t             address) {
+    return isForeignCode(address);
+  }
+
+
   bool VrGameMemory::callsTo(
           uintptr_t             site,
           uintptr_t             target) {
