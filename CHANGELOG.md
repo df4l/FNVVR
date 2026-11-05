@@ -26,18 +26,8 @@
 
 ### Other mods
 
-The mod does not need any of these, and behaves as before without them.
-
-- **xNVSE**: manual reload works with it. xNVSE takes the player's reload function before the mod starts, which turned manual reload off for everyone using it. The scripts' reload control still applies to the game's own reloads.
-- **JIP LN**: the hands stay behind the world in front of them, and a weapon held with both hands keeps the game's precision with JIP's creature spread fix on.
-- **JohnnyGuitar**: the mod no longer gives up on stereo rendering with it, the Pip-Boy keeps the live world behind it, and the rendered menus and the cursor work. Camera overlays drawn by scripts do not work in VR: those above or below the interface are not shown, the others are drawn flat.
-- **kNVSE**: its animations keep playing, and the mod no longer gives up on its pistol brace animation call. With kNVSE's default blend fixes the aim still blends in when the left hand supports a pistol.
-- **lStewieAl's Tweaks**: the comfort settings (no idle third-person camera, first-person kill camera) no longer stop with the tweaks. The bullet trails option no longer takes the weapon out of the hand, `bNoPipBoyInCombat` no longer reopens the Pip-Boy when you look away, and the options on knockdowns, charged attacks and sneak criticals no longer turn off the knocked-down state, the power attack rules and the melee limb damage. With its manual reload option, firing an empty weapon no longer refills a weapon reloaded by hand. Keep `bSmoothIronsightsCameraTransition`, `bScopeVisibilityDelay` and `bAlwaysShowWeaponAnimation` off in VR.
-- **Engine Optimizations**: the functions it rewrites no longer stop stereo rendering and the features that call them.
-- **yUI**: the right stick scrolls menus again with its touchpad fix, and its crosshair, hit markers and objective markers no longer stick to the view. Not tried in the game yet.
-- **UI Organizer**: opening the console no longer crashes with it. Not tried in the game yet.
-- **ITR**: the lasers work in menus with it, the game keeps its sound although its window is hidden, and a bare fist shows its own impact. Not tried in the game yet.
-- **Read against the mod, no conflict found, not tried in the game**: NVTF, ShowOff, hNVSE, ROOGNVSE, Shader Loader, Alpha Rendering Tweaks, HighResWaterDepth, External Emittance Fix, Muzzle Flash Fix, Fast Weapon Lag Fix, VATS Lag Fix, Mod Limit Fix, Cell Offset Generator, ActorCause Save Bloat Fix, SUP and CrashLogger.
+- **Compatibility pass on xNVSE and its plugins**: xNVSE and 23 plugins were checked one by one against the mod, with about 20 patches so that they work together. The mod needs none of them, and behaves as before without them. xNVSE, JIP LN, JohnnyGuitar and kNVSE were confirmed in the headset; lStewieAl's Tweaks and Engine Optimizations were tried without their options; all the others were checked by reading their code, without running them.
+- **Checked**: xNVSE, JIP LN, JohnnyGuitar, kNVSE, lStewieAl's Tweaks, NVTF, ShowOff, yUI, CrashLogger, UI Organizer, ITR, hNVSE, ROOGNVSE, Shader Loader, Alpha Rendering Tweaks, HighResWaterDepth, External Emittance Fix, Muzzle Flash Fix, Fast Weapon Lag Fix, VATS Lag Fix, Mod Limit Fix, Cell Offset Generator, ActorCause Save Bloat Fix and SUP, and Engine Optimizations for the functions it rewrites.
 - **The log names the other mod**: when another mod already patched a place in the game that the mod needs, the log says which file holds it (`is already patched`).
 
 ### Menus
