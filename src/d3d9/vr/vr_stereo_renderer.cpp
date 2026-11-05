@@ -2255,10 +2255,29 @@ namespace dxvk {
     else
       m_device->Clear(0, nullptr, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 0, 0, 0), 1.0f, 0);
 
+    // JohnnyGuitar culls the cursor around this call and draws it afterwards
+    // on the game's target, which the panel never shows
+    auto cursorRoot = *reinterpret_cast<uint8_t**>(static_cast<uint8_t*>(interfaceManager) + VrGame::InterfaceCursorRoot);
+    auto cursorFlags = layer == InterfaceLayer::Menu && cursorRoot
+      ? reinterpret_cast<uint32_t*>(cursorRoot + VrGame::ObjectFlags) : nullptr;
+    bool cursorCulled = cursorFlags && (*cursorFlags & VrGame::ObjectFlagAppCulled);
+
+    if (cursorCulled) {
+      *cursorFlags &= ~VrGame::ObjectFlagAppCulled;
+
+      if (!m_loggedCursorCulled) {
+        Logger::info("VR: The cursor was culled before the menu pass, it is drawn on the panel");
+        m_loggedCursorCulled = true;
+      }
+    }
+
     // The other HUD groups were culled by isolateHud when the interface
     // was culled, which may run on a worker thread that this pass waits for
     g_originalRenderInterface(interfaceManager, nullptr, arg0, arg1);
     m_hudLayers.restore();
+
+    if (cursorCulled)
+      *cursorFlags |= VrGame::ObjectFlagAppCulled;
 
     Com<IDirect3DSurface9> usedTarget;
     m_device->GetRenderTarget(0, &usedTarget);

@@ -1269,6 +1269,15 @@ namespace dxvk {
     constexpr uintptr_t NodeLocalTranslate   = 0x58;
 
     /**
+     * InterfaceManager::pCursorRoot, the node drawn with the interface that
+     * holds the cursor. The game only culls it in its glow and Pip-Boy
+     * isolation passes (Interface::IsolateMenuElements 0x00702C80), which
+     * undo it. JohnnyGuitar culls it around RenderInterface and draws it
+     * after. See findings/nvse-compat.md §5.2.
+     */
+    constexpr uintptr_t InterfaceCursorRoot  = 0x84;
+
+    /**
      * Size of the interface in its own units (__cdecl, returns a float):
      * 960 high and as wide as the screen's aspect makes it, or 1280 wide
      * and taller on a portrait screen.
