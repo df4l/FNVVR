@@ -92,6 +92,7 @@ namespace dxvk {
     bool                    m_available = false;
     bool                    m_menusFound = false;
     bool                    m_rectsFound = false;
+    bool                    m_yuiLoaded = false;
     std::vector<uint32_t*>  m_culledFlags;
 
     void cullTile(uintptr_t tile);

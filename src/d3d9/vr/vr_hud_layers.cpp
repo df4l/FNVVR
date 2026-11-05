@@ -1,4 +1,9 @@
+#include <windows.h>
+
 #include <algorithm>
+#include <string>
+
+#include "../../util/log/log.h"
 
 #include "vr_game_addresses.h"
 #include "vr_game_memory.h"
@@ -9,10 +14,33 @@ namespace dxvk {
   namespace {
 
     using TileGetFloatFn = float (__thiscall*)(uintptr_t tile, uint32_t trait);
+    using TileGetChildFn = uintptr_t (__thiscall*)(uintptr_t tile, const char* name);
+
+    /// What yUI adds to the HUD's tile: crosshair, hit marker, hit indicator,
+    /// objective markers and loot menu. They are placed for a flat screen
+    /// around its centre, and the head panel shows the whole HUD image.
+    constexpr const char* YuiTiles[] = { "JDC", "JHM", "JHI", "JVO", "JLM" };
 
     template<typename T>
     T readField(uintptr_t base, uintptr_t offset) {
       return *reinterpret_cast<const T*>(base + offset);
+    }
+
+    /**
+     * \brief Tells whether yUI's Loot Menu is on
+     *
+     * Only reads yUI's settings, it is on when they do not mention it.
+     */
+    bool yuiLootMenuEnabled() {
+      char path[MAX_PATH] = { };
+      DWORD length = GetModuleFileNameA(nullptr, path, MAX_PATH);
+
+      if (!length || length >= MAX_PATH)
+        return true;
+
+      std::string ini(path, length);
+      ini = ini.substr(0, ini.find_last_of("\\/") + 1) + "Data\\NVSE\\Plugins\\yUI.ini";
+      return GetPrivateProfileIntA("General", "bLootMenu", 1, ini.c_str()) != 0;
     }
 
   }
@@ -47,6 +75,15 @@ namespace dxvk {
         VrGame::HudActionPointsStore, sizeof(VrGame::HudActionPointsStore))
       && VrGameMemory::matches(VrGame::TileGetFloat,
         VrGame::TileGetFloatPrologue, sizeof(VrGame::TileGetFloatPrologue));
+
+    m_yuiLoaded = m_menusFound && GetModuleHandleW(L"yUI.dll")
+      && VrGameMemory::matches(VrGame::TileGetChildByName,
+        VrGame::TileGetChildByNamePrologue, sizeof(VrGame::TileGetChildByNamePrologue));
+
+    if (GetModuleHandleW(L"yUI.dll") && yuiLootMenuEnabled()) {
+      Logger::warn("VR: yUI's Loot Menu is on. With ShowOff it reads the real gamepad and refuses containers "
+        "opened with the controllers: set bLootMenu = 0 in Data/NVSE/Plugins/yUI.ini");
+    }
 
     return m_available;
   }
@@ -87,6 +124,15 @@ namespace dxvk {
     for (uintptr_t group : VrGame::HudGroups) {
       if (std::find(keep, keep + count, group) == keep + count)
         cullTile(readField<uintptr_t>(hud, group));
+    }
+
+    if (m_yuiLoaded) {
+      uintptr_t tiles   = readField<uintptr_t>(VrGame::MenuTiles, 0);
+      uintptr_t hudTile = tiles
+        ? readField<uintptr_t>(tiles, (VrGame::HudMenuId - VrGame::FirstMenuId) * sizeof(uintptr_t)) : 0;
+
+      for (uint32_t i = 0; hudTile && i < std::size(YuiTiles); i++)
+        cullTile(reinterpret_cast<TileGetChildFn>(VrGame::TileGetChildByName)(hudTile, YuiTiles[i]));
     }
 
     return true;
