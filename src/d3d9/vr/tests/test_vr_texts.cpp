@@ -1,11 +1,13 @@
+#include <cstring>
+
 #include "test.h"
 
-#include "../vr_tutorial_text.h"
+#include "../vr_texts.h"
 
 using namespace dxvk;
 
 TEST_CASE(tutorial_text_reads_messages_and_controls) {
-  VrTutorialTexts texts;
+  VrTexts texts;
 
   texts.parse(
     "# A comment\n"
@@ -29,7 +31,7 @@ TEST_CASE(tutorial_text_reads_messages_and_controls) {
 
 
 TEST_CASE(tutorial_text_keeps_what_a_second_file_does_not_hold) {
-  VrTutorialTexts texts;
+  VrTexts texts;
 
   texts.parse("[message 1]\nEnglish one\n[message 2]\nEnglish two\n");
   texts.parse("\xEF\xBB\xBF[message 2]\nFrench two\n");
@@ -40,7 +42,7 @@ TEST_CASE(tutorial_text_keeps_what_a_second_file_does_not_hold) {
 
 
 TEST_CASE(tutorial_text_ignores_what_it_does_not_know) {
-  VrTutorialTexts texts;
+  VrTexts texts;
 
   texts.parse(
     "Text before any section\n"
@@ -48,7 +50,7 @@ TEST_CASE(tutorial_text_ignores_what_it_does_not_know) {
     "[message nope]\nA text\n"
     "[other 1]\nA text\n"
     "[message 5]\n\n"
-    "[control Use]\n" + std::string(VrTutorialTexts::MaxControlName + 1, 'x') + "\n");
+    "[control Use]\n" + std::string(VrTexts::MaxControlName + 1, 'x') + "\n");
 
   CHECK(texts.messageCount() == 0);
   CHECK(texts.controlCount() == 0);
@@ -78,4 +80,22 @@ TEST_CASE(tutorial_text_knows_a_string_setting_read_from_a_file) {
   CHECK(vrIsStringSettingName("SLanguage:General", "sLanguage:General"));
   CHECK(!vrIsStringSettingName("sLanguage:Other", "sLanguage:General"));
   CHECK(!vrIsStringSettingName("xLanguage:General", "sLanguage:General"));
+}
+
+
+TEST_CASE(texts_fall_back_on_the_english_in_the_code) {
+  VrTexts texts;
+
+  texts.parse(
+    "[text option.reload]\n"
+    "Rechargement manuel\n"
+    "[text option.sneak]\n"
+    "\n"
+    "[text option.scope]\n"
+    "Lentille \xC3\xA9\n");
+
+  CHECK(!std::strcmp(texts.text("option.reload", "Manual reload"), "Rechargement manuel"));
+  CHECK(!std::strcmp(texts.text("option.scope", "Scope lens"), "Lentille \xE9"));
+  CHECK(!std::strcmp(texts.text("option.sneak", "Sneak"), "Sneak"));
+  CHECK(!std::strcmp(texts.text("option.other", "Other"), "Other"));
 }

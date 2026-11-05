@@ -188,7 +188,8 @@ namespace dxvk {
     const VrGameTimerConfig&    timer,
     const VrRenderPassConfig&   passes,
     const VrDeveloperConfig&    developer,
-    const VrSwingConfig&        swing) {
+    const VrSwingConfig&        swing,
+    const VrTexts&              texts) {
     if (g_stereoRenderer)
       return nullptr;
 
@@ -295,7 +296,7 @@ namespace dxvk {
     renderer->m_ammoLabel  = std::make_unique<VrAmmoLabel>(*renderer->m_painter, backend, renderer->m_gameImages);
 
     if (VrGameConsole::install())
-      renderer->m_terminal = std::make_unique<VrConsoleTerminal>(*renderer->m_painter, backend);
+      renderer->m_terminal = std::make_unique<VrConsoleTerminal>(*renderer->m_painter, backend, texts);
 
     renderer->m_handPick = VrHandActivatePick::install();
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "vr_texts.h"
+
 namespace dxvk {
 
   /**
@@ -27,9 +29,10 @@ namespace dxvk {
     /**
      * \brief Hooks the main menu if the prompt has to be shown
      *
+     * \param [in] texts The prompt's texts, which must outlive the game's menus
      * \returns \c true if the main menu will show the prompt
      */
-    static bool install();
+    static bool install(const VrTexts& texts);
 
   };
 

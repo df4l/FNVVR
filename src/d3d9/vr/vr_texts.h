@@ -7,7 +7,7 @@
 namespace dxvk {
 
   /**
-   * \brief The VR wording of the game's tutorials, read from text files
+   * \brief The texts shown to the player, read from text files
    *
    * A file holds sections, one per text, in UTF-8:
    *
@@ -19,10 +19,14 @@ namespace dxvk {
    *   The whole text of the message,
    *   over as many lines as it needs.
    *
+   *   [text option.reload]
+   *   Manual reload
+   *
    * Reading a second file replaces the texts it holds and keeps the others,
-   * so a partial translation falls back on the first file.
+   * so a partial translation falls back on the first file. The mod's own
+   * labels have their English in the code, for when no file holds them.
    */
-  class VrTutorialTexts {
+  class VrTexts {
 
   public:
 
@@ -52,6 +56,17 @@ namespace dxvk {
      */
     const std::string* control(uint32_t action) const;
 
+    /**
+     * \brief One of the mod's own texts
+     *
+     * The pointer stays valid as long as this object, unless a file is parsed.
+     *
+     * \param [in] name The text's name
+     * \param [in] english What to show if no file holds it
+     * \returns The text in the game's encoding
+     */
+    const char* text(const char* name, const char* english) const;
+
     size_t messageCount() const {
       return m_messages.size();
     }
@@ -60,10 +75,15 @@ namespace dxvk {
       return m_controls.size();
     }
 
+    size_t textCount() const {
+      return m_texts.size();
+    }
+
   private:
 
     std::map<uint32_t, std::string> m_messages;
     std::map<uint32_t, std::string> m_controls;
+    std::map<std::string, std::string> m_texts;
 
   };
 

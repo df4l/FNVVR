@@ -97,6 +97,7 @@ namespace dxvk {
 
     std::unique_ptr<IVRBackend>          m_backend;
     std::unique_ptr<VrExtensionProvider> m_extensionProvider;
+    VrTexts                              m_texts;
     std::unique_ptr<VrStereoRenderer>    m_stereoRenderer;
     bool                                 m_showPreview;
     VrPanelConfig                        m_panelConfig;

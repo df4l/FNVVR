@@ -1,12 +1,15 @@
-# FNVVR: the game's tutorials with the VR controls (UTF-8).
+# FNVVR: the texts shown to the player (UTF-8).
 #
-# To translate: copy this file to tutorials_<language>.txt, with the value of
-# sLanguage in Fallout_default.ini in lower case (tutorials_german.txt). What a
-# translation leaves out stays in English. A line starting with # is a comment.
+# To translate: copy texts_french.txt to texts_<language>.txt, with the value of
+# sLanguage in Fallout_default.ini in lower case (texts_german.txt), and use this
+# file for the tutorials' English. What a translation leaves out stays in English.
+# A line starting with # is a comment.
 #
 # [control Name] is what a button is called in the game's own sentences. They
 # put "press" or "pull" before it, or use it alone.
 # [message 0x...] replaces the whole text of a message of FalloutNV.esm.
+# [text name] is one of the mod's own labels, only in the translations: the
+# English ones are in the code, so the Settings > VR page never lacks a name.
 
 [control Use]
 the right trigger

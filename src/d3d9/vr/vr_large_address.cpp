@@ -1,5 +1,6 @@
 #include <windows.h>
 
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -39,19 +40,11 @@ namespace dxvk {
     constexpr wchar_t SecondBackupName[] = L"FalloutNV_backup_fnvvr.exe";
     constexpr wchar_t PatchedTempName[]  = L"FalloutNV_fnvvr.tmp";
 
-    constexpr char PromptText[] =
-      "Fallout: New Vegas can only use 2 GB of memory. VR and mods fill it quickly, and the game then crashes. "
-      "FNVVR can let it use 4 GB, as the FNV 4GB Patcher does: FalloutNV.exe is modified and the original is "
-      "kept as FalloutNV_backup.exe. The change takes effect the next time the game starts.";
-    constexpr char PatchText[]    = "Use 4 GB";
-    constexpr char LaterText[]    = "Not now";
-    constexpr char NeverText[]    = "Don't ask again";
-    constexpr char DoneText[]     =
-      "FalloutNV.exe can now use 4 GB of memory. Quit and start the game again for the change to take effect.";
-    constexpr char FailedText[]   =
-      "FalloutNV.exe could not be modified, the d3d9 log says why. "
-      "The FNV 4GB Patcher from Nexus Mods makes the same change.";
-    constexpr char OkText[]       = "OK";
+    const VrTexts* g_texts = nullptr;
+
+    const char* text(const char* name, const char* english) {
+      return g_texts->text(name, english);
+    }
 
     enum class Step {
       WaitForMenu,  ///< The prompt is shown once the menu is ready
@@ -202,11 +195,11 @@ namespace dxvk {
 
       CreateDirectoryW(path.substr(0, path.find_last_of(L'\\')).c_str(), nullptr);
 
-      constexpr char text[] =
+      const char* declined = text("largeaddress.declinedfile",
         "While this file exists, FNVVR does not offer to let FalloutNV.exe use 4 GB of memory.\r\n"
-        "Delete it to be asked again.\r\n";
+        "Delete it to be asked again.");
 
-      if (writeFile(path, text, sizeof(text) - 1))
+      if (writeFile(path, declined, std::strlen(declined)))
         Logger::info("VR: The player declined the 4 GB patch, it is not offered again");
       else
         Logger::warn(str::format("VR: Could not write ", str::fromws(path.c_str())));
@@ -234,8 +227,15 @@ namespace dxvk {
     }
 
     void showPrompt() {
-      reinterpret_cast<MessageBoxFn>(VrGame::ShowMessageBox)(PromptText, nullptr, nullptr, &onPromptAnswered,
-        FirstButton, VrGame::MessageBoxStartMenuType, 0.0f, 0.0f, PatchText, LaterText, NeverText, nullptr);
+      reinterpret_cast<MessageBoxFn>(VrGame::ShowMessageBox)(
+        text("largeaddress.prompt",
+          "Fallout: New Vegas can only use 2 GB of memory. VR and mods fill it quickly, and the game then crashes. "
+          "FNVVR can let it use 4 GB, as the FNV 4GB Patcher does: FalloutNV.exe is modified and the original is "
+          "kept as FalloutNV_backup.exe. The change takes effect the next time the game starts."),
+        nullptr, nullptr, &onPromptAnswered,
+        FirstButton, VrGame::MessageBoxStartMenuType, 0.0f, 0.0f,
+        text("largeaddress.patch", "Use 4 GB"), text("largeaddress.later", "Not now"),
+        text("largeaddress.never", "Don't ask again"), nullptr);
     }
 
     /// The main menu has faded in, has no message box and is not loading content
@@ -260,7 +260,13 @@ namespace dxvk {
         case Step::Report:
           if (menuReady(menu)) {
             g_step = Step::Done;
-            showMessageBox(g_patched ? DoneText : FailedText, nullptr, OkText);
+            showMessageBox(g_patched
+              ? text("largeaddress.done",
+                  "FalloutNV.exe can now use 4 GB of memory. Quit and start the game again for the change to take effect.")
+              : text("largeaddress.failed",
+                  "FalloutNV.exe could not be modified, the d3d9 log says why. "
+                  "The FNV 4GB Patcher from Nexus Mods makes the same change."),
+              nullptr, text("largeaddress.ok", "OK"));
           }
           break;
 
@@ -282,7 +288,9 @@ namespace dxvk {
   }
 
 
-  bool VrLargeAddress::install() {
+  bool VrLargeAddress::install(const VrTexts& texts) {
+    g_texts = &texts;
+
     SYSTEM_INFO system = { };
     GetSystemInfo(&system);
 

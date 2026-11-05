@@ -1,7 +1,7 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "vr_tutorial_text.h"
+#include "vr_texts.h"
 
 namespace dxvk {
 
@@ -78,11 +78,12 @@ namespace dxvk {
   }
 
 
-  void VrTutorialTexts::parse(const std::string& text) {
-    enum class Section { None, Message, Control };
+  void VrTexts::parse(const std::string& text) {
+    enum class Section { None, Message, Control, Text };
 
     Section section = Section::None;
     uint32_t key = 0;
+    std::string name;
     std::string body;
 
     auto finish = [&] {
@@ -93,6 +94,8 @@ namespace dxvk {
         m_messages[key] = std::move(value);
       else if (section == Section::Control && !value.empty() && value.size() <= MaxControlName)
         m_controls[key] = std::move(value);
+      else if (section == Section::Text && !value.empty())
+        m_texts[name] = std::move(value);
     };
 
     size_t start = text.compare(0, 3, "\xEF\xBB\xBF") ? 0 : 3;
@@ -133,6 +136,9 @@ namespace dxvk {
             section = Section::Control;
             key = uint32_t(action);
           }
+        } else if (!header.compare(0, 5, "text ")) {
+          section = Section::Text;
+          name = header.substr(5);
         }
 
         continue;
@@ -147,15 +153,21 @@ namespace dxvk {
   }
 
 
-  const std::string* VrTutorialTexts::message(uint32_t formId) const {
+  const std::string* VrTexts::message(uint32_t formId) const {
     auto entry = m_messages.find(formId);
     return entry != m_messages.end() ? &entry->second : nullptr;
   }
 
 
-  const std::string* VrTutorialTexts::control(uint32_t action) const {
+  const std::string* VrTexts::control(uint32_t action) const {
     auto entry = m_controls.find(action);
     return entry != m_controls.end() ? &entry->second : nullptr;
+  }
+
+
+  const char* VrTexts::text(const char* name, const char* english) const {
+    auto entry = m_texts.find(name);
+    return entry != m_texts.end() ? entry->second.c_str() : english;
   }
 
 

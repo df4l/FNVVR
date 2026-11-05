@@ -26,26 +26,12 @@ namespace dxvk {
     // with long value names
     constexpr uint32_t ArrowSpacing = 0x55;
 
-    // The game keeps these pointers and never frees them
-    constexpr char PageText[]       = "VR";
-    constexpr char ConsoleText[]    = "Console";
-    constexpr char TurnText[]       = "Turning";
-    constexpr char TurnSnapText[]   = "Snap";
-    constexpr char TurnSmoothText[] = "Smooth";
-    constexpr char SpeedText[]      = "Smooth turn speed";
-    constexpr char PipBoySizeText[] = "Pip-Boy size";
-    constexpr char ReloadText[]     = "Manual reload";
-    constexpr char ReloadOffText[]  = "Off";
-    constexpr char ReloadOnText[]   = "On";
-    constexpr char SneakText[]      = "Sneak";
-    constexpr char SneakButtonText[] = "Stick click";
-    constexpr char SneakCrouchText[] = "Real crouch";
-    constexpr char ScopeText[]      = "Scope lens";
-    constexpr char RoomscaleText[]  = "Room-scale walking";
-
     // One name per size of VrPipBoyScaleSteps, from the game's size up
     constexpr const char* PipBoySizeNames[VrPipBoyScaleSteps] = {
       "Normal", "125%", "150%", "175%", "200%" };
+
+    // The game keeps the pointers to the texts and never frees them
+    VrTexts                      g_texts;
 
     using AppendFn   = int   (__fastcall*)(void* array, void* unused, void** option);
     using HeapFn     = void* (__cdecl*)(size_t size);
@@ -288,7 +274,7 @@ namespace dxvk {
         return;
 
       void* option = reinterpret_cast<OptionCtorFn>(VrGame::OptionConstruct)(
-        optionMemory, PageText, &choosePage, VrGame::OptionMaskSettingsList);
+        optionMemory, g_texts.text("option.page", "VR"), &choosePage, VrGame::OptionMaskSettingsList);
 
       append(optionArray, nullptr, &option);
 
@@ -296,26 +282,32 @@ namespace dxvk {
 
       if (consoleMemory) {
         void* console = reinterpret_cast<OptionCtorFn>(VrGame::OptionConstruct)(
-          consoleMemory, ConsoleText, &chooseConsole, VrGame::OptionMaskSettingsList);
+          consoleMemory, g_texts.text("option.console", "Console"), &chooseConsole, VrGame::OptionMaskSettingsList);
 
         append(optionArray, nullptr, &console);
         g_consoleOption = console;
       }
 
       // The page lists its options in the order they are added
-      appendUserOption(TurnText, &onTurnChanged, ToggleType, ToggleValues, ArrowSpacing,
-        TurnSnapText, TurnSmoothText);
-      appendUserOption(SpeedText, &onSpeedChanged, SliderType, VrSmoothTurnSpeedSteps, 0);
-      appendUserOption(PipBoySizeText, &onPipBoySizeChanged, ToggleType, VrPipBoyScaleSteps, ArrowSpacing,
-        PipBoySizeNames[0], PipBoySizeNames[1], PipBoySizeNames[2], PipBoySizeNames[3], PipBoySizeNames[4]);
-      appendUserOption(ReloadText, &onReloadChanged, ToggleType, ToggleValues, ArrowSpacing,
-        ReloadOffText, ReloadOnText);
-      appendUserOption(SneakText, &onSneakChanged, ToggleType, ToggleValues, ArrowSpacing,
-        SneakButtonText, SneakCrouchText);
-      appendUserOption(ScopeText, &onScopeChanged, ToggleType, ToggleValues, ArrowSpacing,
-        ReloadOffText, ReloadOnText);
-      appendUserOption(RoomscaleText, &onRoomscaleChanged, ToggleType, ToggleValues, ArrowSpacing,
-        ReloadOffText, ReloadOnText);
+      const char* off = g_texts.text("option.off", "Off");
+      const char* on  = g_texts.text("option.on", "On");
+
+      appendUserOption(g_texts.text("option.turn", "Turning"), &onTurnChanged, ToggleType, ToggleValues, ArrowSpacing,
+        g_texts.text("option.turn.snap", "Snap"), g_texts.text("option.turn.smooth", "Smooth"));
+      appendUserOption(g_texts.text("option.turn.speed", "Smooth turn speed"), &onSpeedChanged,
+        SliderType, VrSmoothTurnSpeedSteps, 0);
+      appendUserOption(g_texts.text("option.pipboy", "Pip-Boy size"), &onPipBoySizeChanged,
+        ToggleType, VrPipBoyScaleSteps, ArrowSpacing,
+        g_texts.text("option.pipboy.normal", PipBoySizeNames[0]),
+        PipBoySizeNames[1], PipBoySizeNames[2], PipBoySizeNames[3], PipBoySizeNames[4]);
+      appendUserOption(g_texts.text("option.reload", "Manual reload"), &onReloadChanged,
+        ToggleType, ToggleValues, ArrowSpacing, off, on);
+      appendUserOption(g_texts.text("option.sneak", "Sneak"), &onSneakChanged, ToggleType, ToggleValues, ArrowSpacing,
+        g_texts.text("option.sneak.button", "Stick click"), g_texts.text("option.sneak.crouch", "Real crouch"));
+      appendUserOption(g_texts.text("option.scope", "Scope lens"), &onScopeChanged,
+        ToggleType, ToggleValues, ArrowSpacing, off, on);
+      appendUserOption(g_texts.text("option.roomscale", "Room-scale walking"), &onRoomscaleChanged,
+        ToggleType, ToggleValues, ArrowSpacing, off, on);
     }
 
 
@@ -419,13 +411,14 @@ namespace dxvk {
   }
 
 
-  bool VrOptionsMenu::install(const VrOptions& options, ChangedFn onChanged, ConsoleFn onConsole) {
+  bool VrOptionsMenu::install(const VrOptions& options, const VrTexts& texts, ChangedFn onChanged, ConsoleFn onConsole) {
     if (!supported()) {
       Logger::warn("VR: The options page is not available, the executable is not the supported version");
       return false;
     }
 
     g_options   = options;
+    g_texts     = texts;
     g_onChanged = std::move(onChanged);
     g_onConsole = std::move(onConsole);
 
