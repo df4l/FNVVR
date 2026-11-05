@@ -118,6 +118,27 @@ namespace dxvk {
             uintptr_t*            previous);
 
     /**
+     * \brief Takes several calls for one hook, see \ref chainCall
+     *
+     * A hook has one previous function, so the calls must all reach the same
+     * one: the game's, or a single hook a plugin put on all of them.
+     *
+     * \param [in] sites Addresses of 5-byte calls (opcode E8)
+     * \param [in] count Number of calls
+     * \param [in] expectedTarget Function the calls reach without other mods
+     * \param [in] newTarget Function to call instead
+     * \param [out] previous Function the calls reached, unchanged on failure
+     * \returns \c true if every call was redirected. Calls that differ are all
+     *    left alone, and whichever module holds them is logged.
+     */
+    static bool chainCalls(
+      const uintptr_t*            sites,
+            size_t                count,
+            uintptr_t             expectedTarget,
+      const void*                 newTarget,
+            uintptr_t*            previous);
+
+    /**
      * \brief Replaces an entry of a virtual function table
      *
      * \param [in] slot Address of the table entry

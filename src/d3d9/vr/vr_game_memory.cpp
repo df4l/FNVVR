@@ -184,6 +184,32 @@ namespace dxvk {
   }
 
 
+  bool VrGameMemory::chainCalls(
+    const uintptr_t*            sites,
+          size_t                count,
+          uintptr_t             expectedTarget,
+    const void*                 newTarget,
+          uintptr_t*            previous) {
+    uintptr_t held = 0;
+    bool same = count && readCallTarget(sites[0], &held);
+
+    for (size_t i = 0; i < count; i++) {
+      uintptr_t target = 0;
+      same = same && readCallTarget(sites[i], &target) && target == held
+        && canChainCall(sites[i], expectedTarget);
+    }
+
+    for (size_t i = 0; i < count; i++) {
+      if (same)
+        same = chainCall(sites[i], expectedTarget, newTarget, previous);
+      else
+        callsTo(sites[i], expectedTarget);
+    }
+
+    return same;
+  }
+
+
   bool VrGameMemory::replaceCode(
           uintptr_t             site,
     const uint8_t*              expected,

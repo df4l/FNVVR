@@ -78,6 +78,9 @@ namespace dxvk {
     // kNVSE's hook, which replaces animations and then calls it
     uintptr_t g_previousPlaySequence = VrGame::PlaySequence;
 
+    // lStewieAl's Tweaks puts its bullet trails on this call before us
+    uintptr_t g_previousProjectileCreate = VrGame::ProjectileCreate;
+
     // The weapon node is a few levels below the skeleton's root, and the
     // muzzle a few levels below the weapon
     constexpr uint32_t MaxModelDepth = 16;
@@ -599,7 +602,7 @@ namespace dxvk {
         VrGame::FirstPersonZero, sizeof(VrGame::FirstPersonZero))
       && VrGameMemory::matches(VrGame::FirstPersonCameraSite,
         VrGame::FirstPersonCamera, sizeof(VrGame::FirstPersonCamera))
-      && VrGameMemory::callsTo(VrGame::ProjectileCreateCallSite, VrGame::ProjectileCreate);
+      && VrGameMemory::canChainCall(VrGame::ProjectileCreateCallSite, VrGame::ProjectileCreate);
 
     found = found && VrGameMemory::redirectCall(VrGame::FirstPersonUpdateCallSite,
       VrGame::ObjectUpdate, reinterpret_cast<const void*>(&VrWeaponHand::updateHook));
@@ -612,8 +615,8 @@ namespace dxvk {
 
     // If this one fails, the weapon is drawn in the hand but shoots from
     // the game's muzzle, along the head
-    if (found && !VrGameMemory::redirectCall(VrGame::ProjectileCreateCallSite,
-        VrGame::ProjectileCreate, reinterpret_cast<const void*>(&VrWeaponHand::createProjectileHook)))
+    if (found && !VrGameMemory::chainCall(VrGame::ProjectileCreateCallSite, VrGame::ProjectileCreate,
+        reinterpret_cast<const void*>(&VrWeaponHand::createProjectileHook), &g_previousProjectileCreate))
       Logger::warn("VR: The projectile call was not found, the weapon shoots along the head");
 
     // If this one fails, a grenade thrown by hand flies as fast as the
@@ -642,28 +645,9 @@ namespace dxvk {
       Logger::warn("VR: The auto-aim call was not found, shots bend towards where the head looks");
 
     if (found) {
-      // One hook serves the four calls, so they must all reach the same
-      // function: the game's, or the single hook kNVSE puts on all of them
-      uintptr_t held = 0;
-      bool redirected = VrGameMemory::callTarget(VrGame::PlaySequenceCallSites[0], &held);
-
-      for (uintptr_t site : VrGame::PlaySequenceCallSites) {
-        uintptr_t target = 0;
-        redirected = redirected && VrGameMemory::callTarget(site, &target) && target == held
-          && VrGameMemory::canChainCall(site, VrGame::PlaySequence);
-      }
-
-      // When they differ, the check logs which mods hold them
-      for (uintptr_t site : VrGame::PlaySequenceCallSites) {
-        if (redirected) {
-          redirected = VrGameMemory::chainCall(site, VrGame::PlaySequence,
-            reinterpret_cast<const void*>(&VrWeaponHand::playSequenceHook), &g_previousPlaySequence);
-        } else {
-          VrGameMemory::callsTo(site, VrGame::PlaySequence);
-        }
-      }
-
-      if (!redirected)
+      // kNVSE puts a single hook on the four calls
+      if (!VrGameMemory::chainCalls(VrGame::PlaySequenceCallSites, std::size(VrGame::PlaySequenceCallSites),
+          VrGame::PlaySequence, reinterpret_cast<const void*>(&VrWeaponHand::playSequenceHook), &g_previousPlaySequence))
         Logger::warn("VR: An animation call was not found, the left hand may reach for a pistol before aiming");
     }
 
@@ -821,7 +805,7 @@ namespace dxvk {
     if (g_weaponHand)
       g_weaponHand->m_handAimedShot = handAimed;
 
-    void* result = reinterpret_cast<ProjectileCreateFn>(VrGame::ProjectileCreate)(
+    void* result = reinterpret_cast<ProjectileCreateFn>(g_previousProjectileCreate)(
       projectile, shooter, target, weapon, x, y, z, heading, pitch,
       a9, a10, a11, a12, spreadHeading, spreadPitch, a15);
 
