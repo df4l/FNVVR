@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Tutorials
+
+- **The game's tutorials and help speak of the VR controls**: ammunition, hotkeys, the Pip-Boy and its light, aiming, grabbing and the Movement and Combat help page describe the controllers and gestures, in English and French, and the game's other sentences name the real buttons (the right stick for V.A.T.S., no more right bumper). The keyboard versions of these messages no longer appear when a laser is in use. Other languages show these texts in English: a `fnvvr\\texts_<language>.txt` file translates them. `d3d9.vrTutorials = False` brings the game's text back.
+- **The mod speaks the game's language**: the Settings > VR page, the 4 GB memory prompt, the keys of the console's keyboard and the SteamVR action names are in French on a French game, and a `fnvvr\\texts_<language>.txt` file translates them for other languages.
+
 ### Menus
 
 - **The menus keep showing the controller's buttons when you point with a laser**, instead of switching to keyboard shortcuts.
@@ -12,11 +17,8 @@
 
 ### Mini-games in the room
 
-- **The mini-games stand in front of you**, in 3D at their real size, instead of on a flat panel: the lock, the slot machine, the blackjack, roulette and Caravan tables, and the terminals with their hacking screen. Your hands are there too, in front of the table or behind it. Texts and buttons stay on a panel above the table, pointed at with the lasers. `d3d9.vrImmersiveMinigames = False` brings the flat panel back.
-- **Lockpicking**: the pin points at your right hand. Turn the screwdriver with the left trigger, or close the left grip and twist your wrist, the further the faster. The controllers vibrate while the lock turns and when the pin bends. The sticks still work.
-- **Slot machine**: close your grip on the lever's ball and pull it down. Your eyes look slightly down on the reels, as from a stool, and the payout screen only appears when you ask for it.
-- **Blackjack**: tap the felt to hit, wave over the table to stay, as at a real table. Buttons and lasers still work.
-- **Roulette**: point the laser at the felt, the trigger places a chip or takes it back.
+- **The mini-games stand in front of you**, in 3D at their real size, instead of on a flat panel: the lock, the slot machine, the blackjack, roulette and Caravan tables, and the terminals with their hacking screen. They are played with the sticks and buttons, as on a gamepad, and your hands are hidden while they are open. Texts and buttons stay on a panel above the table, pointed at with the lasers. `d3d9.vrImmersiveMinigames = False` brings the flat panel back.
+- **Slot machine**: your eyes look slightly down on the reels, as from a stool, and the payout screen only appears when you ask for it.
 - **Terminals and hacking**: the monitor stands in the room and the laser points directly at its screen.
 - **The casino runs in real time**: at a blackjack table, a roulette table or a slot machine, the world goes on around you, with its time, people and sounds. Dealers may walk away during a game. It stops as before when you are in combat, in the pause menu or in a message. `d3d9.vrRealTimeCasino = False` brings the pause back.
 

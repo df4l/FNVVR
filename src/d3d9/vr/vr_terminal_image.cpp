@@ -48,7 +48,7 @@ namespace dxvk {
   }
 
 
-  bool VrTerminalImage::initialize(const VrImage& texture, const VrBitmapFont& font, const VrImage& glyphs) {
+  bool VrTerminalImage::initialize(const VrImage& texture, const VrBitmapFont& font, const VrImage& glyphs, const VrTexts& texts) {
     m_plate = VrImage();
 
     if (texture.width < uint32_t(VrTerminalKeyboard::Plate.right) + 1
@@ -59,6 +59,16 @@ namespace dxvk {
     m_font.metrics = font;
     m_font.glyphs  = glyphs;
     buildPlate(texture);
+
+    uint32_t count = 0;
+    const VrTerminalKey* keys = VrTerminalKeyboard::keys(count);
+    m_labels.resize(count);
+
+    for (uint32_t i = 0; i < count; i++) {
+      if (keys[i].label)
+        m_labels[i] = texts.text((std::string("key.") + keys[i].label).c_str(), keys[i].label);
+    }
+
     return true;
   }
 
@@ -110,7 +120,7 @@ namespace dxvk {
       const VrTerminalKey& key = keys[i];
 
       char text[2] = { VrTerminalKeyboard::isShifted(key, view.shift, view.capsLock) ? key.upper : key.lower, '\0' };
-      const char* label = key.label ? key.label : text;
+      const char* label = key.label ? m_labels[i].c_str() : text;
 
       float scale = label[0] && label[1] ? NameScale : CharScale;
       float shift = int32_t(i) == view.pressedKey ? PressedShift : 0.0f;

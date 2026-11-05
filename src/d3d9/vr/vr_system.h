@@ -8,6 +8,7 @@
 #include "vr_game_resolution.h"
 #include "vr_options.h"
 #include "vr_stereo_renderer.h"
+#include "vr_tutorials.h"
 
 namespace dxvk {
 
@@ -96,6 +97,7 @@ namespace dxvk {
 
     std::unique_ptr<IVRBackend>          m_backend;
     std::unique_ptr<VrExtensionProvider> m_extensionProvider;
+    VrTexts                              m_texts;
     std::unique_ptr<VrStereoRenderer>    m_stereoRenderer;
     bool                                 m_showPreview;
     VrPanelConfig                        m_panelConfig;
@@ -116,6 +118,8 @@ namespace dxvk {
     bool                                 m_headsetResolution;
     bool                                 m_resolutionChosen = false;
     bool                                 m_forceGameSettings = false;
+    bool                                 m_rewriteTutorials = false;
+    std::unique_ptr<VrTutorials>         m_tutorials;
     bool                                 m_hideGameWindow = false;
     bool                                 m_keepGameActive = false;
     bool                                 m_hasSession = false;

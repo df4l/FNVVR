@@ -3,6 +3,7 @@
 #include <functional>
 
 #include "vr_options.h"
+#include "vr_texts.h"
 
 namespace dxvk {
 
@@ -44,10 +45,11 @@ namespace dxvk {
      *
      * \param [in] options Current values of the options
      * \param [in] onChanged Called after each change
+     * \param [in] texts The labels of the page, copied
      * \param [in] onConsole Called when the Console entry is chosen
      * \returns \c false if the executable is not the supported version
      */
-    static bool install(const VrOptions& options, ChangedFn onChanged, ConsoleFn onConsole);
+    static bool install(const VrOptions& options, const VrTexts& texts, ChangedFn onChanged, ConsoleFn onConsole);
 
   };
 

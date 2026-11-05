@@ -36,8 +36,8 @@ namespace dxvk {
   }
 
 
-  VrConsoleTerminal::VrConsoleTerminal(VrPainter& painter, IVRBackend& backend)
-  : m_painter(painter), m_backend(backend), m_screen(VrConsoleScreen::install(painter.device())),
+  VrConsoleTerminal::VrConsoleTerminal(VrPainter& painter, IVRBackend& backend, const VrTexts& texts)
+  : m_painter(painter), m_backend(backend), m_texts(texts), m_screen(VrConsoleScreen::install(painter.device())),
     m_flatPanel(painter, backend, VrPanelId::Terminal),
     m_flatList(VrTerminalImage::Width, VrTerminalImage::Height),
     m_modelList(0, 0) {
@@ -201,7 +201,7 @@ namespace dxvk {
       && metrics.parse(font.data(), font.size())
       && readImage(FontTexture, glyphs)
       && readImage(KeyboardTexture, keyboard)
-      && m_image.initialize(keyboard, metrics, glyphs);
+      && m_image.initialize(keyboard, metrics, glyphs, m_texts);
 
     if (m_loaded && !m_modelImage.initialize(keyboard))
       m_modelFailed = true;

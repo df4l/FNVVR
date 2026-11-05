@@ -56,7 +56,7 @@ namespace dxvk {
     /// How long a key is drawn pressed, in seconds
     constexpr static float PressTime        = 0.12f;
 
-    VrConsoleTerminal(VrPainter& painter, IVRBackend& backend);
+    VrConsoleTerminal(VrPainter& painter, IVRBackend& backend, const VrTexts& texts);
 
     /**
      * \brief Where the keyboard is, for the lasers
@@ -107,6 +107,7 @@ namespace dxvk {
 
     VrPainter&             m_painter;
     IVRBackend&            m_backend;
+    const VrTexts&         m_texts;
 
     std::unique_ptr<VrConsoleScreen> m_screen;
 

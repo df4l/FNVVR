@@ -33,6 +33,7 @@
 #include "vr_options_menu.h"
 #include "vr_stereo_renderer.h"
 #include "vr_system.h"
+#include "vr_text_files.h"
 #include "vr_weapon_types.h"
 
 namespace dxvk {
@@ -248,6 +249,7 @@ namespace dxvk {
 
     g_vrSystem.reset(new VrSystem(std::move(backend), showPreview, panel, turn, weaponInHand, headsetResolution,
       timer, passes, developer, swing));
+    g_vrSystem->m_texts = vrReadTexts();
     g_vrSystem->m_pipBoyScale = options.pipBoyScale;
     g_vrSystem->m_manualReload = options.manualReload;
     g_vrSystem->m_handPush = config.getOption<bool>("d3d9.vrHandPush", true);
@@ -257,18 +259,19 @@ namespace dxvk {
     g_vrSystem->m_sneakConfig.physical = options.physicalSneak;
     g_vrSystem->m_sneakConfig.crouch   = crouch;
     g_vrSystem->m_forceGameSettings = !emulated && config.getOption<bool>("d3d9.vrForceGameSettings", true);
+    g_vrSystem->m_rewriteTutorials = !emulated && config.getOption<bool>("d3d9.vrTutorials", true);
     g_vrSystem->m_hideGameWindow = !emulated && config.getOption<bool>("d3d9.vrHideGameWindow", true);
     g_vrSystem->m_keepGameActive = g_vrSystem->m_hideGameWindow;
     DxvkInstance::registerExtensionProvider(g_vrSystem->m_extensionProvider.get());
 
-    VrOptionsMenu::install(options, [] (const VrOptions& changed) {
+    VrOptionsMenu::install(options, g_vrSystem->m_texts, [] (const VrOptions& changed) {
       if (g_vrSystem)
         g_vrSystem->applyOptions(changed);
     }, [] {
       VrGameConsole::requestOpen();
     });
 
-    VrLargeAddress::install();
+    VrLargeAddress::install(g_vrSystem->m_texts);
     VrSoundFocus::install();
 
     if (config.getOption<bool>("d3d9.vrRealTimeCasino", true))
@@ -288,6 +291,11 @@ namespace dxvk {
     if (g_vrSystem->m_forceGameSettings) {
       g_vrSystem->m_forceGameSettings = false;
       VrGameSettings::apply();
+    }
+
+    if (g_vrSystem->m_rewriteTutorials) {
+      g_vrSystem->m_rewriteTutorials = false;
+      g_vrSystem->m_tutorials = VrTutorials::install(g_vrSystem->m_texts);
     }
 
     if (g_vrSystem->m_keepGameActive) {
@@ -394,7 +402,7 @@ namespace dxvk {
     }
 
     m_stereoRenderer = VrStereoRenderer::install(*m_backend, device, m_showPreview, m_panelConfig, m_turnConfig,
-      m_weaponInHand, m_timerConfig, m_passConfig, m_developerConfig, m_swingConfig);
+      m_weaponInHand, m_timerConfig, m_passConfig, m_developerConfig, m_swingConfig, m_texts);
 
     if (m_stereoRenderer) {
       m_stereoRenderer->setPipBoyScale(m_pipBoyScale);

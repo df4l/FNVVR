@@ -348,7 +348,7 @@ TEST_CASE(terminal_image_shows_the_view) {
   font.parse(file.data(), file.size());
 
   VrTerminalImage image;
-  CHECK(image.initialize(terminalTexture(), font, solidGlyphs()));
+  CHECK(image.initialize(terminalTexture(), font, solidGlyphs(), VrTexts()));
 
   // The black edge of the plate is transparent, its middle opaque
   const VrImage& plate = image.plate();
@@ -404,7 +404,7 @@ TEST_CASE(terminal_image_needs_the_whole_plate) {
   font.parse(file.data(), file.size());
 
   VrTerminalImage image;
-  CHECK(!image.initialize(small, font, solidGlyphs()));
+  CHECK(!image.initialize(small, font, solidGlyphs(), VrTexts()));
 
   VrPaintList list(VrTerminalImage::Width, VrTerminalImage::Height);
   image.paint(list, VrTerminalKeyboardView(), 0.0f, 0.0f, nullptr, false);
@@ -418,7 +418,7 @@ TEST_CASE(terminal_texture_lays_the_keys_on_the_enlarged_texture) {
   font.parse(file.data(), file.size());
 
   VrTerminalImage image;
-  CHECK(image.initialize(terminalTexture(), font, solidGlyphs()));
+  CHECK(image.initialize(terminalTexture(), font, solidGlyphs(), VrTexts()));
 
   VrTerminalTexture copy;
   CHECK(copy.initialize(terminalTexture()));

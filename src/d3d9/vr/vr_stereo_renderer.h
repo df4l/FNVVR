@@ -168,7 +168,8 @@ namespace dxvk {
       const VrGameTimerConfig&    timer,
       const VrRenderPassConfig&   passes,
       const VrDeveloperConfig&    developer,
-      const VrSwingConfig&        swing);
+      const VrSwingConfig&        swing,
+      const VrTexts&              texts);
 
     /**
      * \brief Called when the game presents, before the image is shown
