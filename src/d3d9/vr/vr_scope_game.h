@@ -48,9 +48,7 @@ namespace dxvk {
     /**
      * \brief Sets whether the player holds the weapon with both hands
      */
-    void setSteadied(bool steadied) {
-      m_steadied = steadied;
-    }
+    void setSteadied(bool steadied);
 
     /**
      * \brief Reads the equipped weapon's scope
@@ -64,6 +62,8 @@ namespace dxvk {
   private:
 
     VrScopeGame() = default;
+
+    static void chainGunSkill();
 
     bool m_steadied = false;
     bool m_loggedSteadied = false;
