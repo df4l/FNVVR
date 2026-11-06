@@ -7,6 +7,7 @@
 #include "vr_game_addresses.h"
 #include "vr_game_console.h"
 #include "vr_game_memory.h"
+#include "vr_game_text_edit.h"
 
 namespace dxvk {
 
@@ -52,10 +53,11 @@ namespace dxvk {
     uint32_t __fastcall readKeyHook(void* interfaceManager, void* unused, int32_t state, uint32_t scanCode) {
       uint32_t key = reinterpret_cast<ReadKeyFn>(VrGame::ConsoleReadKey)(interfaceManager, nullptr, state, scanCode);
 
+      // With the console closed, the keys typed for the game's text field
       if (!VrGameConsole::isOpen()) {
         g_keys.clear();
         g_close = false;
-        return key;
+        return key ? key : VrGameTextEdit::takeKey();
       }
 
       // Closed here, where the game itself toggles the console

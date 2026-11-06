@@ -71,7 +71,9 @@ namespace dxvk {
       m_sneak->update(input.isHeadTracked ? &input.headPose.position.y : nullptr, inGame, dt);
     }
 
-    if (m_terminalPanel && m_context == VrInputContext::Menu && input.hasActions)
+    if (m_systemKeyboardShown && m_context == VrInputContext::Menu)
+      updateSystemKeyboard(input);
+    else if (m_terminalPanel && m_context == VrInputContext::Menu && input.hasActions)
       updateTerminal(input, actions, dt);
     else
       updateGameInput(input, actions, menuPanel, dt);
@@ -183,6 +185,21 @@ namespace dxvk {
 
     // The console has the input: the game's cursor rests and the game's
     // menus see a gamepad at rest
+    VrGamepadHook::setCursorMode(false);
+    VrMenuCursor::update(VrPointerState());
+    VrGamepadHook::setControllerPad(input.hasActions, VrPadState());
+  }
+
+
+  void VrControls::updateSystemKeyboard(
+    const VrInputState&         input) {
+    // The runtime draws lasers of its own for its keyboard
+    for (uint32_t i = 0; i < VrHandCount; i++)
+      m_backend.hidePointer(VrHand(i));
+
+    m_terminalPointer  = VrPointerState();
+    m_terminalBack     = false;
+
     VrGamepadHook::setCursorMode(false);
     VrMenuCursor::update(VrPointerState());
     VrGamepadHook::setControllerPad(input.hasActions, VrPadState());

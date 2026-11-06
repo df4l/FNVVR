@@ -87,6 +87,12 @@ namespace dxvk {
     constexpr std::array<const char*, VrHandCount> PointerOverlayNames = { "Left laser", "Right laser" };
     constexpr uint32_t PointerSortOrder = VrPanelCount;
 
+    // Opaque value the runtime gives back with the keyboard's events
+    constexpr uint64_t KeyboardUserValue = 0x464E5652; // "FNVR"
+
+    // Bytes read back from the keyboard, far above any text field's
+    constexpr uint32_t KeyboardTextSize = 1024;
+
     // The laser's image: a few texels across, with soft edges, in the
     // amber of the Pip-Boy's screen. Its height is stretched to the
     // laser's length with the texel aspect.
@@ -717,7 +723,31 @@ namespace dxvk {
 
       if (event.eventType == vr::VREvent_IpdChanged)
         Logger::info(str::format("VR: The IPD changed to ", event.data.ipd.ipdMeters * 1000.0f, " mm"));
+
+      // Done closes the keyboard too, its close event follows
+      if (event.eventType == vr::VREvent_KeyboardDone && m_keyboardShown) {
+        m_keyboardShown = false;
+        readKeyboardText();
+      }
+
+      if (event.eventType == vr::VREvent_KeyboardClosed_Global && m_keyboardShown
+       && event.data.keyboard.overlayHandle == vr::k_ulOverlayHandleInvalid) {
+        m_keyboardShown = false;
+
+        if (m_keyboardEvent == VrKeyboardEvent::None)
+          m_keyboardEvent = VrKeyboardEvent::Closed;
+      }
     }
+  }
+
+
+  void VrOpenVrBackend::readKeyboardText() {
+    std::vector<char> text(KeyboardTextSize, '\0');
+    m_runtime->overlay->GetKeyboardText(text.data(), uint32_t(text.size()));
+    text.back() = '\0';
+
+    m_keyboardText  = text.data();
+    m_keyboardEvent = VrKeyboardEvent::Done;
   }
 
 
@@ -1292,6 +1322,50 @@ namespace dxvk {
     if (seconds > 0.0f && strength > 0.0f)
       m_runtime->input->TriggerHapticVibrationAction(m_actions.haptic[uint32_t(hand)], 0.0f, seconds, FrequencyHz, strength,
         vr::k_ulInvalidInputValueHandle);
+  }
+
+
+  bool VrOpenVrBackend::showKeyboard(const VrKeyboardRequest& request) {
+    if (m_state != VrSessionState::Running || !m_runtime || !m_runtime->overlay)
+      return false;
+
+    // Buffered: the keyboard shows the text itself and gives it on Done.
+    // Not modal, so that a click beside it does not close it.
+    vr::EVROverlayError error = m_runtime->overlay->ShowKeyboard(
+      vr::k_EGamepadTextInputModeNormal, vr::k_EGamepadTextInputLineModeSingleLine, 0,
+      request.description.c_str(), request.maxLength, request.text.c_str(), KeyboardUserValue);
+
+    if (error != vr::VROverlayError_None) {
+      Logger::warn(str::format("VR: SteamVR could not show its keyboard, error ", int32_t(error)));
+      return false;
+    }
+
+    m_keyboardShown = true;
+    m_keyboardEvent = VrKeyboardEvent::None;
+    m_keyboardText.clear();
+    return true;
+  }
+
+
+  void VrOpenVrBackend::hideKeyboard() {
+    if (!m_keyboardShown)
+      return;
+
+    m_keyboardShown = false;
+    m_keyboardEvent = VrKeyboardEvent::None;
+    m_runtime->overlay->HideKeyboard();
+  }
+
+
+  VrKeyboardEvent VrOpenVrBackend::takeKeyboardEvent(std::string& text) {
+    VrKeyboardEvent event = m_keyboardEvent;
+    m_keyboardEvent = VrKeyboardEvent::None;
+
+    if (event == VrKeyboardEvent::Done)
+      text = std::move(m_keyboardText);
+
+    m_keyboardText.clear();
+    return event;
   }
 
 }

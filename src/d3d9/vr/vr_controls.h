@@ -225,6 +225,16 @@ namespace dxvk {
      * \param [in] panel Placement of the terminal in tracking space, or
      *    \c nullptr while it is hidden; it must stay valid until update
      */
+    /**
+     * \brief Notes whether the runtime's keyboard has the input
+     *
+     * While it does, in menus, the lasers are hidden and the game sees its
+     * cursor and gamepad at rest (see VrTextFieldKeyboard).
+     */
+    void setSystemKeyboardShown(bool shown) {
+      m_systemKeyboardShown = shown;
+    }
+
     void setTerminalPanel(const VrPanelPlacement* panel) {
       m_terminalPanel = panel;
     }
@@ -299,6 +309,9 @@ namespace dxvk {
             VrActionState&        actions,
             float                 dt);
 
+    void updateSystemKeyboard(
+      const VrInputState&         input);
+
     VrPointerState updatePointer(
       const VrInputState&         input,
             VrActionState&        actions,
@@ -328,6 +341,8 @@ namespace dxvk {
     bool                        m_hotKeyWheelShown = false;
     bool                        m_menuBack = false;
     bool                        m_menuBackDown = false;
+
+    bool                        m_systemKeyboardShown = false;
 
     const VrPanelPlacement*     m_terminalPanel = nullptr;
     VrPointerState              m_terminalPointer;

@@ -8,6 +8,7 @@
 - **The brahmin skull can be grabbed**: the intro's tutorial asks you to pick up the skull while fighting is turned off; your hands now take it, without being able to hit Doc Mitchell.
 - **Waking up follows your head**: getting out of Doc Mitchell's bed, the view follows the character's head as it sits up and stands, like sitting down on furniture; nodding no longer swings the view around a point.
 - **No hands before you can move in the intro**: they appear when Doc lets you walk, consistent with the tutorial that then asks you to grab something with them.
+- **Type your name in VR**: when Doc Mitchell asks your name, SteamVR's keyboard opens with the current name. Type with its lasers and press Done: the name is entered in the game. If the game refuses it (empty, or a character its font lacks) or the keyboard is closed, it comes back.
 
 ### Hands
 

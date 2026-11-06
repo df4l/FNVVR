@@ -148,6 +148,20 @@ namespace dxvk {
   };
 
   /**
+   * \brief Text keyboard the runtime shows for a text field
+   *
+   * Texts are UTF-8.
+   */
+  struct VrKeyboardRequest {
+    /// What the text is for, shown above it
+    std::string description;
+    /// Text the keyboard starts with
+    std::string text;
+    /// Characters the text may hold at most
+    uint32_t    maxLength = 0;
+  };
+
+  /**
    * \brief Abstract VR runtime
    *
    * All game-facing VR code talks to this interface. The implementation is
@@ -315,6 +329,29 @@ namespace dxvk {
      * \param [in] durationNs Duration in nanoseconds
      */
     virtual void applyHaptic(VrHand hand, float amplitude, int64_t durationNs) = 0;
+
+    /**
+     * \brief Shows the runtime's own text keyboard
+     *
+     * The keyboard is typed on with the runtime's lasers, over the frames
+     * and panels, until it is confirmed, closed by the user or hidden with
+     * hideKeyboard. See takeKeyboardEvent.
+     *
+     * \returns \c false if the runtime has no keyboard or could not show it
+     */
+    virtual bool showKeyboard(const VrKeyboardRequest& request) = 0;
+
+    virtual void hideKeyboard() = 0;
+
+    /**
+     * \brief Takes what happened to the keyboard since the last call
+     *
+     * Events are read while waiting for a frame. A confirmation wins over a
+     * close seen in the same wait.
+     *
+     * \param [out] text The confirmed text (UTF-8), for VrKeyboardEvent::Done
+     */
+    virtual VrKeyboardEvent takeKeyboardEvent(std::string& text) = 0;
 
   };
 
