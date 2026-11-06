@@ -265,6 +265,20 @@ namespace dxvk {
     const VrGameFrustum&    frustum);
 
   /**
+   * \brief Checks whether a ray passes through a sphere ahead of its origin
+   *
+   * \param [in] origin The ray's origin
+   * \param [in] direction The ray's direction, not 0
+   * \param [in] centre The sphere's centre
+   * \param [in] radius The sphere's radius
+   */
+  bool vrRayMeetsSphere(
+    const VrVector3&        origin,
+    const VrVector3&        direction,
+    const VrVector3&        centre,
+          float             radius);
+
+  /**
    * \brief Moves a camera onto a ray, for its view through a point to be that ray
    *
    * The camera is put at the ray's origin and turned as little as it takes

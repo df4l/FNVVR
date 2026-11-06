@@ -143,6 +143,8 @@ namespace dxvk {
     constexpr VrVector3 VigorTesterFace    = { 0.0f, -15.0f, 92.0f };
     // The rectangle is placed again when it moves more than this, in metres
     constexpr float     PanelMoves         = 0.01f;
+    // More buttons in one list than this means it was not read correctly
+    constexpr uint32_t  MaxVigorButtons    = 256;
 
     // The roulette wheel of the world stands above the game's table
     constexpr const char* RouletteWorldWheel = "Object02:0";
@@ -681,6 +683,45 @@ namespace dxvk {
   }
 
 
+  bool VrMinigames::vigorTesterButtonOnRay(const VrVector3& origin, const VrVector3& direction) {
+    auto menu = global<uint8_t*>(VrGame::LoveTesterInstance);
+
+    if (!menu)
+      return false;
+
+    uint32_t page = field<uint32_t>(menu, VrGame::LoveTesterPage);
+
+    if (page > VrGame::LoveTesterLastPage)
+      return false;
+
+    const uintptr_t lists[] = {
+      VrGame::LoveTesterPages + VrGame::LoveTesterPageSize * page,
+      VrGame::LoveTesterCommonButtons };
+
+    for (uintptr_t list : lists) {
+      auto     buttons = field<uint8_t* const*>(menu, list + VrGame::SimpleArrayBase);
+      uint32_t count   = field<uint32_t>(menu, list + VrGame::SimpleArraySize);
+
+      if (!buttons || count > MaxVigorButtons)
+        continue;
+
+      for (uint32_t i = 0; i < count; i++) {
+        uint8_t* node  = buttons[i] ? field<uint8_t*>(buttons[i], VrGame::LoveTesterButtonNode) : nullptr;
+        auto*    bound = node ? field<const float*>(node, VrGame::ObjectWorldBound) : nullptr;
+
+        // The menu's pick leaves out what is culled
+        if (!bound || (field<uint32_t>(node, VrGame::ObjectFlags) & VrGame::ObjectFlagAppCulled))
+          continue;
+
+        if (vrRayMeetsSphere(origin, direction, VrVector3 { bound[0], bound[1], bound[2] }, bound[3]))
+          return true;
+      }
+    }
+
+    return false;
+  }
+
+
   void VrMinigames::aimVigorTesterCamera(const VrInputState& input) {
     void* camera = global<void*>(VrGame::LoveTesterCamera);
 
@@ -714,12 +755,18 @@ namespace dxvk {
     VrGameCameraPose pose = m_vigorCamera;
     const VrPanelHit& hit = hits[uint32_t(m_vigorHand)];
 
+    // The menu's click takes the whole screen. Off its buttons the triggers
+    // are the gamepad's, which turn the pages.
+    m_pad.decidesTarget = true;
+    m_pad.overTarget    = false;
+
     if (hit.hit) {
       const VrPose& aim = input.controllers[uint32_t(m_vigorHand)].aimPose;
       VrVector3 origin = vrRoomToScene(m_space, aim.position);
       VrVector3 ahead  = vrRoomToScene(m_space, aim.position + vrRotate(aim.orientation, VrVector3 { 0.0f, 0.0f, -1.0f }));
 
       pose = vrCameraAlongRay(m_vigorCamera, m_vigorFrustum, hit.uv, origin, ahead - origin);
+      m_pad.overTarget = vigorTesterButtonOnRay(origin, ahead - origin);
     }
 
     VrGameCamera access;

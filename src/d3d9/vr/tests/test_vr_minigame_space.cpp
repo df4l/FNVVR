@@ -394,6 +394,17 @@ TEST_CASE(camera_along_a_ray_sees_the_ray_at_the_point) {
 }
 
 
+TEST_CASE(ray_meets_a_sphere_ahead_only) {
+  VrVector3 origin = { 0.0f, 0.0f, 0.0f };
+  VrVector3 ahead  = { 0.0f, 0.0f, -2.0f };
+
+  CHECK(vrRayMeetsSphere(origin, ahead, { 0.5f, 0.0f, -10.0f }, 0.6f));
+  CHECK(!vrRayMeetsSphere(origin, ahead, { 0.7f, 0.0f, -10.0f }, 0.6f));
+  CHECK(!vrRayMeetsSphere(origin, ahead, { 0.0f, 0.0f, 10.0f }, 0.6f));
+  CHECK(vrRayMeetsSphere(origin, ahead, { 0.0f, 0.3f, 0.2f }, 0.6f));
+}
+
+
 TEST_CASE(pin_points_at_the_hand) {
   VrPose lock;
   lock.position = { 0.0f, 1.4f, -0.5f };

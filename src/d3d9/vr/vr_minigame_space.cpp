@@ -325,6 +325,27 @@ namespace dxvk {
   }
 
 
+  bool vrRayMeetsSphere(
+    const VrVector3&        origin,
+    const VrVector3&        direction,
+    const VrVector3&        centre,
+          float             radius) {
+    VrVector3 ahead  = direction * (1.0f / vrLength(direction));
+    VrVector3 offset = centre - origin;
+    float along = vrDot(offset, ahead);
+
+    // A sphere around the origin is met whichever way the ray goes
+    if (vrDot(offset, offset) <= radius * radius)
+      return true;
+
+    if (along <= 0.0f)
+      return false;
+
+    VrVector3 across = offset - ahead * along;
+    return vrDot(across, across) <= radius * radius;
+  }
+
+
   VrGameCameraPose vrCameraAlongRay(
     const VrGameCameraPose& camera,
     const VrGameFrustum&    frustum,

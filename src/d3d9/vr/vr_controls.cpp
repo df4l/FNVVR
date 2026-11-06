@@ -141,6 +141,9 @@ namespace dxvk {
     // some menus bind to buttons of their own (the slot machine's bets)
     bool overTarget = !panel || VrMenuCursor::overTarget();
 
+    if (minigame && m_minigamePad.decidesTarget)
+      overTarget = !panel || m_minigamePad.overTarget;
+
     VrPointerState pointer = updatePointer(input, actions, panel, surface, padUsed, overTarget, dt);
     m_pointerSurfaceState = pointer.surface;
     VrGamepadHook::setCursorMode(pointer.cursorActive);

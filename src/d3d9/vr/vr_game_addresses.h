@@ -814,6 +814,23 @@ namespace dxvk {
     constexpr uintptr_t LoveTesterInstance        = 0x011DA2C8;
     constexpr uintptr_t LoveTesterCamera          = 0x011DA2F4;
     constexpr uintptr_t LoveTesterCabinetModel    = 0x60;
+
+    /**
+     * The buttons the menu's click picks (HandleClick, case 5): those of the
+     * current page, LoveTesterPages + LoveTesterPageSize * the page at
+     * LoveTesterPage (pages up to LoveTesterLastPage), then those of the whole
+     * machine, LoveTesterCommonButtons. Each is a BSSimpleArray (base
+     * pointer at +4, size at +8) of buttons whose node (NiAVObject*) is at
+     * LoveTesterButtonNode; the pick is on that node's geometry.
+     */
+    constexpr uintptr_t LoveTesterPage            = 0x48;
+    constexpr uint32_t  LoveTesterLastPage        = 8;
+    constexpr uintptr_t LoveTesterPages           = 0x84;
+    constexpr uintptr_t LoveTesterPageSize        = 0x20;
+    constexpr uintptr_t LoveTesterCommonButtons   = 0x1A4;
+    constexpr uintptr_t SimpleArrayBase           = 0x4;
+    constexpr uintptr_t SimpleArraySize           = 0x8;
+    constexpr uintptr_t LoveTesterButtonNode      = 0x8;
     constexpr uintptr_t LoveTesterDepthClearSite  = 0x0079491C;
 
     /**

@@ -235,6 +235,8 @@ namespace dxvk {
 
     void aimVigorTesterCamera(const VrInputState& input);
 
+    static bool vigorTesterButtonOnRay(const VrVector3& origin, const VrVector3& direction);
+
     void leaveObject();
 
     void updateLock(const VrInputState& input, float dt);
