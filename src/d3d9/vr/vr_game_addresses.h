@@ -1306,6 +1306,13 @@ namespace dxvk {
     constexpr uintptr_t UpdateCursorCallSite = 0x0070CD31;
     constexpr uintptr_t UpdateCursor         = 0x007118D0;
     constexpr uintptr_t InterfaceCursorTile  = 0x28;
+
+    /**
+     * InterfaceManager+0xCC, the tile under the cursor (pOverTileTarget):
+     * set by Update in mouse mode from PickMenus 0x007126C0, which only
+     * returns tiles with the target trait, so null over nothing to click.
+     */
+    constexpr uintptr_t InterfaceOverTile    = 0xCC;
     constexpr uintptr_t NodeLocalTranslate   = 0x58;
 
     /**

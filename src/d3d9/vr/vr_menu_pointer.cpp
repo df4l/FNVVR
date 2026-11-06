@@ -73,10 +73,23 @@ namespace dxvk {
 
     const VrPanelHit& hit = hits[uint32_t(m_hand)];
 
+    // A press on the panel away from anything to click is the gamepad's
+    // trigger until it is released; the surface keeps its own triggers
+    bool padTrigger = false;
+
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      if (!input.triggers[i])
+        m_padTriggers[i] = false;
+      else if (pressed[i] && hits[i].hit && !input.overTarget)
+        m_padTriggers[i] = true;
+
+      padTrigger |= m_padTriggers[i];
+    }
+
     if (!hit.hit) {
       m_cursorActive = false;
       m_hasAnchor    = false;
-    } else if (input.padUsed) {
+    } else if (input.padUsed || padTrigger) {
       // The laser has to move away from here to take the menus back
       m_cursorActive = false;
       m_hasAnchor    = true;

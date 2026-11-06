@@ -156,6 +156,45 @@ TEST_CASE(pointer_gives_way_to_the_gamepad_until_the_laser_moves) {
 }
 
 
+TEST_CASE(pointer_leaves_the_trigger_to_the_gamepad_away_from_buttons) {
+  VrPanelPlacement panel = makePanel();
+  VrMenuPointer pointer;
+
+  VrPointerInput input = frame(panel, pointingAway(), pointingAt(0.0f, 1.5f));
+  input.overTarget = false;
+  CHECK(pointer.update(input).cursorActive);
+
+  // Over nothing to click the press is the gamepad's, as long as it is held
+  input.triggers[uint32_t(VrHand::Right)] = true;
+  VrPointerState state = pointer.update(input);
+  CHECK(!state.cursorActive);
+  CHECK(!state.triggersTaken);
+  CHECK(!state.button);
+
+  state = pointer.update(frame(panel, pointingAway(), pointingAt(0.1f, 1.5f)));
+  CHECK(state.cursorActive);
+
+  input = frame(panel, pointingAway(), pointingAt(0.1f, 1.5f));
+  input.overTarget = false;
+  input.triggers[uint32_t(VrHand::Right)] = true;
+  state = pointer.update(input);
+  CHECK(!state.cursorActive);
+  CHECK(!state.triggersTaken);
+
+  // Released, the laser takes the menus back once it moves, and a press
+  // over a button clicks it
+  state = pointer.update(frame(panel, pointingAway(), pointingAt(0.3f, 1.5f)));
+  CHECK(state.cursorActive);
+
+  input = frame(panel, pointingAway(), pointingAt(0.3f, 1.5f));
+  input.triggers[uint32_t(VrHand::Right)] = true;
+  state = pointer.update(input);
+  CHECK(state.cursorActive);
+  CHECK(state.triggersTaken);
+  CHECK(state.button);
+}
+
+
 TEST_CASE(pointer_wheel_scrolls_one_notch_then_repeats) {
   VrPanelPlacement panel = makePanel();
   VrMenuPointer pointer;

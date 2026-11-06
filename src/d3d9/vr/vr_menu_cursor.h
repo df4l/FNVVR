@@ -38,6 +38,14 @@ namespace dxvk {
     static bool pointerAllowed();
 
     /**
+     * \brief Whether the game's cursor is over a tile that takes clicks
+     *
+     * As the interface last picked it, in mouse mode. \c true when the
+     * hooks are not installed, so that the trigger keeps clicking.
+     */
+    static bool overTarget();
+
+    /**
      * \brief Sets the pointer's state for the next game frame
      *
      * Called once per frame, on the game's thread.
