@@ -22,6 +22,18 @@ namespace dxvk {
 
   namespace {
 
+    // A script holds the player still and unarmed: the intro before its
+    // first steps, while the character is not made yet
+    bool playerHeldStill() {
+      auto player = *reinterpret_cast<const uint8_t* const*>(VrGame::Player);
+
+      if (!player)
+        return false;
+
+      uint8_t disabled = player[VrGame::PlayerDisabledControls];
+      return (disabled & VrGame::ControlMovement) && (disabled & VrGame::ControlFighting);
+    }
+
     // Main::Swap is __thiscall without stack arguments
     using SwapFn = void (__fastcall*)(void* main, void* unused);
 
@@ -1244,6 +1256,22 @@ namespace dxvk {
     // and shows the weapon as the game does.
     if (state == VrGameStateKind::Menu && input.hasActions
      && !*reinterpret_cast<const uint32_t*>(VrGame::VatsCameraState)) {
+      m_weaponHand->beginFrame(gameCamera, nullptr, nullptr, false, VrFirstPersonMode::Hidden, dt);
+      return;
+    }
+
+    // The body is the scene's until the game lets the player move, and the
+    // hands would show a skin the player has not chosen yet
+    bool heldStill = state == VrGameStateKind::InGame && playerHeldStill();
+
+    if (heldStill != m_handsHeldStill) {
+      m_handsHeldStill = heldStill;
+      Logger::info(heldStill
+        ? "VR: The hands are hidden while a script holds the player still"
+        : "VR: The hands are shown again");
+    }
+
+    if (heldStill) {
       m_weaponHand->beginFrame(gameCamera, nullptr, nullptr, false, VrFirstPersonMode::Hidden, dt);
       return;
     }

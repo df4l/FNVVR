@@ -3,10 +3,11 @@
 namespace dxvk {
 
   /**
-   * \brief Keeps the world running while a casino game is open
+   * \brief Keeps the world running while a casino game or the vigor tester is open
    *
    * The menu stays a menu for the game's interface, its scripts and the VR
-   * layer. Only the tests that stop the world answer as if there were none,
+   * layer: the scripts' GameMode blocks wait for its end, as the intro's
+   * quest does to have Doc Mitchell react to the vigor tester. Only the tests that stop the world answer as if there were none,
    * and the player, whose update follows the first of them, stays still, with
    * no input reaching them. See findings/minigames.md §9.
    */
@@ -18,8 +19,11 @@ namespace dxvk {
      * \brief Redirects the game's tests of the menu mode
      *
      * Logs and changes nothing unless all the calls are the expected ones.
+     *
+     * \param [in] casino Whether the casino's games run live
+     * \param [in] vigorTester Whether the vigor tester runs live
      */
-    static void install();
+    static void install(bool casino, bool vigorTester);
 
   private:
 

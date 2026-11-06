@@ -39,6 +39,10 @@ namespace dxvk {
     bool     noTriggers  = false;
     /// Same for the shoulder buttons, which are the grips
     bool     noShoulders = false;
+    /// The mini-game knows whether the laser is over something to click,
+    /// where the interface sees a target everywhere
+    bool     decidesTarget = false;
+    bool     overTarget    = true;
   };
 
   /**

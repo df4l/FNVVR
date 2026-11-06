@@ -112,6 +112,18 @@ namespace dxvk {
   };
 
   /**
+   * \brief How a scene lies on an object whose own model the scene holds
+   *
+   * The scene and the object are then one: a point of the model is seen
+   * where the object has it in the world. The seat, facing, areas and eye
+   * height are left for the caller to set.
+   *
+   * \param [in] model Where the model stands in the scene's space, its
+   *    scale not 0
+   */
+  VrSceneFit vrSceneFitOfModel(const VrWorldObject& model);
+
+  /**
    * \brief Finds the camera that puts the head at the seat of an object
    *
    * It takes the place of the game's camera, from which the eyes are placed
@@ -235,6 +247,56 @@ namespace dxvk {
     const VrSceneSpace&     space,
           float             distance,
     const VrGameFrustum&    frustum);
+
+  /**
+   * \brief Finds the rectangle a camera of the scene sees across its view
+   *
+   * As vrSceneViewRectangle, for a camera anywhere in the scene's space.
+   *
+   * \param [in] space Where the scene stands
+   * \param [in] camera The camera's pose in the scene's space
+   * \param [in] distance Distance from the camera along its axis, in scene units
+   * \param [in] frustum The camera's frustum
+   */
+  VrPanelPlacement vrCameraViewRectangle(
+    const VrSceneSpace&     space,
+    const VrGameCameraPose& camera,
+          float             distance,
+    const VrGameFrustum&    frustum);
+
+  /**
+   * \brief Checks whether a ray passes through a sphere ahead of its origin
+   *
+   * \param [in] origin The ray's origin
+   * \param [in] direction The ray's direction, not 0
+   * \param [in] centre The sphere's centre
+   * \param [in] radius The sphere's radius
+   */
+  bool vrRayMeetsSphere(
+    const VrVector3&        origin,
+    const VrVector3&        direction,
+    const VrVector3&        centre,
+          float             radius);
+
+  /**
+   * \brief Moves a camera onto a ray, for its view through a point to be that ray
+   *
+   * The camera is put at the ray's origin and turned as little as it takes
+   * for what it sees at \c uv of its image to be along the ray. A game that
+   * picks along the view through its cursor then picks along the ray.
+   *
+   * \param [in] camera The camera
+   * \param [in] frustum Its frustum
+   * \param [in] uv Point of its image, see VrPanelHit::uv
+   * \param [in] origin The ray's origin
+   * \param [in] direction The ray's direction, not 0
+   */
+  VrGameCameraPose vrCameraAlongRay(
+    const VrGameCameraPose& camera,
+    const VrGameFrustum&    frustum,
+    const VrVector2&        uv,
+    const VrVector3&        origin,
+    const VrVector3&        direction);
 
   /**
    * \brief Finds the angle of the lock pin from the hand holding it

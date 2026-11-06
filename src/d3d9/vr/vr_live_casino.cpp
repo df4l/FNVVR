@@ -26,6 +26,10 @@ namespace dxvk {
     // The menu had its idle on the main thread this frame
     bool g_interfaceDone = false;
 
+    // The menus that may run live, set once at the start
+    bool g_casino      = false;
+    bool g_vigorTester = false;
+
     bool realMenuMode() {
       return reinterpret_cast<IsInMenuModeFn>(VrGame::IsInMenuMode)();
     }
@@ -36,9 +40,10 @@ namespace dxvk {
 
     VrLiveCasinoState readState() {
       VrLiveCasinoState state;
-      state.casinoOnTop = isTopMenu(VrGame::BlackJackMenuId)
-        || isTopMenu(VrGame::RouletteMenuId)
-        || isTopMenu(VrGame::SlotMachineMenuId);
+      state.casinoOnTop = (g_casino && (isTopMenu(VrGame::BlackJackMenuId)
+          || isTopMenu(VrGame::RouletteMenuId)
+          || isTopMenu(VrGame::SlotMachineMenuId)))
+        || (g_vigorTester && isTopMenu(VrGame::LoveTesterMenuId));
 
       if (!state.casinoOnTop)
         return state;
@@ -100,7 +105,10 @@ namespace dxvk {
   }
 
 
-  void VrLiveCasino::install() {
+  void VrLiveCasino::install(bool casino, bool vigorTester) {
+    if (!casino && !vigorTester)
+      return;
+
     bool found = VrGameMemory::matchesUnlessRewritten(VrGame::IsInMenuMode,
           VrGame::IsInMenuModePrologue, sizeof(VrGame::IsInMenuModePrologue))
       && VrGameMemory::matches(VrGame::IsTopMenu, VrGame::IsTopMenuPrologue, sizeof(VrGame::IsTopMenuPrologue))
@@ -114,9 +122,12 @@ namespace dxvk {
       found = found && VrGameMemory::callsTo(site, VrGame::InterfaceIdle);
 
     if (!found) {
-      Logger::warn("VR: The game's menu mode tests were not found, the casino games pause the world");
+      Logger::warn("VR: The game's menu mode tests were not found, the casino games and the vigor tester pause the world");
       return;
     }
+
+    g_casino      = casino;
+    g_vigorTester = vigorTester;
 
     VrGameMemory::redirectCall(VrGame::LiveMenuModeFrameSite, VrGame::IsInMenuMode,
       reinterpret_cast<const void*>(&VrLiveCasino::frameMenuModeHook));
@@ -138,7 +149,7 @@ namespace dxvk {
     bool wasLive  = g_live.load(std::memory_order_relaxed);
 
     if (live != wasLive) {
-      Logger::info(live ? "VR: The world runs behind the casino game" : "VR: The world no longer runs behind the casino game");
+      Logger::info(live ? "VR: The world runs behind the menu" : "VR: The world no longer runs behind the menu");
 
       // Stopped with the menu still open: as the game's menus keep it
       if (!live && menuMode)
