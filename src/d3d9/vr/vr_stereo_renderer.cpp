@@ -666,7 +666,7 @@ namespace dxvk {
 
     // The Pip-Boy inventory's hotkey wheel takes the navigation stick
     m_controls.setHotKeyWheelShown(state == VrGameStateKind::PipBoy && VrGameHotKeys::inventoryWheelShown());
-    m_controls.setHandsFree(m_weaponDrawn && m_weaponDrawn->playerHolstered());
+    m_controls.setHandsFree(m_weaponDrawn && m_weaponDrawn->handsFree());
 
     float dt = float(timing.predictedPeriod) * 1e-9f;
 
@@ -1256,7 +1256,7 @@ namespace dxvk {
     VrGameCameraPose hand      = vrGrabCorrectHand(handInGame(right), glue[uint32_t(VrHand::Right)]);
     VrGameCameraPose otherHand = vrGrabCorrectHand(handInGame(left), glue[uint32_t(VrHand::Left)]);
 
-    VrFirstPersonMode mode = m_weaponDrawn && m_weaponDrawn->playerHolstered()
+    VrFirstPersonMode mode = m_weaponDrawn && m_weaponDrawn->handsFree()
       ? VrFirstPersonMode::FreeHands
       : VrFirstPersonMode::Hands;
 
@@ -1379,7 +1379,7 @@ namespace dxvk {
 
     VrHolsterInput holster;
     holster.active = state == VrGameStateKind::InGame && m_hasReference && m_hasHeadPose
-      && right.isActive && input.hasActions && !m_rightHandAtPipBoy;
+      && right.isActive && input.hasActions && !m_rightHandAtPipBoy && !VrWeaponDrawn::fightingDisabled();
     holster.kind   = vrHolsterForWeaponType(type);
     holster.drawn  = !m_weaponDrawn->playerHolstered();
     holster.grip   = input.actions.isPressed(VrAction::Grab);
@@ -1422,11 +1422,12 @@ namespace dxvk {
 
     bool inGame = state == VrGameStateKind::InGame && m_hasReference && input.hasActions;
 
-    // The right hand holds objects only while the weapon is holstered. A
-    // press at the holster, at the Pip-Boy or with the quick wheel open
-    // does something else, but an object held there stays held.
+    // The right hand holds objects only while the weapon is holstered, by
+    // the player or by a script that disabled fighting. A press at the
+    // holster, at the Pip-Boy or with the quick wheel open does something
+    // else, but an object held there stays held.
     bool rightBusy = m_holster.atHolster() || m_rightHandAtPipBoy || (m_quickWheel && m_quickWheel->isOpen());
-    bool rightFree = m_weaponDrawn && m_weaponDrawn->playerHolstered()
+    bool rightFree = m_weaponDrawn && m_weaponDrawn->handsFree()
       && (m_physicsGrab->holds(VrHand::Right) || !rightBusy);
 
     // The left hand is free unless it holds the weapon, arms a grenade or
@@ -1448,6 +1449,9 @@ namespace dxvk {
     // the target stays the game's until its next pick, after this frame
     bool aimedRight = m_handPick && m_handPick->pickedWithHands() && m_handPick->hand() == VrHand::Right;
     bool aimedLeft  = m_handPick && m_handPick->pickedWithHands() && m_handPick->hand() == VrHand::Left;
+
+    // Without fighting, living actors are neither held nor shoved
+    m_physicsGrab->setLivingAllowed(!VrWeaponDrawn::fightingDisabled());
 
     for (uint32_t i = 0; i < VrHandCount; i++)
       m_physicsGrab->setFingerRig(VrHand(i), m_weaponHand ? m_weaponHand->fingerRig(VrHand(i)) : nullptr);
@@ -1705,7 +1709,9 @@ namespace dxvk {
     int32_t type = -1;
     bool equipped = VrWeaponDrawn::equippedWeapon(type) != nullptr;
 
-    bool inGame = state == VrGameStateKind::InGame && m_hasReference && input.hasActions && m_weaponDrawn;
+    // No fist strikes while a script disabled fighting
+    bool inGame = state == VrGameStateKind::InGame && m_hasReference && input.hasActions && m_weaponDrawn
+      && !VrWeaponDrawn::fightingDisabled();
     bool holstered = m_weaponDrawn && m_weaponDrawn->playerHolstered();
     bool wornOnFist = type == VrGame::WeaponTypeHandToHand;
 

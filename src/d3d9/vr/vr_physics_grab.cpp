@@ -950,7 +950,7 @@ namespace dxvk {
   void VrPhysicsGrab::updateShoves(uint8_t* player, float dt) {
     m_shoveCooldown = std::max(m_shoveCooldown - dt, 0.0f);
 
-    if (!m_canShove || !m_npcReaction || !canHoldLiving() || m_shoveCooldown > 0.0f)
+    if (!m_canShove || !m_npcReaction || !m_livingAllowed || !canHoldLiving() || m_shoveCooldown > 0.0f)
       return;
 
     // A shove is for empty hands: with a weapon out the player means harm
@@ -1654,7 +1654,7 @@ namespace dxvk {
     bool actor  = virtualFunction<IsActorFn>(ref, VrGame::RefIsActorSlot)(ref, nullptr);
     bool living = actor && !(virtualFunction<IsDeadFn>(ref, VrGame::ActorIsDeadSlot)(ref, nullptr, 0) & 0xFF);
 
-    if (living ? !canHoldLiving() : motion == VrGame::MotionKeyframed)
+    if (living ? !m_livingAllowed || !canHoldLiving() : motion == VrGame::MotionKeyframed)
       return false;
 
     float inverseMass = readField<float>(body, VrGame::BodyInverseMass);

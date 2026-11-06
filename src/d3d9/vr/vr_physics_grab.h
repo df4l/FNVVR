@@ -187,6 +187,19 @@ namespace dxvk {
     }
 
     /**
+     * \brief Whether the hands may hold or shove a living actor
+     *
+     * Off while a script disabled the player's fighting controls: objects
+     * are still held, as with the game's grab key, but nobody is handled.
+     * A living actor already held stays held.
+     *
+     * \param [in] allowed Whether living actors may be taken
+     */
+    void setLivingAllowed(bool allowed) {
+      m_livingAllowed = allowed;
+    }
+
+    /**
      * \brief How a hand is drawn to stay on what it holds
      *
      * From the player's last update (vrGrabHandCorrection): the held point,
@@ -351,6 +364,7 @@ namespace dxvk {
     uint32_t m_loggedStores  = 0;
     bool     m_canStore      = false;
     bool     m_handPush      = true;
+    bool     m_livingAllowed = true;
     bool     m_loggedNoPush  = false;
 
     std::unique_ptr<VrHandBodies> m_handBodies;
