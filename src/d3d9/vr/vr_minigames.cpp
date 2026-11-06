@@ -130,13 +130,14 @@ namespace dxvk {
       { 0.0f, -45.0f, 0.0f }, { 0.0f, 1.0f, 0.0f },
       SlotMachineAreas, 1, SlotMachineEyeHeight };
 
-    // The vigor tester's front is along its model's -Y. The player stands
-    // before the cards, close enough to read them, a little nearer than the
-    // menu's camera, and keeps the game camera's height.
+    // The vigor tester's front is along its model's +Y: the counter with
+    // its buttons stands out to y = 18.6, the cards are behind the glass at
+    // y = -2.2, its back against the wall. The player stands before the
+    // counter, about 65 cm from it, and keeps the game camera's height.
     constexpr VrModelArea VigorTesterAreas[] = {
       { -40.9f, 40.9f, -16.6f, 18.6f } };
-    constexpr VrVector3 VigorTesterSeat    = { 0.0f, -62.0f, 0.0f };
-    constexpr VrVector3 VigorTesterFacing  = { 0.0f, 1.0f, 0.0f };
+    constexpr VrVector3 VigorTesterSeat    = { 0.0f, 64.0f, 0.0f };
+    constexpr VrVector3 VigorTesterFacing  = { 0.0f, -1.0f, 0.0f };
     // The middle of the cards and bulbs: the lasers' rectangle lies there,
     // so that a point of it is where the menu's camera picks a button
     constexpr VrVector3 VigorTesterFace    = { 0.0f, -15.0f, 92.0f };
