@@ -6,8 +6,9 @@ namespace dxvk {
    * \brief What decides whether the world runs behind a casino game
    */
   struct VrLiveCasinoState {
-    /// Blackjack, roulette or a slot machine is the top menu. A message or
-    /// the pause menu above it stops the world as any menu.
+    /// Blackjack, roulette, a slot machine or the vigor tester is the top
+    /// menu, as far as each is allowed to run live. A message or the pause
+    /// menu above it stops the world as any menu.
     bool casinoOnTop    = false;
     bool console        = false;
     /// The player cannot defend from a table: the game stops as it always did

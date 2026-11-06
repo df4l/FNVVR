@@ -277,8 +277,9 @@ namespace dxvk {
     if (g_vrSystem->m_hideGameWindow)
       VrSoundFocus::keepPluginSound();
 
-    if (config.getOption<bool>("d3d9.vrRealTimeCasino", true))
-      VrLiveCasino::install();
+    VrLiveCasino::install(
+      config.getOption<bool>("d3d9.vrRealTimeCasino", true),
+      config.getOption<bool>("d3d9.vrRealTimeVigorTester", true));
   }
 
 
