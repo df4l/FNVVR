@@ -5,6 +5,8 @@
 #include "d3d9_caps.h"
 #include "d3d9_util.h"
 
+#include "vr/vr_depth_resolve.h"
+
 #include "../util/util_bit.h"
 #include "../util/util_luid.h"
 #include "../util/util_ratio.h"
@@ -165,7 +167,7 @@ namespace dxvk {
     // (also advertised in D3D8 by AMD drivers,
     // not advertised at all by modern Intel drivers)
     if (unlikely(rt && CheckFormat == D3D9Format::RESZ && surface))
-      return isAmd
+      return (isAmd || vrOffersResz())
         ? D3D_OK
         : D3DERR_NOTAVAILABLE;
 
