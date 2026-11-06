@@ -83,21 +83,6 @@ namespace dxvk {
   }
 
 
-  std::string vrGameTextFromUtf8(const std::string& utf8) {
-    std::string text;
-    size_t pos = 0;
-
-    while (pos < utf8.size()) {
-      uint8_t character = gameCharacter(nextCodePoint(utf8, pos));
-
-      if (character >= 0x20 && character != '|' && character != 0x7F)
-        text += char(character);
-    }
-
-    return text;
-  }
-
-
   std::string vrUtf8FromGameText(const std::string& text) {
     std::string utf8;
 
@@ -116,18 +101,25 @@ namespace dxvk {
   }
 
 
-  std::vector<uint32_t> vrTextEntryKeys(uint32_t length, const std::string& text) {
+  std::vector<uint32_t> vrTextEntryKeys(const std::string& typed) {
     std::vector<uint32_t> keys;
-    keys.reserve(length + text.size() + 2);
+    size_t pos = 0;
 
-    // End also clears the field's "first key replaces the text" state
-    keys.push_back(VrConsoleKey::End);
-    keys.insert(keys.end(), length, VrConsoleKey::Backspace);
+    while (pos < typed.size()) {
+      uint32_t codePoint = nextCodePoint(typed, pos);
 
-    for (char c : text)
-      keys.push_back(uint8_t(c));
+      if (codePoint == '\b' || codePoint == 0x7F) {
+        keys.push_back(VrConsoleKey::Backspace);
+      } else if (codePoint == '\n' || codePoint == '\r') {
+        keys.push_back(VrConsoleKey::Enter);
+      } else {
+        uint8_t character = gameCharacter(codePoint);
 
-    keys.push_back(VrConsoleKey::Enter);
+        if (character >= 0x20 && character != '|')
+          keys.push_back(character);
+      }
+    }
+
     return keys;
   }
 
@@ -144,7 +136,7 @@ namespace dxvk {
       case State::Shown:
         if (event == VrKeyboardEvent::Done) {
           m_state = State::Applying;
-          return VrTextEntryStep::Apply;
+          return VrTextEntryStep::Confirm;
         }
 
         if (event == VrKeyboardEvent::Closed) {

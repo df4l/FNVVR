@@ -2,6 +2,7 @@
 #include "../../util/util_string.h"
 
 #include "vr_game_text_edit.h"
+#include "vr_terminal_keyboard.h"
 #include "vr_text_field_keyboard.h"
 
 namespace dxvk {
@@ -29,7 +30,16 @@ namespace dxvk {
     std::string typed;
     VrKeyboardEvent event = m_backend.takeKeyboardEvent(typed);
 
-    switch (m_entry.update(VrGameTextEdit::isOpen(), VrGameTextEdit::keysPending(), event, dt)) {
+    bool open   = VrGameTextEdit::isOpen();
+    bool typing = open && m_entry.shown();
+
+    VrTextEntryStep step = m_entry.update(open, VrGameTextEdit::keysPending(), event, dt);
+
+    // The keys pressed up to the confirmation or the close go in first
+    if (typing)
+      type(typed, step == VrTextEntryStep::Confirm);
+
+    switch (step) {
       case VrTextEntryStep::Show:
         show();
         break;
@@ -38,10 +48,7 @@ namespace dxvk {
         m_backend.hideKeyboard();
         break;
 
-      case VrTextEntryStep::Apply:
-        apply(typed);
-        break;
-
+      case VrTextEntryStep::Confirm:
       case VrTextEntryStep::None:
         break;
     }
@@ -55,7 +62,6 @@ namespace dxvk {
 
     VrKeyboardRequest request;
     request.description = vrUtf8FromGameText(title);
-    request.text        = vrUtf8FromGameText(text);
     request.maxLength   = MaxTextLength;
 
     if (!m_backend.showKeyboard(request)) {
@@ -68,16 +74,22 @@ namespace dxvk {
   }
 
 
-  void VrTextFieldKeyboard::apply(const std::string& typed) {
-    std::string title;
-    std::string text;
-    VrGameTextEdit::read(title, text);
+  void VrTextFieldKeyboard::type(const std::string& typed, bool confirm) {
+    std::vector<uint32_t> keys = vrTextEntryKeys(typed);
 
-    std::string gameText = vrGameTextFromUtf8(typed);
-    VrGameTextEdit::pressKeys(vrTextEntryKeys(uint32_t(text.size()), gameText));
+    if (confirm)
+      keys.push_back(VrConsoleKey::Enter);
 
-    Logger::info(str::format("VR: The keyboard's text (", gameText.size(),
-      " characters) goes to the game's text field"));
+    if (!keys.empty())
+      VrGameTextEdit::pressKeys(keys);
+
+    if (!keys.empty() && !m_loggedTyping) {
+      Logger::info("VR: The keyboard's keys are typed in the game's text field as they are pressed");
+      m_loggedTyping = true;
+    }
+
+    if (confirm)
+      Logger::info("VR: The keyboard is confirmed, the game's text field is entered");
   }
 
 }

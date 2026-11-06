@@ -155,8 +155,6 @@ namespace dxvk {
   struct VrKeyboardRequest {
     /// What the text is for, shown above it
     std::string description;
-    /// Text the keyboard starts with
-    std::string text;
     /// Characters the text may hold at most
     uint32_t    maxLength = 0;
   };
@@ -335,7 +333,8 @@ namespace dxvk {
      *
      * The keyboard is typed on with the runtime's lasers, over the frames
      * and panels, until it is confirmed, closed by the user or hidden with
-     * hideKeyboard. See takeKeyboardEvent.
+     * hideKeyboard. It holds no text of its own: each key is given as it
+     * is pressed, for the application to show. See takeKeyboardEvent.
      *
      * \returns \c false if the runtime has no keyboard or could not show it
      */
@@ -349,9 +348,10 @@ namespace dxvk {
      * Events are read while waiting for a frame. A confirmation wins over a
      * close seen in the same wait.
      *
-     * \param [out] text The confirmed text (UTF-8), for VrKeyboardEvent::Done
+     * \param [out] typed The keys pressed since the last call, in order, as
+     *    UTF-8: characters, \c '\b' for Backspace and \c '\n' for Enter
      */
-    virtual VrKeyboardEvent takeKeyboardEvent(std::string& text) = 0;
+    virtual VrKeyboardEvent takeKeyboardEvent(std::string& typed) = 0;
 
   };
 

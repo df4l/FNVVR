@@ -135,9 +135,23 @@ namespace dxvk {
   VrGameCameraPose vrComputeBodyCameraPose(float heading, const VrVector3& position);
 
   /**
+   * \brief Builds a camera pose facing a heading, tilted up or down
+   *
+   * Without roll: its right stays level.
+   *
+   * \param [in] heading Heading in radians, 0 north, clockwise
+   * \param [in] pitch Tilt in radians, positive looking up
+   * \param [in] position Camera position in game units
+   */
+  VrGameCameraPose vrComputeTiltedCameraPose(float heading, float pitch, const VrVector3& position);
+
+  /**
    * \brief Finds the heading a camera faces
    *
-   * \param [in] pose A camera that does not look straight up or down
+   * Looking straight up or down, the camera's top tells it: the heading is
+   * the one the camera would face if it were tilted back to level.
+   *
+   * \param [in] pose A camera that is not rolled onto its side
    * \returns Heading in radians, 0 north, clockwise
    */
   float vrComputeCameraHeading(const VrGameCameraPose& pose);
@@ -161,6 +175,19 @@ namespace dxvk {
    * \returns \c false if the bone looks straight up or down
    */
   bool vrComputeHeadHeading(const float* rotation, float& heading);
+
+  /**
+   * \brief Heading and tilt of a camera, roll left out
+   *
+   * Looking straight up or down, the camera's top tells the heading, as for
+   * vrComputeCameraHeading.
+   *
+   * \param [in] pose The camera
+   * \param [out] heading The heading, unchanged without a result
+   * \param [out] pitch The tilt, positive looking up, unchanged without a result
+   * \returns \c false if the camera is rolled onto its side
+   */
+  bool vrComputeCameraTilt(const VrGameCameraPose& pose, float& heading, float& pitch);
 
   /**
    * \brief Turns the view as much as something else turns

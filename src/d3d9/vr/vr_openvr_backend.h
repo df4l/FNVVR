@@ -116,7 +116,7 @@ namespace dxvk {
 
     void hideKeyboard() override;
 
-    VrKeyboardEvent takeKeyboardEvent(std::string& text) override;
+    VrKeyboardEvent takeKeyboardEvent(std::string& typed) override;
 
   private:
 
@@ -129,8 +129,6 @@ namespace dxvk {
     void shutdownRuntime();
 
     void pollEvents();
-
-    void readKeyboardText();
 
     bool initializeInput();
 
@@ -282,7 +280,7 @@ namespace dxvk {
     // The runtime's keyboard, while this backend shows it
     bool                              m_keyboardShown = false;
     VrKeyboardEvent                   m_keyboardEvent = VrKeyboardEvent::None;
-    std::string                       m_keyboardText;
+    std::string                       m_keyboardTyped;
 
     // Each step of the first frame is logged once, so that a failure
     // inside the runtime can be located from the log

@@ -1102,16 +1102,26 @@ namespace dxvk {
     constexpr uintptr_t PlayerTempThirdPerson     = 0x64D;
 
     /**
-     * Call in the first-person branch of PlayerCharacter::UpdateCamera to
-     * Animation::GetSmallestHavokBlendValue (__thiscall with the
-     * third-person head's parent bone, returns a float in ST0). Below 1, an
-     * animation moves the third-person head, such as waking up and getting
-     * out of bed at a new game, and the camera is pulled from the
-     * first-person camera node towards the third-person one, which the look
-     * angle bends around the body. See findings/camera.md.
+     * PlayerCharacter::p1stPersonAnimation, the first-person skeleton's
+     * animation data, which PlayerCharacter::GetAnimation (0x00950A10, the
+     * Actor vtable slot +0x1E4) gives in first person: scripts play their
+     * idles on it then (Script::PlayIdle 0x005CB2D0 and Cmd_IsIdlePlaying
+     * test that animation), such as waking up and getting out of bed at a
+     * new game, and the camera follows its camera node. Its read there,
+     * cmp dword [ecx+0x690], 0, checks the offset.
+     *
+     * Animation::SpecialIdlePlaying (__thiscall, bool: the idle at +0x124,
+     * an AnimIdle, is in its playing state, 2, its state at +0x8). See
+     * findings/camera.md §8.6.
      */
-    constexpr uintptr_t HeadBlendCallSite         = 0x0094B24B;
-    constexpr uintptr_t HeadBlend                 = 0x00496550;
+    constexpr uintptr_t PlayerFirstPersonAnimation = 0x690;
+    constexpr uintptr_t PlayerGetAnimationReadSite = 0x00950A3F;
+    constexpr uint8_t   PlayerGetAnimationRead[]   = { 0x83, 0xB9, 0x90, 0x06, 0x00, 0x00, 0x00 };
+    constexpr uintptr_t AnimationSpecialIdlePlaying = 0x004985B0;
+    constexpr uint8_t   AnimationSpecialIdlePlayingPrologue[] = {
+      0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x4D, 0xFC, 0x81, 0xC1, 0x24, 0x01, 0x00, 0x00 };
+    constexpr uintptr_t AnimationIdle             = 0x124;
+    constexpr uintptr_t AnimIdleState             = 0x8;
     constexpr uintptr_t TempThirdPersonReadSite   = 0x009503DA;
     constexpr uint8_t   TempThirdPersonRead[]     = { 0x0F, 0xB6, 0x88, 0x4D, 0x06, 0x00, 0x00 };
 

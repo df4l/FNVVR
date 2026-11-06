@@ -243,7 +243,7 @@ namespace dxvk {
   }
 
 
-  VrKeyboardEvent VrEmulatorBackend::takeKeyboardEvent(std::string& text) {
+  VrKeyboardEvent VrEmulatorBackend::takeKeyboardEvent(std::string& typed) {
     return VrKeyboardEvent::None;
   }
 

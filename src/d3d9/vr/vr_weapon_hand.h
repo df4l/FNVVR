@@ -1047,6 +1047,8 @@ namespace dxvk {
     bool             m_loggedArms   = false;
     bool             m_loggedSleeves = false;
     bool             m_loggedSleeveCut = false;
+    // Whether the last placement cut the sleeves under the Pip-Boy's band
+    bool             m_cutsSleeves = false;
     uint32_t         m_loggedBodyMeshes = 0;
     bool             m_loggedOtherHand = false;
     bool             m_loggedTwoHanded = false;
@@ -1489,8 +1491,11 @@ namespace dxvk {
 
     /**
      * \brief Gives the sleeve cut the arms' bones and where they are cut
+     *
+     * \returns \c false if there is no Pip-Boy to cut the sleeves under:
+     *    they are hidden then
      */
-    void placeSleeveCuts(
+    bool placeSleeveCuts(
             uint8_t*              root,
             uint8_t*              leftForearm,
             uint8_t*              leftHand,

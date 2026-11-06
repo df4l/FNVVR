@@ -156,9 +156,6 @@ namespace dxvk {
     // the forearm's twist bone
     constexpr uint32_t MaxPosedBones = 48;
 
-    /** Sleeves end this far from the wrists when the Pip-Boy is not measured */
-    constexpr float DefaultSleeveCut  = 0.15f * VrGameUnitsPerMetre;
-
     /** The left sleeve is cut this far inside the Pip-Boy's band */
     constexpr float PipBoyBandOverlap = 0.015f * VrGameUnitsPerMetre;
 
@@ -3029,11 +3026,11 @@ namespace dxvk {
     uint8_t* skeleton = skeletonRoot(root, arms[0].top);
     uint8_t* weaponNode = findObject(root, VrGame::WeaponNodeName);
 
-    if (m_sleeveCut)
-      placeSleeveCuts(root, arms[0].forearm, hands[0], arms[1].forearm, hands[1]);
+    bool cutsSleeves = m_sleeveCut
+      && placeSleeveCuts(root, arms[0].forearm, hands[0], arms[1].forearm, hands[1]);
 
     // The meshes are culled with the first-person camera after this update
-    forEachObject(root, MaxModelDepth, [this, &arms, &isRightHandMesh, rightHand, skeleton, weaponNode] (uint8_t* object) {
+    forEachObject(root, MaxModelDepth, [this, &arms, &isRightHandMesh, rightHand, cutsSleeves, skeleton, weaponNode] (uint8_t* object) {
       uint8_t* geometry = asGeometry(object);
 
       if (!geometry)
@@ -3043,7 +3040,7 @@ namespace dxvk {
         // The part of a sleeve along a drawn forearm is drawn, cut across it
         uint32_t forearms = coveredForearms(geometry, arms) & (rightHand ? 1u : 3u);
 
-        if (m_sleeveCut && forearms) {
+        if (cutsSleeves && forearms) {
           show(geometry);
           m_sleeveCut->addSleeve(geometry, forearms);
 
@@ -3074,29 +3071,37 @@ namespace dxvk {
       Logger::warn("VR: No arm mesh was found, the arms stay visible");
 
     m_loggedArms    = true;
-    m_loggedSleeves = true;
+    m_loggedSleeves = m_loggedSleeves || cutsSleeves;
   }
 
 
-  void VrWeaponHand::placeSleeveCuts(
+  bool VrWeaponHand::placeSleeveCuts(
           uint8_t*              root,
           uint8_t*              leftForearm,
           uint8_t*              leftHand,
           uint8_t*              rightForearm,
           uint8_t*              rightHand) {
-    // Without a Pip-Boy both sleeves end where it would; with one, the
-    // right sleeve ends as far from its wrist as the left one
-    float distance = DefaultSleeveCut;
+    // The band covers the left cut, and the right sleeve ends as far from
+    // its wrist. Without a Pip-Boy, as early in a new game, the sleeves'
+    // cut ends show what the band hides: they are left out, only the hands
+    // are drawn.
+    float distance = 0.0f;
     bool underPipBoy = measurePipBoyCut(root, leftForearm, leftHand, distance);
 
-    m_sleeveCut->setArm(0, leftForearm, leftHand, distance);
-    m_sleeveCut->setArm(1, rightForearm, rightHand, distance);
+    if (underPipBoy) {
+      m_sleeveCut->setArm(0, leftForearm, leftHand, distance);
+      m_sleeveCut->setArm(1, rightForearm, rightHand, distance);
+    }
 
-    if (!m_loggedSleeveCut) {
-      Logger::info(str::format("VR: Sleeves are cut ", distance / VrGameUnitsPerMetre * 100.0f, " cm from the wrists",
-        underPipBoy ? ", under the Pip-Boy's band" : ", the Pip-Boy was not measured"));
+    if (!m_loggedSleeveCut || underPipBoy != m_cutsSleeves) {
+      Logger::info(underPipBoy
+        ? str::format("VR: Sleeves are cut ", distance / VrGameUnitsPerMetre * 100.0f, " cm from the wrists, under the Pip-Boy's band")
+        : std::string("VR: No Pip-Boy on the left forearm, the sleeves are hidden and only the hands are drawn"));
       m_loggedSleeveCut = true;
     }
+
+    m_cutsSleeves = underPipBoy;
+    return underPipBoy;
   }
 
 
