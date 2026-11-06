@@ -6,6 +6,11 @@
 
 - **The controller's triggers work in menus while a laser points at the panel**: a trigger pressed over nothing to click acts as the gamepad's trigger (the slot machine's bets, for example), and only clicks when the laser is on a button.
 
+### Doc Mitchell's house
+
+- **The Vit-o-matic Vigor Tester leaves the flat panel**: the machine where you spend your S.P.E.C.I.A.L. points is in 3D on the machine in Doc Mitchell's house, with the view brought in front of it. Point at its buttons with a laser and pull the trigger; off the buttons, the triggers turn the pages. The world goes on around you meanwhile, and Doc still reacts to your stats once you are done. `d3d9.vrRealTimeVigorTester = False` brings the pause back.
+- **No hands before you can move in the intro**: they appear when Doc lets you walk, so they no longer show a skin you have not chosen yet.
+
 ## v0.13.0 (2026-11-05, since v0.12.0 `24a1b26`)
 
 ### Mini-games in the room
