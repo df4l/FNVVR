@@ -16,6 +16,7 @@
 #include "d3d9_names.h"
 #include "d3d9_format_helpers.h"
 
+#include "vr/vr_depth_resolve.h"
 #include "vr/vr_system.h"
 
 #include "../dxvk/dxvk_adapter.h"
@@ -2535,7 +2536,7 @@ namespace dxvk {
             // in D3D8 - once supported by Intel as well,
             // however modern drivers do not expose it)
             constexpr uint32_t RESZ = 0x7fa05000;
-            if (unlikely(Value == RESZ && vendorId == amdVendorId)) {
+            if (unlikely(Value == RESZ && (vendorId == amdVendorId || vrOffersResz()))) {
               ResolveZ();
               break;
             }
