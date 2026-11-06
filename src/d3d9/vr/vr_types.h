@@ -96,6 +96,17 @@ namespace dxvk {
     uint32_t height = 0;
   };
 
+  /**
+   * \brief What happened to the runtime's text keyboard
+   */
+  enum class VrKeyboardEvent : uint32_t {
+    None,
+    /// The text was confirmed
+    Done,
+    /// The keyboard was closed without confirming its text
+    Closed,
+  };
+
   enum class VrSessionState : uint32_t {
     Idle,
     Ready,

@@ -233,6 +233,21 @@ namespace dxvk {
   }
 
 
+  bool VrEmulatorBackend::showKeyboard(const VrKeyboardRequest& request) {
+    return false;
+  }
+
+
+  void VrEmulatorBackend::hideKeyboard() {
+
+  }
+
+
+  VrKeyboardEvent VrEmulatorBackend::takeKeyboardEvent(std::string& text) {
+    return VrKeyboardEvent::None;
+  }
+
+
   void VrEmulatorBackend::setInput(const VrEmulatorInput& input) {
     // Accumulate mouse movement between frames, keep the latest key state
     const float dx = m_pendingInput.mouseDeltaX + input.mouseDeltaX;

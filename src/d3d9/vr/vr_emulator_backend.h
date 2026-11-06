@@ -110,6 +110,15 @@ namespace dxvk {
     void applyHaptic(VrHand hand, float amplitude, int64_t durationNs) override;
 
     /**
+     * \brief Shows no keyboard: the computer's keyboard types in the game
+     */
+    bool showKeyboard(const VrKeyboardRequest& request) override;
+
+    void hideKeyboard() override;
+
+    VrKeyboardEvent takeKeyboardEvent(std::string& text) override;
+
+    /**
      * \brief Sets the keyboard and mouse input applied on the next frame
      */
     void setInput(const VrEmulatorInput& input);

@@ -112,6 +112,12 @@ namespace dxvk {
 
     void applyHaptic(VrHand hand, float amplitude, int64_t durationNs) override;
 
+    bool showKeyboard(const VrKeyboardRequest& request) override;
+
+    void hideKeyboard() override;
+
+    VrKeyboardEvent takeKeyboardEvent(std::string& text) override;
+
   private:
 
     struct Runtime;
@@ -123,6 +129,8 @@ namespace dxvk {
     void shutdownRuntime();
 
     void pollEvents();
+
+    void readKeyboardText();
 
     bool initializeInput();
 
@@ -270,6 +278,11 @@ namespace dxvk {
     // One overlay per hand for its laser, created when it is first shown
     std::array<Pointer, VrHandCount>  m_pointers;
     std::vector<uint8_t>              m_pointerImage;
+
+    // The runtime's keyboard, while this backend shows it
+    bool                              m_keyboardShown = false;
+    VrKeyboardEvent                   m_keyboardEvent = VrKeyboardEvent::None;
+    std::string                       m_keyboardText;
 
     // Each step of the first frame is logged once, so that a failure
     // inside the runtime can be located from the log
