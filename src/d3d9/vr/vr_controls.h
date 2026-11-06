@@ -300,6 +300,7 @@ namespace dxvk {
       const VrPanelPlacement*     panel,
       const VrPanelPlacement*     surface,
             bool                  padUsed,
+            bool                  overTarget,
             float                 dt);
 
     IVRBackend&                 m_backend;

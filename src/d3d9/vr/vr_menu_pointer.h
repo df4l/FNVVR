@@ -63,6 +63,8 @@ namespace dxvk {
     std::array<bool, VrHandCount>               triggers = { };
     /// Whether a gamepad menu button or the navigation stick was used
     bool                                        padUsed = false;
+    /// Whether the interface has a tile that takes clicks under its cursor
+    bool                                        overTarget = true;
     /// Wheel stick, up is positive, in [-1, 1]
     float                                       wheel   = 0.0f;
     /// Time since the previous frame, in seconds
@@ -115,6 +117,10 @@ namespace dxvk {
    * \ref MoveThreshold or the trigger is pressed. The cursor is also off
    * while no laser points at the panel.
    *
+   * A trigger pressed while the cursor is over nothing that takes clicks
+   * is the gamepad's trigger instead, which the menus bind to their own
+   * buttons, and hands the menus to the gamepad until it is released.
+   *
    * A surface, when there is one, is pointed at like the panel, with the
    * panel in front of it. It does not move the game's cursor: the caller
    * uses the point it reports.
@@ -141,6 +147,8 @@ namespace dxvk {
     bool      m_hasAnchor     = false;
     VrVector2 m_anchor;
     std::array<bool, VrHandCount> m_triggers = { };
+    /// Triggers held since a press that went to the gamepad
+    std::array<bool, VrHandCount> m_padTriggers = { };
     float     m_wheelTimer    = 0.0f;
 
     int32_t updateWheel(float stick, float dt);

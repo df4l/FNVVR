@@ -137,7 +137,11 @@ namespace dxvk {
 
     const VrPanelPlacement* surface = m_context == VrInputContext::Menu ? m_pointerSurface : nullptr;
 
-    VrPointerState pointer = updatePointer(input, actions, panel, surface, padUsed, dt);
+    // Away from the game's buttons the triggers are the gamepad's, which
+    // some menus bind to buttons of their own (the slot machine's bets)
+    bool overTarget = !panel || VrMenuCursor::overTarget();
+
+    VrPointerState pointer = updatePointer(input, actions, panel, surface, padUsed, overTarget, dt);
     m_pointerSurfaceState = pointer.surface;
     VrGamepadHook::setCursorMode(pointer.cursorActive);
     VrMenuCursor::update(pointer);
@@ -172,7 +176,7 @@ namespace dxvk {
     m_terminalBackDown = back;
 
     // The sticks and buttons never take the lasers off the terminal
-    m_terminalPointer = updatePointer(input, actions, m_terminalPanel, nullptr, false, dt);
+    m_terminalPointer = updatePointer(input, actions, m_terminalPanel, nullptr, false, true, dt);
 
     // The console has the input: the game's cursor rests and the game's
     // menus see a gamepad at rest
@@ -188,6 +192,7 @@ namespace dxvk {
     const VrPanelPlacement*     panel,
     const VrPanelPlacement*     surface,
           bool                  padUsed,
+          bool                  overTarget,
           float                 dt) {
     VrPointerInput pointerInput;
     pointerInput.controllers = input.controllers;
@@ -195,6 +200,7 @@ namespace dxvk {
     pointerInput.panel       = panel;
     pointerInput.surface     = surface;
     pointerInput.padUsed     = padUsed;
+    pointerInput.overTarget  = overTarget;
 
     pointerInput.triggers[uint32_t(VrHand::Left)]  = actions.isPressed(VrAction::MenuLeftTrigger);
     pointerInput.triggers[uint32_t(VrHand::Right)] = actions.isPressed(VrAction::MenuRightTrigger);

@@ -117,6 +117,15 @@ namespace dxvk {
   }
 
 
+  bool VrMenuCursor::overTarget() {
+    if (!g_installed)
+      return true;
+
+    void* interfaceManager = *reinterpret_cast<void* const*>(VrGame::InterfaceManager);
+    return interfaceManager && field<void*>(interfaceManager, VrGame::InterfaceOverTile);
+  }
+
+
   void VrMenuCursor::update(const VrPointerState& state) {
     g_state = state;
   }

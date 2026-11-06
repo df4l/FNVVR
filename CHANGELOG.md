@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Menus
+
+- **The controller's triggers work in menus while a laser points at the panel**: a trigger pressed over nothing to click acts as the gamepad's trigger (the slot machine's bets, for example), and only clicks when the laser is on a button.
+
 ## v0.13.0 (2026-11-05, since v0.12.0 `24a1b26`)
 
 ### Mini-games in the room
