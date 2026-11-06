@@ -17,7 +17,9 @@ namespace dxvk {
    * arm it covers: its bones outside that forearm are gathered at the
    * elbow, and a clip plane across the forearm cuts away everything on the
    * elbow's side, those gathered vertices included. The cut is a straight
-   * edge, whatever the mesh, and no other mesh is touched.
+   * edge, whatever the mesh, and no other mesh is touched. The meat caps
+   * of dismemberment, which lie inside the sleeves and would show through
+   * the cut, are left out of these draws.
    *
    * The sleeves are given again by each placement of the first-person
    * model, and nothing is cut while there are none.
@@ -77,6 +79,13 @@ namespace dxvk {
       uint32_t arms     = 0;
     };
 
+    /** The partitions of the skin being drawn */
+    struct Partitions {
+      const uint8_t* skin      = nullptr;
+      const uint8_t* dismember = nullptr;
+      uint32_t       count     = 0;
+    };
+
     struct SavedBone {
       uint8_t*  bone = nullptr;
       VrVector3 translate;
@@ -89,8 +98,10 @@ namespace dxvk {
 
     /** The cut of the arm being drawn, invalid outside a sleeve's draw */
     VrForearmCut           m_cut;
+    Partitions             m_partitions;
 
     bool                   m_loggedNoPlane  = false;
+    bool                   m_loggedCaps     = false;
 
     VrSleeveCut() = default;
 
@@ -107,6 +118,12 @@ namespace dxvk {
       const VrVector3&            gather);
 
     void restoreBones();
+
+    static Partitions setupPartitions(
+            uint8_t*              skin);
+
+    bool isCap(
+      const void*                 partition) const;
 
     void drawCutPartition(
             uint8_t*              renderer,

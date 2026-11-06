@@ -59,6 +59,19 @@ namespace dxvk {
       return false;
     }
 
+    /** The partitions of a dismemberable skin, null for another skin */
+    const uint8_t* dismemberPartitions(uint8_t* skin) {
+      using GetRttiFn = const void* (__fastcall*)(uint8_t*, void*);
+
+      auto vtable  = field<const uint8_t*>(skin, 0);
+      auto getRtti = *reinterpret_cast<const GetRttiFn*>(vtable + VrGame::ObjectGetRttiSlot);
+
+      if (getRtti(skin, nullptr) != reinterpret_cast<const void*>(VrGame::DismemberSkinInstanceRtti))
+        return nullptr;
+
+      return field<const uint8_t*>(skin, VrGame::DismemberPartitions);
+    }
+
     void renderSkinned(uint8_t* pass, int testAlpha, int blendAlpha, int setupDrawMode) {
       reinterpret_cast<RenderSkinnedFn>(g_previousRenderSkinned)(pass, testAlpha, blendAlpha, setupDrawMode);
     }
@@ -161,7 +174,9 @@ namespace dxvk {
       field<uint32_t>(skin, VrGame::SkinInstanceFrameId) ^= FrameIdFlip;
 
       m_cut = cut;
+      m_partitions = setupPartitions(skin);
       renderSkinned(pass, testAlpha, blendAlpha, setupDrawMode);
+      m_partitions = Partitions();
       m_cut.valid = false;
 
       // And from the game's bones again for the next draw
@@ -214,6 +229,37 @@ namespace dxvk {
     }
 
     m_saved.clear();
+  }
+
+
+  VrSleeveCut::Partitions VrSleeveCut::setupPartitions(uint8_t* skin) {
+    Partitions partitions;
+    auto skinPartition = field<uint8_t*>(skin, VrGame::SkinInstancePartition);
+
+    if (!skinPartition)
+      return partitions;
+
+    partitions.skin      = field<const uint8_t*>(skinPartition, VrGame::SkinPartitionArray);
+    partitions.count     = field<uint32_t>(skinPartition, VrGame::SkinPartitionCount);
+    partitions.dismember = dismemberPartitions(skin);
+    return partitions;
+  }
+
+
+  bool VrSleeveCut::isCap(const void* partition) const {
+    if (!m_partitions.skin || !m_partitions.dismember)
+      return false;
+
+    auto offset = uintptr_t(partition) - uintptr_t(m_partitions.skin);
+    uintptr_t index = offset / VrGame::SkinPartitionSize;
+
+    if (uintptr_t(partition) < uintptr_t(m_partitions.skin) || index >= m_partitions.count)
+      return false;
+
+    uint16_t bodyPart = 0;
+    std::memcpy(&bodyPart, m_partitions.dismember + index * VrGame::DismemberPartitionSize
+      + VrGame::DismemberPartitionBodyPart, sizeof(bodyPart));
+    return bodyPart >= VrGame::FirstCapBodyPart;
   }
 
 
@@ -292,6 +338,16 @@ namespace dxvk {
           void*                 partition,
           void*                 data) {
     VrSleeveCut* self = g_sleeveCut;
+
+    // The meat caps inside a sleeve would show through its cut
+    if (self && self->m_cut.valid && self->isCap(partition)) {
+      if (!self->m_loggedCaps) {
+        Logger::info("VR: The meat caps inside the sleeves are left out of their cut draws");
+        self->m_loggedCaps = true;
+      }
+
+      return;
+    }
 
     if (self && self->m_cut.valid)
       self->drawCutPartition(renderer, buffer, partition, data);

@@ -11,6 +11,7 @@
 ### Hands
 
 - **Sleeves reach the hands again**: outfits whose sleeve runs from the shoulder to the wrist were hidden from the elbow up, leaving a gap between the left hand and the Pip-Boy and an empty right wrist. The sleeves are now drawn along both forearms and cut cleanly: the left one under the Pip-Boy's band, the right one as far from its wrist. Works with any outfit, nothing to set.
+- **The right wrist is no longer twisted after holstering a weapon**: the free right hand takes the same relaxed pose as the left.
 
 ### Menus
 

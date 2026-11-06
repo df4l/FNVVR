@@ -426,6 +426,27 @@ namespace dxvk {
     constexpr uintptr_t SkinInstanceFrameId       = 0x18;
 
     /**
+     * Dismemberment caps (GOG database, RenderPassImmediately_Skinned): the
+     * skin instance's NiSkinPartition (+0x0C) holds the partition count and
+     * array (44 bytes each). When the skin instance's GetRTTI (vtable slot
+     * 0x08) gives BSDismemberSkinInstance's, its DismemberPartition array
+     * (+0x38, 4 bytes each: enabled, state change, body part u16) runs
+     * along it, and the game draws only enabled partitions. Body parts from
+     * 100 on are the meat caps and the sections of a severed limb (NifTools
+     * BSDismemberBodyPartType), which the cut would open the sleeves onto.
+     */
+    constexpr uintptr_t ObjectGetRttiSlot          = 0x08;
+    constexpr uintptr_t DismemberSkinInstanceRtti  = 0x011F49D8;
+    constexpr uintptr_t SkinInstancePartition      = 0x0C;
+    constexpr uintptr_t SkinPartitionCount         = 0x08;
+    constexpr uintptr_t SkinPartitionArray         = 0x0C;
+    constexpr uintptr_t SkinPartitionSize          = 44;
+    constexpr uintptr_t DismemberPartitions        = 0x38;
+    constexpr uintptr_t DismemberPartitionSize     = 4;
+    constexpr uintptr_t DismemberPartitionBodyPart = 0x02;
+    constexpr uint16_t  FirstCapBodyPart           = 100;
+
+    /**
      * NiDX9Renderer: its Direct3D device and m_kViewProj (D3DMATRIX), the
      * product of the view and projection Do_SetCameraData (0x00E6C780)
      * builds for the camera. The view is relative to NiRenderer::kPosAdjust,
