@@ -249,6 +249,11 @@ namespace dxvk {
     void holdBodyHeading(const float* heading);
 
     /**
+     * \brief See VrHeadLook::holdLook
+     */
+    void holdLook(bool held);
+
+    /**
      * \brief Adjusts the camera the game computed for this frame
      *
      * See VrHeadLook::adjustCamera; while the head drives the camera, it

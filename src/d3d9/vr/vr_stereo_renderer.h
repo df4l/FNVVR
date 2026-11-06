@@ -451,6 +451,7 @@ namespace dxvk {
 
     // The eyes in the body's head while it sits down or gets up
     std::unique_ptr<VrBodyView> m_bodyView;
+    bool                        m_heldLook = false;
 
     // The eyes' base camera is no longer on the game's camera
     bool                m_viewMoved = false;

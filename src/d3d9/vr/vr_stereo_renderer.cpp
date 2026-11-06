@@ -710,8 +710,14 @@ namespace dxvk {
     if (m_bodyView) {
       m_bodyView->finishCamera(m_gameCameraPose, headTurnsCamera, dt);
 
+      // The frame the animation lets go of the head, the head's look starts
+      // again from the view's heading
       float viewHeading = m_bodyView->viewHeading();
-      m_controls.holdBodyHeading(m_bodyView->movesView() ? &viewHeading : nullptr);
+      bool holdsLook = m_bodyView->holdsLook();
+
+      m_controls.holdBodyHeading(m_bodyView->movesView() || m_heldLook ? &viewHeading : nullptr);
+      m_controls.holdLook(holdsLook);
+      m_heldLook = holdsLook;
     }
 
     m_viewMoved = m_bodyView && m_bodyView->movesView();

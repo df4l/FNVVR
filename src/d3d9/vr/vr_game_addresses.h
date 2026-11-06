@@ -389,6 +389,7 @@ namespace dxvk {
      * and radius.
      */
     constexpr char LeftForeTwistNodeName[]    = "Bip01 L ForeTwist";
+    constexpr char RightForeTwistNodeName[]   = "Bip01 R ForeTwist";
     constexpr char PipBoyScreenNodeName[]     = "pipboyscreen";
     constexpr char PipBoyScreenNodeAltName[]  = "pipboyscreen:0";
     constexpr uintptr_t ObjectWorldBound      = 0x20;
@@ -404,6 +405,61 @@ namespace dxvk {
     constexpr uintptr_t SkinInstanceData      = 0x08;
     constexpr uintptr_t SkinInstanceBones     = 0x14;
     constexpr uintptr_t SkinDataBoneCount     = 0x44;
+
+    /**
+     * Skinned draws (findings/weapon.md §5.3, GOG database). The only call to
+     * BSBatchRenderer::RenderPassImmediately_Skinned (__cdecl: render pass,
+     * alpha test, alpha blend, draw mode; the pass's geometry at +0x00) is
+     * in RenderPassImmediately 0x00B994F0. It sets each partition's bone
+     * palette through the shader's SetupBoneMatrices, which calls
+     * NiDX9Renderer::CalculateBoneMatrices 0x00E6FE30, and draws the
+     * partition with NiDX9Renderer::Do_DrawPartition (__thiscall: buffer
+     * data, partition, model data) at two sites. The palette is computed
+     * from the bones' world transforms again only when the skin instance's
+     * frame id differs from the renderer's.
+     */
+    constexpr uintptr_t RenderSkinnedPass         = 0x00B99110;
+    constexpr uintptr_t RenderSkinnedPassCallSite = 0x00B99598;
+    constexpr uintptr_t RenderPassGeometry        = 0x00;
+    constexpr uintptr_t DrawPartition             = 0x00E6D310;
+    constexpr uintptr_t DrawPartitionCallSites[]  = { 0x00B992E3, 0x00B99339 };
+    constexpr uintptr_t SkinInstanceFrameId       = 0x18;
+
+    /**
+     * Dismemberment caps (GOG database, RenderPassImmediately_Skinned): the
+     * skin instance's NiSkinPartition (+0x0C) holds the partition count and
+     * array (44 bytes each). When the skin instance's GetRTTI (vtable slot
+     * 0x08) gives BSDismemberSkinInstance's, its DismemberPartition array
+     * (+0x38, 4 bytes each: enabled, state change, body part u16) runs
+     * along it, and the game draws only enabled partitions. Body parts from
+     * 100 on are the meat caps and the sections of a severed limb (NifTools
+     * BSDismemberBodyPartType), which the cut would open the sleeves onto.
+     */
+    constexpr uintptr_t ObjectGetRttiSlot          = 0x08;
+    constexpr uintptr_t DismemberSkinInstanceRtti  = 0x011F49D8;
+    constexpr uintptr_t SkinInstancePartition      = 0x0C;
+    constexpr uintptr_t SkinPartitionCount         = 0x08;
+    constexpr uintptr_t SkinPartitionArray         = 0x0C;
+    constexpr uintptr_t SkinPartitionSize          = 44;
+    constexpr uintptr_t DismemberPartitions        = 0x38;
+    constexpr uintptr_t DismemberPartitionSize     = 4;
+    constexpr uintptr_t DismemberPartitionBodyPart = 0x02;
+    constexpr uint16_t  FirstCapBodyPart           = 100;
+
+    /**
+     * NiDX9Renderer: its Direct3D device and m_kViewProj (D3DMATRIX), the
+     * product of the view and projection Do_SetCameraData (0x00E6C780)
+     * builds for the camera. The view is relative to NiRenderer::kPosAdjust,
+     * the camera's position, which the positions drawn are relative to too
+     * (CalculateBoneMatrices subtracts it from the bone palette).
+     */
+    constexpr uintptr_t RendererDevice            = 0x288;
+    constexpr uintptr_t RendererViewProj          = 0xA00;
+    constexpr uintptr_t RendererPosAdjust         = 0x011F474C;
+
+    /** NiGeometryData: vertex count (u16) and model-space positions (NiPoint3) */
+    constexpr uintptr_t GeometryDataVertexCount   = 0x08;
+    constexpr uintptr_t GeometryDataVertices      = 0x20;
 
     /**
      * NiAVObject transforms: parent, local rotation (row-major 3x3),
@@ -1033,6 +1089,18 @@ namespace dxvk {
      * movzx ecx, byte [eax+0x64D], checks the offset.
      */
     constexpr uintptr_t PlayerTempThirdPerson     = 0x64D;
+
+    /**
+     * Call in the first-person branch of PlayerCharacter::UpdateCamera to
+     * Animation::GetSmallestHavokBlendValue (__thiscall with the
+     * third-person head's parent bone, returns a float in ST0). Below 1, an
+     * animation moves the third-person head, such as waking up and getting
+     * out of bed at a new game, and the camera is pulled from the
+     * first-person camera node towards the third-person one, which the look
+     * angle bends around the body. See findings/camera.md.
+     */
+    constexpr uintptr_t HeadBlendCallSite         = 0x0094B24B;
+    constexpr uintptr_t HeadBlend                 = 0x00496550;
     constexpr uintptr_t TempThirdPersonReadSite   = 0x009503DA;
     constexpr uint8_t   TempThirdPersonRead[]     = { 0x0F, 0xB6, 0x88, 0x4D, 0x06, 0x00, 0x00 };
 

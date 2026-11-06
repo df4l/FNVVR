@@ -6,7 +6,13 @@
 
 - **The Vit-o-matic Vigor Tester leaves the flat panel**: the machine where you spend your S.P.E.C.I.A.L. points is in 3D on the machine in Doc Mitchell's house, with the view brought in front of it. Point at its buttons with a laser and pull the trigger; off the buttons, the triggers turn the pages. The world goes on around you meanwhile, and Doc still reacts to your stats once you are done. `d3d9.vrRealTimeVigorTester = False` brings the pause back.
 - **The brahmin skull can be grabbed**: the intro's tutorial asks you to pick up the skull while fighting is turned off; your hands now take it, without being able to hit Doc Mitchell.
+- **Waking up follows your head**: getting out of Doc Mitchell's bed, the view follows the character's head as it sits up and stands, like sitting down on furniture; nodding no longer swings the view around a point.
 - **No hands before you can move in the intro**: they appear when Doc lets you walk, consistent with the tutorial that then asks you to grab something with them.
+
+### Hands
+
+- **Sleeves reach the hands again**: outfits whose sleeve runs from the shoulder to the wrist were hidden from the elbow up, leaving a gap between the left hand and the Pip-Boy and an empty right wrist. The sleeves are now drawn along both forearms and cut cleanly: the left one under the Pip-Boy's band, the right one as far from its wrist. Works with any outfit, nothing to set.
+- **The right wrist is no longer twisted after holstering a weapon**: the free right hand takes the same relaxed pose as the left.
 
 ### Menus
 

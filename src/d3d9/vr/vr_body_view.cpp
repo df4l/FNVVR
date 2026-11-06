@@ -15,6 +15,12 @@ namespace dxvk {
     using Get3DFn       = uintptr_t (__thiscall*)(uintptr_t reference);
     using StateFn       = int32_t   (__thiscall*)(uintptr_t object);
     using ObjectUpdateFn = void     (__thiscall*)(uintptr_t object, void* updateData);
+    using HeadBlendFn    = float    (__fastcall*)(void* animation, void* unused, void* bone);
+
+    // What the game's camera update reaches for the head's blend, and the
+    // value it gave last: the camera update runs before the eyes are placed
+    uintptr_t g_previousHeadBlend = 0;
+    float     g_headBlend         = 1.0f;
 
     // The head bone is about ten levels below a character's root
     constexpr uint32_t MaxSkeletonDepth = 16;
@@ -46,16 +52,27 @@ namespace dxvk {
       *reinterpret_cast<float*>(head + VrGame::ObjectLocalScale) = 1.0f;
     }
 
-    bool shouldFollowHead(uintptr_t player) {
-      if (*reinterpret_cast<const uint32_t*>(VrGame::VatsCameraState))
-        return false;
-
+    bool isTempThirdPerson(uintptr_t player) {
       // The frames the game has not switched yet, to third person or back to
       // first person, belong here as well: its camera is already or still the
       // one behind the player
-      if (!readField<uint8_t>(player, VrGame::PlayerTempThirdPerson)
-       && (!readField<uint8_t>(player, VrGame::PlayerCurrentThirdPerson)
-        || readField<uint8_t>(player, VrGame::PlayerWantsThirdPerson)))
+      return readField<uint8_t>(player, VrGame::PlayerTempThirdPerson)
+        || (readField<uint8_t>(player, VrGame::PlayerCurrentThirdPerson)
+         && !readField<uint8_t>(player, VrGame::PlayerWantsThirdPerson));
+    }
+
+    // The game computes the blend only in first person, where it pulls its
+    // camera towards the body's head
+    bool isAnimatedFirstPerson(uintptr_t player) {
+      return g_headBlend < 1.0f
+        && !readField<uint8_t>(player, VrGame::PlayerCurrentThirdPerson);
+    }
+
+    bool shouldFollowHead(uintptr_t player, bool animated) {
+      if (*reinterpret_cast<const uint32_t*>(VrGame::VatsCameraState))
+        return false;
+
+      if (!animated && !isTempThirdPerson(player))
         return false;
 
       if (readField<uint32_t>(player, VrGame::ActorLifeState))
@@ -81,7 +98,20 @@ namespace dxvk {
     if (!found)
       return nullptr;
 
+    if (!VrGameMemory::chainCall(VrGame::HeadBlendCallSite, VrGame::HeadBlend,
+        reinterpret_cast<const void*>(&VrBodyView::headBlendHook), &g_previousHeadBlend))
+      Logger::warn("VR: The animated first-person camera was not found, the view moves with the head while waking up");
+
     return std::unique_ptr<VrBodyView>(new VrBodyView());
+  }
+
+
+  float __fastcall VrBodyView::headBlendHook(
+          void*                 animation,
+          void*                 unused,
+          void*                 bone) {
+    g_headBlend = reinterpret_cast<HeadBlendFn>(g_previousHeadBlend)(animation, nullptr, bone);
+    return g_headBlend;
   }
 
 
@@ -94,7 +124,8 @@ namespace dxvk {
     if (!player)
       return;
 
-    bool follow = shouldFollowHead(player);
+    bool animated = isAnimatedFirstPerson(player);
+    bool follow = shouldFollowHead(player, animated);
     bool wasOnBody = m_view == View::Body;
 
     // Looked for only when needed: this runs every frame
@@ -131,7 +162,10 @@ namespace dxvk {
 
         scaleHead(head, HeadShrunk);
 
-        if (!m_logged) {
+        if (animated && !m_loggedAnimated) {
+          Logger::info("VR: An animation moves the body's head in first person, the eyes follow it");
+          m_loggedAnimated = true;
+        } else if (!animated && !m_logged) {
           Logger::info("VR: The game shows the body for a moment, the eyes follow its head");
           m_logged = true;
         }
@@ -144,8 +178,9 @@ namespace dxvk {
     if (wasOnBody && !follow && head)
       scaleHead(head, 1.0f);
 
-    m_changed = follow != wasOnBody;
-    m_view    = view;
+    m_changed  = follow != wasOnBody;
+    m_view     = view;
+    m_animated = follow && animated;
   }
 
 
