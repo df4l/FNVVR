@@ -1102,16 +1102,19 @@ namespace dxvk {
     constexpr uintptr_t PlayerTempThirdPerson     = 0x64D;
 
     /**
-     * Call in the first-person branch of PlayerCharacter::UpdateCamera to
-     * Animation::GetSmallestHavokBlendValue (__thiscall with the
-     * third-person head's parent bone, returns a float in ST0). Below 1, an
-     * animation moves the third-person head, such as waking up and getting
-     * out of bed at a new game, and the camera is pulled from the
-     * first-person camera node towards the third-person one, which the look
-     * angle bends around the body. See findings/camera.md.
+     * Actor::GetAnimation (__thiscall, the process's animation data, null
+     * without a process; reads the process at +0x68) and
+     * Animation::SpecialIdlePlaying (__thiscall, bool: the idle at +0x124 is
+     * in its playing state, 2). Scripts play idles such as waking up and
+     * getting out of bed at a new game on the player's third-person body;
+     * in first person the camera node follows them. See findings/camera.md.
      */
-    constexpr uintptr_t HeadBlendCallSite         = 0x0094B24B;
-    constexpr uintptr_t HeadBlend                 = 0x00496550;
+    constexpr uintptr_t ActorGetAnimation         = 0x008B70D0;
+    constexpr uint8_t   ActorGetAnimationPrologue[] = {
+      0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x45, 0xFC, 0x83, 0x78, 0x68, 0x00 };
+    constexpr uintptr_t AnimationSpecialIdlePlaying = 0x004985B0;
+    constexpr uint8_t   AnimationSpecialIdlePlayingPrologue[] = {
+      0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x4D, 0xFC, 0x81, 0xC1, 0x24, 0x01, 0x00, 0x00 };
     constexpr uintptr_t TempThirdPersonReadSite   = 0x009503DA;
     constexpr uint8_t   TempThirdPersonRead[]     = { 0x0F, 0xB6, 0x88, 0x4D, 0x06, 0x00, 0x00 };
 

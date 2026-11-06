@@ -87,8 +87,26 @@ namespace dxvk {
   }
 
 
+  VrGameCameraPose vrComputeTiltedCameraPose(float heading, float pitch, const VrVector3& position) {
+    float s  = std::sin(heading);
+    float c  = std::cos(heading);
+    float sp = std::sin(pitch);
+    float cp = std::cos(pitch);
+
+    VrGameCameraPose pose;
+    pose.forward  = { s * cp, c * cp, sp };
+    pose.up       = { -s * sp, -c * sp, cp };
+    pose.right    = { c, -s, 0.0f };
+    pose.position = position;
+    return pose;
+  }
+
+
   float vrComputeCameraHeading(const VrGameCameraPose& pose) {
-    return std::atan2(pose.forward.x, pose.forward.y);
+    // Tilting forward by the pitch back to level: forward * cos - up * sin,
+    // where the up's and the forward's heights are the cosine and the sine
+    VrVector3 level = pose.forward * pose.up.z - pose.up * pose.forward.z;
+    return std::atan2(level.x, level.y);
   }
 
 
@@ -115,6 +133,24 @@ namespace dxvk {
       return false;
 
     heading = std::atan2(x, y);
+    return true;
+  }
+
+
+  bool vrComputeHeadTilt(const float* rotation, float& heading, float& pitch) {
+    constexpr float MinLevel = 0.2f;
+
+    VrVector3 top   = { rotation[0], rotation[3], rotation[6] };
+    VrVector3 front = { rotation[1], rotation[4], rotation[7] };
+
+    // As a camera: the front is its forward and the top its up
+    VrVector3 level = front * top.z - top * front.z;
+
+    if (level.x * level.x + level.y * level.y < MinLevel * MinLevel)
+      return false;
+
+    heading = std::atan2(level.x, level.y);
+    pitch   = std::atan2(front.z, top.z);
     return true;
   }
 

@@ -18,16 +18,18 @@ namespace dxvk {
    *
    * The position follows the animation, and the heading follows the way the
    * head of the body turns: its animation turns it around, which the player's
-   * heading only does at its end, in one go (findings/camera.md §8.3). The view
-   * stays level: an animation tilting it without the head is not bearable in a
-   * headset, and the headset's own rotation is added to it.
+   * heading only does at its end, in one go (findings/camera.md §8.3). On
+   * furniture the view stays level: an animation tilting it without the head
+   * is not bearable in a headset, and the headset's own rotation is added to it.
    *
    * The same goes for the Sandman and Cannibal kills, on the same temporary
-   * third person, and for the animations the game plays on the body in first
-   * person, pulling its camera towards the body's head: waking up and getting
-   * out of bed at a new game. The head's look is held meanwhile, or the look
-   * angle would bend the body's head and nodding would move the view. A knocked down player stays on the game's camera: the head of
-   * a ragdoll cannot be followed. Going in and out of the view is blended.
+   * third person, and for the idles scripts play on the body while the game
+   * stays in first person: waking up and getting out of bed at a new game.
+   * There the view also tilts with the head, so that lying on the back looks
+   * at the ceiling, and the head's look is held: the look angle bends the
+   * body, and nodding would move the view up and down. A knocked down player
+   * stays on the game's camera: the head of a ragdoll cannot be followed.
+   * Going in and out of the view is blended.
    *
    * Only used on the game's main thread.
    */
@@ -67,18 +69,13 @@ namespace dxvk {
     /// Heading of the camera the eyes were last placed from
     float viewHeading() const { return m_viewHeading; }
 
-    /// Whether an animation in first person places the eyes: the head must
-    /// not write the player's look
+    /// Whether an idle in first person places the eyes: the head must not
+    /// write the player's look
     bool holdsLook() const { return m_view == View::Body && m_animated; }
 
   private:
 
     VrBodyView() = default;
-
-    static float __fastcall headBlendHook(
-            void*                 animation,
-            void*                 unused,
-            void*                 bone);
 
     enum class View { Game, Body, Seat };
 
@@ -86,8 +83,12 @@ namespace dxvk {
     VrViewHeading m_heading;
     View          m_view        = View::Game;
     float         m_viewHeading = 0.0f;
+    float         m_pitch       = 0.0f;
+    float         m_idleLeft    = 0.0f;
+    bool          m_findsIdles  = false;
     bool          m_hasView     = false;
     bool          m_animated    = false;
+    bool          m_tilts       = false;
     bool          m_headTurns   = false;
     bool          m_changed     = false;
     bool          m_logged      = false;

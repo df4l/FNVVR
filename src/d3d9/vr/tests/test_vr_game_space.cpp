@@ -449,6 +449,53 @@ TEST_CASE(head_heading_is_where_the_face_looks) {
   CHECK_NEAR(heading, -1.0f, 1e-6);
 }
 
+TEST_CASE(head_tilt_follows_a_head_lying_on_its_back) {
+  // Standing, facing east: top up, face east
+  const float standing[9] = {
+    0.0f, 1.0f, 0.0f,
+    0.0f, 0.0f, 1.0f,
+    1.0f, 0.0f, 0.0f,
+  };
+
+  float heading = -1.0f;
+  float pitch   = -1.0f;
+  CHECK(vrComputeHeadTilt(standing, heading, pitch));
+  CHECK_NEAR(heading, 1.5707963f, 1e-4);
+  CHECK_NEAR(pitch, 0.0f, 1e-4);
+
+  // Lying on the back, the top of the head to the west: the face looks up,
+  // and sitting up would face east
+  const float lying[9] = {
+    -1.0f, 0.0f, 0.0f,
+     0.0f, 0.0f, 1.0f,
+     0.0f, 1.0f, 0.0f,
+  };
+
+  CHECK(vrComputeHeadTilt(lying, heading, pitch));
+  CHECK_NEAR(heading, 1.5707963f, 1e-4);
+  CHECK_NEAR(pitch, 1.5707963f, 1e-4);
+
+  // The camera built from it looks up, and gives that heading back
+  VrGameCameraPose pose = vrComputeTiltedCameraPose(heading, pitch, { 0.0f, 0.0f, 0.0f });
+  checkVector(pose.forward, 0.0f, 0.0f, 1.0f);
+  checkVector(pose.up, -1.0f, 0.0f, 0.0f);
+  checkVector(pose.right, 0.0f, -1.0f, 0.0f);
+  CHECK_NEAR(vrComputeCameraHeading(pose), 1.5707963f, 1e-4);
+
+  // On its side, the top of the head to the east, it says nothing
+  const float onSide[9] = {
+    1.0f, 0.0f, 0.0f,
+    0.0f, 1.0f, 0.0f,
+    0.0f, 0.0f, 1.0f,
+  };
+
+  heading = -1.0f;
+  pitch   = -1.0f;
+  CHECK(!vrComputeHeadTilt(onSide, heading, pitch));
+  CHECK_NEAR(heading, -1.0f, 1e-6);
+}
+
+
 TEST_CASE(view_heading_starts_where_the_view_is) {
   VrViewHeading heading;
 
