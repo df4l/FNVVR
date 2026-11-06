@@ -1663,6 +1663,28 @@ namespace dxvk {
     constexpr uint8_t   GetDebugTextPrologue[]       = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x3C, 0x89, 0x4D };
 
     /**
+     * The text field the game asks the player's name with (TextEditMenu,
+     * menu 0x41B, opened by PlayerNameEntryMenu), see findings/name-entry.md.
+     * Read in the GOG database (code addresses equal the Steam build's).
+     *
+     * - TextEditGlobal: TextEditMenu::pInstance, null unless the field is
+     *   open (TextEditMenu::Close clears it before the menu fades out);
+     * - TextEditTitle: the TileText of the question, its text in the trait
+     *   TileTraitString (Tile::GetValue, see TileGetValue);
+     * - TextEditText: the field's text, a BSStringT (characters, then a
+     *   16-bit length), Windows-1252;
+     * - TextEditActive: byte, the field takes keys.
+     * InterfaceManager::Idle gives the key it reads at ConsoleKeyCallSite to
+     * the frontmost menu's HandleKeyboardInput when the console does not
+     * take it: the field inserts characters, handles the VrConsoleKey
+     * editing codes, and Enter clicks OK when the game accepts the text.
+     */
+    constexpr uintptr_t TextEditGlobal           = 0x011DAEC4;
+    constexpr uintptr_t TextEditTitle            = 0x30;
+    constexpr uintptr_t TextEditText             = 0x34;
+    constexpr uintptr_t TextEditActive           = 0x55;
+
+    /**
      * The game's rendered terminal, which shows the console in 3D, see
      * findings/console.md §6. All checked in Ghidra on the Steam executable.
      *

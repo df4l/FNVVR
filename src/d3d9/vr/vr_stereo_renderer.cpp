@@ -10,6 +10,7 @@
 #include "vr_game_depth.h"
 #include "vr_game_ammo.h"
 #include "vr_game_console.h"
+#include "vr_game_text_edit.h"
 #include "vr_game_memory.h"
 #include "vr_game_nodes.h"
 #include "vr_head_hud.h"
@@ -313,6 +314,9 @@ namespace dxvk {
 
     if (VrGameConsole::install())
       renderer->m_terminal = std::make_unique<VrConsoleTerminal>(*renderer->m_painter, backend, texts);
+
+    if (VrGameTextEdit::install())
+      renderer->m_textFieldKeyboard = std::make_unique<VrTextFieldKeyboard>(backend);
 
     renderer->m_handPick = VrHandActivatePick::install();
 
@@ -866,6 +870,11 @@ namespace dxvk {
       m_controls.setMinigamePad(m_minigames->pad());
       m_controls.setPointerSurface(m_minigames->surface());
       m_menuScenes.leaveToEyes(m_minigames->menuId(), m_minigames->showsTerminal());
+    }
+
+    if (m_textFieldKeyboard) {
+      m_textFieldKeyboard->update(dt);
+      m_controls.setSystemKeyboardShown(m_textFieldKeyboard->shown());
     }
 
     m_controls.setTerminalPanel(m_terminal ? m_terminal->placement() : nullptr);

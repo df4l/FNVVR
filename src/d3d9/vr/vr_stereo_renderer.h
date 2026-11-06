@@ -52,6 +52,7 @@
 #include "vr_scope_game.h"
 #include "vr_scope_render.h"
 #include "vr_sky_anchor.h"
+#include "vr_text_field_keyboard.h"
 #include "vr_tile_texture_retry.h"
 #include "vr_weapon_hand.h"
 
@@ -413,6 +414,9 @@ namespace dxvk {
 
     // The game's console, typed in on a terminal with the lasers
     std::unique_ptr<VrConsoleTerminal> m_terminal;
+
+    // The runtime's keyboard, for the field the game asks the player's name with
+    std::unique_ptr<VrTextFieldKeyboard> m_textFieldKeyboard;
 
     // The scenes of the mini-games, in the eye images instead of the panel
     std::unique_ptr<VrMinigames> m_minigames;
