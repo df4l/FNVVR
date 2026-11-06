@@ -123,7 +123,7 @@ namespace dxvk {
     // Tested against the world and the first-person model, as they were drawn
     m_device->SetDepthStencilSurface(lens.depth);
     m_device->SetRenderState(D3DRS_ZENABLE,             D3DZB_TRUE);
-    m_device->SetRenderState(D3DRS_ZFUNC,               D3DCMP_LESSEQUAL);
+    m_device->SetRenderState(D3DRS_ZFUNC,               lens.depthTest);
     m_device->SetRenderState(D3DRS_DEPTHBIAS,           0);
     m_device->SetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, 0);
 

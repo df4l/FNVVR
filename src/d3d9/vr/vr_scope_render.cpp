@@ -7,6 +7,7 @@
 
 #include "vr_dds.h"
 #include "vr_game_addresses.h"
+#include "vr_game_depth.h"
 #include "vr_game_file.h"
 #include "vr_game_memory.h"
 #include "vr_math.h"
@@ -310,8 +311,14 @@ namespace dxvk {
     } else {
       constexpr float OverDepthRaised = 0.5f;
 
-      // The drawn near distance, as the depth row above gives it
-      float nearest = projection[10] > 0.0f ? -projection[14] / projection[10] : nearDistance;
+      // The drawn near distance, as the depth row above gives it: where the
+      // depth is 0, or 1 when the game's depth is reversed
+      float nearest = nearDistance;
+
+      if (!vrGameDepthReversed() && projection[10] > 0.0f)
+        nearest = -projection[14] / projection[10];
+      else if (vrGameDepthReversed() && projection[10] < 0.0f)
+        nearest = projection[14] / (1.0f - projection[10]);
 
       addMesh(vrComputeBinocularsEyeLens(lens, eye, false, nearest), false);
 
@@ -338,6 +345,7 @@ namespace dxvk {
     drawing.imageMipmapped = onScreen;
     drawing.overlay        = m_reticle;
     drawing.projection     = projection.data();
+    drawing.depthTest      = vrGameDepthReversed() ? D3DCMP_GREATEREQUAL : D3DCMP_LESSEQUAL;
     drawing.meshes         = vertexLists;
     drawing.meshOverDepth  = overDepth;
     drawing.meshCount      = meshCount;

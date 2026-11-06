@@ -10,6 +10,7 @@
 
 #include "vr_console_screen.h"
 #include "vr_game_addresses.h"
+#include "vr_game_depth.h"
 #include "vr_game_memory.h"
 #include "vr_game_nodes.h"
 #include "vr_math.h"
@@ -1070,7 +1071,7 @@ namespace dxvk {
     void*  gameTexture = texture;
     texture = m_texture;
 
-    m_device->Clear(0, nullptr, D3DCLEAR_ZBUFFER, 0, 1.0f, 0);
+    m_device->Clear(0, nullptr, D3DCLEAR_ZBUFFER, 0, vrGameDepthClear(), 0);
     game<MainFn>(VrGame::DrawRenderedMenuParent)(main);
     game<ScreenFn>(VrGame::RenderPipBoy)(main, screen, renderer);
 

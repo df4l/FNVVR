@@ -7,6 +7,7 @@
 
 #include "vr_d3d9_bridge.h"
 #include "vr_game_addresses.h"
+#include "vr_game_depth.h"
 #include "vr_game_ammo.h"
 #include "vr_game_console.h"
 #include "vr_game_memory.h"
@@ -2037,7 +2038,7 @@ namespace dxvk {
     // game's clear does nothing outside of its render group.
     if (m_minigames && m_minigames->active() && !m_minigameDrawn[m_eye]) {
       if (!m_minigames->showsTerminal())
-        m_device->Clear(0, nullptr, D3DCLEAR_ZBUFFER, 0, 1.0f, 0);
+        m_device->Clear(0, nullptr, D3DCLEAR_ZBUFFER, 0, vrGameDepthClear(), 0);
 
       drawMinigame();
     }
@@ -2303,7 +2304,7 @@ namespace dxvk {
       return;
 
     m_device->SetDepthStencilSurface(m_menuDepth.ptr());
-    m_device->Clear(0, nullptr, D3DCLEAR_ZBUFFER | D3DCLEAR_STENCIL, 0, 1.0f, 0);
+    m_device->Clear(0, nullptr, D3DCLEAR_ZBUFFER | D3DCLEAR_STENCIL, 0, vrGameDepthClear(), 0);
     m_menuScenes.render();
 
     Com<IDirect3DSurface9> usedDepth;
@@ -2323,7 +2324,9 @@ namespace dxvk {
 
   void VrStereoRenderer::makeMenuSceneOpaque(bool depthTested) {
     // The alpha written by the scene's shaders is not usable, so it is set
-    // to one wherever the scene wrote depth, with a quad at the far plane
+    // to one wherever the scene wrote depth, with a quad at the cleared
+    // depth: the test does not depend on which way depth goes
+    float cleared = vrGameDepthClear();
     D3DSURFACE_DESC desc = { };
     m_menuTexture->GetLevelDesc(0, &desc);
 
@@ -2337,7 +2340,7 @@ namespace dxvk {
     m_device->SetFVF(D3DFVF_XYZRHW);
 
     m_device->SetRenderState(D3DRS_ZENABLE,           depthTested ? D3DZB_TRUE : D3DZB_FALSE);
-    m_device->SetRenderState(D3DRS_ZFUNC,             D3DCMP_GREATER);
+    m_device->SetRenderState(D3DRS_ZFUNC,             D3DCMP_NOTEQUAL);
     m_device->SetRenderState(D3DRS_ZWRITEENABLE,      FALSE);
     m_device->SetRenderState(D3DRS_STENCILENABLE,     FALSE);
     m_device->SetRenderState(D3DRS_ALPHABLENDENABLE,  FALSE);
@@ -2360,10 +2363,10 @@ namespace dxvk {
     float right  = float(desc.Width)  - 0.5f;
     float bottom = float(desc.Height) - 0.5f;
     float quad[4][4] = {
-      { -0.5f,  -0.5f,  1.0f, 1.0f },
-      { right,  -0.5f,  1.0f, 1.0f },
-      { -0.5f,  bottom, 1.0f, 1.0f },
-      { right,  bottom, 1.0f, 1.0f },
+      { -0.5f,  -0.5f,  cleared, 1.0f },
+      { right,  -0.5f,  cleared, 1.0f },
+      { -0.5f,  bottom, cleared, 1.0f },
+      { right,  bottom, cleared, 1.0f },
     };
 
     m_device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, quad, sizeof(quad[0]));

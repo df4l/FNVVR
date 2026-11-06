@@ -746,6 +746,15 @@ namespace dxvk {
     constexpr uintptr_t GetScreenGeometry          = 0x007FA950;
     constexpr uintptr_t Renderer                   = 0x011F4748;
 
+    /**
+     * NiDX9Renderer::m_fZClear, the value the game clears depth to
+     * (NiDX9Renderer::SetDepthClear 0x00E75820, set to 1.0 by InitToDefault
+     * at 0x00E6B9B3). LOD Flicker Fix patches that load to 0.0, reverses
+     * the projections and swaps the depth tests, so it tells which way
+     * depth goes.
+     */
+    constexpr uintptr_t RendererDepthClear         = 0x5E4;
+
     constexpr uint32_t  LockPickMenuId    = 0x3F6;
 
     /**
