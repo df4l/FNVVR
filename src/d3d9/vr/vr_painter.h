@@ -65,6 +65,8 @@ namespace dxvk {
       const VrImage*      overlay;
       /// In row-vector order
       const float*        projection;
+      /// Passes where the lens is nearer than the depth buffer, or as near
+      D3DCMPFUNC          depthTest;
       /// Drawn in turn, the later over the earlier
       const void* const*  meshes;
       /// Which of them are not tested against the depth buffer: an eye at an
