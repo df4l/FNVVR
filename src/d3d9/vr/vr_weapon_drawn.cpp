@@ -104,7 +104,7 @@ namespace dxvk {
       return;
 
     // The game holsters the weapon on purpose in these cases
-    if (field<uint8_t>(actor, VrGame::PlayerDisabledControls) & VrGame::ControlFighting)
+    if (fightingDisabled())
       return;
 
     if (field<uint32_t>(actor, VrGame::ActorLifeState) != 0)
@@ -167,6 +167,17 @@ namespace dxvk {
 
     m_playerHolstered = false;
     Logger::info("VR: The player drew the weapon");
+  }
+
+
+  bool VrWeaponDrawn::handsFree() const {
+    return m_playerHolstered || fightingDisabled();
+  }
+
+
+  bool VrWeaponDrawn::fightingDisabled() {
+    const uint8_t* actor = player();
+    return actor && (field<uint8_t>(actor, VrGame::PlayerDisabledControls) & VrGame::ControlFighting);
   }
 
 

@@ -68,6 +68,21 @@ namespace dxvk {
     }
 
     /**
+     * \brief Whether both hands are free of the weapon
+     *
+     * The player holstered it, or a script disabled the fighting controls
+     * and the game put the weapon or the fists away (Doc Mitchell's house
+     * at the start of the game). The free hands still grab objects as the
+     * game's grab key does, but must not fight, see fightingDisabled.
+     */
+    bool handsFree() const;
+
+    /**
+     * \brief Whether a script disabled the player's fighting controls
+     */
+    static bool fightingDisabled();
+
+    /**
      * \brief The equipped weapon's form and animation type
      *
      * \param [out] type Its animation type, -1 without a weapon
