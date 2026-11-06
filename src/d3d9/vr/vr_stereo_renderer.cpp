@@ -2502,6 +2502,10 @@ namespace dxvk {
     bool hasMessages   = m_hudLayers.groupRect(VrGame::HudMessages, messagesGroup);
     bool hasObjectives = m_hudLayers.groupRect(VrGame::HudQuestReminder, objectivesGroup);
 
+    // A long text can reach past its group's rectangle
+    extendHudCorner(VrGame::HudMessages, hasMessages, messagesGroup);
+    extendHudCorner(VrGame::HudQuestReminder, hasObjectives, objectivesGroup);
+
     float cornerRight = vrComputeHudCornerRight(hasMessages ? &messagesGroup : nullptr,
       hasObjectives ? &objectivesGroup : nullptr) * imageSize.x / size.x;
 
@@ -2523,6 +2527,22 @@ namespace dxvk {
     }
 
     return true;
+  }
+
+
+  void VrStereoRenderer::extendHudCorner(uintptr_t group, bool known, VrInterfaceRect& rect) {
+    VrInterfaceRect content;
+
+    if (!known || !m_hudLayers.groupContent(group, content))
+      return;
+
+    if (content.right > rect.right && !m_loggedHudTextPastGroup) {
+      Logger::info(str::format("VR: A HUD text in the top left corner reaches ", content.right - rect.right,
+        " units past its group, the meters stop after it"));
+      m_loggedHudTextPastGroup = true;
+    }
+
+    rect = vrUniteRects(rect, content);
   }
 
 
@@ -2606,7 +2626,24 @@ namespace dxvk {
     VrVector2 size  = vrComputeInterfaceSize(desc.Width, desc.Height);
     float     scale = float(desc.Width) / size.x;
 
-    VrHandHudCrops crops = vrComputeHandHudCrops(hitPoints, actionPoints, info, size);
+    // What the groups actually draw: a prompt that the game's data
+    // replaces can be wider or taller than its group
+    VrInterfaceRect  hitPointsContent;
+    VrInterfaceRect  actionPointsContent;
+    VrInterfaceRect  infoContent;
+    VrHandHudContent content;
+
+    if (m_hudLayers.groupContent(VrGame::HudInfo, infoContent)) {
+      content.info = &infoContent;
+
+      if (m_hudLayers.groupContent(VrGame::HudHitPoints, hitPointsContent))
+        content.hitPoints = &hitPointsContent;
+
+      if (m_hudLayers.groupContent(VrGame::HudActionPoints, actionPointsContent))
+        content.actionPoints = &actionPointsContent;
+    }
+
+    VrHandHudCrops crops = vrComputeHandHudCrops(hitPoints, actionPoints, info, size, content);
 
     if (!m_loggedHandHudCrops) {
       Logger::info(str::format("VR: Hand HUD crops in interface units: health bar and compass ",
@@ -2682,12 +2719,42 @@ namespace dxvk {
     // The button that activates with this hand, from the next frame on
     m_promptIcon.show(hand);
 
-    RECT prompt = interfaceToPixels(crops.prompt, scale, desc);
-    const HandPanelPart promptPart = { prompt, { 0, 0, prompt.right - prompt.left, prompt.bottom - prompt.top } };
+    if (!crops.promptPartCount) {
+      hideHandPanel(VrPanelId::HudPrompt, m_promptShown);
+      return;
+    }
 
-    m_promptShown = showHandPanel(VrPanelId::HudPrompt, &promptPart, 1,
-      VrHandHudLayout::PromptMetresPerUnit / scale,
-      vrComputePromptPanelPose(input.controllers[uint32_t(hand)], *head), m_promptTexture);
+    // The image keeps its size while the prompt changes and only grows,
+    // so that its texture is not made again for each target
+    if (m_promptImageSourceWidth != desc.Width) {
+      m_promptImageSize        = VrVector2();
+      m_promptImageSourceWidth = desc.Width;
+    }
+
+    VrInterfaceRect promptSources[2];
+
+    for (uint32_t i = 0; i < crops.promptPartCount; i++)
+      promptSources[i] = pixelsToRect(interfaceToPixels(crops.promptParts[i], scale, desc));
+
+    VrPromptImage promptImage = vrComputePromptImage(promptSources, crops.promptPartCount, m_promptImageSize);
+    m_promptImageSize = promptImage.size;
+
+    HandPanelPart promptParts[2];
+
+    for (uint32_t i = 0; i < crops.promptPartCount; i++)
+      promptParts[i] = { rectToPixels(promptSources[i]), rectToPixels(promptImage.targets[i]) };
+
+    if (content.info && !m_loggedMeasuredPrompt) {
+      Logger::info(str::format("VR: The interaction prompt is cut out from what it draws, ",
+        crops.prompt.left, ",", crops.prompt.top, " to ", crops.prompt.right, ",", crops.prompt.bottom,
+        " in interface units, in ", crops.promptPartCount, " part(s)"));
+      m_loggedMeasuredPrompt = true;
+    }
+
+    m_promptShown = showHandPanel(VrPanelId::HudPrompt,
+      promptParts, crops.promptPartCount, VrHandHudLayout::PromptMetresPerUnit / scale,
+      vrComputePromptPanelPose(input.controllers[uint32_t(hand)], *head), m_promptTexture,
+      UINT(promptImage.size.x), UINT(promptImage.size.y));
 
     if (m_promptShown && hand == VrHand::Left && !m_loggedLeftPrompt) {
       Logger::info("VR: The interaction prompt is at the left hand, the left hand's reload button activates");
@@ -2708,9 +2775,11 @@ namespace dxvk {
           size_t                count,
           float                 metresPerPixel,
     const VrPose&               pose,
-          Com<IDirect3DTexture9>& texture) {
-    UINT width  = 0;
-    UINT height = 0;
+          Com<IDirect3DTexture9>& texture,
+          UINT                  minWidth,
+          UINT                  minHeight) {
+    UINT width  = minWidth;
+    UINT height = minHeight;
 
     for (size_t i = 0; i < count; i++) {
       width  = std::max(width,  UINT(std::max(parts[i].target.right,  LONG(0))));
@@ -2720,7 +2789,8 @@ namespace dxvk {
     if (!width || !height)
       return false;
 
-    // The crops only change with the game's resolution
+    // The sizes only change with the game's resolution, or when a prompt
+    // needs a larger image
     if (texture != nullptr) {
       D3DSURFACE_DESC current = { };
       texture->GetLevelDesc(0, &current);
