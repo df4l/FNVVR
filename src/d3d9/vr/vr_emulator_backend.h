@@ -116,7 +116,7 @@ namespace dxvk {
 
     void hideKeyboard() override;
 
-    VrKeyboardEvent takeKeyboardEvent(std::string& text) override;
+    VrKeyboardEvent takeKeyboardEvent(std::string& typed) override;
 
     /**
      * \brief Sets the keyboard and mouse input applied on the next frame

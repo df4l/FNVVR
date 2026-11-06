@@ -9,10 +9,11 @@ namespace dxvk {
    * \brief Types in the game's text field with the runtime's keyboard
    *
    * While the field the game asks the player's name with is open, the
-   * runtime's own keyboard is shown with the field's question and text.
-   * The confirmed text replaces the field's and is confirmed in the game,
-   * as if typed and entered. See VrTextEntry for when the keyboard opens
-   * again, and findings/name-entry.md.
+   * runtime's own keyboard is shown with the field's question. Its keys are
+   * typed in the field as they are pressed, so the field shows the text, and
+   * confirming the keyboard enters it. As on a keyboard, the first character
+   * replaces the name the field opened with. See VrTextEntry for when the
+   * keyboard opens again, and findings/name-entry.md.
    *
    * Only used on the game's main thread.
    */
@@ -42,10 +43,11 @@ namespace dxvk {
 
     void show();
 
-    void apply(const std::string& typed);
+    void type(const std::string& typed, bool confirm);
 
     IVRBackend& m_backend;
     VrTextEntry m_entry;
+    bool        m_loggedTyping = false;
 
   };
 

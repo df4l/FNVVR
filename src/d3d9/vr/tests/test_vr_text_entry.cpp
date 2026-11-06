@@ -26,13 +26,12 @@ namespace {
 
 
 TEST_CASE(text_entry_converts_typed_text_to_the_game_encoding) {
-  CHECK(vrGameTextFromUtf8("Courier") == "Courier");
   // é, € and Œ have Windows-1252 bytes
-  CHECK(vrGameTextFromUtf8("Ren\xC3\xA9 \xE2\x82\xAC\xC5\x92") == "Ren\xE9 \x80\x8C");
-  // A character the game cannot hold, the cursor marker and controls are left out
-  CHECK(vrGameTextFromUtf8("A\xE2\x98\x83" "B|C\n\tD") == "ABCD");
+  std::vector<uint32_t> accents = { 'R', 0xE9, ' ', 0x80, 0x8C };
+  CHECK(vrTextEntryKeys("R\xC3\xA9 \xE2\x82\xAC\xC5\x92") == accents);
   // A malformed sequence does not swallow the next character
-  CHECK(vrGameTextFromUtf8("\xC3" "A") == "A");
+  std::vector<uint32_t> malformed = { 'A' };
+  CHECK(vrTextEntryKeys("\xC3" "A") == malformed);
 }
 
 
@@ -44,15 +43,21 @@ TEST_CASE(text_entry_converts_game_text_to_utf8) {
 }
 
 
-TEST_CASE(text_entry_keys_replace_and_confirm_the_text) {
-  std::vector<uint32_t> keys = vrTextEntryKeys(2, "Bo\xE9");
+TEST_CASE(text_entry_keys_follow_the_keyboard_input) {
+  // An accent, Backspace, Enter
+  std::vector<uint32_t> keys = vrTextEntryKeys("Bo\xC3\xA9\bx\n");
 
   std::vector<uint32_t> expected = {
-    VrConsoleKey::End, VrConsoleKey::Backspace, VrConsoleKey::Backspace,
-    'B', 'o', 0xE9, VrConsoleKey::Enter,
+    'B', 'o', 0xE9, VrConsoleKey::Backspace, 'x', VrConsoleKey::Enter,
   };
 
   CHECK(keys == expected);
+
+  // DEL erases too; the cursor marker, a tab and a character the game cannot
+  // hold are left out
+  std::vector<uint32_t> erased = { VrConsoleKey::Backspace, 'A' };
+  CHECK(vrTextEntryKeys("\x7F|\t\xE2\x98\x83" "A") == erased);
+  CHECK(vrTextEntryKeys("").empty());
 }
 
 
@@ -71,11 +76,11 @@ TEST_CASE(text_entry_shows_the_keyboard_after_the_field_opens) {
 }
 
 
-TEST_CASE(text_entry_applies_the_text_and_reopens_if_the_game_keeps_the_field) {
+TEST_CASE(text_entry_confirms_the_field_and_reopens_if_the_game_keeps_it) {
   VrTextEntry entry;
   CHECK(waitForStep(entry, 1.0f) == VrTextEntryStep::Show);
 
-  CHECK(entry.update(true, false, VrKeyboardEvent::Done, Frame) == VrTextEntryStep::Apply);
+  CHECK(entry.update(true, false, VrKeyboardEvent::Done, Frame) == VrTextEntryStep::Confirm);
   CHECK(!entry.shown());
 
   // The keys are typed: nothing else happens meanwhile

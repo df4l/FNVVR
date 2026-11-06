@@ -9,30 +9,22 @@
 namespace dxvk {
 
   /**
-   * \brief Converts text typed on the runtime's keyboard to the game's text
-   *
-   * The runtime's keyboard types UTF-8; the game's menus use Windows-1252.
-   * Characters the game cannot hold are left out, and so are control
-   * characters and \c |, which the game's text fields draw as their cursor.
-   */
-  std::string vrGameTextFromUtf8(const std::string& utf8);
-
-  /**
    * \brief Converts the game's Windows-1252 text to UTF-8
    */
   std::string vrUtf8FromGameText(const std::string& text);
 
   /**
-   * \brief Keys that replace the text of the game's text field and confirm it
+   * \brief Keys for the game's text field from the runtime keyboard's input
    *
-   * Goes to the end of the text, erases \c length characters, types
-   * \c text (game text, see vrGameTextFromUtf8) and presses Enter. The keys
-   * are characters or VrConsoleKey codes.
+   * The runtime's keyboard types UTF-8; the game's menus use Windows-1252.
+   * \c '\b' and DEL become Backspace, \c '\n' and \c '\r' Enter. Characters
+   * the game cannot hold are left out, and so are other control characters
+   * and \c |, which the game's text fields draw as their cursor. The keys are
+   * characters or VrConsoleKey codes.
    *
-   * \param [in] length Characters in the field
-   * \param [in] text The new text
+   * \param [in] typed What the keyboard sent, UTF-8
    */
-  std::vector<uint32_t> vrTextEntryKeys(uint32_t length, const std::string& text);
+  std::vector<uint32_t> vrTextEntryKeys(const std::string& typed);
 
   /**
    * \brief What the runtime's keyboard should do on a frame
@@ -43,17 +35,17 @@ namespace dxvk {
     Show,
     /// Hide the keyboard: the game's text field closed
     Hide,
-    /// Give the typed text to the game's text field
-    Apply,
+    /// Confirm the game's text field, as Enter does
+    Confirm,
   };
 
   /**
    * \brief Keeps the runtime's keyboard shown while a game text field is open
    *
-   * The keyboard opens shortly after the field does. Its text goes to the
-   * field once it is confirmed; if the field is still open once the game
-   * has taken it (the game refused the text), or if the keyboard is closed
-   * without confirming, the keyboard opens again. A keyboard the runtime
+   * The keyboard opens shortly after the field does, and types in it while
+   * it is shown. Confirming it confirms the field; if the field is still
+   * open once the game has taken the keys (the game refused the text), or
+   * if the keyboard is closed without confirming, the keyboard opens again. A keyboard the runtime
    * cannot show is not asked for again until the next field.
    */
   class VrTextEntry {
@@ -70,8 +62,8 @@ namespace dxvk {
      * \brief Decides the step of a frame
      *
      * \param [in] fieldOpen Whether the game's text field is open
-     * \param [in] keysPending Whether keys of an applied text are still
-     *    waiting for the game
+     * \param [in] keysPending Whether typed keys are still waiting for the
+     *    game
      * \param [in] event What happened to the keyboard since the last frame
      * \param [in] dt Duration of a frame in seconds
      */
