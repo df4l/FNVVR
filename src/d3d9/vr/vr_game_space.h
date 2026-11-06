@@ -177,18 +177,17 @@ namespace dxvk {
   bool vrComputeHeadHeading(const float* rotation, float& heading);
 
   /**
-   * \brief Heading and tilt of a head bone, roll left out
+   * \brief Heading and tilt of a camera, roll left out
    *
-   * Lying on the back, the face looks up and the top of the head tells the
-   * heading, as for vrComputeCameraHeading.
+   * Looking straight up or down, the camera's top tells the heading, as for
+   * vrComputeCameraHeading.
    *
-   * \param [in] rotation World rotation of the bone, nine floats by rows,
-   *    column 0 to the top of the head and column 1 to the front
+   * \param [in] pose The camera
    * \param [out] heading The heading, unchanged without a result
    * \param [out] pitch The tilt, positive looking up, unchanged without a result
-   * \returns \c false if the head lies on its side
+   * \returns \c false if the camera is rolled onto its side
    */
-  bool vrComputeHeadTilt(const float* rotation, float& heading, float& pitch);
+  bool vrComputeCameraTilt(const VrGameCameraPose& pose, float& heading, float& pitch);
 
   /**
    * \brief Turns the view as much as something else turns

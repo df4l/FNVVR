@@ -23,13 +23,16 @@ namespace dxvk {
    * is not bearable in a headset, and the headset's own rotation is added to it.
    *
    * The same goes for the Sandman and Cannibal kills, on the same temporary
-   * third person, and for the idles scripts play on the body while the game
-   * stays in first person: waking up and getting out of bed at a new game.
-   * There the view also tilts with the head, so that lying on the back looks
-   * at the ceiling, and the head's look is held: the look angle bends the
-   * body, and nodding would move the view up and down. A knocked down player
-   * stays on the game's camera: the head of a ragdoll cannot be followed.
-   * Going in and out of the view is blended.
+   * third person. A knocked down player stays on the game's camera: the head
+   * of a ragdoll cannot be followed.
+   *
+   * In first person, scripts play their idles on the first-person skeleton,
+   * such as waking up and getting out of bed at a new game, and the game's
+   * camera follows them. Its tilt is kept then, so that lying on the back
+   * looks at the ceiling, and the head's look is held: the look angle bends
+   * that skeleton, and nodding would move the view up and down.
+   *
+   * Going in and out of these views is blended.
    *
    * Only used on the game's main thread.
    */
@@ -63,7 +66,8 @@ namespace dxvk {
      */
     void finishCamera(VrGameCameraPose& camera, bool headTurnsCamera, float dt);
 
-    /// Whether the eyes are not on the game's camera: on the body or a seat
+    /// Whether the eyes are not on the game's camera as the head's look
+    /// turns it: on the body, a seat or an idle's tilted camera
     bool movesView() const { return m_view != View::Game; }
 
     /// Heading of the camera the eyes were last placed from
@@ -71,13 +75,21 @@ namespace dxvk {
 
     /// Whether an idle in first person places the eyes: the head must not
     /// write the player's look
-    bool holdsLook() const { return m_view == View::Body && m_animated; }
+    bool holdsLook() const { return m_view == View::Idle; }
 
   private:
 
     VrBodyView() = default;
 
-    enum class View { Game, Body, Seat };
+    /**
+     * \brief Logs the changes of the first-person idle's state
+     *
+     * A few of them: they tell whether an animation the view should follow
+     * is seen as an idle.
+     */
+    void logIdleState(uintptr_t animation);
+
+    enum class View { Game, Body, Seat, Idle };
 
     VrCameraBlend m_blend;
     VrViewHeading m_heading;
@@ -86,13 +98,13 @@ namespace dxvk {
     float         m_pitch       = 0.0f;
     float         m_idleLeft    = 0.0f;
     bool          m_findsIdles  = false;
+    int32_t       m_idleState   = -1;
+    uint32_t      m_idleStateLogs = 0;
     bool          m_hasView     = false;
-    bool          m_animated    = false;
-    bool          m_tilts       = false;
     bool          m_headTurns   = false;
     bool          m_changed     = false;
     bool          m_logged      = false;
-    bool          m_loggedAnimated = false;
+    bool          m_loggedIdle  = false;
 
   };
 

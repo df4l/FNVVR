@@ -1,3 +1,5 @@
+#include <cmath>
+
 #include "test.h"
 
 #include "../vr_game_space.h"
@@ -449,49 +451,55 @@ TEST_CASE(head_heading_is_where_the_face_looks) {
   CHECK_NEAR(heading, -1.0f, 1e-6);
 }
 
-TEST_CASE(head_tilt_follows_a_head_lying_on_its_back) {
-  // Standing, facing east: top up, face east
-  const float standing[9] = {
-    0.0f, 1.0f, 0.0f,
-    0.0f, 0.0f, 1.0f,
-    1.0f, 0.0f, 0.0f,
-  };
+TEST_CASE(camera_tilt_leaves_the_roll_out) {
+  // Standing, facing east
+  VrGameCameraPose standing = vrComputeBodyCameraPose(1.5707963f, { 0.0f, 0.0f, 0.0f });
 
   float heading = -1.0f;
   float pitch   = -1.0f;
-  CHECK(vrComputeHeadTilt(standing, heading, pitch));
+  CHECK(vrComputeCameraTilt(standing, heading, pitch));
   CHECK_NEAR(heading, 1.5707963f, 1e-4);
   CHECK_NEAR(pitch, 0.0f, 1e-4);
 
-  // Lying on the back, the top of the head to the west: the face looks up,
-  // and sitting up would face east
-  const float lying[9] = {
-    -1.0f, 0.0f, 0.0f,
-     0.0f, 0.0f, 1.0f,
-     0.0f, 1.0f, 0.0f,
-  };
+  // Lying on the back, the top of the head to the west: the camera looks
+  // up, and sitting up would face east
+  VrGameCameraPose lying;
+  lying.forward = { 0.0f, 0.0f, 1.0f };
+  lying.up      = { -1.0f, 0.0f, 0.0f };
+  lying.right   = { 0.0f, -1.0f, 0.0f };
 
-  CHECK(vrComputeHeadTilt(lying, heading, pitch));
+  CHECK(vrComputeCameraTilt(lying, heading, pitch));
   CHECK_NEAR(heading, 1.5707963f, 1e-4);
   CHECK_NEAR(pitch, 1.5707963f, 1e-4);
 
-  // The camera built from it looks up, and gives that heading back
+  // The camera built from it is the same, and gives that heading back
   VrGameCameraPose pose = vrComputeTiltedCameraPose(heading, pitch, { 0.0f, 0.0f, 0.0f });
   checkVector(pose.forward, 0.0f, 0.0f, 1.0f);
   checkVector(pose.up, -1.0f, 0.0f, 0.0f);
   checkVector(pose.right, 0.0f, -1.0f, 0.0f);
   CHECK_NEAR(vrComputeCameraHeading(pose), 1.5707963f, 1e-4);
 
-  // On its side, the top of the head to the east, it says nothing
-  const float onSide[9] = {
-    1.0f, 0.0f, 0.0f,
-    0.0f, 1.0f, 0.0f,
-    0.0f, 0.0f, 1.0f,
-  };
+  // Facing north, half tilted up and rolled: the camera built from it has
+  // a level right and still faces about north
+  VrGameCameraPose rolled = vrComputeTiltedCameraPose(0.0f, 0.5f, { 0.0f, 0.0f, 0.0f });
+  float r = 0.3f;
+  VrVector3 up    = rolled.up * std::cos(r) + rolled.right * std::sin(r);
+  rolled.right    = rolled.right * std::cos(r) - rolled.up * std::sin(r);
+  rolled.up       = up;
+
+  CHECK(vrComputeCameraTilt(rolled, heading, pitch));
+  CHECK_NEAR(heading, 0.0f, 0.2);
+  CHECK_NEAR(vrComputeTiltedCameraPose(heading, pitch, { 0.0f, 0.0f, 0.0f }).right.z, 0.0f, 1e-6);
+
+  // On its side, it says nothing
+  VrGameCameraPose onSide;
+  onSide.forward = { 0.0f, 1.0f, 0.0f };
+  onSide.up      = { 1.0f, 0.0f, 0.0f };
+  onSide.right   = { 0.0f, 0.0f, -1.0f };
 
   heading = -1.0f;
   pitch   = -1.0f;
-  CHECK(!vrComputeHeadTilt(onSide, heading, pitch));
+  CHECK(!vrComputeCameraTilt(onSide, heading, pitch));
   CHECK_NEAR(heading, -1.0f, 1e-6);
 }
 

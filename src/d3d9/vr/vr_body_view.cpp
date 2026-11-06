@@ -17,12 +17,14 @@ namespace dxvk {
     using Get3DFn       = uintptr_t (__thiscall*)(uintptr_t reference);
     using StateFn       = int32_t   (__thiscall*)(uintptr_t object);
     using ObjectUpdateFn = void     (__thiscall*)(uintptr_t object, void* updateData);
-    using GetAnimationFn = uintptr_t (__thiscall*)(uintptr_t actor);
     using IdlePlayingFn  = bool     (__thiscall*)(uintptr_t animation);
 
     // The idle stays followed this long after it stops, so that the gap
     // between two idles of a scene does not give the view back for a moment
     constexpr float IdleGrace = 0.5f;
+
+    // Enough changes of the idle's state for a wake-up and a few scenes
+    constexpr uint32_t MaxIdleStateLogs = 24;
 
     // The head bone is about ten levels below a character's root
     constexpr uint32_t MaxSkeletonDepth = 16;
@@ -63,21 +65,27 @@ namespace dxvk {
          && !readField<uint8_t>(player, VrGame::PlayerWantsThirdPerson));
     }
 
-    // A script plays an idle on the body while the game stays in first
-    // person, its camera node following the body
-    bool playsIdleInFirstPerson(uintptr_t player) {
-      if (readField<uint8_t>(player, VrGame::PlayerCurrentThirdPerson) || isTempThirdPerson(player))
-        return false;
-
-      uintptr_t animation = reinterpret_cast<GetAnimationFn>(VrGame::ActorGetAnimation)(player);
-      return animation && reinterpret_cast<IdlePlayingFn>(VrGame::AnimationSpecialIdlePlaying)(animation);
+    bool inFirstPerson(uintptr_t player) {
+      return !readField<uint8_t>(player, VrGame::PlayerCurrentThirdPerson) && !isTempThirdPerson(player);
     }
 
-    bool shouldFollowHead(uintptr_t player, bool animated) {
+    // Scripts play their idles on the first-person skeleton while the game
+    // is in first person, and its camera node follows them
+    uintptr_t firstPersonAnimation(uintptr_t player) {
+      return inFirstPerson(player) ? readField<uintptr_t>(player, VrGame::PlayerFirstPersonAnimation) : 0;
+    }
+
+    // -1 without an idle
+    int32_t idleState(uintptr_t animation) {
+      uintptr_t idle = animation ? readField<uintptr_t>(animation, VrGame::AnimationIdle) : 0;
+      return idle ? readField<int32_t>(idle, VrGame::AnimIdleState) : -1;
+    }
+
+    bool shouldFollowHead(uintptr_t player) {
       if (*reinterpret_cast<const uint32_t*>(VrGame::VatsCameraState))
         return false;
 
-      if (!animated && !isTempThirdPerson(player))
+      if (!isTempThirdPerson(player))
         return false;
 
       if (readField<uint32_t>(player, VrGame::ActorLifeState))
@@ -105,13 +113,13 @@ namespace dxvk {
 
     std::unique_ptr<VrBodyView> view(new VrBodyView());
 
-    view->m_findsIdles = VrGameMemory::matchesUnlessRewritten(VrGame::ActorGetAnimation,
-        VrGame::ActorGetAnimationPrologue, sizeof(VrGame::ActorGetAnimationPrologue))
+    view->m_findsIdles = VrGameMemory::matches(VrGame::PlayerGetAnimationReadSite,
+        VrGame::PlayerGetAnimationRead, sizeof(VrGame::PlayerGetAnimationRead))
       && VrGameMemory::matchesUnlessRewritten(VrGame::AnimationSpecialIdlePlaying,
         VrGame::AnimationSpecialIdlePlayingPrologue, sizeof(VrGame::AnimationSpecialIdlePlayingPrologue));
 
     if (!view->m_findsIdles)
-      Logger::warn("VR: The player's idles were not found, the view does not follow the body while waking up");
+      Logger::warn("VR: The player's idles were not found, the view is levelled while waking up");
 
     return view;
   }
@@ -126,13 +134,18 @@ namespace dxvk {
     if (!player)
       return;
 
-    if (m_findsIdles && playsIdleInFirstPerson(player))
+    bool vats = *reinterpret_cast<const uint32_t*>(VrGame::VatsCameraState) != 0;
+    uintptr_t animation = m_findsIdles ? firstPersonAnimation(player) : 0;
+
+    logIdleState(animation);
+
+    if (animation && reinterpret_cast<IdlePlayingFn>(VrGame::AnimationSpecialIdlePlaying)(animation))
       m_idleLeft = IdleGrace;
     else
       m_idleLeft = std::max(m_idleLeft - dt, 0.0f);
 
-    bool animated = m_idleLeft > 0.0f;
-    bool follow = shouldFollowHead(player, animated);
+    bool idle = !vats && m_idleLeft > 0.0f && inFirstPerson(player);
+    bool follow = !idle && shouldFollowHead(player);
     bool wasOnBody = m_view == View::Body;
 
     // Looked for only when needed: this runs every frame
@@ -141,23 +154,36 @@ namespace dxvk {
 
     follow = follow && head;
 
-    View view = follow ? View::Body
-      : !*reinterpret_cast<const uint32_t*>(VrGame::VatsCameraState)
-        && virtualState(player, VrGame::GetSitStateSlot) ? View::Seat
+    View view = idle ? View::Idle
+      : follow ? View::Body
+      : !vats && virtualState(player, VrGame::GetSitStateSlot) ? View::Seat
       : View::Game;
 
-    // Only an idle in first person tilts the view: lying down, the eyes
-    // look where the face does
-    bool tilts = view == View::Body && animated;
+    if (view == View::Idle) {
+      // The game's camera follows the idle, tilt included: lying down, it
+      // looks at the ceiling. Only its roll is left out.
+      float heading = vrComputeCameraHeading(camera);
+      float pitch   = m_pitch;
+      vrComputeCameraTilt(camera, heading, pitch);
 
-    if (view != View::Game) {
+      // The tilt starts from level and follows softly
+      if (view != m_view)
+        m_pitch = 0.0f;
+
+      m_pitch += (pitch - m_pitch) * (1.0f - std::exp(-dt / BodySoftness));
+
+      if (!m_loggedIdle) {
+        Logger::info(str::format("VR: A script plays an idle in first person, the view follows the game's camera, "
+          "the face looking ", pitch * 57.29578f, " degrees up"));
+        m_loggedIdle = true;
+      }
+
+      camera = vrComputeTiltedCameraPose(heading, m_pitch, camera.position);
+    } else if (view != View::Game) {
       float source = readField<float>(player, VrGame::RefHeading);
-      float pitch  = m_pitch;
       auto rotation = view == View::Body ? reinterpret_cast<const float*>(head + VrGame::ObjectWorldRotation) : nullptr;
 
-      if (tilts)
-        vrComputeHeadTilt(rotation, source, pitch);
-      else if (view == View::Body)
+      if (view == View::Body)
         vrComputeHeadHeading(rotation, source);
       else if (std::abs(camera.forward.x) + std::abs(camera.forward.y) > 1e-3f)
         source = vrComputeCameraHeading(camera);
@@ -165,34 +191,18 @@ namespace dxvk {
       if (view != m_view)
         m_heading.start(source, m_hasView ? m_viewHeading : source);
 
-      if (!tilts || tilts != m_tilts)
-        m_pitch = 0.0f;
-
       float heading = m_heading.update(source, view == View::Body ? BodySoftness : 0.0f, dt);
-
-      // The tilt starts from level and follows as softly as the heading
-      if (tilts)
-        m_pitch += (pitch - m_pitch) * (1.0f - std::exp(-dt / BodySoftness));
 
       if (view == View::Body) {
         VrVector3 position;
         std::memcpy(&position, reinterpret_cast<const void*>(head + VrGame::ObjectWorldTranslation), sizeof(position));
 
-        VrVector3 eyes = vrComputeHeadViewPosition(position, rotation,
-          readField<float>(root, VrGame::ObjectWorldScale));
-
-        if (tilts && !m_loggedAnimated) {
-          Logger::info(str::format("VR: A script plays an idle on the body in first person, the eyes follow its head, ",
-            vrLength(eyes - camera.position), " units from the game's camera, the face looking ", pitch * 57.29578f,
-            " degrees up"));
-          m_loggedAnimated = true;
-        }
-
-        camera = vrComputeTiltedCameraPose(heading, m_pitch, eyes);
+        camera = vrComputeBodyCameraPose(heading, vrComputeHeadViewPosition(position, rotation,
+          readField<float>(root, VrGame::ObjectWorldScale)));
 
         scaleHead(head, HeadShrunk);
 
-        if (!animated && !m_logged) {
+        if (!m_logged) {
           Logger::info("VR: The game shows the body for a moment, the eyes follow its head");
           m_logged = true;
         }
@@ -205,16 +215,32 @@ namespace dxvk {
     if (wasOnBody && !follow && head)
       scaleHead(head, 1.0f);
 
-    if (m_animated != (follow && animated)) {
-      Logger::info(follow && animated
-        ? "VR: The player's idle holds the head's look, the view follows the body's head"
+    if (idle != (m_view == View::Idle)) {
+      Logger::info(idle
+        ? "VR: The player's idle holds the head's look, the view follows the game's first-person camera"
         : "VR: The player's idle is over, the head drives the look again");
     }
 
-    m_changed  = follow != wasOnBody;
-    m_view     = view;
-    m_animated = follow && animated;
-    m_tilts    = tilts;
+    bool placed    = view == View::Body || view == View::Idle;
+    bool wasPlaced = m_view == View::Body || m_view == View::Idle;
+
+    m_changed = placed != wasPlaced || (placed && view != m_view);
+    m_view    = view;
+  }
+
+
+  void VrBodyView::logIdleState(uintptr_t animation) {
+    int32_t state = idleState(animation);
+
+    if (state == m_idleState)
+      return;
+
+    if (m_idleStateLogs < MaxIdleStateLogs) {
+      Logger::info(str::format("VR: The first-person idle's state is now ", state));
+      m_idleStateLogs++;
+    }
+
+    m_idleState = state;
   }
 
 

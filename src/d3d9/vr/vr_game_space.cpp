@@ -137,20 +137,16 @@ namespace dxvk {
   }
 
 
-  bool vrComputeHeadTilt(const float* rotation, float& heading, float& pitch) {
+  bool vrComputeCameraTilt(const VrGameCameraPose& pose, float& heading, float& pitch) {
     constexpr float MinLevel = 0.2f;
 
-    VrVector3 top   = { rotation[0], rotation[3], rotation[6] };
-    VrVector3 front = { rotation[1], rotation[4], rotation[7] };
-
-    // As a camera: the front is its forward and the top its up
-    VrVector3 level = front * top.z - top * front.z;
+    VrVector3 level = pose.forward * pose.up.z - pose.up * pose.forward.z;
 
     if (level.x * level.x + level.y * level.y < MinLevel * MinLevel)
       return false;
 
     heading = std::atan2(level.x, level.y);
-    pitch   = std::atan2(front.z, top.z);
+    pitch   = std::atan2(pose.forward.z, pose.up.z);
     return true;
   }
 
