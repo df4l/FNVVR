@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Mods
+
+- **Depth Resolve starts on Nvidia cards**: it no longer closes the game with "Incompatible DXVK version". The mod only changes anything while Depth Resolve is installed.
+
 ### Menus
 
 - **The controller's triggers work in menus while a laser points at the panel**: a trigger pressed over nothing to click acts as the gamepad's trigger (the slot machine's bets, for example), and only clicks when the laser is on a button.
