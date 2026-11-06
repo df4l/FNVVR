@@ -389,6 +389,7 @@ namespace dxvk {
      * and radius.
      */
     constexpr char LeftForeTwistNodeName[]    = "Bip01 L ForeTwist";
+    constexpr char RightForeTwistNodeName[]   = "Bip01 R ForeTwist";
     constexpr char PipBoyScreenNodeName[]     = "pipboyscreen";
     constexpr char PipBoyScreenNodeAltName[]  = "pipboyscreen:0";
     constexpr uintptr_t ObjectWorldBound      = 0x20;

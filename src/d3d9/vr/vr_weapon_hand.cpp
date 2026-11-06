@@ -1679,12 +1679,43 @@ namespace dxvk {
     hand.position = hand.position - shift;
 
     VrGameTransform target = vrComputeHeldTransform(hand, vrMirrorHandPose(FreeHandPose));
-    VrGameRotation drawnRotation = readRotation(rightHand, VrGame::ObjectWorldRotation);
-    VrVector3 drawnHand = readVector(rightHand, VrGame::ObjectWorldTranslation);
+
+    // The wrist and the twist bone take the left hand's free pose,
+    // mirrored, as the right forearm is drawn too: the game's holstered
+    // animation can leave them twisted after a weapon was put away. The
+    // model is moved so that the forearm carries the hand onto its target.
+    uint8_t* rightForearm = field<uint8_t*>(rightHand, VrGame::ObjectParent);
+    uint8_t* rightTwist   = rightForearm ? findObject(rightForearm, VrGame::RightForeTwistNodeName) : nullptr;
 
     VrGameTransform rig;
-    rig.rotate    = target.rotate * vrTranspose(drawnRotation);
-    rig.translate = target.translate - rig.rotate * drawnHand;
+
+    if (rightForearm) {
+      VrGameRotation forearmRotation = readRotation(rightForearm, VrGame::ObjectWorldRotation);
+      VrVector3 forearmPosition      = readVector(rightForearm, VrGame::ObjectWorldTranslation);
+      VrVector3 wrist = vrTranspose(forearmRotation)
+        * (readVector(rightHand, VrGame::ObjectWorldTranslation) - forearmPosition);
+
+      VrGameRotation targetForearm = target.rotate * vrTranspose(vrMirrorHandRotation(FreeHandWrist));
+
+      rig.rotate    = targetForearm * vrTranspose(forearmRotation);
+      rig.translate = target.translate - targetForearm * wrist - rig.rotate * forearmPosition;
+    } else {
+      rig.rotate    = target.rotate * vrTranspose(readRotation(rightHand, VrGame::ObjectWorldRotation));
+      rig.translate = target.translate - rig.rotate * readVector(rightHand, VrGame::ObjectWorldTranslation);
+    }
+
+    std::array<SavedBone, 2> wristBones;
+    uint32_t wristCount = 0;
+
+    if (rightForearm) {
+      wristBones[wristCount++] = { rightHand, readRotation(rightHand, VrGame::ObjectLocalRotation) };
+      writeRotation(rightHand, VrGame::ObjectLocalRotation, vrMirrorHandRotation(FreeHandWrist));
+
+      if (rightTwist) {
+        wristBones[wristCount++] = { rightTwist, readRotation(rightTwist, VrGame::ObjectLocalRotation) };
+        writeRotation(rightTwist, VrGame::ObjectLocalRotation, vrMirrorHandRotation(FreeHandTwist));
+      }
+    }
 
     VrGameRotation worldRotation = rig.rotate * readRotation(root, VrGame::ObjectWorldRotation);
     VrVector3 worldTranslation   = rig.rotate * drawnRoot + rig.translate;
@@ -1708,6 +1739,9 @@ namespace dxvk {
     for (uint32_t i = 0; i < fingerCount; i++)
       writeRotation(fingers[i].bone, VrGame::ObjectLocalRotation, fingers[i].rotate);
 
+    for (uint32_t i = 0; i < wristCount; i++)
+      writeRotation(wristBones[i].bone, VrGame::ObjectLocalRotation, wristBones[i].rotate);
+
     if (forearm && m_hasOtherHand)
       placeOtherHand(root, otherHand, shift, updateData, nullptr);
 
@@ -1720,7 +1754,8 @@ namespace dxvk {
     m_hidesHolstered = true;
 
     if (!m_loggedFreeHands) {
-      Logger::info("VR: The weapon is holstered, both hands take the free pose around their controllers");
+      Logger::info(str::format("VR: The weapon is holstered, both hands take the free pose around their controllers",
+        rightTwist ? "" : " (no right twist bone, the right forearm keeps the game's twist)"));
       m_loggedFreeHands = true;
     }
   }
