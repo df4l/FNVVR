@@ -123,9 +123,6 @@ namespace dxvk {
     constexpr uint32_t  TerminalScreenDepth = 8;
     // Part of the world's glass the menu's screen takes, inside the frame
     constexpr float     TerminalScreenFill  = 0.95f;
-    // The head is this many glass widths in front of the screen: the screen
-    // is about 45 degrees wide, as the terminal standing in the room
-    constexpr float     TerminalViewRatio   = 1.2f;
 
     // How the scenes lie on the casino's objects, in the models' space:
     // findings/minigames.md §6. The game's table is only a top, on the
@@ -668,16 +665,40 @@ namespace dxvk {
   void VrMinigames::takeSeat(uint8_t* root, const VrWorldObject& object, const VrSceneFit* fit, const VrMinigameFrame& frame) {
     m_object     = object;
     m_fit        = fit;
-    m_seatCamera = vrSeatCamera(m_object, *fit,
+    m_viewCamera = vrSeatCamera(m_object, *fit,
       vrComputeEyeInReference(frame.reference, frame.head), frame.cameraHeight, VrGameUnitsPerMetre);
     m_onObject   = true;
+    m_seated     = true;
 
-    Logger::info(str::format("VR: The seat's camera is ", m_seatCamera.position.z - m_object.position.z,
+    Logger::info(str::format("VR: The seat's camera is ", m_viewCamera.position.z - m_object.position.z,
       " units above the object, the game's ", frame.cameraHeight - m_object.position.z));
 
     keep(root);
     updateActorsInTheWay(true);
     standOnObject(frame);
+  }
+
+
+  void VrMinigames::standAt(uint8_t* root, const VrWorldObject& object, const VrSceneFit* fit, const VrMinigameFrame& frame) {
+    // The view stays the player's: nothing stands between the eyes and the
+    // object that the player does not see already
+    m_object     = object;
+    m_fit        = fit;
+    m_viewCamera = frame.camera;
+    m_onObject   = true;
+    m_seated     = false;
+
+    keep(root);
+    standOnObject(frame);
+  }
+
+
+  void VrMinigames::viewFrom(const VrGameCameraPose& camera) {
+    if (!m_onObject || m_seated)
+      return;
+
+    m_viewCamera = camera;
+    placeOnObjectSpace();
   }
 
 
@@ -709,13 +730,13 @@ namespace dxvk {
     }
 
     m_modelFit = vrSceneFitOnScreen(worldPose(screen), MenuScreenGlass,
-      vrObjectInObject(object, worldPose(glass)), model->glass, TerminalScreenFill, TerminalViewRatio);
+      vrObjectInObject(object, worldPose(glass)), model->glass, TerminalScreenFill);
 
     for (const char* text : TerminalFakeTexts)
       VrMenuScenes::hideObject(reinterpret_cast<uintptr_t>(root), text, m_objectHidden);
 
     Logger::info(str::format("VR: The terminal shows on the world's ", model->shape));
-    takeSeat(root, object, &m_modelFit, frame);
+    standAt(root, object, &m_modelFit, frame);
     return true;
   }
 
@@ -734,17 +755,26 @@ namespace dxvk {
 
 
   void VrMinigames::standOnObject(const VrMinigameFrame& frame) {
-    m_space = vrSceneSpaceOnObject(frame.reference, m_seatCamera, m_object, *m_fit, VrGameUnitsPerMetre);
+    m_reference = frame.reference;
 
-    hidePlayerBody();
+    if (m_seated) {
+      hidePlayerBody();
 
-    // The world runs behind the casino's games, and people walk
-    if (!m_actorsWait) {
-      m_actorsWait = ActorsCheckFrames;
-      updateActorsInTheWay(false);
+      // The world runs behind the casino's games, and people walk
+      if (!m_actorsWait) {
+        m_actorsWait = ActorsCheckFrames;
+        updateActorsInTheWay(false);
+      }
+
+      m_actorsWait--;
     }
 
-    m_actorsWait--;
+    placeOnObjectSpace();
+  }
+
+
+  void VrMinigames::placeOnObjectSpace() {
+    m_space = vrSceneSpaceOnObject(m_reference, m_viewCamera, m_object, *m_fit, VrGameUnitsPerMetre);
 
     if (m_fit == &RouletteFit)
       placeRouletteSurface();
@@ -1041,6 +1071,7 @@ namespace dxvk {
     m_kept.clear();
 
     m_onObject = false;
+    m_seated   = false;
     m_fit      = nullptr;
   }
 

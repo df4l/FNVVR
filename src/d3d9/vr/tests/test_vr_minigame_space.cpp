@@ -362,7 +362,7 @@ TEST_CASE(menu_screen_lies_on_the_world_screen) {
   modelGlass.width  = 24.0f;
   modelGlass.height = 20.0f;
 
-  VrSceneFit fit = vrSceneFitOnScreen(sceneScreen, sceneGlass, modelScreen, modelGlass, 0.5f, 1.0f);
+  VrSceneFit fit = vrSceneFitOnScreen(sceneScreen, sceneGlass, modelScreen, modelGlass, 0.5f);
 
   auto inModel = [&] (const VrVector3& p) {
     return fit.origin + (fit.sceneX * p.x + fit.sceneY * p.y + fit.sceneZ * p.z) * fit.scale;
@@ -377,11 +377,6 @@ TEST_CASE(menu_screen_lies_on_the_world_screen) {
   CHECK(same(inModel({ 20.0f, 0.4f, 2.0f }), { 4.4f, 0.0f, 30.8f }));
   // The menu's viewer side, -Y, is the world's
   CHECK(same(inModel({ 20.0f, -0.6f, 1.0f }), { 5.8f, 0.0f, 30.6f }));
-
-  // A glass's width away in front of it, looking at it level
-  CHECK(same(fit.seat, VrVector3 { 5.0f, 0.0f, 30.0f } + VrVector3 { 0.8f, 0.0f, 0.6f } * 24.0f));
-  CHECK(same(fit.facing, { -1.0f, 0.0f, 0.0f }));
-  CHECK_NEAR(fit.eyeHeight, fit.seat.z, Near);
 }
 
 
