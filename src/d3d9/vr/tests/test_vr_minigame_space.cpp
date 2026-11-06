@@ -292,6 +292,108 @@ TEST_CASE(view_rectangle_gives_the_camera_cursor_position) {
 }
 
 
+TEST_CASE(fit_of_a_model_finds_its_points_back) {
+  // A model stood up and turned in its scene, as the vigor tester's
+  VrWorldObject model;
+  model.x        = { -1.0f, 0.0f, 0.0f };
+  model.y        = { 0.0f, 0.0f, -1.0f };
+  model.z        = { 0.0f, 1.0f, 0.0f };
+  model.position = { 0.0f, -85.0f, -85.0f };
+  model.scale    = 2.0f;
+
+  VrSceneFit fit = vrSceneFitOfModel(model);
+
+  for (const VrVector3& point : { VrVector3 { 0.0f, 0.0f, 0.0f }, VrVector3 { 10.0f, -15.0f, 92.0f } }) {
+    VrVector3 scene = model.position + (model.x * point.x + model.y * point.y + model.z * point.z) * model.scale;
+    VrVector3 back  = fit.origin + (fit.sceneX * scene.x + fit.sceneY * scene.y + fit.sceneZ * scene.z) * fit.scale;
+    CHECK(same(back, point));
+  }
+}
+
+
+TEST_CASE(camera_view_rectangle_gives_the_cursor_of_a_camera_anywhere) {
+  VrPose reference = vrMakeRecenterReference(headAt(0.0f, 1.6f, 0.0f));
+
+  VrSceneSpace space;
+  space.anchor        = reference;
+  space.origin        = { 5.0f, 0.0f, 0.0f };
+  space.right         = { 1.0f, 0.0f, 0.0f };
+  space.up            = { 0.0f, 0.0f, 1.0f };
+  space.back          = { 0.0f, -1.0f, 0.0f };
+  space.unitsPerMetre = 70.0f;
+
+  // At (0, 0, 1) looking at the origin with +Y up, as the vigor tester's
+  VrGameCameraPose camera;
+  camera.position = { 0.0f, 0.0f, 1.0f };
+  camera.forward  = { 0.0f, 0.0f, -1.0f };
+  camera.up       = { 0.0f, 1.0f, 0.0f };
+  camera.right    = { 1.0f, 0.0f, 0.0f };
+
+  VrGameFrustum frustum;
+  frustum.left   = -0.8f;
+  frustum.right  = 0.8f;
+  frustum.top    = 0.45f;
+  frustum.bottom = -0.45f;
+
+  VrPanelPlacement view = vrCameraViewRectangle(space, camera, 60.0f, frustum);
+
+  CHECK_NEAR(view.width, 1.6f * 60.0f / 70.0f, Near);
+  CHECK_NEAR(view.height, 0.9f * 60.0f / 70.0f, Near);
+
+  // A point on the plane, 60 units ahead of the camera
+  VrVector3 point = { -12.0f, 9.0f, -59.0f };
+  VrVector3 room  = vrSceneToRoom(space, point);
+  VrVector3 normal = vrRotate(view.pose.orientation, VrVector3 { 0.0f, 0.0f, 1.0f });
+
+  VrPose ray;
+  ray.position    = room + normal * 0.3f;
+  ray.orientation = view.pose.orientation;
+
+  VrPanelHit hit = vrIntersectPanel(ray, view);
+  CHECK(hit.hit);
+
+  VrVector3 offset = point - camera.position;
+  float depth = vrDot(offset, camera.forward);
+  float u = (vrDot(offset, camera.right) / depth - frustum.left) / (frustum.right - frustum.left);
+  float v = (frustum.top - vrDot(offset, camera.up) / depth) / (frustum.top - frustum.bottom);
+
+  CHECK_NEAR(hit.uv.x, u, Near);
+  CHECK_NEAR(hit.uv.y, v, Near);
+}
+
+
+TEST_CASE(camera_along_a_ray_sees_the_ray_at_the_point) {
+  VrGameCameraPose camera;
+  camera.position = { 0.0f, 0.0f, 1.0f };
+  camera.forward  = { 0.0f, 0.0f, -1.0f };
+  camera.up       = { 0.0f, 1.0f, 0.0f };
+  camera.right    = { 1.0f, 0.0f, 0.0f };
+
+  VrGameFrustum frustum;
+  frustum.left   = -0.8f;
+  frustum.right  = 0.8f;
+  frustum.top    = 0.45f;
+  frustum.bottom = -0.45f;
+
+  VrVector2 uv = { 0.7f, 0.2f };
+  VrVector3 origin = { 10.0f, -20.0f, -30.0f };
+  VrVector3 direction = { -0.3f, 0.5f, -0.6f };
+
+  VrGameCameraPose pose = vrCameraAlongRay(camera, frustum, uv, origin, direction);
+
+  CHECK(same(pose.position, origin));
+  CHECK_NEAR(vrLength(pose.forward), 1.0f, Near);
+  CHECK_NEAR(vrDot(pose.forward, pose.up), 0.0f, Near);
+  CHECK_NEAR(vrDot(pose.forward, pose.right), 0.0f, Near);
+
+  VrVector3 view = pose.forward
+    + pose.right * (frustum.left + uv.x * (frustum.right - frustum.left))
+    + pose.up    * (frustum.top  - uv.y * (frustum.top - frustum.bottom));
+
+  CHECK(same(view * (1.0f / vrLength(view)), direction * (1.0f / vrLength(direction))));
+}
+
+
 TEST_CASE(pin_points_at_the_hand) {
   VrPose lock;
   lock.position = { 0.0f, 1.4f, -0.5f };

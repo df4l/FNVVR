@@ -87,6 +87,19 @@ namespace dxvk {
   }
 
 
+  VrSceneFit vrSceneFitOfModel(const VrWorldObject& model) {
+    // The inverse of the model's pose: its rotation's rows, its translation
+    // brought back into the model
+    VrSceneFit fit;
+    fit.sceneX = { model.x.x, model.y.x, model.z.x };
+    fit.sceneY = { model.x.y, model.y.y, model.z.y };
+    fit.sceneZ = { model.x.z, model.y.z, model.z.z };
+    fit.origin = vrPointInObject(model, VrVector3 { 0.0f, 0.0f, 0.0f });
+    fit.scale  = 1.0f / model.scale;
+    return fit;
+  }
+
+
   VrGameCameraPose vrSeatCamera(
     const VrWorldObject&    object,
     const VrSceneFit&       fit,
@@ -281,17 +294,78 @@ namespace dxvk {
     const VrSceneSpace&     space,
           float             distance,
     const VrGameFrustum&    frustum) {
-    VrVector3 centre = {
-      distance,
-      0.5f * (frustum.top + frustum.bottom) * distance,
-      0.5f * (frustum.left + frustum.right) * distance };
+    VrGameCameraPose camera;
+    camera.forward = { 1.0f, 0.0f, 0.0f };
+    camera.up      = { 0.0f, 1.0f, 0.0f };
+    camera.right   = { 0.0f, 0.0f, 1.0f };
+    return vrCameraViewRectangle(space, camera, distance, frustum);
+  }
+
+
+  VrPanelPlacement vrCameraViewRectangle(
+    const VrSceneSpace&     space,
+    const VrGameCameraPose& camera,
+          float             distance,
+    const VrGameFrustum&    frustum) {
+    VrVector3 centre = camera.position + (camera.forward
+      + camera.up    * (0.5f * (frustum.top + frustum.bottom))
+      + camera.right * (0.5f * (frustum.left + frustum.right))) * distance;
+
+    // The camera's axes as the anchor sees them: the panel faces the camera
+    VrVector3 x = fromScene(space, camera.right);
+    VrVector3 y = fromScene(space, camera.up);
+    VrVector3 z = fromScene(space, camera.forward * -1.0f);
 
     VrPanelPlacement placement;
     placement.pose.position    = vrSceneToRoom(space, centre);
-    placement.pose.orientation = space.anchor.orientation;
+    placement.pose.orientation = vrNormalize(space.anchor.orientation * fromAxes(x, y, z));
     placement.width            = (frustum.right - frustum.left) * distance / space.unitsPerMetre;
     placement.height           = (frustum.top - frustum.bottom) * distance / space.unitsPerMetre;
     return placement;
+  }
+
+
+  VrGameCameraPose vrCameraAlongRay(
+    const VrGameCameraPose& camera,
+    const VrGameFrustum&    frustum,
+    const VrVector2&        uv,
+    const VrVector3&        origin,
+    const VrVector3&        direction) {
+    VrVector3 view = camera.forward
+      + camera.right * (frustum.left + uv.x * (frustum.right - frustum.left))
+      + camera.up    * (frustum.top  - uv.y * (frustum.top - frustum.bottom));
+
+    VrVector3 from = view * (1.0f / vrLength(view));
+    VrVector3 to   = direction * (1.0f / vrLength(direction));
+
+    // The turn from the view to the ray, about the axis across both
+    VrVector3 axis = cross(from, to);
+    float sine   = vrLength(axis);
+    float cosine = vrDot(from, to);
+
+    if (sine > 1e-6f) {
+      axis = axis * (1.0f / sine);
+    } else if (cosine > 0.0f) {
+      axis = camera.up;
+      sine = 0.0f;
+    } else {
+      // Half a turn about any axis across the view
+      VrVector3 side = std::abs(from.x) < 0.9f ? VrVector3 { 1.0f, 0.0f, 0.0f } : VrVector3 { 0.0f, 1.0f, 0.0f };
+      axis = cross(from, side);
+      axis = axis * (1.0f / vrLength(axis));
+      sine = 0.0f;
+    }
+
+    auto turn = [&] (const VrVector3& v) {
+      return v * cosine + cross(axis, v) * sine + axis * (vrDot(axis, v) * (1.0f - cosine));
+    };
+
+    VrGameCameraPose pose;
+    pose.forward  = turn(camera.forward);
+    pose.up       = turn(camera.up);
+    pose.right    = turn(camera.right);
+    pose.position = origin;
+    return pose;
   }
 
 
