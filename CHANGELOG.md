@@ -2,18 +2,29 @@
 
 ## Unreleased
 
-### Mods
+### Doc Mitchell's house
 
-- **Depth Resolve starts on Nvidia cards**: it no longer closes the game with "Incompatible DXVK version". The mod only changes anything while Depth Resolve is installed.
+- **The Vit-o-matic Vigor Tester leaves the flat panel**: the machine where you spend your S.P.E.C.I.A.L. points is in 3D on the machine in Doc Mitchell's house, with the view brought in front of it. Point at its buttons with a laser and pull the trigger; off the buttons, the triggers turn the pages. The world goes on around you meanwhile, and Doc still reacts to your stats once you are done. `d3d9.vrRealTimeVigorTester = False` brings the pause back.
+- **The brahmin skull can be grabbed**: the intro's tutorial asks you to pick up the skull while fighting is turned off; your hands now take it, without being able to hit Doc Mitchell.
+- **No hands before you can move in the intro**: they appear when Doc lets you walk, consistent with the tutorial that then asks you to grab something with them.
 
 ### Menus
 
 - **The controller's triggers work in menus while a laser points at the panel**: a trigger pressed over nothing to click acts as the gamepad's trigger (the slot machine's bets, for example), and only clicks when the laser is on a button.
 
-### Doc Mitchell's house
+### HUD
 
-- **The Vit-o-matic Vigor Tester leaves the flat panel**: the machine where you spend your S.P.E.C.I.A.L. points is in 3D on the machine in Doc Mitchell's house, with the view brought in front of it. Point at its buttons with a laser and pull the trigger; off the buttons, the triggers turn the pages. The world goes on around you meanwhile, and Doc still reacts to your stats once you are done. `d3d9.vrRealTimeVigorTester = False` brings the pause back.
-- **No hands before you can move in the intro**: they appear when Doc lets you walk, so they no longer show a skin you have not chosen yet.
+- **Long prompts and messages are no longer cut**: the prompt above your fingertip and the messages on the head panel are cut out of the HUD from the text the game actually draws, so a long action or a long location name fits.
+
+### Scopes
+
+- **No more glass through the scope image**: on the anti-materiel rifle, the marksman carbine, the scoped varmint rifle, Lincoln's repeater, the scoped .44 and the trail carbine, the tip of the eyepiece glass no longer shows in the middle of the view.
+
+### Other mods
+
+- **LOD Flicker Fix**: the Reflectron in character creation, the menus with a 3D scene, the console terminal, the mini-games and the scope lenses are drawn right with it, instead of black or with a square screen.
+- **Depth Resolve starts on Nvidia cards**: it no longer closes the game with "Incompatible DXVK version".
+- Both fixes only act while that mod is installed; without it, nothing changes.
 
 ## v0.13.0 (2026-11-05, since v0.12.0 `24a1b26`)
 
