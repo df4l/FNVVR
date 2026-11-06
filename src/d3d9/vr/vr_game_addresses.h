@@ -950,6 +950,17 @@ namespace dxvk {
 
     /** The vtable that tells a world's terminal among the rendered menus */
     constexpr uintptr_t TerminalVtable       = 0x0106EBE4;
+    /**
+     * FORenderedMenuRaceSex, the rendered menu of RaceSexMenu (0x40C): the
+     * Reflectron of the character creation, the barber's and the surgeon's
+     * projectors. Same FORenderedMenu layout as the terminal (screen, model,
+     * camera, initialised flag); its Draw renders the face into a texture of
+     * its own and then the tiles into the given texture, and its Pick casts
+     * the menu camera's ray through the cursor at the projector's buttons.
+     * See findings/menu-scenes.md.
+     */
+    constexpr uintptr_t RaceSexRenderedVtable = 0x010759EC;
+    constexpr uint32_t  RaceSexMenuId         = 0x40C;
     constexpr uintptr_t LockPickSceneRoot = 0x011DA24C;
     constexpr char      LockPickBackdrop[] = "shadow";
 

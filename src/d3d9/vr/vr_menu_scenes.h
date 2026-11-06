@@ -22,7 +22,7 @@ namespace dxvk {
    * that ignores the head, so they would stick to the face in both eyes.
    * Their draw in the eye images is skipped, the model and then its screen
    * with the menu and the face, and they are drawn with the menu scenes
-   * instead.
+   * instead, unless VrMinigames draws them in the eyes.
    *
    * Only used on the game's main thread, while the game draws a frame.
    */
@@ -67,11 +67,12 @@ namespace dxvk {
      * See VrMinigames. That scene is no longer drawn into the menu panel.
      *
      * \param [in] menuId The menu, or 0 for none
-     * \param [in] terminal Whether the rendered terminal is left out as well
+     * \param [in] renderedMenu Whether the rendered menu (a terminal or the
+     *   Reflectron) is left out as well
      */
-    void leaveToEyes(uint32_t menuId, bool terminal) {
-      m_eyeMenuId   = menuId;
-      m_eyeTerminal = terminal;
+    void leaveToEyes(uint32_t menuId, bool renderedMenu) {
+      m_eyeMenuId       = menuId;
+      m_eyeRenderedMenu = renderedMenu;
     }
 
     /**
@@ -97,7 +98,7 @@ namespace dxvk {
     bool m_available         = false;
     bool m_renderedMenuMoved = false;
     uint32_t m_eyeMenuId     = 0;
-    bool m_eyeTerminal       = false;
+    bool m_eyeRenderedMenu   = false;
 
     static void __fastcall renderedMenuHook(
             void*                 main,

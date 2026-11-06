@@ -39,8 +39,9 @@ namespace dxvk {
    * \brief Shows the game's mini-games in the room
    *
    * The lockpicking, slot machine, blackjack, roulette, Caravan and vigor
-   * tester menus and the world's terminals (hacking included) keep all of their game
-   * logic. Their 3D scene, which the game draws with a camera of its own,
+   * tester menus, the world's terminals (hacking included) and the Reflectron
+   * of the character creation (with the barber's and the surgeon's) keep all
+   * of their game logic. Their 3D scene, which the game draws with a camera of its own,
    * is drawn in each eye's image with that camera on the eye, at the place
    * of the room the game's view gives it, instead of on the flat panel. The
    * interface's tiles stay on the panel, which is out of the way of the
@@ -91,8 +92,8 @@ namespace dxvk {
     /// Id of the menu whose scene the eyes show, 0 if none
     uint32_t menuId() const;
 
-    /// Whether the eyes show a world's terminal
-    bool showsTerminal() const { return m_kind == Kind::Terminal; }
+    /// Whether the eyes show a rendered menu: a world's terminal or the Reflectron
+    bool showsRenderedMenu() const { return m_kind == Kind::Terminal || m_kind == Kind::Reflectron; }
 
     bool active() const { return m_kind != Kind::None; }
 
@@ -121,7 +122,7 @@ namespace dxvk {
     void drawEye(const VrEyeView& eye, float nearPlane, float farPlane);
 
     /// Whether the scene can be drawn before the first-person pass
-    bool drawsBeforeFirstPerson() const { return active() && m_kind != Kind::Terminal; }
+    bool drawsBeforeFirstPerson() const { return active() && !showsRenderedMenu(); }
 
   private:
 
@@ -134,6 +135,7 @@ namespace dxvk {
       Caravan,
       VigorTester,
       Terminal,
+      Reflectron,
     };
 
     VrMinigames(IDirect3DDevice9* device, IVRBackend& backend);
@@ -199,8 +201,8 @@ namespace dxvk {
     VrHand            m_vigorHand   = VrHand::Right;
     std::array<bool, VrHandCount> m_vigorTriggers = { };
 
-    // Terminal
-    uint8_t*          m_terminal    = nullptr;
+    // Rendered menu: a terminal or the Reflectron
+    uint8_t*          m_rendered    = nullptr;
     void*             m_texture     = nullptr;
 
     Kind findKind() const;
@@ -211,7 +213,7 @@ namespace dxvk {
 
     void placeBoard(const VrMinigameFrame& frame, bool aboveTable);
 
-    bool placeTerminal(const VrMinigameFrame& frame);
+    bool placeRenderedMenu(const VrMinigameFrame& frame, float distance, float width);
 
     bool placeOnObject(uint32_t id, const VrMinigameFrame& frame);
 
@@ -249,9 +251,9 @@ namespace dxvk {
 
     void press(uint16_t button);
 
-    void drawTerminal(const VrEyeView& eye);
+    void drawRenderedMenu(const VrEyeView& eye);
 
-    void renderTerminalScreen();
+    void renderRenderedMenuScreen();
 
     void releaseTexture();
 

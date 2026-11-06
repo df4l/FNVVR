@@ -85,6 +85,11 @@ namespace dxvk {
     constexpr float     TerminalDistance = 0.7f;
     constexpr float     TerminalWidth    = 0.62f;
 
+    // The Reflectron's projector a little larger than the terminal: the
+    // face on its screen is what the player looks at
+    constexpr float     ReflectronDistance = 0.75f;
+    constexpr float     ReflectronWidth    = 0.8f;
+
     // How the scenes lie on the casino's objects, in the models' space:
     // findings/minigames.md §6. The game's table is only a top, on the
     // world's, which holds it up. Its felt is above all of the world's top.
@@ -220,6 +225,7 @@ namespace dxvk {
         case VrGame::RouletteMenuId:    return "roulette table";
         case VrGame::CaravanMenuId:     return "Caravan table";
         case VrGame::LoveTesterMenuId:  return "vigor tester";
+        case VrGame::RaceSexMenuId:     return "Reflectron";
         default:                        return "terminal";
       }
     }
@@ -281,7 +287,8 @@ namespace dxvk {
       && VrGameMemory::readable(VrGame::LoveTesterInstance, sizeof(uintptr_t))
       && VrGameMemory::readable(VrGame::LoveTesterCamera, sizeof(uintptr_t))
       && VrGameMemory::readable(VrGame::LockPickSliderTrait, sizeof(uint32_t))
-      && VrGameMemory::readable(VrGame::TerminalVtable, sizeof(uintptr_t));
+      && VrGameMemory::readable(VrGame::TerminalVtable, sizeof(uintptr_t))
+      && VrGameMemory::readable(VrGame::RaceSexRenderedVtable, sizeof(uintptr_t));
 
     if (!found)
       return nullptr;
@@ -289,8 +296,8 @@ namespace dxvk {
     std::unique_ptr<VrMinigames> minigames(new VrMinigames(device, backend));
     g_minigames = minigames.get();
 
-    // The world's terminals need the console's hook to get a screen for
-    // both eyes; without it they stay on the panel
+    // The world's terminals and the Reflectron need the console's hook to
+    // get a screen for both eyes; without it they stay on the panel
     VrConsoleScreen::setAfterOffscreen(&VrMinigames::afterOffscreen);
 
     // The calls stay redirected if the option is turned off and on again
@@ -333,6 +340,7 @@ namespace dxvk {
       case Kind::Roulette:    return VrGame::RouletteMenuId;
       case Kind::Caravan:     return VrGame::CaravanMenuId;
       case Kind::VigorTester: return VrGame::LoveTesterMenuId;
+      case Kind::Reflectron:  return VrGame::RaceSexMenuId;
       default:                return 0;
     }
   }
@@ -359,9 +367,16 @@ namespace dxvk {
 
     void* rendered = game<PointerFn>(VrGame::GetCurrentRenderedMenu)();
 
-    if (rendered && rendered != game<PointerFn>(VrGame::GetPipBoy)()
-     && field<uintptr_t>(rendered, 0) == VrGame::TerminalVtable)
+    if (!rendered || rendered == game<PointerFn>(VrGame::GetPipBoy)())
+      return Kind::None;
+
+    uintptr_t vtable = field<uintptr_t>(rendered, 0);
+
+    if (vtable == VrGame::TerminalVtable)
       return Kind::Terminal;
+
+    if (vtable == VrGame::RaceSexRenderedVtable)
+      return Kind::Reflectron;
 
     return Kind::None;
   }
@@ -405,7 +420,7 @@ namespace dxvk {
       standOnObject(frame);
 
     // A menu over the mini-game (a message, a quantity) has the input
-    bool onTop = m_kind == Kind::Terminal || isTopMenu(menuId());
+    bool onTop = showsRenderedMenu() || isTopMenu(menuId());
 
     if (m_pulseFrames) {
       m_pad.buttons |= m_pulse;
@@ -470,7 +485,10 @@ namespace dxvk {
     m_tension     = VrLockTension();
 
     if (kind == Kind::Terminal)
-      return placeTerminal(frame);
+      return placeRenderedMenu(frame, TerminalDistance, TerminalWidth);
+
+    if (kind == Kind::Reflectron)
+      return placeRenderedMenu(frame, ReflectronDistance, ReflectronWidth);
 
     Kind previous = m_kind;
     m_kind = kind;
@@ -928,7 +946,7 @@ namespace dxvk {
     Logger::info(str::format("VR: The ", kindName(menuId()), " is put away"));
 
     m_kind       = Kind::None;
-    m_terminal   = nullptr;
+    m_rendered   = nullptr;
     m_hasSurface = false;
     m_panelRevision++;
     m_pad = VrMinigamePad();
@@ -954,7 +972,7 @@ namespace dxvk {
   }
 
 
-  bool VrMinigames::placeTerminal(const VrMinigameFrame& frame) {
+  bool VrMinigames::placeRenderedMenu(const VrMinigameFrame& frame, float distance, float width) {
     auto rendered = static_cast<uint8_t*>(game<PointerFn>(VrGame::GetCurrentRenderedMenu)());
 
     if (!rendered || !VrConsoleScreen::hooksOffscreen())
@@ -983,9 +1001,9 @@ namespace dxvk {
     if (view <= 0.0f)
       return false;
 
-    m_space = vrSceneSpaceInFront(frame.head, target, TerminalDistance, 0.0f, view / TerminalWidth);
+    m_space = vrSceneSpaceInFront(frame.head, target, distance, 0.0f, view / width);
     m_panel = vrSceneViewRectangle(m_space, target.x, frustum);
-    m_terminal = rendered;
+    m_rendered = rendered;
     return true;
   }
 
@@ -1192,8 +1210,8 @@ namespace dxvk {
 
 
   void VrMinigames::drawEye(const VrEyeView& eye, float nearPlane, float farPlane) {
-    if (m_kind == Kind::Terminal) {
-      drawTerminal(eye);
+    if (showsRenderedMenu()) {
+      drawRenderedMenu(eye);
       return;
     }
 
@@ -1269,16 +1287,16 @@ namespace dxvk {
   }
 
 
-  void VrMinigames::drawTerminal(const VrEyeView& eye) {
+  void VrMinigames::drawRenderedMenu(const VrEyeView& eye) {
     void* main     = global<void*>(VrGame::MainSingleton);
     void* renderer = global<void*>(VrGame::Renderer);
     uint8_t* graph = global<uint8_t*>(VrGame::WorldSceneGraph);
 
-    if (!m_terminal || !m_texture || !main || !renderer || !graph)
+    if (!m_rendered || !m_texture || !main || !renderer || !graph)
       return;
 
-    void* camera = field<void*>(m_terminal, VrGame::TerminalCamera);
-    void* screen = field<void*>(m_terminal, VrGame::TerminalScreen);
+    void* camera = field<void*>(m_rendered, VrGame::TerminalCamera);
+    void* screen = field<void*>(m_rendered, VrGame::TerminalScreen);
 
     if (!camera || !screen)
       return;
@@ -1316,12 +1334,12 @@ namespace dxvk {
 
   void __cdecl VrMinigames::afterOffscreen() {
     if (g_minigames)
-      g_minigames->renderTerminalScreen();
+      g_minigames->renderRenderedMenuScreen();
   }
 
 
-  void VrMinigames::renderTerminalScreen() {
-    if (m_kind != Kind::Terminal || !m_terminal)
+  void VrMinigames::renderRenderedMenuScreen() {
+    if (!showsRenderedMenu() || !m_rendered)
       return;
 
     void* renderer = global<void*>(VrGame::Renderer);
@@ -1341,8 +1359,9 @@ namespace dxvk {
     if (!m_texture)
       return;
 
-    auto vtable = field<uint8_t*>(m_terminal, 0);
-    (*reinterpret_cast<DrawFn*>(vtable + VrGame::TerminalDraw))(m_terminal, m_texture, 1, nullptr);
+    // The Reflectron's Draw renders the face first, into a texture of its own
+    auto vtable = field<uint8_t*>(m_rendered, 0);
+    (*reinterpret_cast<DrawFn*>(vtable + VrGame::TerminalDraw))(m_rendered, m_texture, 1, nullptr);
   }
 
 
