@@ -865,7 +865,7 @@ namespace dxvk {
 
       m_controls.setMinigamePad(m_minigames->pad());
       m_controls.setPointerSurface(m_minigames->surface());
-      m_menuScenes.leaveToEyes(m_minigames->menuId(), m_minigames->showsTerminal());
+      m_menuScenes.leaveToEyes(m_minigames->menuId(), m_minigames->showsRenderedMenu());
     }
 
     m_controls.setTerminalPanel(m_terminal ? m_terminal->placement() : nullptr);
@@ -2068,10 +2068,10 @@ namespace dxvk {
       return;
 
     // A mini-game's scene drawn at the last moment: when the first-person
-    // pass did not run, and for the terminals, like the console's. The
+    // pass did not run, and for the rendered menus, like the console's. The
     // game's clear does nothing outside of its render group.
     if (m_minigames && m_minigames->active() && !m_minigameDrawn[m_eye]) {
-      if (!m_minigames->showsTerminal())
+      if (!m_minigames->showsRenderedMenu())
         m_device->Clear(0, nullptr, D3DCLEAR_ZBUFFER, 0, vrGameDepthClear(), 0);
 
       drawMinigame();

@@ -110,7 +110,7 @@ namespace dxvk {
     if (!m_available)
       return false;
 
-    if (isRenderedMenuOpen() && !m_eyeTerminal)
+    if (isRenderedMenuOpen() && !m_eyeRenderedMenu)
       return true;
 
     for (const auto& scene : VrGame::MenuScenes) {
@@ -142,7 +142,7 @@ namespace dxvk {
 
     auto main = readField<void*>(VrGame::MainSingleton, 0);
 
-    if (!main || !isRenderedMenuOpen() || m_eyeTerminal)
+    if (!main || !isRenderedMenuOpen() || m_eyeRenderedMenu)
       return;
 
     reinterpret_cast<MainFn>(VrGame::DrawRenderedMenuParent)(main, nullptr);
