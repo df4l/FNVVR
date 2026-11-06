@@ -1089,6 +1089,18 @@ namespace dxvk {
      * movzx ecx, byte [eax+0x64D], checks the offset.
      */
     constexpr uintptr_t PlayerTempThirdPerson     = 0x64D;
+
+    /**
+     * Call in the first-person branch of PlayerCharacter::UpdateCamera to
+     * Animation::GetSmallestHavokBlendValue (__thiscall with the
+     * third-person head's parent bone, returns a float in ST0). Below 1, an
+     * animation moves the third-person head, such as waking up and getting
+     * out of bed at a new game, and the camera is pulled from the
+     * first-person camera node towards the third-person one, which the look
+     * angle bends around the body. See findings/camera.md.
+     */
+    constexpr uintptr_t HeadBlendCallSite         = 0x0094B24B;
+    constexpr uintptr_t HeadBlend                 = 0x00496550;
     constexpr uintptr_t TempThirdPersonReadSite   = 0x009503DA;
     constexpr uint8_t   TempThirdPersonRead[]     = { 0x0F, 0xB6, 0x88, 0x4D, 0x06, 0x00, 0x00 };
 

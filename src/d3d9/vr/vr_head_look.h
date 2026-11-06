@@ -75,6 +75,19 @@ namespace dxvk {
     void holdBodyHeading(const float* heading);
 
     /**
+     * \brief Keeps the head from writing the player's heading and look angle
+     *
+     * An animation places the view from the body's head: the look angle
+     * would bend that head, and nodding would move the view. Called once per
+     * frame.
+     *
+     * \param [in] held Whether the look is held
+     */
+    void holdLook(bool held) {
+      m_holdsLook = held;
+    }
+
+    /**
      * \brief Replaces the game's camera rotation by the body's
      *
      * Only while the heading and look angle are still the ones written
@@ -133,6 +146,7 @@ namespace dxvk {
 
     bool         m_holdsBody      = false;
     float        m_heldBody       = 0.0f;
+    bool         m_holdsLook      = false;
 
     bool         m_loggedActive   = false;
 

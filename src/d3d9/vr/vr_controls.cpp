@@ -242,6 +242,12 @@ namespace dxvk {
   }
 
 
+  void VrControls::holdLook(bool held) {
+    if (m_headLook)
+      m_headLook->holdLook(held);
+  }
+
+
   bool VrControls::updateCamera(VrGameCameraPose& pose, float dt) {
     bool vats = m_headLook && m_headLook->adjustVatsCamera(pose);
     bool adjusted = !vats && m_headLook && m_headLook->adjustCamera(pose);

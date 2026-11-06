@@ -218,7 +218,7 @@ namespace dxvk {
 
 
   void VrHeadLook::applyLook(uint8_t* player) {
-    if (!m_hasHead || !headControlsLook(player)) {
+    if (!m_hasHead || m_holdsLook || !headControlsLook(player)) {
       m_active = false;
       m_pendingTurn = 0.0f;
       return;
