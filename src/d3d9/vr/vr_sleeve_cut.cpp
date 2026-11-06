@@ -154,6 +154,16 @@ namespace dxvk {
     if (!skin)
       return;
 
+    // NiDX9Renderer::CalculateBoneMatrices computes the palette again only
+    // when the skin's frame id differs from the renderer's, and then writes
+    // the renderer's id into it. Each cut draw writes an id the palette did
+    // not come from: flipping the original id twice would give it back to
+    // the second arm, which would reuse the first arm's palette.
+    uint32_t& frameId = field<uint32_t>(skin, VrGame::SkinInstanceFrameId);
+    uint32_t gameId   = frameId;
+    uint32_t forcedId = gameId ^ FrameIdFlip;
+    bool computed     = false;
+
     for (uint32_t i = 0; i < 2; i++) {
       const Arm& arm = m_arms[i];
 
@@ -171,7 +181,10 @@ namespace dxvk {
       }
 
       // The palette is computed from the gathered bones for this draw
-      field<uint32_t>(skin, VrGame::SkinInstanceFrameId) ^= FrameIdFlip;
+      if (frameId != forcedId)
+        forcedId = frameId ^ FrameIdFlip;
+
+      frameId = forcedId;
 
       m_cut = cut;
       m_partitions = setupPartitions(skin);
@@ -179,10 +192,15 @@ namespace dxvk {
       m_partitions = Partitions();
       m_cut.valid = false;
 
-      // And from the game's bones again for the next draw
+      computed |= frameId != forcedId;
       restoreBones();
-      field<uint32_t>(skin, VrGame::SkinInstanceFrameId) ^= FrameIdFlip;
     }
+
+    // And from the game's bones again for the next draw
+    if (!computed)
+      frameId = gameId;
+    else if (frameId != forcedId)
+      frameId ^= FrameIdFlip;
   }
 
 
