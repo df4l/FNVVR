@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.14.0 (2026-11-06, since v0.13.0 `d232764`)
 
 ### Doc Mitchell's house
 
