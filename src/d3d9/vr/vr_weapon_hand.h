@@ -14,6 +14,7 @@
 #include "vr_scope_game.h"
 #include "vr_scope_lens.h"
 #include "vr_scope_table.h"
+#include "vr_sleeve_cut.h"
 #include "vr_throw.h"
 #include "vr_throw_animation.h"
 #include "vr_weapon_aim.h"
@@ -1044,6 +1045,8 @@ namespace dxvk {
     bool             m_loggedActive = false;
     bool             m_loggedFrame  = false;
     bool             m_loggedArms   = false;
+    bool             m_loggedSleeves = false;
+    bool             m_loggedSleeveCut = false;
     uint32_t         m_loggedBodyMeshes = 0;
     bool             m_loggedOtherHand = false;
     bool             m_loggedTwoHanded = false;
@@ -1061,6 +1064,10 @@ namespace dxvk {
     // they are found in the model again, and whether the right hand and the
     // weapon are among them
     std::vector<uint8_t*> m_hiddenObjects;
+
+    // Draws the sleeves that reach above the forearms cut across them,
+    // null if the game's skinned draws were not found: they are hidden then
+    std::unique_ptr<VrSleeveCut> m_sleeveCut;
     bool             m_hidesRightHand = false;
     bool             m_hidesModel = false;
     bool             m_loggedHidden = false;
@@ -1479,6 +1486,29 @@ namespace dxvk {
     bool holdsRack() const;
 
     void hideArms(uint8_t* root, bool rightHand);
+
+    /**
+     * \brief Gives the sleeve cut the arms' bones and where they are cut
+     */
+    void placeSleeveCuts(
+            uint8_t*              root,
+            uint8_t*              leftForearm,
+            uint8_t*              leftHand,
+            uint8_t*              rightForearm,
+            uint8_t*              rightHand);
+
+    /**
+     * \brief Distance from the left wrist at which the left sleeve is cut
+     *
+     * Under the Pip-Boy's band: from its edge on the elbow's side, measured
+     * on its vertices, a little towards the wrist so that the band covers
+     * the cut. \c false if there is no Pip-Boy or it cannot be measured.
+     */
+    bool measurePipBoyCut(
+            uint8_t*              root,
+            uint8_t*              forearm,
+            uint8_t*              hand,
+            float&                distance);
 
     void hideModel(uint8_t* root);
 

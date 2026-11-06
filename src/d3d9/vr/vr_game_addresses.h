@@ -406,6 +406,40 @@ namespace dxvk {
     constexpr uintptr_t SkinDataBoneCount     = 0x44;
 
     /**
+     * Skinned draws (findings/weapon.md §5.3, GOG database). The only call to
+     * BSBatchRenderer::RenderPassImmediately_Skinned (__cdecl: render pass,
+     * alpha test, alpha blend, draw mode; the pass's geometry at +0x00) is
+     * in RenderPassImmediately 0x00B994F0. It sets each partition's bone
+     * palette through the shader's SetupBoneMatrices, which calls
+     * NiDX9Renderer::CalculateBoneMatrices 0x00E6FE30, and draws the
+     * partition with NiDX9Renderer::Do_DrawPartition (__thiscall: buffer
+     * data, partition, model data) at two sites. The palette is computed
+     * from the bones' world transforms again only when the skin instance's
+     * frame id differs from the renderer's.
+     */
+    constexpr uintptr_t RenderSkinnedPass         = 0x00B99110;
+    constexpr uintptr_t RenderSkinnedPassCallSite = 0x00B99598;
+    constexpr uintptr_t RenderPassGeometry        = 0x00;
+    constexpr uintptr_t DrawPartition             = 0x00E6D310;
+    constexpr uintptr_t DrawPartitionCallSites[]  = { 0x00B992E3, 0x00B99339 };
+    constexpr uintptr_t SkinInstanceFrameId       = 0x18;
+
+    /**
+     * NiDX9Renderer: its Direct3D device and m_kViewProj (D3DMATRIX), the
+     * product of the view and projection Do_SetCameraData (0x00E6C780)
+     * builds for the camera. The view is relative to NiRenderer::kPosAdjust,
+     * the camera's position, which the positions drawn are relative to too
+     * (CalculateBoneMatrices subtracts it from the bone palette).
+     */
+    constexpr uintptr_t RendererDevice            = 0x288;
+    constexpr uintptr_t RendererViewProj          = 0xA00;
+    constexpr uintptr_t RendererPosAdjust         = 0x011F474C;
+
+    /** NiGeometryData: vertex count (u16) and model-space positions (NiPoint3) */
+    constexpr uintptr_t GeometryDataVertexCount   = 0x08;
+    constexpr uintptr_t GeometryDataVertices      = 0x20;
+
+    /**
      * NiAVObject transforms: parent, local rotation (row-major 3x3),
      * translation and scale, and world transform. The local scale is the
      * float NiAVObject::SetLocalScale (0x00440490, `fstp [eax+0x64]`) writes.

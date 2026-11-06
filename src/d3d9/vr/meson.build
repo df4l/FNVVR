@@ -22,6 +22,7 @@ vr_src = files([
   'vr_melee.cpp',
   'vr_pipboy_gaze.cpp',
   'vr_pipboy_size.cpp',
+  'vr_forearm_cut.cpp',
   'vr_hand_hud.cpp',
   'vr_head_hud.cpp',
   'vr_frame_stats.cpp',
@@ -57,6 +58,7 @@ vr_src = files([
 
 # Parts that depend on DXVK and Vulkan, only built into d3d9.dll
 vr_dxvk_src = files([
+  'vr_sleeve_cut.cpp',
   'vr_activate_target.cpp',
   'vr_prompt_icon.cpp',
   'vr_hud_meters.cpp',
@@ -174,6 +176,7 @@ if add_languages('cpp', native: true, required: false)
     'tests/test_vr_melee.cpp',
     'tests/test_vr_pipboy_gaze.cpp',
     'tests/test_vr_pipboy_size.cpp',
+    'tests/test_vr_forearm_cut.cpp',
     'tests/test_vr_hand_hud.cpp',
     'tests/test_vr_head_hud.cpp',
     'tests/test_vr_frame_stats.cpp',

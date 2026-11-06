@@ -8,6 +8,10 @@
 - **The brahmin skull can be grabbed**: the intro's tutorial asks you to pick up the skull while fighting is turned off; your hands now take it, without being able to hit Doc Mitchell.
 - **No hands before you can move in the intro**: they appear when Doc lets you walk, consistent with the tutorial that then asks you to grab something with them.
 
+### Hands
+
+- **Sleeves reach the hands again**: outfits whose sleeve runs from the shoulder to the wrist were hidden from the elbow up, leaving a gap between the left hand and the Pip-Boy and an empty right wrist. The sleeves are now drawn along both forearms and cut cleanly: the left one under the Pip-Boy's band, the right one as far from its wrist. Works with any outfit, nothing to set.
+
 ### Menus
 
 - **The controller's triggers work in menus while a laser points at the panel**: a trigger pressed over nothing to click acts as the gamepad's trigger (the slot machine's bets, for example), and only clicks when the laser is on a button.
