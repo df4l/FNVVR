@@ -345,6 +345,10 @@ namespace dxvk {
     bool   m_wristShown       = false;
     bool   m_promptShown      = false;
     bool   m_loggedHandHudCrops = false;
+    bool   m_loggedMeasuredPrompt = false;
+    bool   m_loggedHudTextPastGroup = false;
+    VrVector2 m_promptImageSize;
+    UINT   m_promptImageSourceWidth = 0;
     bool   m_loggedWrist      = false;
     bool   m_loggedPrompt     = false;
     bool   m_loggedLeftPrompt = false;
@@ -744,9 +748,13 @@ namespace dxvk {
             size_t                count,
             float                 metresPerPixel,
       const VrPose&               pose,
-            Com<IDirect3DTexture9>& texture);
+            Com<IDirect3DTexture9>& texture,
+            UINT                  minWidth  = 0,
+            UINT                  minHeight = 0);
 
     void hideHandPanel(VrPanelId id, bool& shown);
+
+    void extendHudCorner(uintptr_t group, bool known, VrInterfaceRect& rect);
 
     void hideHandHud();
 

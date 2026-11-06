@@ -29,6 +29,13 @@ namespace dxvk {
     constexpr float PromptMarginAbove = 80.0f;
     constexpr float PromptMarginSide  = 40.0f;
 
+    // Around what the prompt is measured to draw, for the glyphs' edges,
+    // in interface units
+    constexpr float PromptContentMargin = 6.0f;
+
+    // Above what the corners are measured to draw, in interface units
+    constexpr float CornerContentMargin = 2.0f;
+
     // A quarter turn, in radians
     constexpr float QuarterTurn = 1.5707963f;
 
@@ -60,11 +67,103 @@ namespace dxvk {
   }
 
 
+  VrInterfaceRect vrComputeTextRect(
+    const VrVector2&            position,
+    const VrVector2&            size,
+          VrTextAlign           align) {
+    float left = position.x;
+
+    if (align == VrTextAlign::Centre)
+      left -= 0.5f * size.x;
+    else if (align == VrTextAlign::Right)
+      left -= size.x;
+
+    return { left, position.y, left + size.x, position.y + size.y };
+  }
+
+
+  VrInterfaceRect vrUniteRects(
+    const VrInterfaceRect&      a,
+    const VrInterfaceRect&      b) {
+    if (a.isEmpty())
+      return b;
+
+    if (b.isEmpty())
+      return a;
+
+    return {
+      std::min(a.left,   b.left),
+      std::min(a.top,    b.top),
+      std::max(a.right,  b.right),
+      std::max(a.bottom, b.bottom) };
+  }
+
+
+  namespace {
+
+    void cropMeasuredPrompt(
+      const VrInterfaceRect&      info,
+      const VrInterfaceRect&      measured,
+      const VrInterfaceRect     (&corners)[2],
+      const VrInterfaceRect*    (&cornersMeasured)[2],
+      const VrVector2&            size,
+            VrHandHudCrops&       crops) {
+      VrInterfaceRect area = clampRect({
+        measured.left   - PromptContentMargin,
+        measured.top    - PromptContentMargin,
+        measured.right  + PromptContentMargin,
+        measured.bottom + PromptContentMargin }, size);
+
+      float centre     = 0.5f * (info.left + info.right);
+      float lowerLeft  = area.left;
+      float lowerRight = area.right;
+      float split      = area.bottom;
+
+      for (uint32_t i = 0; i < 2; i++) {
+        VrInterfaceRect zone = corners[i];
+
+        // The rows where the corner actually draws, when it was measured
+        if (cornersMeasured[i] && !cornersMeasured[i]->isEmpty())
+          zone.top = cornersMeasured[i]->top - CornerContentMargin;
+
+        if (zone.isEmpty() || zone.top >= area.bottom || zone.bottom <= area.top)
+          continue;
+
+        if (zone.right <= centre && zone.right > lowerLeft)
+          lowerLeft = zone.right;
+        else if (zone.left >= centre && zone.left < lowerRight)
+          lowerRight = zone.left;
+        else
+          continue;
+
+        split = std::min(split, std::max(zone.top, area.top));
+      }
+
+      crops.promptPartCount = 0;
+
+      if (split > area.top)
+        crops.promptParts[crops.promptPartCount++] = { area.left, area.top, area.right, split };
+
+      VrInterfaceRect lower = { lowerLeft, split, lowerRight, area.bottom };
+
+      if (!lower.isEmpty())
+        crops.promptParts[crops.promptPartCount++] = lower;
+
+      crops.prompt = VrInterfaceRect();
+
+      for (uint32_t i = 0; i < crops.promptPartCount; i++)
+        crops.prompt = vrUniteRects(crops.prompt, crops.promptParts[i]);
+    }
+
+  }
+
+
   VrHandHudCrops vrComputeHandHudCrops(
     const VrInterfaceRect&      hitPoints,
     const VrInterfaceRect&      actionPoints,
     const VrInterfaceRect&      info,
-    const VrVector2&            size) {
+    const VrVector2&            size,
+    const VrHandHudContent&     content) {
     VrHandHudCrops crops;
 
     crops.wrist = clampRect({
@@ -78,6 +177,13 @@ namespace dxvk {
       actionPoints.top    - WristMargin,
       actionPoints.right  + WristMargin,
       actionPoints.bottom + WristMargin }, size);
+
+    if (content.info && !content.info->isEmpty()) {
+      const VrInterfaceRect  corners[2]         = { crops.wrist, crops.actionPoints };
+      const VrInterfaceRect* cornersMeasured[2] = { content.hitPoints, content.actionPoints };
+      cropMeasuredPrompt(info, *content.info, corners, cornersMeasured, size, crops);
+      return crops;
+    }
 
     float centre     = 0.5f * (info.left + info.right);
     float halfWidth  = 0.5f * info.width() + PromptMarginSide;
@@ -98,7 +204,37 @@ namespace dxvk {
     halfWidth = std::min({ halfWidth, centre, size.x - centre });
 
     crops.prompt = clampRect({ centre - halfWidth, top, centre + halfWidth, bottom }, size);
+    crops.promptParts[0]  = crops.prompt;
+    crops.promptPartCount = crops.prompt.isEmpty() ? 0 : 1;
     return crops;
+  }
+
+
+  VrPromptImage vrComputePromptImage(
+    const VrInterfaceRect*      parts,
+          uint32_t              count,
+    const VrVector2&            minimum) {
+    VrPromptImage image;
+    VrInterfaceRect bounds;
+    count = std::min(count, uint32_t(image.targets.size()));
+
+    for (uint32_t i = 0; i < count; i++)
+      bounds = vrUniteRects(bounds, parts[i]);
+
+    image.size.x = std::max(bounds.width(),  minimum.x);
+    image.size.y = std::max(bounds.height(), minimum.y);
+
+    // Rounded down, so that parts given in whole pixels stay on whole pixels
+    float left = std::floor(0.5f * (image.size.x - bounds.width()))  - bounds.left;
+    float top  = std::floor(0.5f * (image.size.y - bounds.height())) - bounds.top;
+
+    for (uint32_t i = 0; i < count; i++) {
+      image.targets[i] = {
+        parts[i].left  + left, parts[i].top    + top,
+        parts[i].right + left, parts[i].bottom + top };
+    }
+
+    return image;
   }
 
 

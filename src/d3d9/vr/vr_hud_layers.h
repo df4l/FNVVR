@@ -74,6 +74,20 @@ namespace dxvk {
     bool groupRect(uintptr_t group, VrInterfaceRect& rect) const;
 
     /**
+     * \brief Measures what a HUD group draws
+     *
+     * Covers the group's visible texts and images, as the game laid them
+     * out for the last frame: a text's rectangle is the size the game
+     * stored for it, so a text longer or taller than its group's
+     * rectangle is covered whole. See findings/hud.md §15.
+     *
+     * \param [in] group HUDMainMenu field of the group
+     * \param [out] rect What the group draws, in interface units
+     * \returns \c false if the group does not exist or draws nothing
+     */
+    bool groupContent(uintptr_t group, VrInterfaceRect& rect) const;
+
+    /**
      * \brief Checks whether the interface pass draws a menu other than the HUD
      *
      * Valid once the game culled the menus for the pass. While the Pip-Boy
@@ -92,6 +106,7 @@ namespace dxvk {
     bool                    m_available = false;
     bool                    m_menusFound = false;
     bool                    m_rectsFound = false;
+    bool                    m_contentFound = false;
     bool                    m_yuiLoaded = false;
     std::vector<uint32_t*>  m_culledFlags;
 

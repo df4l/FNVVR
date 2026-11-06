@@ -1164,6 +1164,23 @@ namespace dxvk {
     constexpr uint32_t  TileTraitWidth  = 0xFB1;
 
     /**
+     * What a HUD group actually draws (VrHudLayers::groupContent), see
+     * findings/hud.md §15. Tile::GetRealX/Y (0x00A013D0/0x00A01440) add to
+     * a tile's x and y those of each ancestor whose locus trait is set.
+     * TileText::MakeNode (0x00A21AF0) stores the size of the laid out text
+     * in the width and height traits, and Font::GetLineOffsets (0x00A12370)
+     * centres a line on x when (justify & 0xF) == 2 and ends it there when
+     * it is 4. GetType (vtable slot TileGetTypeSlot): 0x386 image, 0x387 text.
+     */
+    constexpr uint32_t  TileTraitLocus        = 0xFA8;
+    constexpr uint32_t  TileTraitAlpha        = 0xFA9;
+    constexpr uint32_t  TileTraitJustify      = 0xFB7;
+    constexpr uint32_t  TileJustifyMask       = 0xF;
+    constexpr uint32_t  TileJustifyCentre     = 2;
+    constexpr uint32_t  TileJustifyRight      = 4;
+    constexpr uint32_t  TileTypeText          = 0x387;
+
+    /**
      * Interface::GetActivateREFR, __cdecl without arguments: the reference
      * the player would activate (InterfaceManager+0xFC), whose name and
      * action the HUD's Info group shows, or null. Checked against its first

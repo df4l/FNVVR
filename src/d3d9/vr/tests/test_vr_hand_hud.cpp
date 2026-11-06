@@ -98,6 +98,140 @@ TEST_CASE(hand_hud_prompt_crop_avoids_the_corners) {
 }
 
 
+TEST_CASE(text_rect_follows_the_alignment) {
+  VrInterfaceRect left = vrComputeTextRect({ 100.0f, 50.0f }, { 40.0f, 20.0f }, VrTextAlign::Left);
+  CHECK_NEAR(left.left,   100.0f, 1e-3f);
+  CHECK_NEAR(left.right,  140.0f, 1e-3f);
+  CHECK_NEAR(left.top,     50.0f, 1e-3f);
+  CHECK_NEAR(left.bottom,  70.0f, 1e-3f);
+
+  VrInterfaceRect centre = vrComputeTextRect({ 100.0f, 50.0f }, { 40.0f, 20.0f }, VrTextAlign::Centre);
+  CHECK_NEAR(centre.left,   80.0f, 1e-3f);
+  CHECK_NEAR(centre.right, 120.0f, 1e-3f);
+
+  VrInterfaceRect right = vrComputeTextRect({ 100.0f, 50.0f }, { 40.0f, 20.0f }, VrTextAlign::Right);
+  CHECK_NEAR(right.left,   60.0f, 1e-3f);
+  CHECK_NEAR(right.right, 100.0f, 1e-3f);
+}
+
+
+TEST_CASE(united_rects_ignore_empty_ones) {
+  VrInterfaceRect a = { 10.0f, 20.0f, 30.0f, 40.0f };
+  VrInterfaceRect b = { 0.0f, 25.0f, 20.0f, 60.0f };
+
+  VrInterfaceRect both = vrUniteRects(a, b);
+  CHECK_NEAR(both.left,    0.0f, 1e-3f);
+  CHECK_NEAR(both.top,    20.0f, 1e-3f);
+  CHECK_NEAR(both.right,  30.0f, 1e-3f);
+  CHECK_NEAR(both.bottom, 60.0f, 1e-3f);
+
+  VrInterfaceRect alone = vrUniteRects(VrInterfaceRect(), a);
+  CHECK_NEAR(alone.left,  10.0f, 1e-3f);
+  CHECK_NEAR(alone.right, 30.0f, 1e-3f);
+  CHECK_NEAR(vrUniteRects(a, VrInterfaceRect()).bottom, 40.0f, 1e-3f);
+}
+
+
+TEST_CASE(hand_hud_prompt_crop_without_measure_is_one_part) {
+  VrHandHudCrops crops = vrComputeHandHudCrops(HitPoints, ActionPoints, Info, Screen);
+
+  CHECK(crops.promptPartCount == 1);
+  CHECK_NEAR(crops.promptParts[0].left,  crops.prompt.left,  1e-3f);
+  CHECK_NEAR(crops.promptParts[0].right, crops.prompt.right, 1e-3f);
+}
+
+
+TEST_CASE(hand_hud_measured_prompt_keeps_a_long_first_line) {
+  // An activator's own action, wider than the group, above the corners,
+  // and the item lines below it, level with the corners
+  VrInterfaceRect infoContent   = { 300.0f, 780.0f, 980.0f, 900.0f };
+  VrInterfaceRect healthContent = {  14.0f, 835.0f, 380.0f, 958.0f };
+  VrInterfaceRect weaponContent = { 880.0f, 836.0f, 1280.0f, 958.0f };
+
+  VrHandHudContent content;
+  content.hitPoints    = &healthContent;
+  content.actionPoints = &weaponContent;
+  content.info         = &infoContent;
+
+  VrHandHudCrops crops = vrComputeHandHudCrops(HitPoints, ActionPoints, Info, Screen, content);
+  CHECK(crops.promptPartCount == 2);
+
+  // The rows above the corners keep the whole width, with a margin
+  CHECK_NEAR(crops.promptParts[0].left,   294.0f, 1e-3f);
+  CHECK_NEAR(crops.promptParts[0].top,    774.0f, 1e-3f);
+  CHECK_NEAR(crops.promptParts[0].right,  986.0f, 1e-3f);
+  CHECK_NEAR(crops.promptParts[0].bottom, 833.0f, 1e-3f);
+
+  // The rows level with the corners reach neither of them
+  CHECK_NEAR(crops.promptParts[1].left,   391.0f, 1e-3f);
+  CHECK_NEAR(crops.promptParts[1].top,    833.0f, 1e-3f);
+  CHECK_NEAR(crops.promptParts[1].right,  874.0f, 1e-3f);
+  CHECK_NEAR(crops.promptParts[1].bottom, 906.0f, 1e-3f);
+
+  for (uint32_t i = 0; i < crops.promptPartCount; i++) {
+    CHECK(!overlaps(crops.promptParts[i], healthContent));
+    CHECK(!overlaps(crops.promptParts[i], weaponContent));
+  }
+
+  CHECK_NEAR(crops.prompt.left,   294.0f, 1e-3f);
+  CHECK_NEAR(crops.prompt.top,    774.0f, 1e-3f);
+  CHECK_NEAR(crops.prompt.right,  986.0f, 1e-3f);
+  CHECK_NEAR(crops.prompt.bottom, 906.0f, 1e-3f);
+
+  // Without the corners' measure, their crops tell where they start
+  VrHandHudContent infoOnly;
+  infoOnly.info = &infoContent;
+  crops = vrComputeHandHudCrops(HitPoints, ActionPoints, Info, Screen, infoOnly);
+  CHECK(crops.promptPartCount == 2);
+  CHECK_NEAR(crops.promptParts[0].bottom, 821.0f, 1e-3f);
+  CHECK(!overlaps(crops.promptParts[1], crops.wrist));
+  CHECK(!overlaps(crops.promptParts[1], crops.actionPoints));
+}
+
+
+TEST_CASE(hand_hud_measured_prompt_above_the_corners_is_one_part) {
+  VrInterfaceRect infoContent = { 500.0f, 700.0f, 780.0f, 800.0f };
+
+  VrHandHudContent content;
+  content.info = &infoContent;
+
+  VrHandHudCrops crops = vrComputeHandHudCrops(HitPoints, ActionPoints, Info, Screen, content);
+  CHECK(crops.promptPartCount == 1);
+  CHECK_NEAR(crops.prompt.left,   494.0f, 1e-3f);
+  CHECK_NEAR(crops.prompt.top,    694.0f, 1e-3f);
+  CHECK_NEAR(crops.prompt.right,  786.0f, 1e-3f);
+  CHECK_NEAR(crops.prompt.bottom, 806.0f, 1e-3f);
+}
+
+
+TEST_CASE(prompt_image_centres_its_parts_and_only_grows) {
+  const VrInterfaceRect parts[] = {
+    { 294.0f, 774.0f, 986.0f, 833.0f },
+    { 391.0f, 833.0f, 874.0f, 906.0f } };
+
+  VrPromptImage image = vrComputePromptImage(parts, 2, { 800.0f, 100.0f });
+  CHECK_NEAR(image.size.x, 800.0f, 1e-3f);
+  CHECK_NEAR(image.size.y, 132.0f, 1e-3f);
+
+  CHECK_NEAR(image.targets[0].left,    54.0f, 1e-3f);
+  CHECK_NEAR(image.targets[0].top,      0.0f, 1e-3f);
+  CHECK_NEAR(image.targets[0].right,  746.0f, 1e-3f);
+  CHECK_NEAR(image.targets[0].bottom,  59.0f, 1e-3f);
+
+  CHECK_NEAR(image.targets[1].left,   151.0f, 1e-3f);
+  CHECK_NEAR(image.targets[1].top,     59.0f, 1e-3f);
+  CHECK_NEAR(image.targets[1].right,  634.0f, 1e-3f);
+  CHECK_NEAR(image.targets[1].bottom, 132.0f, 1e-3f);
+
+  // A taller image left by an earlier prompt centres it vertically too
+  image = vrComputePromptImage(parts, 2, { 0.0f, 200.0f });
+  CHECK_NEAR(image.size.x, 692.0f, 1e-3f);
+  CHECK_NEAR(image.size.y, 200.0f, 1e-3f);
+  CHECK_NEAR(image.targets[0].left,  0.0f, 1e-3f);
+  CHECK_NEAR(image.targets[0].top,  34.0f, 1e-3f);
+}
+
+
 TEST_CASE(wrist_stack_puts_the_action_points_below_the_health_bar) {
   VrInterfaceRect health = {   0.0f, 821.0f,  391.0f, 960.0f };
   VrInterfaceRect weapon = { 874.0f, 821.0f, 1280.0f, 960.0f };

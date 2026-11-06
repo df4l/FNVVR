@@ -44,6 +44,52 @@ namespace dxvk {
   VrVector2 vrComputeInterfaceSize(uint32_t width, uint32_t height);
 
   /**
+   * \brief How a text tile is placed on its position
+   */
+  enum class VrTextAlign : uint32_t {
+    Left,
+    Centre,
+    Right,
+  };
+
+  /**
+   * \brief Rectangle covered by a text tile
+   *
+   * The game lays a text out from the tile's position and stores the size
+   * it takes in the tile's width and height. A centred text is centred on
+   * that position and a right-aligned one ends there. See
+   * findings/hud.md §15.
+   *
+   * \param [in] position Position of the tile, in interface units
+   * \param [in] size Width and height of the text, in interface units
+   * \param [in] align How the text is placed on its position
+   */
+  VrInterfaceRect vrComputeTextRect(
+    const VrVector2&            position,
+    const VrVector2&            size,
+          VrTextAlign           align);
+
+  /**
+   * \brief Smallest rectangle holding both rectangles
+   *
+   * An empty rectangle holds nothing, so the other one is returned.
+   */
+  VrInterfaceRect vrUniteRects(
+    const VrInterfaceRect&      a,
+    const VrInterfaceRect&      b);
+
+  /**
+   * \brief What the hand HUD groups actually draw, when it was measured
+   *
+   * Rectangles in interface units, \c nullptr when unknown.
+   */
+  struct VrHandHudContent {
+    const VrInterfaceRect* hitPoints    = nullptr;
+    const VrInterfaceRect* actionPoints = nullptr;
+    const VrInterfaceRect* info         = nullptr;
+  };
+
+  /**
    * \brief Parts of the interface image cut out for the hand HUD panels
    */
   struct VrHandHudCrops {
@@ -51,8 +97,11 @@ namespace dxvk {
     VrInterfaceRect wrist;
     /// Action points, ammunition and weapon condition, shown below them
     VrInterfaceRect actionPoints;
-    /// Interaction prompt, for the fingertip
+    /// Interaction prompt, for the fingertip: the rectangle holding its parts
     VrInterfaceRect prompt;
+    /// Parts of the prompt, each copied to the same place relative to \c prompt
+    std::array<VrInterfaceRect, 2> promptParts;
+    uint32_t                       promptPartCount = 0;
   };
 
   /**
@@ -65,20 +114,57 @@ namespace dxvk {
    * at the bottom centre. The crops of the corners are their group's
    * rectangle with a margin, a wider one on the left of the action points,
    * where the weapon condition's label moves when an ammunition type is
-   * shown. The prompt's text is wrapped to its group's width but its lines
-   * reach above and below the group, so its crop is taller, stays centred
-   * on the group and is narrowed so that it overlaps neither corner.
+   * shown.
+   *
+   * The prompt's crop is what its texts and images cover, with a small
+   * margin, when that was measured: a prompt the game's data replaces
+   * (an activator's own action, a long name) can be wider or taller than
+   * its group. Its rows level with the corners' content are narrowed so
+   * that they reach neither corner; the rows above keep their width, so the
+   * prompt is cut in two parts then. Without a measure, the crop is
+   * centred on the group, from above it to the bottom of the screen, and
+   * narrowed the same way, in one part.
    *
    * \param [in] hitPoints Rectangle of the HitPoints group, in interface units
    * \param [in] actionPoints Rectangle of the ActionPoints group, in interface units
    * \param [in] info Rectangle of the Info group, in interface units
    * \param [in] size Size of the interface, in interface units
+   * \param [in] content What the groups draw, where it was measured
    */
   VrHandHudCrops vrComputeHandHudCrops(
     const VrInterfaceRect&      hitPoints,
     const VrInterfaceRect&      actionPoints,
     const VrInterfaceRect&      info,
-    const VrVector2&            size);
+    const VrVector2&            size,
+    const VrHandHudContent&     content = VrHandHudContent());
+
+  /**
+   * \brief Layout of the interaction prompt's image
+   *
+   * Rectangles and size are in pixels.
+   */
+  struct VrPromptImage {
+    VrVector2                      size = { 0.0f, 0.0f };
+    std::array<VrInterfaceRect, 2> targets;
+  };
+
+  /**
+   * \brief Places the prompt's parts in its image
+   *
+   * The parts keep their places relative to each other, and the whole is
+   * centred in the image, so that the prompt stays centred on the point
+   * the panel is placed at whatever its size. The image is at least
+   * \c minimum large, so that it can keep the size it had while the
+   * prompt changes, and is made only larger when a prompt needs it.
+   *
+   * \param [in] parts The prompt's parts in the HUD image, in pixels
+   * \param [in] count Number of parts, two at most
+   * \param [in] minimum Smallest size of the image, in pixels
+   */
+  VrPromptImage vrComputePromptImage(
+    const VrInterfaceRect*      parts,
+          uint32_t              count,
+    const VrVector2&            minimum);
 
   /**
    * \brief Layout of the wrist display's image
