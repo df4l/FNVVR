@@ -799,6 +799,24 @@ namespace dxvk {
     constexpr uintptr_t RouletteDepthClearSite    = 0x007BBD20;
 
     /**
+     * The vigor tester of character creation (LoveTesterMenu, findings/
+     * minigames.md §10). Its scene, Draw3DElements 0x007948D0, holds the
+     * world's machine itself: the Activate and Cabinet models (BSFadeNode*
+     * fields of the instance at 0x5C and LoveTesterCabinetModel, children of
+     * the menu's shadow scene node, so that their world transform is their
+     * place in the scene), in the frame of the model of the world's
+     * VCG01VigorTester activator. Mouse clicks go to
+     * the full-screen hot rectangle, then the menu picks its buttons with
+     * NiCamera::WindowPointToRay of its camera at the cursor.
+     * LoveTesterDepthClearSite is its call to RendererClearBuffer.
+     */
+    constexpr uint32_t  LoveTesterMenuId          = 0x432;
+    constexpr uintptr_t LoveTesterInstance        = 0x011DA2C8;
+    constexpr uintptr_t LoveTesterCamera          = 0x011DA2F4;
+    constexpr uintptr_t LoveTesterCabinetModel    = 0x60;
+    constexpr uintptr_t LoveTesterDepthClearSite  = 0x0079491C;
+
+    /**
      * ShadowSceneNode::kLightingOffset, on the world's shadow scene node
      * (ShadowSceneNodes[0]). The shaders add it to the position of every
      * point light and to the eye, whatever scene they draw.

@@ -130,6 +130,19 @@ namespace dxvk {
       { 0.0f, -45.0f, 0.0f }, { 0.0f, 1.0f, 0.0f },
       SlotMachineAreas, 1, SlotMachineEyeHeight };
 
+    // The vigor tester's front is along its model's -Y. The player stands
+    // before the cards, close enough to read them, a little nearer than the
+    // menu's camera, and keeps the game camera's height.
+    constexpr VrModelArea VigorTesterAreas[] = {
+      { -40.9f, 40.9f, -16.6f, 18.6f } };
+    constexpr VrVector3 VigorTesterSeat    = { 0.0f, -62.0f, 0.0f };
+    constexpr VrVector3 VigorTesterFacing  = { 0.0f, 1.0f, 0.0f };
+    // The middle of the cards and bulbs: the lasers' rectangle lies there,
+    // so that a point of it is where the menu's camera picks a button
+    constexpr VrVector3 VigorTesterFace    = { 0.0f, -15.0f, 92.0f };
+    // The rectangle is placed again when it moves more than this, in metres
+    constexpr float     PanelMoves         = 0.01f;
+
     // The roulette wheel of the world stands above the game's table
     constexpr const char* RouletteWorldWheel = "Object02:0";
 
@@ -178,6 +191,7 @@ namespace dxvk {
         case VrGame::BlackJackMenuId:   return VrGame::BlackJackCamera;
         case VrGame::RouletteMenuId:    return VrGame::RouletteCamera;
         case VrGame::CaravanMenuId:     return VrGame::CaravanCamera;
+        case VrGame::LoveTesterMenuId:  return VrGame::LoveTesterCamera;
         default:                        return 0;
       }
     }
@@ -202,6 +216,7 @@ namespace dxvk {
         case VrGame::BlackJackMenuId:   return "blackjack table";
         case VrGame::RouletteMenuId:    return "roulette table";
         case VrGame::CaravanMenuId:     return "Caravan table";
+        case VrGame::LoveTesterMenuId:  return "vigor tester";
         default:                        return "terminal";
       }
     }
@@ -213,6 +228,25 @@ namespace dxvk {
         c = char(std::tolower(static_cast<unsigned char>(c)));
 
       return lower.find(lowerName) != std::string::npos;
+    }
+
+    // Where an object of a scene graph is, in the space of its graph's root
+    VrWorldObject worldPose(uint8_t* object) {
+      auto rotation = reinterpret_cast<const float*>(object + VrGame::ObjectWorldRotation);
+
+      VrWorldObject pose;
+      pose.x        = { rotation[0], rotation[3], rotation[6] };
+      pose.y        = { rotation[1], rotation[4], rotation[7] };
+      pose.z        = { rotation[2], rotation[5], rotation[8] };
+      pose.position = field<VrVector3>(object, VrGame::ObjectWorldTranslation);
+      pose.scale    = field<float>(object, VrGame::ObjectWorldScale);
+      return pose;
+    }
+
+    // The vigor tester's cabinet in the menu's scene, null until it is loaded
+    uint8_t* vigorTesterCabinet() {
+      auto menu = global<uint8_t*>(VrGame::LoveTesterInstance);
+      return menu ? field<uint8_t*>(menu, VrGame::LoveTesterCabinetModel) : nullptr;
     }
 
     // The game's clear of a scene: it stays out of the world's depth buffer
@@ -241,6 +275,8 @@ namespace dxvk {
       && VrGameMemory::readable(VrGame::RouletteInstance, sizeof(uintptr_t))
       && VrGameMemory::readable(VrGame::SlotMachineInstance, sizeof(uintptr_t))
       && VrGameMemory::readable(VrGame::CaravanCamera, sizeof(uintptr_t))
+      && VrGameMemory::readable(VrGame::LoveTesterInstance, sizeof(uintptr_t))
+      && VrGameMemory::readable(VrGame::LoveTesterCamera, sizeof(uintptr_t))
       && VrGameMemory::readable(VrGame::LockPickSliderTrait, sizeof(uint32_t))
       && VrGameMemory::readable(VrGame::TerminalVtable, sizeof(uintptr_t));
 
@@ -261,9 +297,10 @@ namespace dxvk {
       bool keepsDepth = VrGameMemory::redirectCall(VrGame::BlackJackDepthClearSite, VrGame::RendererClearBuffer, clearHook);
       keepsDepth = VrGameMemory::redirectCall(VrGame::SlotMachineDepthClearSite, VrGame::RendererClearBuffer, clearHook) && keepsDepth;
       keepsDepth = VrGameMemory::redirectCall(VrGame::RouletteDepthClearSite, VrGame::RendererClearBuffer, clearHook) && keepsDepth;
+      keepsDepth = VrGameMemory::redirectCall(VrGame::LoveTesterDepthClearSite, VrGame::RendererClearBuffer, clearHook) && keepsDepth;
 
       if (!keepsDepth)
-        Logger::warn("VR: A depth clear of the casino's scenes was not found, they are drawn over the world in front of them");
+        Logger::warn("VR: A depth clear of the scenes on the world's objects was not found, they are drawn over the world in front of them");
 
       g_clearHooked = true;
     }
@@ -292,6 +329,7 @@ namespace dxvk {
       case Kind::BlackJack:   return VrGame::BlackJackMenuId;
       case Kind::Roulette:    return VrGame::RouletteMenuId;
       case Kind::Caravan:     return VrGame::CaravanMenuId;
+      case Kind::VigorTester: return VrGame::LoveTesterMenuId;
       default:                return 0;
     }
   }
@@ -313,6 +351,9 @@ namespace dxvk {
     if (isMenuActive(VrGame::CaravanMenuId))
       return Kind::Caravan;
 
+    if (isMenuActive(VrGame::LoveTesterMenuId))
+      return Kind::VigorTester;
+
     void* rendered = game<PointerFn>(VrGame::GetCurrentRenderedMenu)();
 
     if (rendered && rendered != game<PointerFn>(VrGame::GetPipBoy)()
@@ -328,6 +369,12 @@ namespace dxvk {
     const VrInputState&           input,
     const VrPointerSurfaceState&  surface) {
     Kind kind = frame.stereo ? findKind() : Kind::None;
+
+    // Until that menu closes
+    if (kind != m_declined)
+      m_declined = Kind::None;
+    else
+      kind = Kind::None;
 
     // The game may forget it as soon as a menu is open
     if (!frame.stereo)
@@ -383,6 +430,11 @@ namespace dxvk {
 
         if (onTop)
           updateRoulette(surface);
+        break;
+
+      case Kind::VigorTester:
+        if (onTop)
+          aimVigorTesterCamera(input);
         break;
 
       case Kind::Caravan: {
@@ -459,6 +511,19 @@ namespace dxvk {
         placeBoard(frame, true);
         break;
 
+      case Kind::VigorTester:
+        // The machine is the scene: away from it, nothing in the room would
+        // say what it is. The menu builds the cabinet in its first frames.
+        if (!vigorTesterCabinet())
+          return false;
+
+        if (!placeOnObject(id, frame)) {
+          Logger::info("VR: The vigor tester has no machine of the world to lie on, it stays on the panel");
+          m_declined = kind;
+          return false;
+        }
+        break;
+
       default:
         return false;
     }
@@ -496,22 +561,18 @@ namespace dxvk {
       fit = &RouletteFit;
     else if (id == VrGame::SlotMachineMenuId && hasName(model, "slot_machine0"))
       fit = &SlotMachineFit;
+    else if (id == VrGame::LoveTesterMenuId && hasName(model, "nv_vitomaticvigortester") && fitVigorTester())
+      fit = &m_modelFit;
 
     auto vtable = field<uint8_t*>(reference, 0);
     auto root   = fit ? static_cast<uint8_t*>((*reinterpret_cast<Get3DFn*>(vtable + VrGame::RefGet3DSlot))(reference)) : nullptr;
 
     if (!root) {
-      Logger::info(str::format("VR: No place for the scene on ", model, ", it stands in the room"));
+      Logger::info(str::format("VR: No place for the scene on ", model));
       return false;
     }
 
-    auto rotation = reinterpret_cast<const float*>(root + VrGame::ObjectWorldRotation);
-
-    m_object.x        = { rotation[0], rotation[3], rotation[6] };
-    m_object.y        = { rotation[1], rotation[4], rotation[7] };
-    m_object.z        = { rotation[2], rotation[5], rotation[8] };
-    m_object.position = field<VrVector3>(root, VrGame::ObjectWorldTranslation);
-    m_object.scale    = field<float>(root, VrGame::ObjectWorldScale);
+    m_object = worldPose(root);
 
     m_fit        = fit;
     m_seatCamera = vrSeatCamera(m_object, *fit,
@@ -523,9 +584,9 @@ namespace dxvk {
 
     keep(root);
 
-    // The machine is whole in the scene. The tables' are only tops, and the
+    // The machines are whole in the scene. The tables' are only tops, and the
     // world's holds them up: only what stands above that top goes.
-    if (fit == &SlotMachineFit)
+    if (fit == &SlotMachineFit || fit == &m_modelFit)
       hideRoot(root);
     else if (fit == &RouletteFit)
       VrMenuScenes::hideObject(reinterpret_cast<uintptr_t>(root), RouletteWorldWheel, m_objectHidden);
@@ -551,6 +612,118 @@ namespace dxvk {
 
     if (m_fit == &RouletteFit)
       placeRouletteSurface();
+
+    if (m_fit == &m_modelFit)
+      placeVigorTesterPanel();
+  }
+
+
+  bool VrMinigames::fitVigorTester() {
+    void*    camera  = global<void*>(VrGame::LoveTesterCamera);
+    uint8_t* cabinet = vigorTesterCabinet();
+
+    if (!camera || !cabinet)
+      return false;
+
+    // Kept before the lasers move it. The menu makes a camera of its own
+    // each time it opens and lets it go when it closes.
+    VrGameCamera access;
+    access.attach(camera);
+    VrGameCameraState state = access.save();
+
+    m_vigorCamera = access.readPose();
+    m_vigorFrustum.left   = state.frustum[0];
+    m_vigorFrustum.right  = state.frustum[1];
+    m_vigorFrustum.top    = state.frustum[2];
+    m_vigorFrustum.bottom = state.frustum[3];
+    m_vigorHand     = VrHand::Right;
+    m_vigorTriggers = { };
+
+    VrWorldObject model = worldPose(cabinet);
+
+    if (model.scale <= 0.0f)
+      return false;
+
+    m_modelFit = vrSceneFitOfModel(model);
+    m_modelFit.seat      = VigorTesterSeat;
+    m_modelFit.facing    = VigorTesterFacing;
+    m_modelFit.areas     = VigorTesterAreas;
+    m_modelFit.areaCount = 1;
+    return true;
+  }
+
+
+  void VrMinigames::placeVigorTesterPanel() {
+    uint8_t* cabinet = vigorTesterCabinet();
+
+    if (!cabinet)
+      return;
+
+    VrWorldObject model = worldPose(cabinet);
+    VrVector3 face = model.position + (model.x * VigorTesterFace.x + model.y * VigorTesterFace.y
+      + model.z * VigorTesterFace.z) * model.scale;
+
+    float distance = vrDot(face - m_vigorCamera.position, m_vigorCamera.forward);
+
+    if (distance <= 0.0f)
+      return;
+
+    // A laser on this rectangle gives the cursor position the menu's camera
+    // sees on the machine where the laser points
+    VrPanelPlacement panel = vrCameraViewRectangle(m_space, m_vigorCamera, distance, m_vigorFrustum);
+
+    if (vrLength(panel.pose.position - m_panel.pose.position) > PanelMoves
+     || std::abs(panel.width - m_panel.width) > PanelMoves)
+      m_panelRevision++;
+
+    m_panel = panel;
+  }
+
+
+  void VrMinigames::aimVigorTesterCamera(const VrInputState& input) {
+    void* camera = global<void*>(VrGame::LoveTesterCamera);
+
+    if (!camera || !m_onObject)
+      return;
+
+    // The hand the cursor follows, chosen as VrMenuPointer does: a press on
+    // the rectangle takes it, and a hand that points elsewhere gives it up
+    const VrAction triggers[VrHandCount] = { VrAction::MenuLeftTrigger, VrAction::MenuRightTrigger };
+    std::array<VrPanelHit, VrHandCount> hits;
+
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      if (input.controllers[i].isActive)
+        hits[i] = vrIntersectPanel(input.controllers[i].aimPose, m_panel);
+
+      bool trigger = input.actions.isPressed(triggers[i]);
+
+      if (trigger && !m_vigorTriggers[i] && hits[i].hit)
+        m_vigorHand = VrHand(i);
+
+      m_vigorTriggers[i] = trigger;
+    }
+
+    uint32_t other = 1u - uint32_t(m_vigorHand);
+
+    if (!hits[uint32_t(m_vigorHand)].hit && hits[other].hit)
+      m_vigorHand = VrHand(other);
+
+    // The menu picks its buttons along its camera's view through the
+    // cursor: that view is the laser. Without one, the camera is the menu's.
+    VrGameCameraPose pose = m_vigorCamera;
+    const VrPanelHit& hit = hits[uint32_t(m_vigorHand)];
+
+    if (hit.hit) {
+      const VrPose& aim = input.controllers[uint32_t(m_vigorHand)].aimPose;
+      VrVector3 origin = vrRoomToScene(m_space, aim.position);
+      VrVector3 ahead  = vrRoomToScene(m_space, aim.position + vrRotate(aim.orientation, VrVector3 { 0.0f, 0.0f, -1.0f }));
+
+      pose = vrCameraAlongRay(m_vigorCamera, m_vigorFrustum, hit.uv, origin, ahead - origin);
+    }
+
+    VrGameCamera access;
+    access.attach(camera);
+    access.apply(pose, m_vigorFrustum);
   }
 
 
@@ -688,6 +861,16 @@ namespace dxvk {
 
 
   void VrMinigames::close() {
+    // The menu can stay open with its scene back on the panel: its camera is
+    // its own again. Once the menu has closed, it has let its camera go.
+    void* vigorCamera = m_kind == Kind::VigorTester ? global<void*>(VrGame::LoveTesterCamera) : nullptr;
+
+    if (vigorCamera && isMenuActive(VrGame::LoveTesterMenuId)) {
+      VrGameCamera access;
+      access.attach(vigorCamera);
+      access.apply(m_vigorCamera, m_vigorFrustum);
+    }
+
     // A try of open() that has to wait for the menu's scene may have started
     leaveObject();
 

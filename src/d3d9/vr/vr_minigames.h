@@ -38,8 +38,8 @@ namespace dxvk {
   /**
    * \brief Shows the game's mini-games in the room
    *
-   * The lockpicking, slot machine, blackjack, roulette and Caravan menus
-   * and the world's terminals (hacking included) keep all of their game
+   * The lockpicking, slot machine, blackjack, roulette, Caravan and vigor
+   * tester menus and the world's terminals (hacking included) keep all of their game
    * logic. Their 3D scene, which the game draws with a camera of its own,
    * is drawn in each eye's image with that camera on the eye, at the place
    * of the room the game's view gives it, instead of on the flat panel. The
@@ -51,7 +51,11 @@ namespace dxvk {
    * it replaces of the object is hidden, and the player is brought to the
    * object's seat while the menu is open, by the view only. The player's own
    * body and the characters frozen in the way of the scene are hidden too. The
-   * slot machine's payout screen is shown only while it is lowered.
+   * slot machine's payout screen is shown only while it is lowered. The
+   * vigor tester's scene holds the world's machine itself: it is shown only on
+   * it, else the menu stays on the panel. The lasers click its buttons on the
+   * rectangle its camera sees, as on a terminal, with that camera on the laser
+   * so that the game picks along it.
    *
    * Everything reaches the menus as the gamepad or the cursor would, and
    * the game's camera is put back after each draw, because the game's
@@ -128,6 +132,7 @@ namespace dxvk {
       BlackJack,
       Roulette,
       Caravan,
+      VigorTester,
       Terminal,
     };
 
@@ -137,6 +142,8 @@ namespace dxvk {
     IVRBackend&       m_backend;
 
     Kind              m_kind = Kind::None;
+    // A menu whose scene could not be placed: it stays on the panel
+    Kind              m_declined = Kind::None;
     VrSceneSpace      m_space;
     VrPanelPlacement  m_panel;
     VrPanelPlacement  m_surface;
@@ -152,6 +159,8 @@ namespace dxvk {
     bool              m_onObject = false;
     VrWorldObject     m_object;
     const VrSceneFit* m_fit = nullptr;
+    // For a scene that holds the object's own model
+    VrSceneFit        m_modelFit;
     VrGameCameraPose  m_seatCamera;
     std::vector<void*>     m_kept;
     std::vector<uint32_t*> m_objectHidden;
@@ -183,6 +192,13 @@ namespace dxvk {
     bool              m_betTrigger  = false;
     int32_t           m_selectorNudge = 1;
 
+    // Vigor tester: the menu's camera as the menu made it, the hand the
+    // cursor follows and the triggers of the last frame
+    VrGameCameraPose  m_vigorCamera;
+    VrGameFrustum     m_vigorFrustum;
+    VrHand            m_vigorHand   = VrHand::Right;
+    std::array<bool, VrHandCount> m_vigorTriggers = { };
+
     // Terminal
     uint8_t*          m_terminal    = nullptr;
     void*             m_texture     = nullptr;
@@ -212,6 +228,12 @@ namespace dxvk {
     void hideRaisedPayoutScreen(std::vector<uint32_t*>& hidden);
 
     void placeRouletteSurface();
+
+    bool fitVigorTester();
+
+    void placeVigorTesterPanel();
+
+    void aimVigorTesterCamera(const VrInputState& input);
 
     void leaveObject();
 
