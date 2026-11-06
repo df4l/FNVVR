@@ -311,6 +311,80 @@ TEST_CASE(fit_of_a_model_finds_its_points_back) {
 }
 
 
+TEST_CASE(object_in_object_keeps_its_points) {
+  VrWorldObject frame = turnedTable();
+  frame.scale = 2.0f;
+
+  VrWorldObject object;
+  object.x        = { 0.0f, 0.0f, 1.0f };
+  object.y        = { 0.0f, 1.0f, 0.0f };
+  object.z        = { -1.0f, 0.0f, 0.0f };
+  object.position = { 1010.0f, 1990.0f, 320.0f };
+  object.scale    = 3.0f;
+
+  VrWorldObject inFrame = vrObjectInObject(frame, object);
+  VrVector3 point = { 1.0f, -2.0f, 4.0f };
+
+  VrVector3 world = object.position + (object.x * point.x + object.y * point.y + object.z * point.z) * object.scale;
+  VrVector3 local = inFrame.position + (inFrame.x * point.x + inFrame.y * point.y + inFrame.z * point.z) * inFrame.scale;
+
+  CHECK(same(vrPointInObject(frame, world), local));
+}
+
+
+TEST_CASE(menu_screen_lies_on_the_world_screen) {
+  // The menu's glass faces -Y with +Z up and +X right, at 2 units of scale
+  VrWorldObject sceneScreen;
+  sceneScreen.x        = { 1.0f, 0.0f, 0.0f };
+  sceneScreen.y        = { 0.0f, 1.0f, 0.0f };
+  sceneScreen.z        = { 0.0f, 0.0f, 1.0f };
+  sceneScreen.position = { 20.0f, 0.4f, 0.0f };
+  sceneScreen.scale    = 2.0f;
+
+  VrScreenGlass sceneGlass;
+  sceneGlass.centre = { 0.0f, 0.0f, 0.5f };
+  sceneGlass.right  = { 1.0f, 0.0f, 0.0f };
+  sceneGlass.up     = { 0.0f, 0.0f, 1.0f };
+  sceneGlass.width  = 6.0f;
+  sceneGlass.height = 4.0f;
+
+  // The world's faces +X with +Y right, tilted back, wider than tall by less
+  VrWorldObject modelScreen;
+  modelScreen.x        = { 1.0f, 0.0f, 0.0f };
+  modelScreen.y        = { 0.0f, 1.0f, 0.0f };
+  modelScreen.z        = { 0.0f, 0.0f, 1.0f };
+  modelScreen.position = { 0.0f, 0.0f, 10.0f };
+
+  VrScreenGlass modelGlass;
+  modelGlass.centre = { 5.0f, 0.0f, 20.0f };
+  modelGlass.right  = { 0.0f, 1.0f, 0.0f };
+  modelGlass.up     = { -0.6f, 0.0f, 0.8f };
+  modelGlass.width  = 24.0f;
+  modelGlass.height = 20.0f;
+
+  VrSceneFit fit = vrSceneFitOnScreen(sceneScreen, sceneGlass, modelScreen, modelGlass, 0.5f, 1.0f);
+
+  auto inModel = [&] (const VrVector3& p) {
+    return fit.origin + (fit.sceneX * p.x + fit.sceneY * p.y + fit.sceneZ * p.z) * fit.scale;
+  };
+
+  // Its width takes half of the world's: 12 units for 12
+  CHECK_NEAR(fit.scale, 1.0f, Near);
+
+  // Middle on middle, right on right, up on up
+  CHECK(same(inModel({ 20.0f, 0.4f, 1.0f }), { 5.0f, 0.0f, 30.0f }));
+  CHECK(same(inModel({ 21.0f, 0.4f, 1.0f }), { 5.0f, 1.0f, 30.0f }));
+  CHECK(same(inModel({ 20.0f, 0.4f, 2.0f }), { 4.4f, 0.0f, 30.8f }));
+  // The menu's viewer side, -Y, is the world's
+  CHECK(same(inModel({ 20.0f, -0.6f, 1.0f }), { 5.8f, 0.0f, 30.6f }));
+
+  // A glass's width away in front of it, looking at it level
+  CHECK(same(fit.seat, VrVector3 { 5.0f, 0.0f, 30.0f } + VrVector3 { 0.8f, 0.0f, 0.6f } * 24.0f));
+  CHECK(same(fit.facing, { -1.0f, 0.0f, 0.0f }));
+  CHECK_NEAR(fit.eyeHeight, fit.seat.z, Near);
+}
+
+
 TEST_CASE(camera_view_rectangle_gives_the_cursor_of_a_camera_anywhere) {
   VrPose reference = vrMakeRecenterReference(headAt(0.0f, 1.6f, 0.0f));
 

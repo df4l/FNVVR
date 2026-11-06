@@ -100,6 +100,83 @@ namespace dxvk {
   }
 
 
+  VrWorldObject vrObjectInObject(
+    const VrWorldObject&    frame,
+    const VrWorldObject&    object) {
+    auto direction = [&] (const VrVector3& v) {
+      return VrVector3 { vrDot(v, frame.x), vrDot(v, frame.y), vrDot(v, frame.z) };
+    };
+
+    VrWorldObject result;
+    result.x        = direction(object.x);
+    result.y        = direction(object.y);
+    result.z        = direction(object.z);
+    result.position = vrPointInObject(frame, object.position);
+    result.scale    = object.scale / frame.scale;
+    return result;
+  }
+
+
+  VrSceneFit vrSceneFitOnScreen(
+    const VrWorldObject&    sceneScreen,
+    const VrScreenGlass&    sceneGlass,
+    const VrWorldObject&    modelScreen,
+    const VrScreenGlass&    modelGlass,
+          float             fill,
+          float             viewRatio) {
+    // The glass's centre and axes in the space its object stands in
+    struct Glass {
+      VrVector3 centre;
+      VrVector3 right;
+      VrVector3 up;
+      VrVector3 out;
+      float     width;
+      float     height;
+    };
+
+    auto place = [] (const VrWorldObject& object, const VrScreenGlass& glass) {
+      Glass result;
+      result.centre = object.position + modelToWorld(object, glass.centre) * object.scale;
+      result.right  = modelToWorld(object, glass.right);
+      result.right  = result.right * (1.0f / vrLength(result.right));
+      result.up     = modelToWorld(object, glass.up);
+      result.up     = result.up - result.right * vrDot(result.up, result.right);
+      result.up     = result.up * (1.0f / vrLength(result.up));
+      result.out    = cross(result.right, result.up);
+      result.width  = glass.width  * object.scale;
+      result.height = glass.height * object.scale;
+      return result;
+    };
+
+    Glass scene = place(sceneScreen, sceneGlass);
+    Glass model = place(modelScreen, modelGlass);
+
+    // Each axis of the scene's glass on the same axis of the model's
+    auto turn = [&] (const VrVector3& v) {
+      return model.right * vrDot(v, scene.right)
+           + model.up    * vrDot(v, scene.up)
+           + model.out   * vrDot(v, scene.out);
+    };
+
+    VrSceneFit fit;
+    fit.scale  = fill * std::min(model.width / scene.width, model.height / scene.height);
+    fit.sceneX = turn(VrVector3 { 1.0f, 0.0f, 0.0f });
+    fit.sceneY = turn(VrVector3 { 0.0f, 1.0f, 0.0f });
+    fit.sceneZ = turn(VrVector3 { 0.0f, 0.0f, 1.0f });
+    fit.origin = model.centre - turn(scene.centre) * fit.scale;
+
+    fit.seat = model.centre + model.out * (viewRatio * model.width);
+
+    VrVector3 facing = { -model.out.x, -model.out.y, 0.0f };
+    float level = vrLength(facing);
+    fit.facing = level > 1e-3f ? facing * (1.0f / level) : VrVector3 { model.up.x, model.up.y, 0.0f };
+
+    // A seat at the model's origin height would mean the game camera's
+    fit.eyeHeight = fit.seat.z != 0.0f ? fit.seat.z : 1e-3f;
+    return fit;
+  }
+
+
   VrGameCameraPose vrSeatCamera(
     const VrWorldObject&    object,
     const VrSceneFit&       fit,
@@ -125,7 +202,7 @@ namespace dxvk {
                    + camera.forward * -headInReference.position.z;
 
     camera.position = seat - head * unitsPerMetre;
-    camera.position.z = fit.eyeHeight > 0.0f
+    camera.position.z = fit.eyeHeight != 0.0f
       ? object.position.z + modelToWorld(object, VrVector3 { 0.0f, 0.0f, fit.eyeHeight }).z * object.scale
         - headInReference.position.y * unitsPerMetre
       : cameraHeight;

@@ -56,7 +56,8 @@ namespace dxvk {
    * vigor tester's scene holds the world's machine itself: it is shown only on
    * it, else the menu stays on the panel. The lasers click its buttons on the
    * rectangle its camera sees, as on a terminal, with that camera on the laser
-   * so that the game picks along it.
+   * so that the game picks along it. A world's terminal shows the menu's
+   * screen on its own glass, the player brought in front of it.
    *
    * Everything reaches the menus as the gamepad or the cursor would, and
    * the game's camera is put back after each draw, because the game's
@@ -201,9 +202,12 @@ namespace dxvk {
     VrHand            m_vigorHand   = VrHand::Right;
     std::array<bool, VrHandCount> m_vigorTriggers = { };
 
-    // Rendered menu: a terminal or the Reflectron
+    // Rendered menu: a terminal or the Reflectron, the depth of its model
+    // ahead of its camera and that camera's frustum
     uint8_t*          m_rendered    = nullptr;
     void*             m_texture     = nullptr;
+    float             m_renderedDepth = 0.0f;
+    VrGameFrustum     m_renderedFrustum;
 
     Kind findKind() const;
 
@@ -213,9 +217,19 @@ namespace dxvk {
 
     void placeBoard(const VrMinigameFrame& frame, bool aboveTable);
 
-    bool placeRenderedMenu(const VrMinigameFrame& frame, float distance, float width);
+    static bool renderedMenuReady(uint8_t* rendered);
+
+    bool placeRenderedMenu(const VrMinigameFrame& frame, bool onScreen, float distance, float width);
+
+    bool placeTerminalOnScreen(const VrMinigameFrame& frame);
+
+    void placeTerminalPanel();
 
     bool placeOnObject(uint32_t id, const VrMinigameFrame& frame);
+
+    uint8_t* activateRoot() const;
+
+    void takeSeat(uint8_t* root, const VrWorldObject& object, const VrSceneFit* fit, const VrMinigameFrame& frame);
 
     void standOnObject(const VrMinigameFrame& frame);
 

@@ -90,6 +90,43 @@ namespace dxvk {
     constexpr float     ReflectronDistance = 0.75f;
     constexpr float     ReflectronWidth    = 0.8f;
 
+    // The glass of the menu's monitor (TerminalInterface01.nif), in the frame
+    // of its screen: findings/minigames.md §12
+    constexpr VrScreenGlass MenuScreenGlass = {
+      { 0.0f, -0.02f, -0.03f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }, 6.2f, 4.46f };
+
+    // The glass of the world's terminals, in the frame of the shape that is it
+    struct TerminalScreenModel {
+      const char*   shape;
+      VrScreenGlass glass;
+    };
+
+    constexpr VrScreenGlass DeskTerminalGlass = {
+      { 5.19f, 0.02f, 23.48f }, { 0.0f, 1.0f, 0.0f }, { -0.0865f, 0.0f, 0.9962f }, 21.29f, 17.4f };
+
+    constexpr TerminalScreenModel TerminalScreens[] = {
+      // terminaldesk01.nif, nvdlc01_terminaldesk01.nif
+      { "TerminalDesk01base:1", DeskTerminalGlass },
+      // the ruined vaults' terminaldeskr01.nif
+      { "TerminalDeskR01:1",    DeskTerminalGlass },
+      // terminal01.nif, the wall terminal
+      { "T01Screen01:1", { { 22.48f, -1.69f, 12.68f }, { 0.0f, 1.0f, 0.0f }, { -0.005f, 0.0f, 1.0f }, 30.78f, 25.15f } },
+      // terminal02.nif
+      { "T01Screen02:1", { { 24.34f, -1.69f, 8.59f }, { 0.0f, 1.0f, 0.0f }, { 0.1687f, 0.0f, 0.9857f }, 30.78f, 25.15f } } };
+
+    // The lines of text drawn on the world's wall terminals, which the
+    // menu's screen replaces
+    constexpr const char* TerminalFakeTexts[] = {
+      "Text01", "Text02", "Text03", "Text04", "Text05", "Text06" };
+
+    // The glass shape is four levels below a terminal's root
+    constexpr uint32_t  TerminalScreenDepth = 8;
+    // Part of the world's glass the menu's screen takes, inside the frame
+    constexpr float     TerminalScreenFill  = 0.95f;
+    // The head is this many glass widths in front of the screen: the screen
+    // is about 45 degrees wide, as the terminal standing in the room
+    constexpr float     TerminalViewRatio   = 1.2f;
+
     // How the scenes lie on the casino's objects, in the models' space:
     // findings/minigames.md §6. The game's table is only a top, on the
     // world's, which holds it up. Its felt is above all of the world's top.
@@ -398,6 +435,19 @@ namespace dxvk {
     if (!frame.stereo)
       m_activateRef = game<PointerFn>(VrGame::GetActivateRef)();
 
+    // A terminal goes from one rendered menu to the next (hacking, then the
+    // computer) on the same monitor: the scene stays where it is
+    if (kind == m_kind && showsRenderedMenu()) {
+      auto rendered = static_cast<uint8_t*>(game<PointerFn>(VrGame::GetCurrentRenderedMenu)());
+
+      if (rendered != m_rendered) {
+        if (renderedMenuReady(rendered))
+          m_rendered = rendered;
+        else
+          close();
+      }
+    }
+
     if (kind != m_kind) {
       close();
 
@@ -485,10 +535,10 @@ namespace dxvk {
     m_tension     = VrLockTension();
 
     if (kind == Kind::Terminal)
-      return placeRenderedMenu(frame, TerminalDistance, TerminalWidth);
+      return placeRenderedMenu(frame, true, TerminalDistance, TerminalWidth);
 
     if (kind == Kind::Reflectron)
-      return placeRenderedMenu(frame, ReflectronDistance, ReflectronWidth);
+      return placeRenderedMenu(frame, false, ReflectronDistance, ReflectronWidth);
 
     Kind previous = m_kind;
     m_kind = kind;
@@ -585,16 +635,38 @@ namespace dxvk {
     else if (id == VrGame::LoveTesterMenuId && hasName(model, "nv_vitomaticvigortester") && fitVigorTester())
       fit = &m_modelFit;
 
-    auto vtable = field<uint8_t*>(reference, 0);
-    auto root   = fit ? static_cast<uint8_t*>((*reinterpret_cast<Get3DFn*>(vtable + VrGame::RefGet3DSlot))(reference)) : nullptr;
+    auto root = fit ? activateRoot() : nullptr;
 
     if (!root) {
       Logger::info(str::format("VR: No place for the scene on ", model));
       return false;
     }
 
-    m_object = worldPose(root);
+    // The machines are whole in the scene. The tables' are only tops, and the
+    // world's holds them up: only what stands above that top goes.
+    if (fit == &SlotMachineFit || fit == &m_modelFit)
+      hideRoot(root);
+    else if (fit == &RouletteFit)
+      VrMenuScenes::hideObject(reinterpret_cast<uintptr_t>(root), RouletteWorldWheel, m_objectHidden);
 
+    takeSeat(root, worldPose(root), fit, frame);
+    return true;
+  }
+
+
+  uint8_t* VrMinigames::activateRoot() const {
+    auto reference = static_cast<uint8_t*>(m_activateRef);
+
+    if (!reference)
+      return nullptr;
+
+    auto vtable = field<uint8_t*>(reference, 0);
+    return static_cast<uint8_t*>((*reinterpret_cast<Get3DFn*>(vtable + VrGame::RefGet3DSlot))(reference));
+  }
+
+
+  void VrMinigames::takeSeat(uint8_t* root, const VrWorldObject& object, const VrSceneFit* fit, const VrMinigameFrame& frame) {
+    m_object     = object;
     m_fit        = fit;
     m_seatCamera = vrSeatCamera(m_object, *fit,
       vrComputeEyeInReference(frame.reference, frame.head), frame.cameraHeight, VrGameUnitsPerMetre);
@@ -604,17 +676,60 @@ namespace dxvk {
       " units above the object, the game's ", frame.cameraHeight - m_object.position.z));
 
     keep(root);
-
-    // The machines are whole in the scene. The tables' are only tops, and the
-    // world's holds them up: only what stands above that top goes.
-    if (fit == &SlotMachineFit || fit == &m_modelFit)
-      hideRoot(root);
-    else if (fit == &RouletteFit)
-      VrMenuScenes::hideObject(reinterpret_cast<uintptr_t>(root), RouletteWorldWheel, m_objectHidden);
-
     updateActorsInTheWay(true);
     standOnObject(frame);
+  }
+
+
+  bool VrMinigames::placeTerminalOnScreen(const VrMinigameFrame& frame) {
+    uint8_t* root   = frame.hasReference ? activateRoot() : nullptr;
+    auto     screen = field<uint8_t*>(m_rendered, VrGame::TerminalScreen);
+
+    if (!root)
+      return false;
+
+    uint8_t* glass = nullptr;
+    const TerminalScreenModel* model = nullptr;
+
+    for (const auto& candidate : TerminalScreens) {
+      glass = reinterpret_cast<uint8_t*>(vrFindGameObject(reinterpret_cast<uintptr_t>(root),
+        candidate.shape, TerminalScreenDepth));
+
+      if (glass) {
+        model = &candidate;
+        break;
+      }
+    }
+
+    VrWorldObject object = worldPose(root);
+
+    if (!glass || object.scale <= 0.0f) {
+      Logger::info("VR: The terminal has no screen of the world to show on, it stands in the room");
+      return false;
+    }
+
+    m_modelFit = vrSceneFitOnScreen(worldPose(screen), MenuScreenGlass,
+      vrObjectInObject(object, worldPose(glass)), model->glass, TerminalScreenFill, TerminalViewRatio);
+
+    for (const char* text : TerminalFakeTexts)
+      VrMenuScenes::hideObject(reinterpret_cast<uintptr_t>(root), text, m_objectHidden);
+
+    Logger::info(str::format("VR: The terminal shows on the world's ", model->shape));
+    takeSeat(root, object, &m_modelFit, frame);
     return true;
+  }
+
+
+  void VrMinigames::placeTerminalPanel() {
+    // A laser on this rectangle gives the cursor position the menu's camera
+    // sees on its screen, which lies on the world's
+    VrPanelPlacement panel = vrSceneViewRectangle(m_space, m_renderedDepth, m_renderedFrustum);
+
+    if (vrLength(panel.pose.position - m_panel.pose.position) > PanelMoves
+     || std::abs(panel.width - m_panel.width) > PanelMoves)
+      m_panelRevision++;
+
+    m_panel = panel;
   }
 
 
@@ -634,8 +749,12 @@ namespace dxvk {
     if (m_fit == &RouletteFit)
       placeRouletteSurface();
 
-    if (m_fit == &m_modelFit)
-      placeVigorTesterPanel();
+    if (m_fit == &m_modelFit) {
+      if (m_rendered)
+        placeTerminalPanel();
+      else
+        placeVigorTesterPanel();
+    }
   }
 
 
@@ -972,18 +1091,23 @@ namespace dxvk {
   }
 
 
-  bool VrMinigames::placeRenderedMenu(const VrMinigameFrame& frame, float distance, float width) {
+  bool VrMinigames::renderedMenuReady(uint8_t* rendered) {
+    return rendered
+        && field<bool>(rendered, VrGame::TerminalInitialized)
+        && field<void*>(rendered, VrGame::TerminalCamera)
+        && field<void*>(rendered, VrGame::TerminalModel)
+        && field<void*>(rendered, VrGame::TerminalScreen);
+  }
+
+
+  bool VrMinigames::placeRenderedMenu(const VrMinigameFrame& frame, bool onScreen, float distance, float width) {
     auto rendered = static_cast<uint8_t*>(game<PointerFn>(VrGame::GetCurrentRenderedMenu)());
 
-    if (!rendered || !VrConsoleScreen::hooksOffscreen())
+    if (!renderedMenuReady(rendered) || !VrConsoleScreen::hooksOffscreen())
       return false;
 
     void* camera = field<void*>(rendered, VrGame::TerminalCamera);
     void* model  = field<void*>(rendered, VrGame::TerminalModel);
-
-    if (!field<bool>(rendered, VrGame::TerminalInitialized) || !camera || !model
-     || !field<void*>(rendered, VrGame::TerminalScreen))
-      return false;
 
     VrGameCamera access;
     access.attach(camera);
@@ -1001,9 +1125,16 @@ namespace dxvk {
     if (view <= 0.0f)
       return false;
 
+    m_rendered        = rendered;
+    m_renderedDepth   = target.x;
+    m_renderedFrustum = frustum;
+
+    // On the screen of the world's terminal when there is one
+    if (onScreen && placeTerminalOnScreen(frame))
+      return true;
+
     m_space = vrSceneSpaceInFront(frame.head, target, distance, 0.0f, view / width);
     m_panel = vrSceneViewRectangle(m_space, target.x, frustum);
-    m_rendered = rendered;
     return true;
   }
 
@@ -1321,7 +1452,12 @@ namespace dxvk {
     texture = m_texture;
 
     m_device->Clear(0, nullptr, D3DCLEAR_ZBUFFER, 0, vrGameDepthClear(), 0);
-    game<MainFn>(VrGame::DrawRenderedMenuParent)(main);
+
+    // On the world's terminal, its own monitor holds the screen. The game
+    // adds the screen to what is behind it: the world's dark glass lights up.
+    if (!m_onObject)
+      game<MainFn>(VrGame::DrawRenderedMenuParent)(main);
+
     game<ScreenFn>(VrGame::RenderPipBoy)(main, screen, renderer);
 
     texture = gameTexture;

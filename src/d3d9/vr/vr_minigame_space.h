@@ -107,7 +107,8 @@ namespace dxvk {
     /// What the object takes of the ground, in the model
     const VrModelArea* areas = nullptr;
     uint32_t  areaCount = 0;
-    /// Height of the head above the model's origin, 0 to keep the game camera's
+    /// Height of the head above the model's origin (below it if negative),
+    /// 0 to keep the game camera's
     float     eyeHeight = 0.0f;
   };
 
@@ -122,6 +123,54 @@ namespace dxvk {
    *    scale not 0
    */
   VrSceneFit vrSceneFitOfModel(const VrWorldObject& model);
+
+  /**
+   * \brief The glass of a screen, in the frame of the object that holds it
+   *
+   * Seen from the front, \c right goes to the viewer's right and \c up up:
+   * the glass faces right x up. Both are unit vectors, \c up at right angles
+   * to \c right or nearly.
+   */
+  struct VrScreenGlass {
+    VrVector3 centre;
+    VrVector3 right;
+    VrVector3 up;
+    float     width  = 0.0f;
+    float     height = 0.0f;
+  };
+
+  /**
+   * \brief Finds an object's pose in the frame of another one
+   *
+   * \param [in] frame The other object, its scale not 0
+   * \param [in] object The object, in the same space as \c frame
+   */
+  VrWorldObject vrObjectInObject(
+    const VrWorldObject&    frame,
+    const VrWorldObject&    object);
+
+  /**
+   * \brief How a menu's screen lies on the screen of a world's object
+   *
+   * The scene's glass gets the middle of the world's, as large as fits in
+   * it at \c fill of its width or height, facing the same way. The seat is
+   * in front of the world's glass, \c viewRatio times its width away along
+   * its normal, at that height, looking at it.
+   *
+   * \param [in] sceneScreen The object holding the scene's glass, in the scene
+   * \param [in] sceneGlass The scene's glass, in \c sceneScreen
+   * \param [in] modelScreen The object holding the world's glass, in the model
+   * \param [in] modelGlass The world's glass, in \c modelScreen
+   * \param [in] fill Part of the world's glass the scene's may take, at most 1
+   * \param [in] viewRatio Distance of the seat over the glass's width
+   */
+  VrSceneFit vrSceneFitOnScreen(
+    const VrWorldObject&    sceneScreen,
+    const VrScreenGlass&    sceneGlass,
+    const VrWorldObject&    modelScreen,
+    const VrScreenGlass&    modelGlass,
+          float             fill,
+          float             viewRatio);
 
   /**
    * \brief Finds the camera that puts the head at the seat of an object
