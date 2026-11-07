@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased (since v0.14.0)
+
+### Terminals
+
+- **Terminals show on their own screen**: the text of a desk or wall terminal, hacking included, now lights up the terminal's own glass in the world instead of a monitor floating in front of you, and the view no longer moves when you activate it. Other terminals stand in the room as before.
+
+### HUD
+
+- **Long quest names are no longer cut**: a quest added or completed with a long name shows whole in the top left corner, even while the XP meter is shown.
+
 ## v0.14.0 (2026-11-06, since v0.13.0 `d232764`)
 
 ### Doc Mitchell's house
