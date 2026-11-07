@@ -233,6 +233,11 @@ namespace dxvk {
   }
 
 
+  void VrEmulatorBackend::fadeView(float seconds, float opacity) {
+
+  }
+
+
   bool VrEmulatorBackend::showKeyboard(const VrKeyboardRequest& request) {
     return false;
   }

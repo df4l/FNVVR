@@ -2,6 +2,10 @@
 
 ## Unreleased (since v0.14.0)
 
+### Caravan
+
+- **A still table at the size of real cards**: the Caravan mat no longer slides under you when the game moves from the bet to deck building and to the game; it stays in place, about 60 cm below your eyes, with cards the size of real ones, and opens out of black instead of popping up.
+
 ### Terminals
 
 - **Terminals show on their own screen**: the text of a desk or wall terminal, hacking included, now lights up the terminal's own glass in the world instead of a monitor floating in front of you, and the view no longer moves when you activate it. Other terminals stand in the room as before.

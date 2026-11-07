@@ -60,6 +60,16 @@ namespace dxvk {
     constexpr float     SlotDistance   = 0.45f;
     constexpr float     SlotDrop       = 0.25f;
 
+    // Caravan's mat at 1.75 times its model, so that its cards are the size
+    // of real ones. The eyes are put above the middle of the mat, behind the
+    // player's edge (y -21): the mat stays still while the game's camera pans
+    // between its betting, deck and game areas.
+    constexpr float     CaravanUnits   = VrGameUnitsPerMetre / 1.75f;
+    constexpr VrVector3 CaravanEye     = { 0.0f, -21.0f - 0.25f * CaravanUnits, 1.1f + 0.6f * CaravanUnits };
+    constexpr VrVector3 CaravanFacing  = { 0.0f, 1.0f, 0.0f };
+    // The table opens out of black
+    constexpr float     CaravanFadeIn  = 0.5f;
+
     // Top of the blackjack table, in its model
     constexpr float     BlackJackHalfX = 22.75f;
     constexpr float     BlackJackHalfY = 37.2f;
@@ -502,18 +512,6 @@ namespace dxvk {
           aimVigorTesterCamera(input);
         break;
 
-      case Kind::Caravan: {
-        // Its camera pans over the table between the menus, and the table
-        // follows, so that what the game shows stays in front of the player
-        void* camera = global<void*>(VrGame::CaravanCamera);
-
-        if (camera) {
-          VrGameCamera access;
-          access.attach(camera);
-          m_space.origin = access.readPose().position;
-        }
-      } break;
-
       default:
         break;
     }
@@ -575,8 +573,10 @@ namespace dxvk {
         break;
 
       case Kind::Caravan:
-        m_space = vrSceneSpaceAroundHead(frame.head, pose.position, pose.forward, VrGameUnitsPerMetre);
+        m_space = vrSceneSpaceAroundHead(frame.head, CaravanEye, CaravanFacing, CaravanUnits);
         placeBoard(frame, true);
+        m_backend.fadeView(0.0f, 1.0f);
+        m_backend.fadeView(CaravanFadeIn, 0.0f);
         break;
 
       case Kind::VigorTester:

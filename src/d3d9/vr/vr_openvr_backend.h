@@ -112,6 +112,8 @@ namespace dxvk {
 
     void applyHaptic(VrHand hand, float amplitude, int64_t durationNs) override;
 
+    void fadeView(float seconds, float opacity) override;
+
     bool showKeyboard(const VrKeyboardRequest& request) override;
 
     void hideKeyboard() override;

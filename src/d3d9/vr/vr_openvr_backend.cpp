@@ -1320,6 +1320,15 @@ namespace dxvk {
   }
 
 
+  void VrOpenVrBackend::fadeView(float seconds, float opacity) {
+    if (m_state != VrSessionState::Running || !m_runtime || !m_runtime->compositor)
+      return;
+
+    m_runtime->compositor->FadeToColor(std::max(0.0f, seconds), 0.0f, 0.0f, 0.0f,
+      std::max(0.0f, std::min(1.0f, opacity)));
+  }
+
+
   bool VrOpenVrBackend::showKeyboard(const VrKeyboardRequest& request) {
     if (m_state != VrSessionState::Running || !m_runtime || !m_runtime->overlay)
       return false;
