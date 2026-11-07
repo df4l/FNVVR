@@ -1,4 +1,5 @@
 #include <cmath>
+#include <cstring>
 
 #include "vr_caravan_pick.h"
 
@@ -58,6 +59,21 @@ namespace dxvk {
       return VrCaravanKey::Left;
 
     return VrCaravanKey::None;
+  }
+
+
+  bool vrIsCaravanRowModel(const char* name) {
+    for (const char* side : { "Player_", "Opponent_" }) {
+      size_t length = std::strlen(side);
+
+      if (!std::strncmp(name, side, length)) {
+        const char* rest = name + length;
+        return rest[0] >= '1' && rest[0] <= '3' && rest[1] == '_'
+            && rest[2] == '0' && rest[3] >= '1' && rest[3] <= '7' && !rest[4];
+      }
+    }
+
+    return false;
   }
 
 }

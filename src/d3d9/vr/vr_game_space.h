@@ -298,6 +298,22 @@ namespace dxvk {
   VrGameFrustum vrComputeGameFrustum(const VrFov& fov);
 
   /**
+   * \brief Checks whether a sphere is wholly out of a camera's view
+   *
+   * Tests the four side planes and the plane through the camera, so that
+   * what is behind it is out too. Near and far planes are not tested.
+   * \param [in] camera Pose of the camera
+   * \param [in] frustum Its extents
+   * \param [in] centre Centre of the sphere, in the camera's frame
+   * \param [in] radius Radius of the sphere
+   */
+  bool vrSphereOutOfView(
+    const VrGameCameraPose&       camera,
+    const VrGameFrustum&          frustum,
+    const VrVector3&              centre,
+          float                   radius);
+
+  /**
    * \brief Places the camera of a menu's own scene for a VR eye
    *
    * Rendered menus, such as the game's terminals, draw a model with a

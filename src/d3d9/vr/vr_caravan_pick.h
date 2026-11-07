@@ -101,4 +101,12 @@ namespace dxvk {
    */
   VrCaravanKey vrCaravanTrackKey(int32_t target, int32_t current);
 
+  /**
+   * \brief Checks whether a name is the model of one row of a track
+   *
+   * The game loads one model per track and row, Player_{track}_0{row} and
+   * Opponent_{track}_0{row} (tracks 1 to 3, rows 1 to 7).
+   */
+  bool vrIsCaravanRowModel(const char* name);
+
 }

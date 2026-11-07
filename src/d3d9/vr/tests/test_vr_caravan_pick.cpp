@@ -55,3 +55,13 @@ TEST_CASE(caravan_track_key_moves_towards_the_track) {
   CHECK(vrCaravanTrackKey(0, 1) == VrCaravanKey::Left);
   CHECK(vrCaravanTrackKey(1, 1) == VrCaravanKey::None);
 }
+
+TEST_CASE(caravan_row_models_by_name) {
+  CHECK(vrIsCaravanRowModel("Player_1_01"));
+  CHECK(vrIsCaravanRowModel("Opponent_3_07"));
+  CHECK(!vrIsCaravanRowModel("Player_4_01"));
+  CHECK(!vrIsCaravanRowModel("Player_1_08"));
+  CHECK(!vrIsCaravanRowModel("Player_1_01 NonAccum"));
+  CHECK(!vrIsCaravanRowModel("Player_Deck"));
+  CHECK(!vrIsCaravanRowModel("Player_4_Shadow"));
+}
