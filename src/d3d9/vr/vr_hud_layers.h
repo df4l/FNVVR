@@ -65,6 +65,13 @@ namespace dxvk {
     }
 
     /**
+     * \brief Checks whether groupContent can measure what the groups draw
+     */
+    bool contentFound() const {
+      return m_contentFound;
+    }
+
+    /**
      * \brief Reads where a HUD group is laid out
      *
      * \param [in] group HUDMainMenu field of the group
