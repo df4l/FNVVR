@@ -9,6 +9,7 @@
 #include "../../util/log/log.h"
 #include "../../util/util_string.h"
 
+#include "vr_caravan_pick.h"
 #include "vr_console_screen.h"
 #include "vr_game_addresses.h"
 #include "vr_game_depth.h"
@@ -111,6 +112,22 @@ namespace dxvk {
     constexpr float     CaravanRayTop      = 120.0f;
     // The table opens out of black
     constexpr float     CaravanFadeIn  = 0.5f;
+    // The lasers point at the whole mat, just above its cloth (z 1.1).
+    // A hand card or a slot is on the laser within this reach of where the
+    // laser meets the mat, the one already chosen favoured by the
+    // stickiness, in the mat's units (1.4 cm between two rows at scale 1).
+    constexpr VrVector3 CaravanMatCentre = { 0.45f, 0.5f * (CaravanNearEdge + CaravanFarEdge), 1.1f };
+    constexpr float     CaravanMatSizeX  = 56.9f;
+    constexpr float     CaravanMatSizeY  = CaravanFarEdge - CaravanNearEdge;
+    constexpr float     CaravanCardReach = 3.0f;
+    constexpr float     CaravanSlotReach = 3.0f;
+    constexpr float     CaravanStickiness = 0.4f;
+    // A click waits this long for the menu's step to what the laser is on
+    constexpr float     CaravanClickWait = 0.6f;
+    // A stick past this moves the menu's selection itself
+    constexpr float     CaravanStickRest = 0.2f;
+    // Deeper than this below the hand's or a grid's root, no card or slot
+    constexpr uint32_t  CaravanNodeDepth = 8;
 
     // Top of the blackjack table, in its model
     constexpr float     BlackJackHalfX = 22.75f;
@@ -558,6 +575,13 @@ namespace dxvk {
           updateRoulette(surface);
         break;
 
+      case Kind::Caravan:
+        if (onTop)
+          updateCaravan(surface, input, frame.dt);
+        else
+          m_hasSurface = false;
+        break;
+
       case Kind::VigorTester:
         if (onTop)
           aimVigorTesterCamera(input);
@@ -575,6 +599,11 @@ namespace dxvk {
     m_handDrives  = true;
     m_betTrigger  = false;
     m_pinAngle    = 0.0f;
+    m_caravanCard = -1;
+    m_caravanSlot = -1;
+    m_caravanTrigger = false;
+    m_caravanClick   = false;
+    m_caravanStepping = false;
     m_leverHeld   = { };
     m_levers      = { };
     m_signals     = VrTableSignals();
@@ -1540,6 +1569,222 @@ namespace dxvk {
 
     press(placed ? VrGamepadButton::Y : VrGamepadButton::A);
     m_backend.applyHaptic(pointer.hand, 0.3f, HapticTick);
+  }
+
+
+  void VrMinigames::placeCaravanSurface() {
+    m_surface = vrSceneSurface(m_space, CaravanMatCentre, CaravanMatSizeX, CaravanMatSizeY);
+  }
+
+
+  void VrMinigames::updateCaravan(const VrPointerSurfaceState& pointer, const VrInputState& input, float dt) {
+    auto menu = global<uint8_t*>(VrGame::CaravanInstance);
+
+    bool playing = menu && field<uint32_t>(menu, VrGame::CaravanActiveMenu) == VrGame::CaravanGameMenu;
+    bool idle    = playing && field<uint32_t>(menu, VrGame::CaravanGameState) == 0;
+
+    // A step asked in the last frame: taken, or the menu left its idle state
+    // first (a button) and would take it later, from a selection that is
+    // not the one shown
+    if (m_caravanStepping && menu) {
+      uint32_t& key = field<uint32_t>(menu, VrGame::CaravanPendingKey);
+
+      if (!key) {
+        m_caravanStepping = false;
+      } else if (!idle) {
+        key = 0;
+        field<int32_t>(menu, VrGame::CaravanSelectedCard)  = m_caravanWasCard;
+        field<int32_t>(menu, VrGame::CaravanSelectedTrack) = m_caravanWasTrack;
+        field<int32_t>(menu, VrGame::CaravanSelectedRow)   = m_caravanWasRow;
+        m_caravanStepping = false;
+      }
+    }
+
+    m_hasSurface = playing;
+
+    if (!playing) {
+      m_caravanCard  = -1;
+      m_caravanSlot  = -1;
+      m_caravanClick = false;
+      m_caravanTrigger = false;
+      return;
+    }
+
+    placeCaravanSurface();
+
+    if (m_caravanClick) {
+      m_caravanClickAge += dt;
+
+      if (m_caravanClickAge > CaravanClickWait)
+        m_caravanClick = false;
+    }
+
+    if (!pointer.hit) {
+      m_caravanCard    = -1;
+      m_caravanSlot    = -1;
+      m_caravanTrigger = false;
+      return;
+    }
+
+    if (pointer.trigger && !m_caravanTrigger) {
+      m_caravanClick    = true;
+      m_caravanClickAge = 0.0f;
+    }
+
+    m_caravanTrigger = pointer.trigger;
+
+    VrVector3 point = vrSurfacePoint(CaravanMatCentre, CaravanMatSizeX, CaravanMatSizeY, pointer.uv);
+    VrVector2 at    = { point.x, point.y };
+
+    uint32_t flags = field<uint32_t>(menu, VrGame::CaravanFlags);
+    bool choosesSlot = (flags & VrGame::CaravanFlagSelectTrack) != 0;
+    bool discards    = choosesSlot && (flags & VrGame::CaravanFlagDestroyTrack);
+    bool setsUp      = choosesSlot && (flags & VrGame::CaravanFlagTrackSetup);
+
+    // The first three cards go to a track the menu chooses: the click places
+    // the card wherever the laser is on the mat
+    bool onTarget = setsUp;
+    int32_t wasCard = m_caravanCard;
+    int32_t wasSlot = m_caravanSlot;
+    VrCaravanKey key  = VrCaravanKey::None;
+    VrCaravanStep step;
+
+    if (!choosesSlot && caravanCardOnLaser(menu, at)) {
+      int32_t current = field<int32_t>(menu, VrGame::CaravanSelectedCard);
+      int32_t size    = int32_t(field<uint32_t>(menu, VrGame::CaravanPlayerHand + VrGame::SimpleArraySize));
+      step     = vrCaravanHandStep(m_caravanCard, current, size);
+      key      = step.key;
+      onTarget = key == VrCaravanKey::None;
+    } else if (discards && caravanSlotOnLaser(menu, at, true)) {
+      int32_t track = m_caravanSlot / int32_t(VrGame::CaravanRowCount);
+      key      = vrCaravanTrackKey(track, field<int32_t>(menu, VrGame::CaravanSelectedTrack));
+      onTarget = key == VrCaravanKey::None;
+    } else if (choosesSlot && !discards && !setsUp && caravanSlotOnLaser(menu, at, false)) {
+      int32_t track = m_caravanSlot / int32_t(VrGame::CaravanRowCount);
+      int32_t row   = m_caravanSlot % int32_t(VrGame::CaravanRowCount);
+      onTarget = track == field<int32_t>(menu, VrGame::CaravanSelectedTrack)
+              && row   == field<int32_t>(menu, VrGame::CaravanSelectedRow);
+
+      if (!onTarget) {
+        step = vrCaravanSlotStep(uint32_t(track), row);
+        key  = step.key;
+      }
+    }
+
+    if (m_caravanCard != wasCard && m_caravanCard >= 0 && !choosesSlot)
+      Logger::info(str::format("VR: The laser is on the Caravan hand card ", m_caravanCard));
+
+    if (m_caravanSlot != wasSlot && m_caravanSlot >= 0 && choosesSlot) {
+      Logger::info(str::format("VR: The laser is on the Caravan track ", m_caravanSlot / int32_t(VrGame::CaravanRowCount),
+        ", row ", m_caravanSlot % int32_t(VrGame::CaravanRowCount)));
+    }
+
+    // The menu takes one step a quarter of a second at most, and none while
+    // a stick moves it or a step is still waiting
+    bool stickMoves = input.hasActions
+      && std::max(std::abs(input.actions.move.x), std::abs(input.actions.move.y)) > CaravanStickRest;
+    bool canStep = idle && !stickMoves && !m_caravanStepping
+      && !field<uint32_t>(menu, VrGame::CaravanPendingKey)
+      && global<float>(VrGame::CaravanTimeDelta) - field<float>(menu, VrGame::CaravanSelectionDelay) > VrGame::CaravanStepDelay;
+
+    if (key != VrCaravanKey::None && canStep) {
+      m_caravanWasCard  = field<int32_t>(menu, VrGame::CaravanSelectedCard);
+      m_caravanWasTrack = field<int32_t>(menu, VrGame::CaravanSelectedTrack);
+      m_caravanWasRow   = field<int32_t>(menu, VrGame::CaravanSelectedRow);
+
+      if (!choosesSlot) {
+        field<int32_t>(menu, VrGame::CaravanSelectedCard) = step.selection;
+      } else if (!discards) {
+        field<int32_t>(menu, VrGame::CaravanSelectedTrack) = m_caravanSlot / int32_t(VrGame::CaravanRowCount);
+        field<int32_t>(menu, VrGame::CaravanSelectedRow)   = step.selection;
+      }
+
+      askCaravanStep(menu, key, pointer.hand);
+    }
+
+    // A click on what is selected: the gamepad's A takes the card, places it
+    // or discards the track
+    if (m_caravanClick && onTarget && idle && !m_caravanStepping) {
+      m_caravanClick = false;
+      press(VrGamepadButton::A);
+      m_backend.applyHaptic(pointer.hand, 0.3f, HapticTick);
+    }
+  }
+
+
+  void VrMinigames::askCaravanStep(uint8_t* menu, VrCaravanKey key, VrHand hand) {
+    uint32_t code = 0;
+
+    switch (key) {
+      case VrCaravanKey::Left:  code = VrGame::CaravanKeyLeft;  break;
+      case VrCaravanKey::Right: code = VrGame::CaravanKeyRight; break;
+      case VrCaravanKey::Up:    code = VrGame::CaravanKeyUp;    break;
+      default: return;
+    }
+
+    field<uint32_t>(menu, VrGame::CaravanPendingKey) = code;
+    m_caravanStepping = true;
+    m_backend.applyHaptic(hand, 0.15f, HapticTick);
+  }
+
+
+  bool VrMinigames::caravanCardOnLaser(uint8_t* menu, const VrVector2& at) {
+    auto     hand  = field<uintptr_t>(menu, VrGame::CaravanPlayerHandModel);
+    uint32_t count = field<uint32_t>(menu, VrGame::CaravanPlayerHand + VrGame::SimpleArraySize);
+
+    if (!hand || !count || count > VrGame::CaravanHandSize) {
+      m_caravanCard = -1;
+      return false;
+    }
+
+    std::array<VrVector2, VrGame::CaravanHandSize> cards;
+
+    for (uint32_t i = 0; i < count; i++) {
+      std::string name = str::format("Player-Deck_0", i + 1, ":", i);
+      auto  node  = vrFindGameObject(hand, name.c_str(), CaravanNodeDepth);
+      auto* bound = node ? field<const float*>(reinterpret_cast<void*>(node), VrGame::ObjectWorldBound) : nullptr;
+
+      // Out of reach of every laser
+      cards[i] = bound ? VrVector2 { bound[0], bound[1] } : VrVector2 { FLT_MAX, FLT_MAX };
+    }
+
+    m_caravanCard = vrNearestPoint(cards.data(), count, at, CaravanCardReach, m_caravanCard, CaravanStickiness);
+    return m_caravanCard >= 0;
+  }
+
+
+  bool VrMinigames::caravanSlotOnLaser(uint8_t* menu, const VrVector2& at, bool ownTracksOnly) {
+    constexpr uint32_t Count = VrGame::CaravanTrackCount * VrGame::CaravanRowCount;
+    std::array<VrVector2, Count> slots;
+    slots.fill(VrVector2 { FLT_MAX, FLT_MAX });
+
+    uint32_t tracks = ownTracksOnly ? 3 : VrGame::CaravanTrackCount;
+
+    for (uint32_t track = 0; track < tracks; track++) {
+      auto grid = field<uintptr_t>(menu, VrGame::CaravanTrackGrids + track * sizeof(uint32_t));
+
+      if (!grid)
+        continue;
+
+      for (uint32_t row = 0; row < VrGame::CaravanRowCount; row++) {
+        std::string name = str::format("Select", row + 1, "_01:0");
+        auto  node  = vrFindGameObject(grid, name.c_str(), CaravanNodeDepth);
+        auto* bound = node ? field<const float*>(reinterpret_cast<void*>(node), VrGame::ObjectWorldBound) : nullptr;
+
+        if (bound)
+          slots[track * VrGame::CaravanRowCount + row] = { bound[0], bound[1] };
+
+        // A row past the first empty one holds nothing to put a card on
+        uintptr_t cards = VrGame::CaravanCardTracks
+          + (track * VrGame::CaravanRowCount + row) * VrGame::CaravanCardListSize;
+
+        if (!field<uint32_t>(menu, cards + VrGame::SimpleArraySize))
+          break;
+      }
+    }
+
+    m_caravanSlot = vrNearestPoint(slots.data(), Count, at, CaravanSlotReach, m_caravanSlot, CaravanStickiness);
+    return m_caravanSlot >= 0;
   }
 
 

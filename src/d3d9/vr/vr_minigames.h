@@ -8,6 +8,7 @@
 #include "../d3d9_include.h"
 
 #include "vr_backend.h"
+#include "vr_caravan_pick.h"
 #include "vr_controller_pad.h"
 #include "vr_game_camera.h"
 #include "vr_minigame_space.h"
@@ -214,6 +215,21 @@ namespace dxvk {
     bool              m_betTrigger  = false;
     int32_t           m_selectorNudge = 1;
 
+    // Caravan: what the laser is on (a hand card, a track * rows + row,
+    // -1 for nothing), and a trigger's click waiting for the menu to take
+    // the step to it
+    int32_t           m_caravanCard = -1;
+    int32_t           m_caravanSlot = -1;
+    bool              m_caravanTrigger = false;
+    bool              m_caravanClick   = false;
+    float             m_caravanClickAge = 0.0f;
+    // The selection as it was before a step was asked, put back if the menu
+    // leaves its idle state before it takes the step
+    bool              m_caravanStepping = false;
+    int32_t           m_caravanWasCard  = 0;
+    int32_t           m_caravanWasTrack = 0;
+    int32_t           m_caravanWasRow   = 0;
+
     // Vigor tester: the menu's camera as the menu made it, the hand the
     // cursor follows and the triggers of the last frame
     VrGameCameraPose  m_vigorCamera;
@@ -291,6 +307,16 @@ namespace dxvk {
     void updateBlackJack(const VrInputState& input, float dt);
 
     void updateRoulette(const VrPointerSurfaceState& pointer);
+
+    void placeCaravanSurface();
+
+    void updateCaravan(const VrPointerSurfaceState& pointer, const VrInputState& input, float dt);
+
+    bool caravanCardOnLaser(uint8_t* menu, const VrVector2& at);
+
+    bool caravanSlotOnLaser(uint8_t* menu, const VrVector2& at, bool ownTracksOnly);
+
+    void askCaravanStep(uint8_t* menu, VrCaravanKey key, VrHand hand);
 
     void press(uint16_t button);
 

@@ -838,6 +838,48 @@ namespace dxvk {
     constexpr uintptr_t CaravanInstance      = 0x011D917C;
     constexpr uintptr_t CaravanChallenger    = 0x100;
 
+    /**
+     * What the lasers read and write in CaravanMenu (findings/caravan.md
+     * §1.1, §3.3), checked in CaravanMenu::DoIdle 0x00741500,
+     * HandleTrackSelection 0x0074F360, SelectDeckCard 0x0074E480 and
+     * SelectTrackCard 0x0074E6D0. eActiveMenu 2 is the game, eGameState 0
+     * the only state that takes input. The hand cards are the nodes
+     * "Player-Deck_0{i+1}:{i}" of the player's hand model, the slots the
+     * nodes "Select{row+1}_01:0" of each track's grid (tracks 0-2 the
+     * player's, 3-5 the opponent's, 7 rows each). kCardTracks holds a
+     * BSSimpleArray (0x10 bytes) per track and row: the cards on that row.
+     * The pending key is read and cleared by DoIdle in state 0, game menu,
+     * as one stick step, once fTimeDelta (a global) is more than
+     * CaravanStepDelay past fSelectionDelay.
+     */
+    constexpr uintptr_t CaravanActiveMenu    = 0x28;
+    constexpr uintptr_t CaravanGameState     = 0x2C;
+    constexpr uintptr_t CaravanPlayerHandModel = 0x190;
+    constexpr uintptr_t CaravanCardTracks    = 0xB44;
+    constexpr uintptr_t CaravanPlayerHand    = 0xB24;
+    constexpr uintptr_t CaravanSelectedCard  = 0xE2C;
+    constexpr uintptr_t CaravanSelectedTrack = 0xE30;
+    constexpr uintptr_t CaravanSelectedRow   = 0xE34;
+    constexpr uintptr_t CaravanSelectionDelay = 0xE3C;
+    constexpr uintptr_t CaravanTrackGrids    = 0xE54;
+    constexpr uintptr_t CaravanFlags         = 0xE74;
+    constexpr uintptr_t CaravanPendingKey    = 0xE80;
+    constexpr uintptr_t CaravanTimeDelta     = 0x011D9208;
+    constexpr float     CaravanStepDelay     = 0.25f;
+    constexpr uint32_t  CaravanGameMenu      = 2;
+    constexpr uint32_t  CaravanTrackCount    = 6;
+    constexpr uint32_t  CaravanRowCount      = 7;
+    constexpr uint32_t  CaravanHandSize      = 8;
+    constexpr uintptr_t CaravanCardListSize  = 0x10;
+    /** uiFlags: a hand card is taken, the first three cards, a track discard */
+    constexpr uint32_t  CaravanFlagSelectTrack  = 0x1000;
+    constexpr uint32_t  CaravanFlagTrackSetup   = 0x800;
+    constexpr uint32_t  CaravanFlagDestroyTrack = 0x2000;
+    /** Pending keys, as DoKey writes them */
+    constexpr uint32_t  CaravanKeyLeft       = 0x80000001;
+    constexpr uint32_t  CaravanKeyRight      = 0x80000002;
+    constexpr uint32_t  CaravanKeyUp         = 0x80000003;
+
     constexpr uint32_t  SlotMachineMenuId    = 0x438;
     constexpr uint32_t  BlackJackMenuId      = 0x439;
     constexpr uint32_t  RouletteMenuId       = 0x43A;
