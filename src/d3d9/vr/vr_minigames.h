@@ -33,6 +33,8 @@ namespace dxvk {
     VrPose reference;
     /// Height of the game's camera in the world, known when \c stereo is set
     float  cameraHeight = 0.0f;
+    /// The camera the eyes were placed from in the last frame
+    VrGameCameraPose camera;
   };
 
   /**
@@ -56,7 +58,8 @@ namespace dxvk {
    * vigor tester's scene holds the world's machine itself: it is shown only on
    * it, else the menu stays on the panel. The lasers click its buttons on the
    * rectangle its camera sees, as on a terminal, with that camera on the laser
-   * so that the game picks along it.
+   * so that the game picks along it. A world's terminal shows the menu's
+   * screen on its own glass, seen from where the player stands.
    *
    * Everything reaches the menus as the gamepad or the cursor would, and
    * the game's camera is put back after each draw, because the game's
@@ -110,7 +113,15 @@ namespace dxvk {
     uint32_t panelRevision() const { return m_panelRevision; }
 
     /// The camera the eyes are placed from, \c nullptr for the game's own
-    const VrGameCameraPose* seatCamera() const { return m_onObject ? &m_seatCamera : nullptr; }
+    const VrGameCameraPose* seatCamera() const { return m_seated ? &m_viewCamera : nullptr; }
+
+    /**
+     * \brief Gives the camera the eyes are placed from in this frame
+     *
+     * A scene on an object seen from where the player stands follows it.
+     * \param [in] camera The camera, after the head and the body moved it
+     */
+    void viewFrom(const VrGameCameraPose& camera);
 
     /**
      * \brief Draws the scene for an eye
@@ -159,11 +170,14 @@ namespace dxvk {
     // The object of the world the scene lies on. What is hidden is kept alive
     // until it is shown again.
     bool              m_onObject = false;
+    // The view is brought to the object's seat, or stays the player's
+    bool              m_seated   = false;
+    VrPose            m_reference;
     VrWorldObject     m_object;
     const VrSceneFit* m_fit = nullptr;
     // For a scene that holds the object's own model
     VrSceneFit        m_modelFit;
-    VrGameCameraPose  m_seatCamera;
+    VrGameCameraPose  m_viewCamera;
     std::vector<void*>     m_kept;
     std::vector<uint32_t*> m_objectHidden;
     // Characters hidden for now: they come and go while the world runs
@@ -201,9 +215,12 @@ namespace dxvk {
     VrHand            m_vigorHand   = VrHand::Right;
     std::array<bool, VrHandCount> m_vigorTriggers = { };
 
-    // Rendered menu: a terminal or the Reflectron
+    // Rendered menu: a terminal or the Reflectron, the depth of its model
+    // ahead of its camera and that camera's frustum
     uint8_t*          m_rendered    = nullptr;
     void*             m_texture     = nullptr;
+    float             m_renderedDepth = 0.0f;
+    VrGameFrustum     m_renderedFrustum;
 
     Kind findKind() const;
 
@@ -213,11 +230,25 @@ namespace dxvk {
 
     void placeBoard(const VrMinigameFrame& frame, bool aboveTable);
 
-    bool placeRenderedMenu(const VrMinigameFrame& frame, float distance, float width);
+    static bool renderedMenuReady(uint8_t* rendered);
+
+    bool placeRenderedMenu(const VrMinigameFrame& frame, bool onScreen, float distance, float width);
+
+    bool placeTerminalOnScreen(const VrMinigameFrame& frame);
+
+    void placeTerminalPanel();
 
     bool placeOnObject(uint32_t id, const VrMinigameFrame& frame);
 
+    uint8_t* activateRoot() const;
+
+    void takeSeat(uint8_t* root, const VrWorldObject& object, const VrSceneFit* fit, const VrMinigameFrame& frame);
+
+    void standAt(uint8_t* root, const VrWorldObject& object, const VrSceneFit* fit, const VrMinigameFrame& frame);
+
     void standOnObject(const VrMinigameFrame& frame);
+
+    void placeOnObjectSpace();
 
     void keep(void* object);
 

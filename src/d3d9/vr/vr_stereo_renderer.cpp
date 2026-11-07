@@ -731,6 +731,8 @@ namespace dxvk {
     if (const VrGameCameraPose* seat = m_minigames ? m_minigames->seatCamera() : nullptr) {
       m_gameCameraPose = *seat;
       m_viewMoved = true;
+    } else if (m_minigames) {
+      m_minigames->viewFrom(m_gameCameraPose);
     }
 
     if (m_roomscale && m_hasReference) {
@@ -863,6 +865,8 @@ namespace dxvk {
 
       if (frame.stereo)
         frame.cameraHeight = m_renderCamera.readPose().position.z;
+
+      frame.camera = m_gameCameraPose;
 
       Com<IDirect3DSurface9> backBuffer;
       D3DSURFACE_DESC desc = { };
