@@ -2527,11 +2527,14 @@ namespace dxvk {
       ? m_panelConfig.hudMessagesOffset / m_panelConfig.hudWidth : 0.0f;
     float shift = std::round(shiftScale * imageSize.x);
 
-    // The crop of the meters placed in the top right corner
+    // The crop of the meters placed in the top right corner, if shown:
+    // the copy of a hidden meter would only erase the messages under it
     VrInterfaceRect radiationGroup;
     VrInterfaceRect xpGroup;
-    bool hasRadiation = m_hudMetersPlaced.radiation && m_hudLayers.groupRect(VrGame::HudRadiationMeter, radiationGroup);
-    bool hasXp        = m_hudMetersPlaced.xp && m_hudLayers.groupRect(VrGame::HudXpMeter, xpGroup);
+    bool hasRadiation = m_hudMetersPlaced.radiation && isHudMeterShown(VrGame::HudRadiationMeter)
+      && m_hudLayers.groupRect(VrGame::HudRadiationMeter, radiationGroup);
+    bool hasXp        = m_hudMetersPlaced.xp && isHudMeterShown(VrGame::HudXpMeter)
+      && m_hudLayers.groupRect(VrGame::HudXpMeter, xpGroup);
 
     VrVector2       size = vrComputeInterfaceSize(desc.Width, desc.Height);
     VrInterfaceRect metersGroup;
@@ -2574,6 +2577,14 @@ namespace dxvk {
     }
 
     return true;
+  }
+
+
+  bool VrStereoRenderer::isHudMeterShown(uintptr_t group) const {
+    VrInterfaceRect content;
+
+    // Without a measure, the meter is assumed shown
+    return !m_hudLayers.contentFound() || m_hudLayers.groupContent(group, content);
   }
 
 

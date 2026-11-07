@@ -762,6 +762,8 @@ namespace dxvk {
 
     void extendHudCorner(uintptr_t group, bool known, VrInterfaceRect& rect);
 
+    bool isHudMeterShown(uintptr_t group) const;
+
     void hideHandHud();
 
     void updatePanel(IDirect3DSwapChain9* swapchain);

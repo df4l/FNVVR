@@ -130,6 +130,43 @@ TEST_CASE(head_hud_meters_stay_with_no_room) {
   const VrInterfaceRect meters = { 1696.0f, 110.0f, 2560.0f, 862.0f };
   VrHeadHudLayout layout = vrComputeHeadHudLayout(Image, 400.0f, &meters, 1500.0f);
   CHECK_NEAR(layout.copies[2].target.left, 1696.0f, 1e-3f);
+  CHECK_NEAR(layout.copies[1].target.left, 196.0f, 1e-3f);
+}
+
+
+TEST_CASE(head_hud_keeps_a_long_quest_name_whole) {
+  // A quest's name on one line from 30 to 760 units, past where the
+  // meters' column starts once the corner moved by 427 pixels
+  const VrInterfaceRect meters = { 1696.0f, 110.0f, 2560.0f, 862.0f };
+  const VrInterfaceRect objectives = { 30.0f, 150.0f, 760.0f, 350.0f };
+
+  float cornerRight = 2.0f * vrComputeHudCornerRight(nullptr, &objectives);
+  VrHeadHudLayout layout = vrComputeHeadHudLayout(Image, 427.0f, &meters, cornerRight);
+  CHECK(layout.count == 3);
+
+  // The meters stay, the corner moves only as far as the room allows
+  const VrHudCopy& upper  = layout.copies[1];
+  const VrHudCopy& column = layout.copies[2];
+  CHECK_NEAR(column.target.left, 1696.0f, 1e-3f);
+  CHECK_NEAR(upper.target.left, 1696.0f - 1540.0f, 1e-3f);
+
+  VrInterfaceRect movedName = {
+    2.0f * objectives.left  + upper.target.left, 2.0f * objectives.top,
+    2.0f * objectives.right + upper.target.left, 2.0f * objectives.bottom };
+
+  CHECK(movedName.right <= upper.target.right);
+  CHECK(!overlaps(column.target, movedName));
+}
+
+
+TEST_CASE(head_hud_without_meters_keeps_the_shift_for_a_long_name) {
+  const VrInterfaceRect objectives = { 30.0f, 150.0f, 760.0f, 350.0f };
+
+  float cornerRight = 2.0f * vrComputeHudCornerRight(nullptr, &objectives);
+  VrHeadHudLayout layout = vrComputeHeadHudLayout(Image, 427.0f, nullptr, cornerRight);
+  CHECK(layout.count == 2);
+  CHECK_NEAR(layout.copies[1].target.left, 427.0f, 1e-3f);
+  CHECK_NEAR(layout.copies[1].target.right, 2560.0f, 1e-3f);
 }
 
 

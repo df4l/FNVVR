@@ -108,12 +108,15 @@ namespace dxvk {
    * The radiation and XP meters, placed by the VR layer in a column in the
    * top right corner (see VrHudMeters), move towards the centre from the
    * other side, by the same distance at most: they stop where the moved
-   * messages and objectives end, since a copy replaces what it covers.
+   * messages and objectives end, since a copy replaces what it covers. If
+   * a long text, such as a quest's name, leaves less room than the shift,
+   * the meters stay and the upper half moves only as far as the room
+   * allows, so the text is not cut. See findings/hud.md §16.
    *
    * \param [in] size Size of the image, in pixels
    * \param [in] shift How far the corners move towards the centre, in pixels
    * \param [in] meters Crop of the meters' column in pixels, or \c nullptr
-   *    if neither was placed in the top right corner
+   *    if neither is shown in the top right corner
    * \param [in] cornerRight Right side of the messages and objectives
    *    before the move, in pixels, or 0 if unknown
    */

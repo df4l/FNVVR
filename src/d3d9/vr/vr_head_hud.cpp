@@ -102,25 +102,28 @@ namespace dxvk {
       { 0.0f, split, size.x, size.y },
       { 0.0f, split, size.x, size.y } };
 
+    // Room between the messages and objectives and the meters, shared by
+    // both moves: the meters give theirs up first, then the corner, since
+    // a copy replaces what it covers
+    float room        = meters ? std::max(meters->left - cornerRight, 0.0f) : shift;
+    float cornerShift = std::min(shift, room);
+    float metersShift = std::min(shift, room - cornerShift);
+
     // The upper half without the meters' columns, so that the meters are
     // not copied twice
-    float upperRight = size.x - shift;
+    float upperRight = size.x - cornerShift;
 
     if (meters)
       upperRight = std::min(upperRight, meters->left);
 
     layout.copies[layout.count++] = {
-      { 0.0f,  0.0f, upperRight,         split },
-      { shift, 0.0f, upperRight + shift, split } };
+      { 0.0f,        0.0f, upperRight,               split },
+      { cornerShift, 0.0f, upperRight + cornerShift, split } };
 
     if (meters) {
       VrInterfaceRect source = {
         meters->left, std::max(meters->top, 0.0f),
         std::min(meters->right, size.x), std::min(meters->bottom, split) };
-
-      // The meters' copy replaces what lies under it, so it must not reach
-      // the messages and objectives moved the other way
-      float metersShift = std::clamp(meters->left - (cornerRight + shift), 0.0f, shift);
 
       if (!source.isEmpty()) {
         layout.copies[layout.count++] = { source,
