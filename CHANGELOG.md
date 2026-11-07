@@ -5,6 +5,7 @@
 ### Caravan
 
 - **A still table at the size of real cards**: the Caravan mat no longer slides under you when the game moves from the bet to deck building and to the game; it stays in place, about 60 cm below your eyes, with cards the size of real ones, and opens out of black instead of popping up.
+- **The table stands between you and your opponent**: it lies on a table or counter of the world when there is a flat one there, else on a diner table of the game, and you sit 25 cm behind your edge. Walls and people in front of it now hide it. With nobody close enough to play against, the table stays in front of you as before.
 
 ### Terminals
 
