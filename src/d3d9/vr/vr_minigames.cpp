@@ -17,6 +17,7 @@
 #include "vr_math.h"
 #include "vr_menu_scenes.h"
 #include "vr_minigames.h"
+#include "vr_scene_model.h"
 #include "vr_virtual_gamepad.h"
 
 namespace dxvk {
@@ -96,8 +97,12 @@ namespace dxvk {
     // the challenger may stand for the table to go between the two
     constexpr float     CaravanGap         = 20.0f;
     constexpr float     CaravanReach       = 300.0f;
-    // dinertable01_nv.nif's top, above the feet
+    // The game's diner table, put under the mat when no surface of the
+    // world takes it: 117 x 57 units, its top 55.3 above its origin, its
+    // long side along its +X. Its middle goes under the mat's.
+    constexpr char      CaravanTableModel[] = "Meshes\\Furniture\\DinerTable01_NV.nif";
     constexpr float     CaravanTableTop    = 55.3f;
+    constexpr VrVector3 CaravanTableCentre = { 0.45f, 0.5f * (CaravanNearEdge + CaravanFarEdge), 0.0f };
     // A surface of the world takes the mat when the rays down at its centre
     // and corners all meet it this high above the player's feet, this flat
     constexpr float     CaravanSurfaceLow  = 55.0f;
@@ -366,6 +371,7 @@ namespace dxvk {
       && VrGameMemory::readable(VrGame::SlotMachineInstance, sizeof(uintptr_t))
       && VrGameMemory::readable(VrGame::CaravanCamera, sizeof(uintptr_t))
       && VrGameMemory::readable(VrGame::CaravanInstance, sizeof(uintptr_t))
+      && VrGameMemory::readable(VrGame::CaravanSceneRoot, sizeof(uintptr_t))
       && VrGameMemory::readable(VrGame::LoveTesterInstance, sizeof(uintptr_t))
       && VrGameMemory::readable(VrGame::LoveTesterCamera, sizeof(uintptr_t))
       && VrGameMemory::readable(VrGame::LockPickSliderTrait, sizeof(uint32_t))
@@ -377,6 +383,8 @@ namespace dxvk {
 
     std::unique_ptr<VrMinigames> minigames(new VrMinigames(device, backend));
     g_minigames = minigames.get();
+
+    minigames->m_caravanTable = VrSceneModel::create(CaravanTableModel);
 
     // Without the rays, Caravan's table never takes a surface of the world
     minigames->m_canPick = VrGameMemory::matches(VrGame::PickDataConstruct,
@@ -751,6 +759,8 @@ namespace dxvk {
 
     if (onWorld)
       table.position.z = surface;
+    else
+      showCaravanTable();
 
     Logger::info(str::format("VR: The Caravan table goes between the player and the challenger, ", distance,
       " units apart, ", onWorld ? "on a surface of the world " : "at a table's height, ",
@@ -758,6 +768,20 @@ namespace dxvk {
 
     takeSeat(nullptr, table, &CaravanFit, frame);
     return true;
+  }
+
+
+  void VrMinigames::showCaravanTable() {
+    void* scene = global<void*>(VrGame::CaravanSceneRoot);
+
+    if (!m_caravanTable || !scene)
+      return;
+
+    VrVector3 origin = CaravanTableCentre;
+    origin.z = -CaravanTableTop / CaravanScale;
+
+    if (m_caravanTable->show(scene, origin, 1.0f / CaravanScale))
+      Logger::info("VR: The game's diner table stands under the Caravan mat");
   }
 
 
@@ -1196,6 +1220,9 @@ namespace dxvk {
 
 
   void VrMinigames::leaveObject() {
+    if (m_caravanTable)
+      m_caravanTable->hide();
+
     VrMenuScenes::showHidden(m_objectHidden);
     m_objectHidden.clear();
     VrMenuScenes::showHidden(m_actorsHidden);

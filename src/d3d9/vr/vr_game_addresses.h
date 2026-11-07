@@ -1977,6 +1977,17 @@ namespace dxvk {
     constexpr uintptr_t ShadowSceneNodeAddObject      = 0x00B5EEB0;
     constexpr uintptr_t ShadowSceneNodeRemoveObject   = 0x00B5B1C0;
     constexpr uint32_t  MenuShadowSceneNode           = 1;
+
+    /** BSFadeNode's virtual function table, to tell a model's root is one */
+    constexpr uintptr_t FadeNodeVtable                = 0x010A8F90;
+
+    /**
+     * CaravanMenu::spModel, the root of the table's scene, a child of the
+     * menu's shadow scene node (BSSM_SSN_MENU_OBJECT_3D, index 1, read in
+     * CaravanMenu::DrawScene). CaravanMenu::PrepareGameMenu detaches the last
+     * two children of spModel: nothing may be attached under it.
+     */
+    constexpr uintptr_t CaravanSceneRoot              = 0x011D91E4;
     constexpr uint32_t  ShadePropertyType             = 3;
     constexpr uintptr_t ShaderPropertyTextures        = 0xAC;
     constexpr uintptr_t TextureRendererData           = 0x24;

@@ -105,6 +105,7 @@ vr_dxvk_src = files([
   'vr_game_file.cpp',
   'vr_menu_scenes.cpp',
   'vr_minigames.cpp',
+  'vr_scene_model.cpp',
   'vr_scope_game.cpp',
   'vr_scope_render.cpp',
   'vr_tube_screen.cpp',

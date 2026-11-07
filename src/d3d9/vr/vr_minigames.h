@@ -14,6 +14,8 @@
 
 namespace dxvk {
 
+  class VrSceneModel;
+
   /**
    * \brief Sizes the panel of a mini-game is placed with
    */
@@ -180,6 +182,8 @@ namespace dxvk {
     VrGameCameraPose  m_viewCamera;
     // Whether the world's surfaces can be found with the game's rays
     bool              m_canPick = false;
+    // The table under Caravan's mat when the world has none
+    std::unique_ptr<VrSceneModel> m_caravanTable;
     std::vector<void*>     m_kept;
     std::vector<uint32_t*> m_objectHidden;
     // Characters hidden for now: they come and go while the world runs
@@ -247,6 +251,8 @@ namespace dxvk {
     void takeSeat(uint8_t* root, const VrWorldObject& object, const VrSceneFit* fit, const VrMinigameFrame& frame);
 
     bool placeCaravanTable(const VrMinigameFrame& frame);
+
+    void showCaravanTable();
 
     bool findCaravanSurface(uint8_t* player, const VrWorldObject& table, float feet, float& surface);
 
