@@ -115,6 +115,16 @@ namespace dxvk {
     /// Changes whenever the panel has to be placed again
     uint32_t panelRevision() const { return m_panelRevision; }
 
+    /// The values of Caravan's tracks to lay on the mat, \c nullptr if none
+    const VrCaravanBoard* caravanBoard() const { return m_hasCaravanBoard ? &m_caravanBoard : nullptr; }
+
+    /**
+     * \brief Says whether the values of caravanBoard() are shown
+     *
+     * The game's own values are hidden while they are.
+     */
+    void setCaravanValuesShown(bool shown);
+
     /// The camera the eyes are placed from, \c nullptr for the game's own
     const VrGameCameraPose* seatCamera() const { return m_seated ? &m_viewCamera : nullptr; }
 
@@ -223,6 +233,11 @@ namespace dxvk {
     bool              m_caravanTrigger = false;
     bool              m_caravanClick   = false;
     float             m_caravanClickAge = 0.0f;
+    // The values of the tracks on the mat, and whether the game's are hidden
+    bool              m_canHideTiles = false;
+    bool              m_hasCaravanBoard = false;
+    VrCaravanBoard    m_caravanBoard;
+    bool              m_caravanTilesHidden = false;
     // The selection as it was before a step was asked, put back if the menu
     // leaves its idle state before it takes the step
     bool              m_caravanStepping = false;
@@ -317,6 +332,8 @@ namespace dxvk {
     bool caravanSlotOnLaser(uint8_t* menu, const VrVector2& at, bool ownTracksOnly);
 
     void askCaravanStep(uint8_t* menu, VrCaravanKey key, VrHand hand);
+
+    bool placeCaravanBoard(uint8_t* menu);
 
     void press(uint16_t button);
 

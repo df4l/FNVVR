@@ -311,6 +311,7 @@ namespace dxvk {
     renderer->m_chargeRing = std::make_unique<VrChargeRing>(*renderer->m_painter, backend);
     renderer->m_quickWheel = std::make_unique<VrQuickWheel>(*renderer->m_painter, backend, renderer->m_gameImages);
     renderer->m_ammoLabel  = std::make_unique<VrAmmoLabel>(*renderer->m_painter, backend, renderer->m_gameImages);
+    renderer->m_caravanValues = std::make_unique<VrCaravanValues>(*renderer->m_painter, backend, renderer->m_gameImages);
 
     if (VrGameConsole::install())
       renderer->m_terminal = std::make_unique<VrConsoleTerminal>(*renderer->m_painter, backend, texts);
@@ -876,6 +877,15 @@ namespace dxvk {
         frame.panelAspect = float(desc.Height) / float(desc.Width);
 
       m_minigames->update(frame, input, m_controls.pointerSurfaceState());
+
+      bool valuesShown = false;
+
+      if (const VrCaravanBoard* board = m_minigames->caravanBoard())
+        valuesShown = m_caravanValues && m_caravanValues->show(*board);
+      else if (m_caravanValues)
+        m_caravanValues->hide();
+
+      m_minigames->setCaravanValuesShown(valuesShown);
 
       m_controls.setMinigamePad(m_minigames->pad());
       m_controls.setPointerSurface(m_minigames->surface());
@@ -2128,6 +2138,10 @@ namespace dxvk {
       m_renderPasses->setBeforeFirstPerson(nullptr);
 
     if (!enabled) {
+      if (m_caravanValues)
+        m_caravanValues->hide();
+
+      m_minigames->setCaravanValuesShown(false);
       m_minigames = nullptr;
       return;
     }

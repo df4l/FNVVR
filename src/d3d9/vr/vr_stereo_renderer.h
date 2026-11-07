@@ -29,6 +29,7 @@
 #include "vr_hand_throw.h"
 #include "vr_holster.h"
 #include "vr_ammo_label.h"
+#include "vr_caravan_values.h"
 #include "vr_game_images.h"
 #include "vr_quick_wheel.h"
 #include "vr_melee_swing.h"
@@ -404,6 +405,7 @@ namespace dxvk {
     VrGameImages                        m_gameImages;
     std::unique_ptr<VrQuickWheel>       m_quickWheel;
     std::unique_ptr<VrAmmoLabel>        m_ammoLabel;
+    std::unique_ptr<VrCaravanValues>    m_caravanValues;
     // The left hand held ammunition at the last frame, and the reload
     // button was down
     bool                                m_ammoInHand     = false;

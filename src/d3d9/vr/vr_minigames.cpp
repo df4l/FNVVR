@@ -48,6 +48,8 @@ namespace dxvk {
     using PickObjectFn    = bool  (__fastcall*)(uint8_t* world, void* unused, void* pick);
     using GetFilterFn     = uint32_t* (__fastcall*)(uint8_t* actor, void* unused, uint32_t* filter);
     using GetPartFn       = uint8_t* (__fastcall*)(uint8_t* object, void* unused);
+    using TileByNameFn    = void* (__cdecl*)(void* tile, const char* name);
+    using TileSetFloatFn  = void  (__thiscall*)(void* tile, uint32_t trait, float value, bool clearActions);
 
     // The lock's keyhole, in the menu's space: the pin turns about it. The
     // lock is scaled so that the long screwdriver stays off the face.
@@ -128,6 +130,14 @@ namespace dxvk {
     constexpr float     CaravanStickRest = 0.2f;
     // Deeper than this below the hand's or a grid's root, no card or slot
     constexpr uint32_t  CaravanNodeDepth = 8;
+    // The values of the tracks lie on a square of the mat, from the
+    // player's edge across the middle of the tracks, just above the cloth:
+    // the player's past their seventh row (y -18.2), the opponent's past
+    // theirs (y 3.3)
+    constexpr float     CaravanBoardSide   = 27.0f;
+    constexpr float     CaravanBoardHeight = 1.15f;
+    constexpr float     CaravanValueNearY  = -19.6f;
+    constexpr float     CaravanValueFarY   = 4.8f;
 
     // Top of the blackjack table, in its model
     constexpr float     BlackJackHalfX = 22.75f;
@@ -402,6 +412,11 @@ namespace dxvk {
     g_minigames = minigames.get();
 
     minigames->m_caravanTable = VrSceneModel::create(CaravanTableModel);
+
+    // Without them, the game's tiles keep Caravan's values
+    minigames->m_canHideTiles =
+         VrGameMemory::matches(VrGame::TileSetFloat, VrGame::TileSetFloatPrologue, sizeof(VrGame::TileSetFloatPrologue))
+      && VrGameMemory::matches(VrGame::TileGetByName, VrGame::TileGetByNamePrologue, sizeof(VrGame::TileGetByNamePrologue));
 
     // Without the rays, Caravan's table never takes a surface of the world
     minigames->m_canPick = VrGameMemory::matches(VrGame::PickDataConstruct,
@@ -1298,6 +1313,8 @@ namespace dxvk {
 
     m_kind       = Kind::None;
     m_rendered   = nullptr;
+    m_hasCaravanBoard    = false;
+    m_caravanTilesHidden = false;
     m_hasSurface = false;
     m_panelRevision++;
     m_pad = VrMinigamePad();
@@ -1601,6 +1618,7 @@ namespace dxvk {
     }
 
     m_hasSurface = playing;
+    m_hasCaravanBoard = playing && m_canHideTiles && placeCaravanBoard(menu);
 
     if (!playing) {
       m_caravanCard  = -1;
@@ -1709,6 +1727,79 @@ namespace dxvk {
       press(VrGamepadButton::A);
       m_backend.applyHaptic(pointer.hand, 0.3f, HapticTick);
     }
+  }
+
+
+  bool VrMinigames::placeCaravanBoard(uint8_t* menu) {
+    std::array<float, VrCaravanBoard::Tracks> xs;
+
+    for (uint32_t track = 0; track < VrCaravanBoard::Tracks; track++) {
+      auto  grid  = field<uintptr_t>(menu, VrGame::CaravanTrackGrids + track * sizeof(uint32_t));
+      auto  node  = grid ? vrFindGameObject(grid, "Select1_01:0", CaravanNodeDepth) : 0;
+      auto* bound = node ? field<const float*>(reinterpret_cast<void*>(node), VrGame::ObjectWorldBound) : nullptr;
+
+      if (!bound)
+        return false;
+
+      xs[track] = bound[0];
+
+      uintptr_t cards = VrGame::CaravanCardTracks + track * VrGame::CaravanRowCount * VrGame::CaravanCardListSize;
+      bool started = field<uint32_t>(menu, cards + VrGame::SimpleArraySize) != 0;
+
+      m_caravanBoard.values[track] = started
+        ? field<int32_t>(menu, VrGame::CaravanTrackInfos + track * VrGame::CaravanTrackInfoSize + VrGame::CaravanTrackValue)
+        : -1;
+    }
+
+    auto range = std::minmax_element(xs.begin(), xs.end());
+    float left = 0.5f * (*range.first + *range.second) - 0.5f * CaravanBoardSide;
+    float top  = CaravanNearEdge + CaravanBoardSide;
+
+    for (uint32_t track = 0; track < VrCaravanBoard::Tracks; track++) {
+      float y = track < 3 ? CaravanValueNearY : CaravanValueFarY;
+      m_caravanBoard.spots[track] = {
+        clamp((xs[track] - left) / CaravanBoardSide, 0.0f, 1.0f),
+        clamp((top - y) / CaravanBoardSide, 0.0f, 1.0f) };
+    }
+
+    VrVector3 centre = { left + 0.5f * CaravanBoardSide, top - 0.5f * CaravanBoardSide, CaravanBoardHeight };
+    m_caravanBoard.placement = vrSceneSurface(m_space, centre, CaravanBoardSide, CaravanBoardSide);
+    return true;
+  }
+
+
+  void VrMinigames::setCaravanValuesShown(bool shown) {
+    auto menu = m_kind == Kind::Caravan ? global<uint8_t*>(VrGame::CaravanInstance) : nullptr;
+
+    // Out of the game, the game hides its values itself
+    if (!menu || field<uint32_t>(menu, VrGame::CaravanActiveMenu) != VrGame::CaravanGameMenu) {
+      m_caravanTilesHidden = false;
+      return;
+    }
+
+    if (!shown && !m_caravanTilesHidden)
+      return;
+
+    // The game shows them again at each new game
+    void* tiles = field<void*>(menu, VrGame::CaravanGameTiles);
+
+    if (!tiles)
+      return;
+
+    for (const char* name : { VrGame::CaravanPlayerValuesTile, VrGame::CaravanOpponentValuesTile }) {
+      void* tile = game<TileByNameFn>(VrGame::TileGetByName)(tiles, name);
+
+      if (tile)
+        game<TileSetFloatFn>(VrGame::TileSetFloat)(tile, VrGame::TileTraitVisible, shown ? 0.0f : 1.0f, true);
+    }
+
+    if (shown != m_caravanTilesHidden) {
+      Logger::info(shown
+        ? "VR: The values of Caravan's tracks lie on the mat"
+        : "VR: The values of Caravan's tracks are back on the panel");
+    }
+
+    m_caravanTilesHidden = shown;
   }
 
 

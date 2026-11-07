@@ -1,10 +1,29 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 
+#include "vr_menu_pointer.h"
 #include "vr_types.h"
 
 namespace dxvk {
+
+  /**
+   * \brief The values of Caravan's six tracks, where they lie on the mat
+   */
+  struct VrCaravanBoard {
+    constexpr static uint32_t Tracks      = 6;
+    constexpr static uint32_t ImageSize   = 512;
+    /// A track's value over this has bust
+    constexpr static int32_t  MostValue   = 26;
+
+    /// The square of the mat the values are drawn on, facing up
+    VrPanelPlacement placement;
+    /// Value of each track, -1 for a track without a card
+    std::array<int32_t, Tracks>   values = { -1, -1, -1, -1, -1, -1 };
+    /// Centre of each value in the image, (0, 0) top left, (1, 1) bottom right
+    std::array<VrVector2, Tracks> spots  = { };
+  };
 
   /**
    * \brief A stick step Caravan's menu is asked to take

@@ -84,9 +84,11 @@ namespace dxvk {
     QuickWheel,
     /// The console's terminal and keyboard, in front of the player
     Terminal,
+    /// The values of Caravan's tracks, lying on the mat
+    CaravanValues,
   };
 
-  constexpr uint32_t VrPanelCount = 8;
+  constexpr uint32_t VrPanelCount = 9;
 
   /**
    * \brief What a panel's pose is relative to

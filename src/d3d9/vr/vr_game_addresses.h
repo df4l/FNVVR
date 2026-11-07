@@ -879,6 +879,23 @@ namespace dxvk {
     constexpr uint32_t  CaravanKeyLeft       = 0x80000001;
     constexpr uint32_t  CaravanKeyRight      = 0x80000002;
     constexpr uint32_t  CaravanKeyUp         = 0x80000003;
+    /**
+     * The values of the tracks (findings/caravan.md §3.4): kTrackInfos holds
+     * 12 bytes per track, the value at +8 (CaravanMenu::UpdateTrackValue
+     * 0x0074EE70). The game's tiles of the values are in the rectangles
+     * CGM_PlayerTrackRect and CGM_NPCTrackRect of the tile set pTiles[2]
+     * (caravan_game_menu.xml): their visible is a constant the game sets
+     * once, at the move to the game, and the values copy it. They are found
+     * with Tile::GetTileByName (__cdecl, tile, name).
+     */
+    constexpr uintptr_t CaravanTrackInfos    = 0xDE4;
+    constexpr uintptr_t CaravanTrackInfoSize = 12;
+    constexpr uintptr_t CaravanTrackValue    = 8;
+    constexpr uintptr_t CaravanGameTiles     = 0x38;
+    constexpr char      CaravanPlayerValuesTile[] = "CGM_PlayerTrackRect";
+    constexpr char      CaravanOpponentValuesTile[] = "CGM_NPCTrackRect";
+    constexpr uintptr_t TileGetByName        = 0x00A08B20;
+    constexpr uint8_t   TileGetByNamePrologue[] = { 0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x88, 0x08, 0x00, 0x00 };
 
     constexpr uint32_t  SlotMachineMenuId    = 0x438;
     constexpr uint32_t  BlackJackMenuId      = 0x439;
