@@ -829,6 +829,15 @@ namespace dxvk {
     constexpr uintptr_t RouletteCamera       = 0x011DA8D0;
     constexpr uintptr_t CaravanCamera        = 0x011D91A8;
 
+    /**
+     * CaravanMenu::pMe and its challenger (Actor*, null when the script runs
+     * on an object that is not a character), set by CaravanMenu::Create
+     * 0x00741060 from the reference ShowCaravanMenu runs on
+     * (findings/caravan.md §1.1).
+     */
+    constexpr uintptr_t CaravanInstance      = 0x011D917C;
+    constexpr uintptr_t CaravanChallenger    = 0x100;
+
     constexpr uint32_t  SlotMachineMenuId    = 0x438;
     constexpr uint32_t  BlackJackMenuId      = 0x439;
     constexpr uint32_t  RouletteMenuId       = 0x43A;
@@ -848,11 +857,13 @@ namespace dxvk {
     /**
      * The calls to NiRenderer::ClearBuffer (RendererClearBuffer) that clear
      * the depth buffer at the start of the scenes that can lie on an object
-     * of the world: BlackJackMenu, SlotMachineMenu and RouletteMenu::DrawScene.
+     * of the world: BlackJackMenu, SlotMachineMenu, RouletteMenu and
+     * CaravanMenu::DrawScene (0x00740F30 for Caravan's).
      */
     constexpr uintptr_t BlackJackDepthClearSite   = 0x00733530;
     constexpr uintptr_t SlotMachineDepthClearSite = 0x007C19F0;
     constexpr uintptr_t RouletteDepthClearSite    = 0x007BBD20;
+    constexpr uintptr_t CaravanDepthClearSite     = 0x00740F60;
 
     /**
      * The vigor tester of character creation (LoveTesterMenu, findings/

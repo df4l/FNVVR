@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cctype>
+#include <cfloat>
 #include <cmath>
 #include <cstring>
 #include <string>
@@ -39,6 +40,12 @@ namespace dxvk {
     using Get3DFn         = void* (__thiscall*)(void* reference);
     using ClearFn         = void  (__fastcall*)(void* renderer, void* unused, const void* rect, uint32_t flags);
     using IsActorFn       = bool  (__thiscall*)(void* reference);
+    using PickConstructFn = void* (__fastcall*)(void* pick, void* unused);
+    using PickSetFilterFn = void  (__fastcall*)(void* pick, void* unused, uint32_t filter);
+    using PickSetPointFn  = void  (__fastcall*)(void* pick, void* unused, const VrVector3* point);
+    using PickObjectFn    = bool  (__fastcall*)(uint8_t* world, void* unused, void* pick);
+    using GetFilterFn     = uint32_t* (__fastcall*)(uint8_t* actor, void* unused, uint32_t* filter);
+    using GetPartFn       = uint8_t* (__fastcall*)(uint8_t* object, void* unused);
 
     // The lock's keyhole, in the menu's space: the pin turns about it. The
     // lock is scaled so that the long screwdriver stays off the face.
@@ -64,9 +71,39 @@ namespace dxvk {
     // of real ones. The eyes are put above the middle of the mat, behind the
     // player's edge (y -21): the mat stays still while the game's camera pans
     // between its betting, deck and game areas.
-    constexpr float     CaravanUnits   = VrGameUnitsPerMetre / 1.75f;
-    constexpr VrVector3 CaravanEye     = { 0.0f, -21.0f - 0.25f * CaravanUnits, 1.1f + 0.6f * CaravanUnits };
+    constexpr float     CaravanScale   = 1.75f;
+    constexpr float     CaravanUnits   = VrGameUnitsPerMetre / CaravanScale;
+    constexpr float     CaravanNearEdge = -21.0f;
+    constexpr float     CaravanFarEdge  = 14.7f;
+    constexpr VrVector3 CaravanEye     = { 0.0f, CaravanNearEdge - 0.25f * CaravanUnits, 1.1f + 0.6f * CaravanUnits };
     constexpr VrVector3 CaravanFacing  = { 0.0f, 1.0f, 0.0f };
+
+    // Between the player and the challenger, the mat lies on the world's
+    // table under it, else at the height of the game's diner tables. The
+    // world's model of the table is the mat's at scale 1, the seat 25 cm
+    // behind the player's edge.
+    constexpr VrModelArea CaravanArea = {
+      -28.0f * CaravanScale, 28.9f * CaravanScale,
+      CaravanNearEdge * CaravanScale, CaravanFarEdge * CaravanScale };
+
+    constexpr VrSceneFit CaravanFit = {
+      { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f },
+      { 0.0f, 0.0f, 0.0f }, CaravanScale,
+      { 0.0f, CaravanNearEdge * CaravanScale - 0.25f * VrGameUnitsPerMetre, 0.0f }, { 0.0f, 1.0f, 0.0f },
+      &CaravanArea, 1 };
+
+    // Room left between the far edge and the challenger's feet, and how far
+    // the challenger may stand for the table to go between the two
+    constexpr float     CaravanGap         = 20.0f;
+    constexpr float     CaravanReach       = 300.0f;
+    // dinertable01_nv.nif's top, above the feet
+    constexpr float     CaravanTableTop    = 55.3f;
+    // A surface of the world takes the mat when the rays down at its centre
+    // and corners all meet it this high above the player's feet, this flat
+    constexpr float     CaravanSurfaceLow  = 55.0f;
+    constexpr float     CaravanSurfaceHigh = 110.0f;
+    constexpr float     CaravanSurfaceFlat = 3.0f;
+    constexpr float     CaravanRayTop      = 120.0f;
     // The table opens out of black
     constexpr float     CaravanFadeIn  = 0.5f;
 
@@ -328,6 +365,7 @@ namespace dxvk {
       && VrGameMemory::readable(VrGame::RouletteInstance, sizeof(uintptr_t))
       && VrGameMemory::readable(VrGame::SlotMachineInstance, sizeof(uintptr_t))
       && VrGameMemory::readable(VrGame::CaravanCamera, sizeof(uintptr_t))
+      && VrGameMemory::readable(VrGame::CaravanInstance, sizeof(uintptr_t))
       && VrGameMemory::readable(VrGame::LoveTesterInstance, sizeof(uintptr_t))
       && VrGameMemory::readable(VrGame::LoveTesterCamera, sizeof(uintptr_t))
       && VrGameMemory::readable(VrGame::LockPickSliderTrait, sizeof(uint32_t))
@@ -339,6 +377,10 @@ namespace dxvk {
 
     std::unique_ptr<VrMinigames> minigames(new VrMinigames(device, backend));
     g_minigames = minigames.get();
+
+    // Without the rays, Caravan's table never takes a surface of the world
+    minigames->m_canPick = VrGameMemory::matches(VrGame::PickDataConstruct,
+      VrGame::PickDataConstructPrologue, sizeof(VrGame::PickDataConstructPrologue));
 
     // The world's terminals and the Reflectron need the console's hook to
     // get a screen for both eyes; without it they stay on the panel
@@ -352,6 +394,7 @@ namespace dxvk {
       keepsDepth = VrGameMemory::redirectCall(VrGame::SlotMachineDepthClearSite, VrGame::RendererClearBuffer, clearHook) && keepsDepth;
       keepsDepth = VrGameMemory::redirectCall(VrGame::RouletteDepthClearSite, VrGame::RendererClearBuffer, clearHook) && keepsDepth;
       keepsDepth = VrGameMemory::redirectCall(VrGame::LoveTesterDepthClearSite, VrGame::RendererClearBuffer, clearHook) && keepsDepth;
+      keepsDepth = VrGameMemory::redirectCall(VrGame::CaravanDepthClearSite, VrGame::RendererClearBuffer, clearHook) && keepsDepth;
 
       if (!keepsDepth)
         Logger::warn("VR: A depth clear of the scenes on the world's objects was not found, they are drawn over the world in front of them");
@@ -573,7 +616,9 @@ namespace dxvk {
         break;
 
       case Kind::Caravan:
-        m_space = vrSceneSpaceAroundHead(frame.head, CaravanEye, CaravanFacing, CaravanUnits);
+        if (!placeCaravanTable(frame))
+          m_space = vrSceneSpaceAroundHead(frame.head, CaravanEye, CaravanFacing, CaravanUnits);
+
         placeBoard(frame, true);
         m_backend.fadeView(0.0f, 1.0f);
         m_backend.fadeView(CaravanFadeIn, 0.0f);
@@ -673,9 +718,109 @@ namespace dxvk {
     Logger::info(str::format("VR: The seat's camera is ", m_viewCamera.position.z - m_object.position.z,
       " units above the object, the game's ", frame.cameraHeight - m_object.position.z));
 
-    keep(root);
+    if (root)
+      keep(root);
+
     updateActorsInTheWay(true);
     standOnObject(frame);
+  }
+
+
+  bool VrMinigames::placeCaravanTable(const VrMinigameFrame& frame) {
+    auto menu       = global<uint8_t*>(VrGame::CaravanInstance);
+    auto challenger = menu ? field<uint8_t*>(menu, VrGame::CaravanChallenger) : nullptr;
+    auto player     = global<uint8_t*>(VrGame::Player);
+
+    if (!challenger || !player || !frame.hasReference)
+      return false;
+
+    VrVector3 feet  = field<VrVector3>(player, VrGame::RefLocation);
+    VrVector3 other = field<VrVector3>(challenger, VrGame::RefLocation);
+    float distance  = vrLength(VrVector3 { other.x - feet.x, other.y - feet.y, 0.0f });
+
+    VrWorldObject table;
+
+    if (distance > CaravanReach || std::abs(other.z - feet.z) > CaravanSurfaceHigh
+     || !vrTableBetween(feet, other, CaravanArea.maxY, CaravanGap, feet.z + CaravanTableTop, table)) {
+      Logger::info(str::format("VR: The Caravan challenger stands ", distance, " units away, the table stands in the room"));
+      return false;
+    }
+
+    float surface = 0.0f;
+    bool  onWorld = findCaravanSurface(player, table, feet.z, surface);
+
+    if (onWorld)
+      table.position.z = surface;
+
+    Logger::info(str::format("VR: The Caravan table goes between the player and the challenger, ", distance,
+      " units apart, ", onWorld ? "on a surface of the world " : "at a table's height, ",
+      table.position.z - feet.z, " units above the feet"));
+
+    takeSeat(nullptr, table, &CaravanFit, frame);
+    return true;
+  }
+
+
+  bool VrMinigames::findCaravanSurface(uint8_t* player, const VrWorldObject& table, float feet, float& surface) {
+    if (!m_canPick)
+      return false;
+
+    uint8_t* cell  = reinterpret_cast<GetPartFn>(VrGame::RefGetParentCell)(player, nullptr);
+    uint8_t* world = cell ? reinterpret_cast<GetPartFn>(VrGame::CellGetWorld)(cell, nullptr) : nullptr;
+
+    if (!world)
+      return false;
+
+    // The game's grab ray: it skips the player
+    uint32_t playerFilter = 0;
+    reinterpret_cast<GetFilterFn>(VrGame::GetCollisionFilter)(player, nullptr, &playerFilter);
+    uint32_t rayFilter = (playerFilter >> VrGame::FilterGroupShift << VrGame::FilterGroupShift) | VrGame::LayerItemPick;
+
+    const VrVector2 points[] = {
+      { 0.5f * (CaravanArea.minX + CaravanArea.maxX), 0.5f * (CaravanArea.minY + CaravanArea.maxY) },
+      { CaravanArea.minX, CaravanArea.minY }, { CaravanArea.maxX, CaravanArea.minY },
+      { CaravanArea.minX, CaravanArea.maxY }, { CaravanArea.maxX, CaravanArea.maxY } };
+
+    float lowest  = FLT_MAX;
+    float highest = -FLT_MAX;
+    bool  meets   = true;
+
+    for (const VrVector2& point : points) {
+      alignas(16) uint8_t pick[VrGame::PickDataSize];
+      VrVector3 from = table.position + table.x * point.x + table.y * point.y;
+      from.z = feet + CaravanRayTop;
+      VrVector3 length = { 0.0f, 0.0f, CaravanSurfaceLow - CaravanRayTop };
+
+      reinterpret_cast<PickConstructFn>(VrGame::PickDataConstruct)(pick, nullptr);
+      reinterpret_cast<PickSetFilterFn>(VrGame::PickDataSetFilter)(pick, nullptr, rayFilter);
+      reinterpret_cast<PickSetPointFn>(VrGame::PickDataSetFrom)(pick, nullptr, &from);
+      reinterpret_cast<PickSetPointFn>(VrGame::PickDataSetLength)(pick, nullptr, &length);
+
+      auto vtable = field<uint8_t*>(world, 0);
+
+      if (!(*reinterpret_cast<PickObjectFn*>(vtable + VrGame::WorldPickObjectSlot))(world, nullptr, pick)) {
+        meets = false;
+        break;
+      }
+
+      float z = from.z + length.z * field<float>(pick, VrGame::PickDataHitFraction);
+      lowest  = std::min(lowest, z);
+      highest = std::max(highest, z);
+    }
+
+    if (!meets) {
+      Logger::info("VR: No surface of the world under the whole Caravan table");
+      return false;
+    }
+
+    if (highest - lowest > CaravanSurfaceFlat || highest - feet > CaravanSurfaceHigh) {
+      Logger::info(str::format("VR: The surface under the Caravan table is uneven, from ",
+        lowest - feet, " to ", highest - feet, " units above the feet"));
+      return false;
+    }
+
+    surface = highest;
+    return true;
   }
 
 

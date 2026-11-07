@@ -178,6 +178,8 @@ namespace dxvk {
     // For a scene that holds the object's own model
     VrSceneFit        m_modelFit;
     VrGameCameraPose  m_viewCamera;
+    // Whether the world's surfaces can be found with the game's rays
+    bool              m_canPick = false;
     std::vector<void*>     m_kept;
     std::vector<uint32_t*> m_objectHidden;
     // Characters hidden for now: they come and go while the world runs
@@ -243,6 +245,10 @@ namespace dxvk {
     uint8_t* activateRoot() const;
 
     void takeSeat(uint8_t* root, const VrWorldObject& object, const VrSceneFit* fit, const VrMinigameFrame& frame);
+
+    bool placeCaravanTable(const VrMinigameFrame& frame);
+
+    bool findCaravanSurface(uint8_t* player, const VrWorldObject& table, float feet, float& surface);
 
     void standAt(uint8_t* root, const VrWorldObject& object, const VrSceneFit* fit, const VrMinigameFrame& frame);
 

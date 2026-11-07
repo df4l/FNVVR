@@ -645,3 +645,28 @@ TEST_CASE(wave_over_the_table_is_a_signal) {
     CHECK(one.update(hands, Step) == VrTableSignal::None);
   }
 }
+
+
+TEST_CASE(table_between_lies_on_the_line_short_of_the_other) {
+  VrWorldObject table;
+  VrVector3 player = { 100.0f, 200.0f, 10.0f };
+  VrVector3 other  = { 100.0f, 400.0f, 12.0f };
+
+  CHECK(vrTableBetween(player, other, 25.0f, 20.0f, 65.0f, table));
+
+  // +Y towards the other, +X to the player's right, up stays up
+  CHECK(same(table.y, VrVector3 { 0.0f, 1.0f, 0.0f }));
+  CHECK(same(table.x, VrVector3 { 1.0f, 0.0f, 0.0f }));
+  CHECK(same(table.z, VrVector3 { 0.0f, 0.0f, 1.0f }));
+  CHECK(same(table.position, VrVector3 { 100.0f, 355.0f, 65.0f }));
+
+  // The far edge is the gap short of the other person
+  VrVector3 edge = table.position + table.y * 25.0f;
+  CHECK(std::abs(other.y - edge.y - 20.0f) < Near);
+
+  // Facing west, the right is north
+  CHECK(vrTableBetween(player, VrVector3 { 0.0f, 200.0f, 10.0f }, 25.0f, 20.0f, 65.0f, table));
+  CHECK(same(table.x, VrVector3 { 0.0f, 1.0f, 0.0f }));
+
+  CHECK(!vrTableBetween(player, VrVector3 { 100.0f, 200.0f, 80.0f }, 25.0f, 20.0f, 65.0f, table));
+}

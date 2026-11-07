@@ -123,6 +123,31 @@ namespace dxvk {
    */
   VrSceneFit vrSceneFitOfModel(const VrWorldObject& model);
 
+
+  /**
+   * \brief Lays a table between the player and someone facing them
+   *
+   * The table's model has +Y towards the other person, +X to the player's
+   * right and +Z up, at scale 1. The edge of the model at \c farEdge on +Y
+   * stops \c gap units short of the other person, on the line between the
+   * two seen from above, and the model's origin is at the height \c top.
+   *
+   * \param [in] player Where the player stands in the world
+   * \param [in] other Where the other person stands in the world
+   * \param [in] farEdge The model's edge on the other person's side
+   * \param [in] gap Room left between that edge and the other person
+   * \param [in] top Height of the model's origin in the world
+   * \param [out] table Where the model stands in the world
+   * \returns \c false if the two stand on the same spot, seen from above
+   */
+  bool vrTableBetween(
+    const VrVector3&        player,
+    const VrVector3&        other,
+          float             farEdge,
+          float             gap,
+          float             top,
+          VrWorldObject&    table);
+
   /**
    * \brief The glass of a screen, in the frame of the object that holds it
    *
