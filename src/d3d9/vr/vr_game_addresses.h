@@ -930,6 +930,28 @@ namespace dxvk {
     constexpr uintptr_t TileGetByName        = 0x00A08B20;
     constexpr uint8_t   TileGetByNamePrologue[] = { 0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x88, 0x08, 0x00, 0x00 };
 
+    /**
+     * Caravan's deck building (eActiveMenu 1), checked in CaravanMenu::DoIdle
+     * 0x00741500, DoGamepad 0x00747D30 and SwapDeckBuildingTextures
+     * 0x0074B700. The deck meter is pTiles[15] (+0x6C); its value (the trait
+     * in the global CaravanMenu::iUT_CurrentValue) is the collection's card
+     * in the middle. Slot i (0-23) of both rows shows the card at that value
+     * minus 11 + i: shapes "Deck_{i+1:02}:{i}" of pActiveDeckGeometry (the
+     * deck's row) and "Available_{i+1:02}:{i}" of pInactiveDeckGeometry,
+     * NV_Caravan-Deck.NIF and -Available.NIF. With a gamepad DoIdle moves the
+     * value one card per animation (states 5 and 6) while the left stick is
+     * off its dead zone; A adds kDeck[value] to the deck and X takes it out,
+     * the byte +0x98 of the kDeck entry saying whether it is in.
+     */
+    constexpr uint32_t  CaravanDeckBuildingMenu  = 1;
+    constexpr uintptr_t CaravanDeckMeterTile     = 0x6C;
+    constexpr uintptr_t CaravanCurrentValueTrait = 0x011D9170;
+    constexpr uintptr_t CaravanAvailableModel    = 0x188;
+    constexpr uintptr_t CaravanDeckModel         = 0x18C;
+    constexpr uintptr_t CaravanCollection        = 0xA6C;
+    constexpr uintptr_t CaravanCollectionSize    = 0xAF0;
+    constexpr uintptr_t CaravanCardInDeck        = 0x98;
+
     constexpr uint32_t  SlotMachineMenuId    = 0x438;
     constexpr uint32_t  BlackJackMenuId      = 0x439;
     constexpr uint32_t  RouletteMenuId       = 0x43A;

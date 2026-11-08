@@ -244,3 +244,69 @@ TEST_CASE(caravan_spread_turns_cards_away_from_the_middle) {
   CHECK_NEAR(same.rotate[0][0], 1.0f, 1e-6f);
   CHECK_NEAR(same.translate.x, 0.0f, 1e-4f);
 }
+
+
+TEST_CASE(caravan_deck_picker_scrolls_then_adds) {
+  VrCaravanDeckPicker picker;
+
+  // Three slots right of the middle: three steps right, then A
+  CHECK(picker.click(VrCaravanDeckRow::Available, 14, 20, 54));
+  CHECK(picker.target() == 23);
+
+  VrCaravanDeckAction action = picker.update(20, false, true, 0.01f);
+  CHECK(action.stick == 1);
+  CHECK(!action.add && !action.remove);
+
+  CHECK(picker.update(22, false, false, 0.01f).stick == 1);
+
+  // At the card, the last animation still runs: nothing yet
+  action = picker.update(23, false, false, 0.01f);
+  CHECK(action.stick == 0);
+  CHECK(!action.add);
+
+  action = picker.update(23, false, true, 0.01f);
+  CHECK(action.add);
+  CHECK(!action.remove);
+  CHECK(picker.target() == -1);
+  CHECK(picker.update(23, false, true, 0.01f).stick == 0);
+}
+
+
+TEST_CASE(caravan_deck_picker_removes_only_what_is_in_the_deck) {
+  VrCaravanDeckPicker picker;
+
+  // The middle card of the deck's row: X at once
+  CHECK(picker.click(VrCaravanDeckRow::Deck, VrCaravanDeckPicker::CurrentSlot, 5, 54));
+  VrCaravanDeckAction action = picker.update(5, true, true, 0.01f);
+  CHECK(action.remove);
+  CHECK(!action.add);
+
+  // A card already out of the deck is only brought to the middle
+  CHECK(picker.click(VrCaravanDeckRow::Deck, 9, 5, 54));
+  CHECK(picker.update(5, false, true, 0.01f).stick == -1);
+  action = picker.update(3, false, true, 0.01f);
+  CHECK(!action.add && !action.remove);
+  CHECK(picker.target() == -1);
+
+  // Nor is a card already in it added again
+  CHECK(picker.click(VrCaravanDeckRow::Available, VrCaravanDeckPicker::CurrentSlot, 3, 54));
+  action = picker.update(3, true, true, 0.01f);
+  CHECK(!action.add && !action.remove);
+}
+
+
+TEST_CASE(caravan_deck_picker_ignores_empty_slots_and_stalls) {
+  VrCaravanDeckPicker picker;
+
+  // Before the first card and past the last one
+  CHECK(!picker.click(VrCaravanDeckRow::Available, 2, 3, 54));
+  CHECK(!picker.click(VrCaravanDeckRow::Available, 20, 50, 54));
+  CHECK(!picker.click(VrCaravanDeckRow::Available, VrCaravanDeckPicker::Slots, 20, 54));
+  CHECK(picker.target() == -1);
+
+  // A meter that does not move is given up
+  CHECK(picker.click(VrCaravanDeckRow::Available, 12, 3, 54));
+  CHECK(picker.update(3, false, true, 1.5f).stick == 1);
+  CHECK(picker.update(3, false, true, 1.0f).stick == 0);
+  CHECK(picker.target() == -1);
+}

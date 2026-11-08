@@ -1775,8 +1775,19 @@ namespace dxvk {
       }
     }
 
-    m_hasSurface = playing;
+    bool building = menu && field<uint32_t>(menu, VrGame::CaravanActiveMenu) == VrGame::CaravanDeckBuildingMenu;
+
+    m_hasSurface = playing || building;
     m_hasCaravanBoard = playing && m_canHideTiles && placeCaravanBoard(menu);
+
+    if (building) {
+      placeCaravanSurface();
+      updateCaravanDeck(menu, pointer, input, dt);
+      return;
+    }
+
+    m_caravanDeck.reset();
+    m_caravanDeckSlot = -1;
 
     if (!playing) {
       m_caravanCard  = -1;
@@ -1934,6 +1945,109 @@ namespace dxvk {
       press(VrGamepadButton::A);
       m_backend.applyHaptic(hand, 0.3f, HapticTick);
     }
+  }
+
+
+  void VrMinigames::updateCaravanDeck(uint8_t* menu, const VrPointerSurfaceState& pointer, const VrInputState& input, float dt) {
+    void* meter = field<void*>(menu, VrGame::CaravanDeckMeterTile);
+
+    if (!meter) {
+      m_caravanDeck.reset();
+      return;
+    }
+
+    float   value   = game<GetFloatFn>(VrGame::TileGetFloat)(meter, global<uint32_t>(VrGame::CaravanCurrentValueTrait));
+    int32_t current = int32_t(std::lround(value));
+    int32_t total   = int32_t(field<uint32_t>(menu, VrGame::CaravanCollectionSize));
+    bool    idle    = field<uint32_t>(menu, VrGame::CaravanGameState) == 0;
+
+    int32_t wasSlot = m_caravanDeckSlot;
+    m_caravanDeckSlot = -1;
+
+    if (pointer.hit) {
+      const VrPose& aim = input.controllers[uint32_t(pointer.hand)].aimPose;
+      VrVector3 origin  = vrRoomToScene(m_space, aim.position);
+      VrVector3 ahead   = vrRoomToScene(m_space, aim.position + vrRotate(aim.orientation, VrVector3 { 0.0f, 0.0f, -1.0f }));
+      m_caravanDeckSlot = caravanDeckCardOnLaser(menu, origin, ahead - origin);
+    }
+
+    constexpr int32_t Slots = VrCaravanDeckPicker::Slots;
+    auto rowOf = [] (int32_t slot) { return slot < Slots ? VrCaravanDeckRow::Deck : VrCaravanDeckRow::Available; };
+
+    if (m_caravanDeckSlot != wasSlot && m_caravanDeckSlot >= 0) {
+      Logger::info(str::format("VR: The laser is on the Caravan ",
+        rowOf(m_caravanDeckSlot) == VrCaravanDeckRow::Deck ? "deck's" : "available", " card ",
+        current + m_caravanDeckSlot % Slots - VrCaravanDeckPicker::CurrentSlot));
+    }
+
+    if (pointer.trigger && !m_caravanTrigger && m_caravanDeckSlot >= 0
+     && m_caravanDeck.click(rowOf(m_caravanDeckSlot), m_caravanDeckSlot % Slots, current, total)) {
+      Logger::info(str::format("VR: The trigger brings the Caravan card ", m_caravanDeck.target(), " of ", total,
+        " to the middle, from ", current));
+      m_backend.applyHaptic(pointer.hand, 0.3f, HapticTick);
+    }
+
+    m_caravanTrigger = pointer.trigger;
+
+    int32_t target = m_caravanDeck.target();
+    bool    inDeck = target >= 0 && target < total && caravanCardInDeck(menu, uint32_t(target));
+    VrCaravanDeckAction action = m_caravanDeck.update(current, inDeck, idle, dt);
+
+    if (action.stick) {
+      m_pad.driveLeftX = true;
+      m_pad.leftX      = float(action.stick);
+    }
+
+    if (action.add || action.remove) {
+      Logger::info(str::format("VR: ", action.add ? "A adds" : "X takes out", " the Caravan card ", current,
+        action.add ? " to the deck" : " of the deck"));
+      press(action.add ? VrGamepadButton::A : VrGamepadButton::X);
+      m_backend.applyHaptic(pointer.hand, 0.3f, HapticTick);
+    }
+  }
+
+
+  int32_t VrMinigames::caravanDeckCardOnLaser(uint8_t* menu, const VrVector3& origin, const VrVector3& direction) const {
+    constexpr int32_t Slots = VrCaravanDeckPicker::Slots;
+    std::array<VrCaravanCard, 2 * Slots> cards;
+
+    for (int32_t row = 0; row < 2; row++) {
+      auto model = field<uintptr_t>(menu, row ? VrGame::CaravanAvailableModel : VrGame::CaravanDeckModel);
+
+      for (int32_t i = 0; i < Slots; i++) {
+        VrCaravanCard& card = cards[row * Slots + i];
+        card.scale = 0.0f;
+
+        if (!model)
+          continue;
+
+        std::string name = str::format(row ? "Available_" : "Deck_", i < 9 ? "0" : "", i + 1, ":", i);
+        auto* node = reinterpret_cast<uint8_t*>(vrFindGameObject(model, name.c_str(), CaravanNodeDepth));
+
+        if (!node || (field<uint32_t>(node, VrGame::ObjectFlags) & VrGame::ObjectFlagAppCulled))
+          continue;
+
+        auto world = *reinterpret_cast<const VrCaravanTransform*>(node + VrGame::ObjectWorldRotation);
+        std::memcpy(card.rotate, world.rotate, sizeof(card.rotate));
+        card.translate = world.translate;
+        card.scale     = world.scale;
+        card.halfX     = CaravanCardHalfX;
+        card.halfY     = CaravanCardHalfY;
+      }
+    }
+
+    return vrFirstCardOnRay(cards.data(), uint32_t(cards.size()), origin, direction);
+  }
+
+
+  bool VrMinigames::caravanCardInDeck(uint8_t* menu, uint32_t card) const {
+    auto base = field<uintptr_t*>(menu, VrGame::CaravanCollection + VrGame::SimpleArrayBase);
+    auto size = field<uint32_t>(menu, VrGame::CaravanCollection + VrGame::SimpleArraySize);
+
+    if (!base || card >= size || !base[card])
+      return false;
+
+    return field<uint8_t>(reinterpret_cast<uint8_t*>(base[card]), VrGame::CaravanCardInDeck) != 0;
   }
 
 

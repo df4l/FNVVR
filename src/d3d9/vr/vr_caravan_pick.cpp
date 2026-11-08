@@ -250,4 +250,52 @@ namespace dxvk {
     return command;
   }
 
+
+  bool VrCaravanDeckPicker::click(VrCaravanDeckRow row, int32_t slot, int32_t current, int32_t total) {
+    int32_t card = current + slot - CurrentSlot;
+
+    if (slot < 0 || slot >= Slots || card < 0 || card >= total)
+      return false;
+
+    m_target  = card;
+    m_row     = row;
+    m_last    = current;
+    m_stalled = 0.0f;
+    return true;
+  }
+
+
+  VrCaravanDeckAction VrCaravanDeckPicker::update(int32_t current, bool inDeck, bool idle, float dt) {
+    VrCaravanDeckAction action;
+
+    if (m_target < 0)
+      return action;
+
+    if (current != m_last) {
+      m_last    = current;
+      m_stalled = 0.0f;
+    } else {
+      m_stalled += dt;
+    }
+
+    if (m_stalled > StallTime) {
+      reset();
+      return action;
+    }
+
+    if (current != m_target) {
+      action.stick = m_target > current ? 1 : -1;
+      return action;
+    }
+
+    // The last step's animation ends before the menu takes a button
+    if (!idle)
+      return action;
+
+    action.add    = m_row == VrCaravanDeckRow::Available && !inDeck;
+    action.remove = m_row == VrCaravanDeckRow::Deck && inDeck;
+    reset();
+    return action;
+  }
+
 }

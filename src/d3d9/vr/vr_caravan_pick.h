@@ -280,4 +280,80 @@ namespace dxvk {
 
   };
 
+  /**
+   * \brief The two rows of cards of Caravan's deck building
+   */
+  enum class VrCaravanDeckRow : uint32_t {
+    /// The cards in the player's deck: a click takes one out
+    Deck,
+    /// The cards out of it: a click puts one in
+    Available,
+  };
+
+  /**
+   * \brief What the deck building is asked this frame
+   */
+  struct VrCaravanDeckAction {
+    /// Left stick X to hold: -1, 0 or 1, one card per step of the menu
+    int32_t stick  = 0;
+    /// Press the gamepad's A (add the current card to the deck)
+    bool    add    = false;
+    /// Press the gamepad's X (take the current card out of the deck)
+    bool    remove = false;
+  };
+
+  /**
+   * \brief Brings a clicked card of Caravan's deck building to the middle,
+   *    then puts it in or takes it out of the deck
+   *
+   * Both rows show the collection from the card at the deck meter's value
+   * minus \ref CurrentSlot; only the card in the middle (the meter's value)
+   * is added or removed. The menu scrolls one card per stick step and
+   * animation, with its sound: the stick is held towards the clicked card
+   * until the meter reaches it (findings/caravan.md §5 step 4).
+   */
+  class VrCaravanDeckPicker {
+
+  public:
+
+    constexpr static int32_t Slots       = 24;
+    constexpr static int32_t CurrentSlot = 11;
+    /// Seconds without the meter moving before the scroll is given up
+    constexpr static float   StallTime   = 2.0f;
+
+    /**
+     * \brief A click on a card of a row
+     *
+     * \param [in] row The row clicked
+     * \param [in] slot Slot of the card in the row, 0 to \ref Slots - 1
+     * \param [in] current The deck meter's value: the card in the middle
+     * \param [in] total Cards in the collection
+     * \returns Whether the slot holds a card of the collection
+     */
+    bool click(VrCaravanDeckRow row, int32_t slot, int32_t current, int32_t total);
+
+    /**
+     * \brief What to do this frame
+     *
+     * \param [in] current The deck meter's value
+     * \param [in] inDeck Whether the clicked card is in the deck now
+     * \param [in] idle The menu takes input (its state 0)
+     * \param [in] dt Seconds since the last update
+     */
+    VrCaravanDeckAction update(int32_t current, bool inDeck, bool idle, float dt);
+
+    /// The clicked card's index in the collection, -1 for none
+    int32_t target() const { return m_target; }
+
+    void reset() { *this = VrCaravanDeckPicker(); }
+
+  private:
+
+    int32_t          m_target  = -1;
+    VrCaravanDeckRow m_row     = VrCaravanDeckRow::Deck;
+    int32_t          m_last    = -1;
+    float            m_stalled = 0.0f;
+
+  };
+
 }

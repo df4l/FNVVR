@@ -262,6 +262,10 @@ namespace dxvk {
     int32_t           m_caravanWasRow   = 0;
     // Where the player's hand of cards is carried from the table, in the
     // left hand during the game
+    // Deck building: the card on the laser (as caravanDeckCardOnLaser) and
+    // the clicked card brought to the middle
+    int32_t             m_caravanDeckSlot = -1;
+    VrCaravanDeckPicker m_caravanDeck;
     bool              m_caravanFanHeld = false;
     VrCaravanTransform m_caravanFan;
 
@@ -367,6 +371,11 @@ namespace dxvk {
 
     bool placeCaravanBoard(uint8_t* menu);
 
+    void updateCaravanDeck(uint8_t* menu, const VrPointerSurfaceState& pointer, const VrInputState& input, float dt);
+    /// The deck building's card on the laser: the deck's row 0-23, the
+    /// available row 24-47, -1 for none
+    int32_t caravanDeckCardOnLaser(uint8_t* menu, const VrVector3& origin, const VrVector3& direction) const;
+    bool caravanCardInDeck(uint8_t* menu, uint32_t card) const;
     void commandCaravan(uint8_t* menu, VrCaravanCommand command, VrHand hand, const VrVector2* at);
 
     void press(uint16_t button);
