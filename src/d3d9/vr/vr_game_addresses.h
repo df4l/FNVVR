@@ -1379,6 +1379,29 @@ namespace dxvk {
     constexpr uint8_t   FormTypeIdle                = 0x48;
 
     /**
+     * Keeping that idle up, then ending it. Animation::uiLoopCounts (+0x7C,
+     * an int per animation section) counts the loops a section has left:
+     * Animation::Update (0x00491180) decrements it at each loop unless it
+     * is -1, which loops for ever (the counter JohnnyGuitar's StopIdleLoop
+     * zeroes). The AnimIdle at Animation::spAnimIdle holds its section at
+     * +0x14, its two add-on objects (the TESObjectANIO models the idle
+     * brings, here the sheet aoExamPaperA 0x5DB23, attached by the game to
+     * the bone its NIF names) at +0x24 and its TESIdleForm at +0x2C. The
+     * process's virtual FreeUpSpecialIdle (__thiscall, the actor; slot
+     * 0xD8, HighProcess 0x008DAF20, empty in the other processes) ends the
+     * idle through Animation::SpecialIdleFree (0x00498910), as JIP LN's
+     * StopIdle does.
+     */
+    constexpr uintptr_t AnimationLoopCounts         = 0x7C;
+    constexpr int32_t   AnimationLoopForever        = -1;
+    constexpr uint32_t  AnimationSections           = 8;
+    constexpr uintptr_t AnimIdleSection             = 0x14;
+    constexpr uintptr_t AnimIdleAddOns              = 0x24;
+    constexpr uint32_t  AnimIdleAddOnCount          = 2;
+    constexpr uintptr_t AnimIdleForm                = 0x2C;
+    constexpr uintptr_t ProcessFreeSpecialIdleSlot  = 0xD8;
+
+    /**
      * HUDMainMenu*, the HUD. Its top-level element groups are Tile* fields,
      * see findings/hud.md. HUDMainMenu::Create reads the pointer before it
      * stores each group, which is checked at these sites

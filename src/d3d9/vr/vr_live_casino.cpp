@@ -26,6 +26,7 @@ namespace dxvk {
     using SetIdleFn          = void (__fastcall*)(void* process, void* unused, void* idle);
     using PostAnimationFn    = void (__fastcall*)(void* process, void* unused, uint32_t action);
     using FormByIdFn         = uint8_t* (__cdecl*)(uint32_t id);
+    using FreeIdleFn         = void (__fastcall*)(void* process, void* unused, void* actor);
 
     // Frames left before the hold pose is asked again: the AI picks the
     // idle a frame or two after it is asked
@@ -45,9 +46,12 @@ namespace dxvk {
     // The Caravan challenger held by the mod, main thread only
     uint8_t* g_heldChallenger = nullptr;
 
-    // Whether the challenger holds a hand up as if it held cards, and the
-    // frames to wait before asking for that pose again
+    // Whether the challenger holds a hand up as if it held cards, the idle
+    // of that pose once found, whether it was asked for this game, and the
+    // frames to wait before asking for it again
     bool     g_caravanPose = false;
+    uint8_t* g_poseForm    = nullptr;
+    bool     g_posed       = false;
     uint32_t g_poseWait    = 0;
 
     bool realMenuMode() {
@@ -133,36 +137,88 @@ namespace dxvk {
       return *reinterpret_cast<const Fn*>(vtable + offset);
     }
 
+    uint8_t* processOf(uint8_t* actor) {
+      return *reinterpret_cast<uint8_t* const*>(actor + VrGame::ActorProcess);
+    }
+
+    uint8_t* animationOf(uint8_t* actor) {
+      return processOf(actor) ? slot<GetAnimationFn>(actor, VrGame::ActorGetAnimationSlot)(actor, nullptr) : nullptr;
+    }
+
+    // The AnimIdle of the hold pose if it is the actor's idle, else null
+    uint8_t* poseIdle(const uint8_t* animation) {
+      auto idle = animation ? *reinterpret_cast<uint8_t* const*>(animation + VrGame::AnimationIdle) : nullptr;
+      return idle && g_poseForm && *reinterpret_cast<uint8_t* const*>(idle + VrGame::AnimIdleForm) == g_poseForm
+        ? idle : nullptr;
+    }
+
     // The challenger keeps a hand raised for the cards during the game, as
-    // a script's PlayIdle would have it: asked again whenever the idle has
-    // played its loops, since the restrained actor's AI picks none of its
-    // own (findings/caravan.md §3.8)
+    // a script's PlayIdle would have it, since the restrained actor's AI
+    // picks no idle of its own (findings/caravan.md §3.8). Once it plays,
+    // its section loops for ever and the sheet it brings stays hidden: the
+    // mod's cards take its place.
     void keepCaravanPose(uint8_t* challenger) {
+      auto animation = animationOf(challenger);
+
+      if (!animation)
+        return;
+
+      if (auto idle = poseIdle(animation)) {
+        auto section = *reinterpret_cast<const uint32_t*>(idle + VrGame::AnimIdleSection);
+
+        if (section < VrGame::AnimationSections)
+          reinterpret_cast<int32_t*>(animation + VrGame::AnimationLoopCounts)[section] = VrGame::AnimationLoopForever;
+
+        auto addOns = reinterpret_cast<uint8_t* const*>(idle + VrGame::AnimIdleAddOns);
+
+        for (uint32_t i = 0; i < VrGame::AnimIdleAddOnCount; i++) {
+          if (addOns[i])
+            *reinterpret_cast<uint32_t*>(addOns[i] + VrGame::ObjectFlags) |= VrGame::ObjectFlagAppCulled;
+        }
+
+        return;
+      }
+
       if (g_poseWait) {
         g_poseWait--;
         return;
       }
 
-      auto process   = *reinterpret_cast<uint8_t* const*>(challenger + VrGame::ActorProcess);
-      auto animation = process ? slot<GetAnimationFn>(challenger, VrGame::ActorGetAnimationSlot)(challenger, nullptr) : nullptr;
-
-      if (!animation
-       || reinterpret_cast<IdlePlayingFn>(VrGame::AnimationSpecialIdlePlaying)(animation, nullptr)
+      if (reinterpret_cast<IdlePlayingFn>(VrGame::AnimationSpecialIdlePlaying)(animation, nullptr)
        || *reinterpret_cast<void* const*>(animation + VrGame::AnimationIdleQueued))
         return;
 
-      auto idle = reinterpret_cast<FormByIdFn>(VrGame::FormById)(VrGame::CaravanHoldCardsIdle);
+      if (!g_poseForm) {
+        auto form = reinterpret_cast<FormByIdFn>(VrGame::FormById)(VrGame::CaravanHoldCardsIdle);
 
-      if (!idle || idle[VrGame::FormType] != VrGame::FormTypeIdle) {
-        Logger::warn("VR: The idle that holds Caravan's cards up is not in the game, the challenger keeps its pose");
-        g_caravanPose = false;
-        return;
+        if (!form || form[VrGame::FormType] != VrGame::FormTypeIdle) {
+          Logger::warn("VR: The idle that holds Caravan's cards up is not in the game, the challenger keeps its pose");
+          g_caravanPose = false;
+          return;
+        }
+
+        g_poseForm = form;
       }
 
-      slot<SetIdleFn>(process, VrGame::ProcessSetCurrentIdleSlot)(process, nullptr, idle);
+      auto process = processOf(challenger);
+      slot<SetIdleFn>(process, VrGame::ProcessSetCurrentIdleSlot)(process, nullptr, g_poseForm);
       slot<PostAnimationFn>(process, VrGame::ProcessAddPostAnimationSlot)(process, nullptr, VrGame::PostAnimationPickIdle);
+      g_posed    = true;
       g_poseWait = PoseRetryFrames;
       Logger::info("VR: The Caravan challenger raises a hand for the cards");
+    }
+
+    // Ends the pose as JIP LN's StopIdle does, if the challenger still has
+    // it: nothing else ends an idle that loops for ever
+    void endCaravanPose(uint8_t* challenger) {
+      g_posed = false;
+
+      if (!poseIdle(animationOf(challenger)))
+        return;
+
+      auto process = processOf(challenger);
+      slot<FreeIdleFn>(process, VrGame::ProcessFreeSpecialIdleSlot)(process, nullptr, challenger);
+      Logger::info("VR: The Caravan challenger lowers the hand");
     }
 
     // Called on the main thread at the start of the frame, before the AI
@@ -177,6 +233,11 @@ namespace dxvk {
       bool alive      = challenger && lifeState(challenger) == VrGame::ActorLifeAlive;
 
       auto step = vrCaravanHoldStep(g_heldChallenger, challenger, alive);
+
+      bool inGame = menu && *reinterpret_cast<const uint32_t*>(menu + VrGame::CaravanActiveMenu) == VrGame::CaravanGameMenu;
+
+      if (g_posed && g_heldChallenger && (step.release || !inGame))
+        endCaravanPose(g_heldChallenger);
 
       if (step.release) {
         // Left as it is if anything else changed it meanwhile
@@ -197,8 +258,7 @@ namespace dxvk {
       }
 
       // The cards are dealt in the game menu: none to hold before
-      if (g_caravanPose && g_heldChallenger
-       && *reinterpret_cast<const uint32_t*>(menu + VrGame::CaravanActiveMenu) == VrGame::CaravanGameMenu)
+      if (g_caravanPose && g_heldChallenger && inGame)
         keepCaravanPose(g_heldChallenger);
     }
 
