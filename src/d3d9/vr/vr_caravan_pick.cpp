@@ -134,4 +134,39 @@ namespace dxvk {
     return false;
   }
 
+
+
+  VrCaravanCommand VrCaravanButtons::update(bool back, bool option, bool choosesSlot, float dt) {
+    VrCaravanCommand command = VrCaravanCommand::None;
+
+    if (option && !m_option)
+      command = VrCaravanCommand::Cancel;
+
+    m_option = option;
+
+    if (back) {
+      if (!m_back) {
+        m_backHeld = 0.0f;
+        m_backUsed = false;
+
+        if (choosesSlot) {
+          m_backUsed = true;
+          command    = VrCaravanCommand::Cancel;
+        }
+      } else if (!m_backUsed) {
+        m_backHeld += dt;
+
+        if (m_backHeld >= HoldTime) {
+          m_backUsed = true;
+          command    = choosesSlot ? VrCaravanCommand::None : VrCaravanCommand::DiscardTrack;
+        }
+      }
+    } else if (m_back && !m_backUsed && !choosesSlot) {
+      command = VrCaravanCommand::DiscardCard;
+    }
+
+    m_back = back;
+    return command;
+  }
+
 }

@@ -121,3 +121,33 @@ TEST_CASE(caravan_row_models_by_name) {
   CHECK(!vrIsCaravanRowModel("Player_Deck"));
   CHECK(!vrIsCaravanRowModel("Player_4_Shadow"));
 }
+
+TEST_CASE(caravan_back_discards_a_card_on_a_tap_and_a_caravan_on_a_hold) {
+  using C = VrCaravanCommand;
+  VrCaravanButtons buttons;
+
+  CHECK(buttons.update(true,  false, false, 0.1f) == C::None);
+  CHECK(buttons.update(true,  false, false, 0.1f) == C::None);
+  CHECK(buttons.update(false, false, false, 0.1f) == C::DiscardCard);
+  CHECK(buttons.update(false, false, false, 0.1f) == C::None);
+
+  CHECK(buttons.update(true,  false, false, 0.1f) == C::None);
+  CHECK(buttons.update(true,  false, false, 0.7f) == C::DiscardTrack);
+  // The menu chooses a caravan now: the same press gives nothing more
+  CHECK(buttons.update(true,  false, true,  0.7f) == C::None);
+  CHECK(buttons.update(false, false, true,  0.1f) == C::None);
+}
+
+TEST_CASE(caravan_back_and_option_cancel_while_a_slot_is_chosen) {
+  using C = VrCaravanCommand;
+  VrCaravanButtons buttons;
+
+  CHECK(buttons.update(true,  false, true, 0.1f) == C::Cancel);
+  CHECK(buttons.update(true,  false, true, 1.0f) == C::None);
+  // The card went back to the hand while B was held: no discard on release
+  CHECK(buttons.update(false, false, false, 0.1f) == C::None);
+
+  CHECK(buttons.update(false, true,  true,  0.1f) == C::Cancel);
+  CHECK(buttons.update(false, true,  true,  0.1f) == C::None);
+  CHECK(buttons.update(false, false, false, 0.1f) == C::None);
+}

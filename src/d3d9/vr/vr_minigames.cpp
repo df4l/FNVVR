@@ -578,7 +578,9 @@ namespace dxvk {
     bool onTop = showsRenderedMenu() || isTopMenu(menuId());
 
     if (m_pulseFrames) {
-      m_pad.buttons |= m_pulse;
+      m_pad.buttons     |= m_pulse;
+      m_pad.leftTrigger  = m_pulseLeftTrigger;
+      m_pad.rightTrigger = m_pulseRightTrigger;
       m_pulseFrames--;
     }
 
@@ -636,6 +638,8 @@ namespace dxvk {
     m_caravanTrigger = false;
     m_caravanClick   = false;
     m_caravanStepping = false;
+    m_caravanButtons.reset();
+    m_caravanDiscard = -1;
     m_leverHeld   = { };
     m_levers      = { };
     m_signals     = VrTableSignals();
@@ -1407,8 +1411,20 @@ namespace dxvk {
 
   void VrMinigames::press(uint16_t button) {
     m_pulse       = button;
+    m_pulseLeftTrigger  = false;
+    m_pulseRightTrigger = false;
     m_pulseFrames = PulseFrames;
     m_pad.buttons |= button;
+  }
+
+
+  void VrMinigames::pressTrigger(VrHand side) {
+    m_pulse       = 0;
+    m_pulseLeftTrigger  = side == VrHand::Left;
+    m_pulseRightTrigger = side == VrHand::Right;
+    m_pulseFrames = PulseFrames;
+    m_pad.leftTrigger  = m_pulseLeftTrigger;
+    m_pad.rightTrigger = m_pulseRightTrigger;
   }
 
 
@@ -1620,6 +1636,10 @@ namespace dxvk {
     bool playing = menu && field<uint32_t>(menu, VrGame::CaravanActiveMenu) == VrGame::CaravanGameMenu;
     bool idle    = playing && field<uint32_t>(menu, VrGame::CaravanGameState) == 0;
 
+    // The triggers are the lasers' clicks: off the mat the right one would
+    // be the gamepad's RT, which starts discarding a whole caravan
+    m_pad.noTriggers = true;
+
     // A step asked in the last frame: taken, or the menu left its idle state
     // first (a button) and would take it later, from a selection that is
     // not the one shown
@@ -1645,10 +1665,39 @@ namespace dxvk {
       m_caravanSlot  = -1;
       m_caravanClick = false;
       m_caravanTrigger = false;
+      m_caravanButtons.reset();
+      m_caravanDiscard = -1;
       return;
     }
 
     placeCaravanSurface();
+
+    uint32_t flags = field<uint32_t>(menu, VrGame::CaravanFlags);
+    bool choosesSlot = (flags & VrGame::CaravanFlagSelectTrack) != 0;
+    bool discards    = choosesSlot && (flags & VrGame::CaravanFlagDestroyTrack);
+    bool setsUp      = choosesSlot && (flags & VrGame::CaravanFlagTrackSetup);
+
+    VrVector3 point = vrSurfacePoint(CaravanMatCentre, CaravanMatSizeX, CaravanMatSizeY, pointer.uv);
+    VrVector2 at    = { point.x, point.y };
+
+    // B and Y are read here, the game gets what they stand for
+    m_pad.noButtons = VrGamepadButton::B | VrGamepadButton::Y;
+
+    if (input.hasActions) {
+      VrCaravanCommand command = m_caravanButtons.update(
+        input.actions.isPressed(VrAction::MenuBack),
+        input.actions.isPressed(VrAction::MenuOption),
+        choosesSlot, dt);
+
+      commandCaravan(menu, command, pointer.hand, pointer.hit ? &at : nullptr);
+    }
+
+    if (m_caravanDiscard >= 0) {
+      m_caravanDiscardAge += dt;
+
+      if (!discards && m_caravanDiscardAge > CaravanClickWait)
+        m_caravanDiscard = -1;
+    }
 
     if (m_caravanClick) {
       m_caravanClickAge += dt;
@@ -1671,19 +1720,11 @@ namespace dxvk {
 
     m_caravanTrigger = pointer.trigger;
 
-    VrVector3 point = vrSurfacePoint(CaravanMatCentre, CaravanMatSizeX, CaravanMatSizeY, pointer.uv);
-    VrVector2 at    = { point.x, point.y };
-
     // The hand's cards stand off the cloth and overlap: they take the laser
     // itself, not where it meets the mat
     const VrPose& aim = input.controllers[uint32_t(pointer.hand)].aimPose;
     VrVector3 origin  = vrRoomToScene(m_space, aim.position);
     VrVector3 ahead   = vrRoomToScene(m_space, aim.position + vrRotate(aim.orientation, VrVector3 { 0.0f, 0.0f, -1.0f }));
-
-    uint32_t flags = field<uint32_t>(menu, VrGame::CaravanFlags);
-    bool choosesSlot = (flags & VrGame::CaravanFlagSelectTrack) != 0;
-    bool discards    = choosesSlot && (flags & VrGame::CaravanFlagDestroyTrack);
-    bool setsUp      = choosesSlot && (flags & VrGame::CaravanFlagTrackSetup);
 
     // The first three cards go to a track the menu chooses: the click places
     // the card wherever the laser is on the mat
@@ -1756,6 +1797,43 @@ namespace dxvk {
         Logger::info(str::format("VR: The trigger takes the Caravan hand card ", field<int32_t>(menu, VrGame::CaravanSelectedCard)));
 
       m_backend.applyHaptic(pointer.hand, 0.3f, HapticTick);
+    }
+
+    // A held B on one of the player's caravans: A once the menu has it
+    if (m_caravanDiscard >= 0 && discards && onTarget && idle && !m_caravanStepping
+     && m_caravanSlot / int32_t(VrGame::CaravanRowCount) == m_caravanDiscard) {
+      Logger::info(str::format("VR: The held B discards the Caravan track ", m_caravanDiscard));
+      m_caravanDiscard = -1;
+      press(VrGamepadButton::A);
+      m_backend.applyHaptic(pointer.hand, 0.3f, HapticTick);
+    }
+  }
+
+
+  void VrMinigames::commandCaravan(uint8_t* menu, VrCaravanCommand command, VrHand hand, const VrVector2* at) {
+    switch (command) {
+      case VrCaravanCommand::DiscardCard:
+        Logger::info(str::format("VR: B discards the Caravan hand card ", field<int32_t>(menu, VrGame::CaravanSelectedCard)));
+        pressTrigger(VrHand::Left);
+        break;
+
+      case VrCaravanCommand::DiscardTrack:
+        // The menu then chooses a caravan from the first one: the laser's
+        // is discarded once selected, else the trigger or B decides
+        m_caravanDiscard    = at && caravanSlotOnLaser(menu, *at, true)
+          ? m_caravanSlot / int32_t(VrGame::CaravanRowCount) : -1;
+        m_caravanDiscardAge = 0.0f;
+        Logger::info(str::format("VR: A held B starts discarding a Caravan track, the laser is on track ", m_caravanDiscard));
+        pressTrigger(VrHand::Right);
+        m_backend.applyHaptic(hand, 0.5f, HapticTick);
+        break;
+
+      case VrCaravanCommand::Cancel:
+        press(VrGamepadButton::B);
+        break;
+
+      case VrCaravanCommand::None:
+        break;
     }
   }
 

@@ -202,8 +202,10 @@ namespace dxvk {
     uint32_t          m_actorsWait = 0;
     uint32_t*         m_bodyHidden = nullptr;
 
-    // The button a gesture presses, held for a few frames
+    // The button or trigger a gesture presses, held for a few frames
     uint16_t          m_pulse       = 0;
+    bool              m_pulseLeftTrigger  = false;
+    bool              m_pulseRightTrigger = false;
     uint32_t          m_pulseFrames = 0;
 
     // Lock
@@ -233,6 +235,11 @@ namespace dxvk {
     bool              m_caravanTrigger = false;
     bool              m_caravanClick   = false;
     float             m_caravanClickAge = 0.0f;
+    // B and Y during the game, and the caravan a held B discards once the
+    // menu has selected it (-1 for none)
+    VrCaravanButtons  m_caravanButtons;
+    int32_t           m_caravanDiscard = -1;
+    float             m_caravanDiscardAge = 0.0f;
     // The values of the tracks on the mat, and whether the game's are hidden
     bool              m_canHideTiles = false;
     bool              m_hasCaravanBoard = false;
@@ -345,7 +352,11 @@ namespace dxvk {
 
     bool placeCaravanBoard(uint8_t* menu);
 
+    void commandCaravan(uint8_t* menu, VrCaravanCommand command, VrHand hand, const VrVector2* at);
+
     void press(uint16_t button);
+
+    void pressTrigger(VrHand side);
 
     void drawRenderedMenu(const VrEyeView& eye);
 

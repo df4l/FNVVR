@@ -151,4 +151,52 @@ namespace dxvk {
    */
   bool vrIsCaravanRowModel(const char* name);
 
+  /**
+   * \brief What the controller buttons ask of Caravan's game
+   */
+  enum class VrCaravanCommand : uint32_t {
+    None,
+    /// Discard the selected hand card (the gamepad's LT)
+    DiscardCard,
+    /// Start discarding a whole caravan (the gamepad's RT)
+    DiscardTrack,
+    /// Put back the taken card, leave a caravan's discard (the gamepad's B)
+    Cancel,
+  };
+
+  /**
+   * \brief Caravan's controller buttons during the game
+   *
+   * B (back) discards the selected hand card on a tap and starts a whole
+   * caravan's discard once held for \ref HoldTime; while a slot is being
+   * chosen it cancels at once, as Y (option) always does. A press that gave
+   * a command gives no other until released.
+   */
+  class VrCaravanButtons {
+
+  public:
+
+    constexpr static float HoldTime = 0.6f;
+
+    /**
+     * \param [in] back B is down
+     * \param [in] option Y is down
+     * \param [in] choosesSlot A hand card is taken or a caravan is being
+     *    discarded: the menu's \c SELECT_TRACK flag
+     * \param [in] dt Seconds since the last update
+     */
+    VrCaravanCommand update(bool back, bool option, bool choosesSlot, float dt);
+
+    /// Forgets the buttons' state, e.g. while the game does not take them
+    void reset() { *this = VrCaravanButtons(); }
+
+  private:
+
+    bool  m_back       = false;
+    bool  m_backUsed   = false;
+    float m_backHeld   = 0.0f;
+    bool  m_option     = false;
+
+  };
+
 }
