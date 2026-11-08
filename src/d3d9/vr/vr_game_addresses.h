@@ -951,6 +951,14 @@ namespace dxvk {
     constexpr uintptr_t CaravanCollection        = 0xA6C;
     constexpr uintptr_t CaravanCollectionSize    = 0xAF0;
     constexpr uintptr_t CaravanCardInDeck        = 0x98;
+    /**
+     * The game menu's prompts "discard card" and "discard caravan",
+     * pTiles[20] and [21] (CGM_DiscardCardButton, CGM_DiscardTrackButton of
+     * caravan_game_menu.xml): their "_xbox_button" is the LT and RT image,
+     * set once by the menu file.
+     */
+    constexpr uintptr_t CaravanDiscardCardPrompt  = 0x80;
+    constexpr uintptr_t CaravanDiscardTrackPrompt = 0x84;
 
     constexpr uint32_t  SlotMachineMenuId    = 0x438;
     constexpr uint32_t  BlackJackMenuId      = 0x439;

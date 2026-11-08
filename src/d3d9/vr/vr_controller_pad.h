@@ -77,6 +77,7 @@ namespace dxvk {
    * \brief Gamepad input codes of the game's bindings, see findings/input.md
    */
   namespace VrGamepadInput {
+    constexpr uint8_t B = 0x0B;
     constexpr uint8_t X = 0x0C;
   }
 

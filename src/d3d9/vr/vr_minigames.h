@@ -247,6 +247,8 @@ namespace dxvk {
     float             m_caravanDiscardAge = 0.0f;
     // The values of the tracks on the mat, and whether the game's are hidden
     bool              m_canHideTiles = false;
+    bool              m_canReadTiles = false;
+    uint32_t          m_promptIconTrait = 0;
     bool              m_hasCaravanBoard = false;
     VrCaravanBoard    m_caravanBoard;
     bool              m_caravanTilesHidden = false;
@@ -376,6 +378,8 @@ namespace dxvk {
     /// available row 24-47, -1 for none
     int32_t caravanDeckCardOnLaser(uint8_t* menu, const VrVector3& origin, const VrVector3& direction) const;
     bool caravanCardInDeck(uint8_t* menu, uint32_t card) const;
+    /// Shows B on the game menu's discard prompts, which show the triggers
+    void showCaravanDiscardPrompts(uint8_t* menu);
     void commandCaravan(uint8_t* menu, VrCaravanCommand command, VrHand hand, const VrVector2* at);
 
     void press(uint16_t button);

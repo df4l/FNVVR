@@ -50,6 +50,7 @@ namespace dxvk {
     using GetPartFn       = uint8_t* (__fastcall*)(uint8_t* object, void* unused);
     using TileByNameFn    = void* (__cdecl*)(void* tile, const char* name);
     using TileSetFloatFn  = void  (__thiscall*)(void* tile, uint32_t trait, float value, bool clearActions);
+    using TextToTraitFn   = uint32_t (__cdecl*)(const char* name);
 
     // The lock's keyhole, in the menu's space: the pin turns about it. The
     // lock is scaled so that the long screwdriver stays off the face.
@@ -451,6 +452,12 @@ namespace dxvk {
     minigames->m_canHideTiles =
          VrGameMemory::matches(VrGame::TileSetFloat, VrGame::TileSetFloatPrologue, sizeof(VrGame::TileSetFloatPrologue))
       && VrGameMemory::matches(VrGame::TileGetByName, VrGame::TileGetByNamePrologue, sizeof(VrGame::TileGetByNamePrologue));
+
+    // Without them, Caravan's deck building takes no laser and its prompts
+    // keep the gamepad's triggers
+    minigames->m_canReadTiles =
+         VrGameMemory::matches(VrGame::TileGetFloat, VrGame::TileGetFloatPrologue, sizeof(VrGame::TileGetFloatPrologue))
+      && VrGameMemory::matches(VrGame::TileTextToTrait, VrGame::TileTextToTraitPrologue, sizeof(VrGame::TileTextToTraitPrologue));
 
     // Without the rays, Caravan's table never takes a surface of the world
     minigames->m_canPick = VrGameMemory::matches(VrGame::PickDataConstruct,
@@ -1775,7 +1782,8 @@ namespace dxvk {
       }
     }
 
-    bool building = menu && field<uint32_t>(menu, VrGame::CaravanActiveMenu) == VrGame::CaravanDeckBuildingMenu;
+    bool building = m_canReadTiles && menu
+      && field<uint32_t>(menu, VrGame::CaravanActiveMenu) == VrGame::CaravanDeckBuildingMenu;
 
     m_hasSurface = playing || building;
     m_hasCaravanBoard = playing && m_canHideTiles && placeCaravanBoard(menu);
@@ -1820,6 +1828,7 @@ namespace dxvk {
 
     // B and Y are read here, the game gets what they stand for
     m_pad.noButtons = VrGamepadButton::B | VrGamepadButton::Y;
+    showCaravanDiscardPrompts(menu);
 
     if (input.hasActions) {
       VrCaravanCommand command = m_caravanButtons.update(
@@ -2004,6 +2013,38 @@ namespace dxvk {
       press(action.add ? VrGamepadButton::A : VrGamepadButton::X);
       m_backend.applyHaptic(pointer.hand, 0.3f, HapticTick);
     }
+  }
+
+
+  void VrMinigames::showCaravanDiscardPrompts(uint8_t* menu) {
+    if (!m_canReadTiles || !m_canHideTiles)
+      return;
+
+    // The trait is created when the menu files are read
+    if (!m_promptIconTrait) {
+      uint32_t trait = game<TextToTraitFn>(VrGame::TileTextToTrait)(VrGame::PromptIconTraitName);
+
+      if (trait == VrGame::TileTraitUnknown)
+        return;
+
+      m_promptIconTrait = trait;
+    }
+
+    // B discards in VR, tapped or held: the triggers no longer reach the game
+    float icon = float(vrButtonIconForInput(VrGamepadInput::B));
+    bool  shown = false;
+
+    for (uintptr_t offset : { VrGame::CaravanDiscardCardPrompt, VrGame::CaravanDiscardTrackPrompt }) {
+      void* tile = field<void*>(menu, offset);
+
+      if (tile && game<GetFloatFn>(VrGame::TileGetFloat)(tile, m_promptIconTrait) != icon) {
+        game<TileSetFloatFn>(VrGame::TileSetFloat)(tile, m_promptIconTrait, icon, true);
+        shown = true;
+      }
+    }
+
+    if (shown)
+      Logger::info("VR: Caravan's discard prompts show the B button");
   }
 
 
