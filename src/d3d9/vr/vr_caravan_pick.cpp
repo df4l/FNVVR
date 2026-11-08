@@ -116,6 +116,59 @@ namespace dxvk {
   }
 
 
+  VrCaravanTransform vrCaravanInverse(const VrCaravanTransform& transform) {
+    VrCaravanTransform inverse;
+
+    for (uint32_t i = 0; i < 3; i++) {
+      for (uint32_t j = 0; j < 3; j++)
+        inverse.rotate[i][j] = transform.rotate[j][i];
+    }
+
+    inverse.scale     = 1.0f / transform.scale;
+    inverse.translate = { 0.0f, 0.0f, 0.0f };
+    inverse.translate = vrCaravanTransformPoint(inverse, transform.translate) * -1.0f;
+    return inverse;
+  }
+
+
+  VrCaravanTransform vrCaravanOpponentCard(
+    const VrVector3&      hold,
+    const VrVector3&      up,
+    const VrVector3&      face,
+          uint32_t        index,
+          uint32_t        count,
+          float           spread,
+          float           reach,
+          float           layer,
+          float           scale) {
+    // The middle card's frame, as the player's fan is held
+    VrCaravanTransform fan = vrCaravanFanInHand(VrVector3 { 0.0f, 0.0f, 0.0f }, hold, up, face, 1.0f);
+    VrVector3 tip  = { fan.rotate[0][1], fan.rotate[1][1], fan.rotate[2][1] };
+    VrVector3 side = { fan.rotate[0][0], fan.rotate[1][0], fan.rotate[2][0] };
+    VrVector3 back = { fan.rotate[0][2], fan.rotate[1][2], fan.rotate[2][2] };
+
+    float angle = spread * (float(index) - 0.5f * float(count - 1));
+    VrVector3 x = tip * std::cos(angle) + side * std::sin(angle);
+    VrVector3 y = {
+      back.y * x.z - back.z * x.y,
+      back.z * x.x - back.x * x.z,
+      back.x * x.y - back.y * x.x };
+
+    VrCaravanTransform card;
+    const VrVector3* axes[3] = { &x, &y, &back };
+
+    for (uint32_t column = 0; column < 3; column++) {
+      card.rotate[0][column] = axes[column]->x;
+      card.rotate[1][column] = axes[column]->y;
+      card.rotate[2][column] = axes[column]->z;
+    }
+
+    card.translate = hold + x * reach + back * (layer * float(index));
+    card.scale     = scale;
+    return card;
+  }
+
+
   float vrRayMeetsCard(
     const VrVector3&      origin,
     const VrVector3&      direction,

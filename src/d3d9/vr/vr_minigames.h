@@ -271,6 +271,10 @@ namespace dxvk {
     bool              m_caravanFanHeld = false;
     int32_t           m_caravanCursorSlot = -1;
     VrCaravanTransform m_caravanFan;
+    // The opponent's hand of cards: whether the challenger's left hand is
+    // raised to hold it, and where it holds it in the scene
+    bool              m_caravanOpponentHeld = false;
+    VrVector3         m_caravanOpponentHold = { };
 
     // Vigor tester: the menu's camera as the menu made it, the hand the
     // cursor follows and the triggers of the last frame
@@ -365,6 +369,13 @@ namespace dxvk {
     VrCaravanTransform caravanCardInHand(uintptr_t card) const;
 
     void holdCaravanFan(std::vector<uint32_t*>& hidden, VrGameWorldTransforms& moved);
+
+    void placeOpponentFan(uint8_t* menu, bool playing);
+
+    void holdOpponentFan(std::vector<uint32_t*>& hidden, VrGameWorldTransforms& moved);
+
+    static void carryCaravanCard(uintptr_t model, uintptr_t card, const VrCaravanTransform& place,
+      const std::string& shadow, std::vector<uint32_t*>& hidden);
 
     void placeCaravanCursor(VrGameWorldTransforms& moved);
 

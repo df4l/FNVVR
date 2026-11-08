@@ -147,6 +147,42 @@ namespace dxvk {
   VrCaravanTransform vrCaravanCompose(const VrCaravanTransform& outer, const VrCaravanTransform& inner);
 
   /**
+   * \brief The transform that undoes \c transform, whose scale is not 0
+   */
+  VrCaravanTransform vrCaravanInverse(const VrCaravanTransform& transform);
+
+  /**
+   * \brief Where a card of the opponent's hand goes in their hand
+   *
+   * The cards stand in a fan whose bottoms meet at \c hold: their long axis
+   * (+X of the card) leaves it towards \c up, turned by \c spread radians
+   * from one card to the next about the backs' direction, and their backs
+   * (+Z) turn as close to \c face as the tips let them, each card \c layer
+   * further that way than the one before so that none goes through
+   * another. All in the scene.
+   *
+   * \param [in] hold Point the bottoms of the cards meet at
+   * \param [in] up Direction of the middle card's tip, not 0
+   * \param [in] face Direction the backs turn to, not along \c up
+   * \param [in] index The card, from 0
+   * \param [in] count Cards in the hand, more than \c index
+   * \param [in] spread Angle between two cards
+   * \param [in] reach Distance from \c hold to a card's centre
+   * \param [in] layer Distance between two cards along their backs
+   * \param [in] scale The card's world scale
+   */
+  VrCaravanTransform vrCaravanOpponentCard(
+    const VrVector3&      hold,
+    const VrVector3&      up,
+    const VrVector3&      face,
+          uint32_t        index,
+          uint32_t        count,
+          float           spread,
+          float           reach,
+          float           layer,
+          float           scale);
+
+  /**
    * \brief Where a ray meets a card
    *
    * \param [in] origin The ray's origin

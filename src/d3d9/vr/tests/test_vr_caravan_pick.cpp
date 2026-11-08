@@ -318,3 +318,53 @@ TEST_CASE(caravan_deck_picker_ignores_empty_slots_and_stalls) {
   CHECK(picker.update(3, false, true, 1.0f).stick == 0);
   CHECK(picker.target() == -1);
 }
+
+
+TEST_CASE(caravan_inverse_undoes_a_transform) {
+  VrCaravanTransform t;
+  t.rotate[0][0] = 0.0f; t.rotate[0][1] = -1.0f;
+  t.rotate[1][0] = 1.0f; t.rotate[1][1] =  0.0f;
+  t.translate = { 3.0f, -2.0f, 5.0f };
+  t.scale     = 2.0f;
+
+  VrVector3 p = { 1.0f, 2.0f, 3.0f };
+  VrVector3 back = vrCaravanTransformPoint(vrCaravanInverse(t), vrCaravanTransformPoint(t, p));
+
+  CHECK(std::abs(back.x - p.x) < 1e-4f);
+  CHECK(std::abs(back.y - p.y) < 1e-4f);
+  CHECK(std::abs(back.z - p.z) < 1e-4f);
+}
+
+
+TEST_CASE(caravan_opponent_cards_fan_out_backs_to_the_player) {
+  // Held upright, backs towards -Y (the player's side of the mat)
+  const VrVector3 hold = { 10.0f, 20.0f, 30.0f };
+  const VrVector3 up   = { 0.0f, 0.0f, 1.0f };
+  const VrVector3 face = { 0.0f, -1.0f, 0.0f };
+
+  VrCaravanTransform middle = vrCaravanOpponentCard(hold, up, face, 1, 3, 0.2f, 1.5f, 0.05f, 1.0f);
+
+  // Long axis up, back towards the player, centre above the hold point
+  CHECK(std::abs(middle.rotate[2][0] - 1.0f) < 1e-4f);
+  CHECK(std::abs(middle.rotate[1][2] + 1.0f) < 1e-4f);
+  CHECK(std::abs(middle.translate.x - 10.0f) < 1e-4f);
+  CHECK(std::abs(middle.translate.z - 31.5f) < 1e-4f);
+  CHECK(std::abs(middle.translate.y - (20.0f - 0.05f)) < 1e-4f);
+
+  // The first and last cards lean to opposite sides by the spread
+  VrCaravanTransform first = vrCaravanOpponentCard(hold, up, face, 0, 3, 0.2f, 1.5f, 0.05f, 1.0f);
+  VrCaravanTransform last  = vrCaravanOpponentCard(hold, up, face, 2, 3, 0.2f, 1.5f, 0.05f, 1.0f);
+
+  CHECK(std::abs(first.rotate[0][0] + last.rotate[0][0]) < 1e-4f);
+  CHECK(std::abs(std::abs(first.rotate[0][0]) - std::sin(0.2f)) < 1e-4f);
+  CHECK(std::abs(first.rotate[2][0] - std::cos(0.2f)) < 1e-4f);
+
+  // Each card a layer nearer the player, the axes right-handed
+  CHECK(last.translate.y < middle.translate.y && middle.translate.y < first.translate.y);
+
+  const auto& r = last.rotate;
+  float det = r[0][0] * (r[1][1] * r[2][2] - r[1][2] * r[2][1])
+            - r[0][1] * (r[1][0] * r[2][2] - r[1][2] * r[2][0])
+            + r[0][2] * (r[1][0] * r[2][1] - r[1][1] * r[2][0]);
+  CHECK(std::abs(det - 1.0f) < 1e-4f);
+}
