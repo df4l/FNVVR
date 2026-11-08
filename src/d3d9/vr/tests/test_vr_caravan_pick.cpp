@@ -1,3 +1,5 @@
+#include <cmath>
+
 #include "test.h"
 
 #include "../vr_caravan_pick.h"
@@ -16,6 +18,60 @@ TEST_CASE(caravan_nearest_point_keeps_the_chosen_one) {
   // Out of reach of all
   CHECK(vrNearestPoint(cards, 3, VrVector2 { 5.0f, 5.0f }, 2.0f, -1, 0.3f) == -1);
   CHECK(vrNearestPoint(cards, 0, VrVector2 { 0.0f, 0.0f }, 2.0f, -1, 0.3f) == -1);
+}
+
+
+namespace {
+
+  VrCaravanCard flatCard(float x, float z, float angle) {
+    // Turned about z, lying face up: the hand's fan
+    VrCaravanCard card;
+    card.rotate[0][0] = std::cos(angle); card.rotate[0][1] = -std::sin(angle);
+    card.rotate[1][0] = std::sin(angle); card.rotate[1][1] =  std::cos(angle);
+    card.rotate[2][2] = 1.0f;
+    card.translate = { x, 0.0f, z };
+    card.halfX = 1.75f;
+    card.halfY = 1.25f;
+    return card;
+  }
+
+}
+
+
+TEST_CASE(caravan_ray_meets_a_card_in_its_rectangle) {
+  VrCaravanCard card = flatCard(0.0f, 0.0f, 0.0f);
+  const VrVector3 down = { 0.0f, 0.0f, -1.0f };
+
+  CHECK(std::abs(vrRayMeetsCard(VrVector3 { 1.5f, 1.0f, 10.0f }, down, card) - 10.0f) < 1e-4f);
+  CHECK(vrRayMeetsCard(VrVector3 { 1.5f, 1.5f, 10.0f }, down, card) < 0.0f);
+  CHECK(vrRayMeetsCard(VrVector3 { 0.0f, 0.0f, -10.0f }, down, card) < 0.0f);
+
+  // Turned a quarter, the long side lies along y
+  card = flatCard(0.0f, 0.0f, 1.5707963f);
+  CHECK(vrRayMeetsCard(VrVector3 { 0.0f, 1.5f, 10.0f }, down, card) > 0.0f);
+  CHECK(vrRayMeetsCard(VrVector3 { 1.5f, 0.0f, 10.0f }, down, card) < 0.0f);
+
+  // Scaled up twice
+  card = flatCard(0.0f, 0.0f, 0.0f);
+  card.scale = 2.0f;
+  CHECK(vrRayMeetsCard(VrVector3 { 3.0f, 0.0f, 10.0f }, down, card) > 0.0f);
+}
+
+
+TEST_CASE(caravan_first_card_on_ray_is_the_one_on_top) {
+  // A fan: each card a little higher and further right than the one before
+  const VrCaravanCard cards[] = {
+    flatCard(0.0f, 0.0f, 0.3f), flatCard(0.5f, 0.1f, 0.4f), flatCard(1.0f, 0.2f, 0.5f) };
+  const VrVector3 down = { 0.0f, 0.0f, -1.0f };
+
+  // Over the overlap of all three, the top one
+  CHECK(vrFirstCardOnRay(cards, 3, VrVector3 { 0.5f, 0.0f, 10.0f }, down) == 2);
+  // On the strip of the first card the others leave uncovered
+  CHECK(vrFirstCardOnRay(cards, 3, VrVector3 { -1.5f, -0.4f, 10.0f }, down) == 0);
+  // From aside, slanted
+  CHECK(vrFirstCardOnRay(cards, 3, VrVector3 { -10.5f, 0.0f, 10.0f }, VrVector3 { 1.0f, 0.0f, -1.0f }) == 2);
+  CHECK(vrFirstCardOnRay(cards, 3, VrVector3 { 10.0f, 10.0f, 10.0f }, down) == -1);
+  CHECK(vrFirstCardOnRay(cards, 0, VrVector3 { 0.0f, 0.0f, 10.0f }, down) == -1);
 }
 
 

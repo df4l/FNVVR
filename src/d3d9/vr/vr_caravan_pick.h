@@ -69,6 +69,48 @@ namespace dxvk {
           float       stickiness);
 
   /**
+   * \brief Where a card shape lies, from its world transform
+   *
+   * The game's layout: a point of the card is placed at
+   * rotate * (scale * point) + translate, rotate row-major. The card is the
+   * rectangle of its own plane z = 0 within the half sizes.
+   */
+  struct VrCaravanCard {
+    float     rotate[3][3] = { };
+    VrVector3 translate    = { };
+    float     scale        = 1.0f;
+    float     halfX        = 0.0f;
+    float     halfY        = 0.0f;
+  };
+
+  /**
+   * \brief Where a ray meets a card
+   *
+   * \param [in] origin The ray's origin
+   * \param [in] direction The ray's direction, not 0
+   * \param [in] card The card
+   * \returns Distance along the ray in lengths of \c direction, negative
+   *    when the ray misses the card or meets it behind its origin
+   */
+  float vrRayMeetsCard(
+    const VrVector3&      origin,
+    const VrVector3&      direction,
+    const VrCaravanCard&  card);
+
+  /**
+   * \brief The card a ray meets first
+   *
+   * The cards of a hand overlap: the first one met is the one seen there.
+   *
+   * \returns Index of the card, -1 if the ray meets none
+   */
+  int32_t vrFirstCardOnRay(
+    const VrCaravanCard*  cards,
+          uint32_t        count,
+    const VrVector3&      origin,
+    const VrVector3&      direction);
+
+  /**
    * \brief The step from the card before the target to the target
    *
    * The menu steps right through its hand and wraps at the end.

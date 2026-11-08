@@ -115,13 +115,16 @@ namespace dxvk {
     // The table opens out of black
     constexpr float     CaravanFadeIn  = 0.5f;
     // The lasers point at the whole mat, just above its cloth (z 1.1).
-    // A hand card or a slot is on the laser within this reach of where the
-    // laser meets the mat, the one already chosen favoured by the
-    // stickiness, in the mat's units (1.4 cm between two rows at scale 1).
+    // A slot is on the laser within this reach of where the laser meets the
+    // mat, the one already chosen favoured by the stickiness, in the mat's
+    // units (1.4 cm between two rows at scale 1). A hand card is on the
+    // laser where the laser meets it first.
     constexpr VrVector3 CaravanMatCentre = { 0.45f, 0.5f * (CaravanNearEdge + CaravanFarEdge), 1.1f };
     constexpr float     CaravanMatSizeX  = 56.9f;
     constexpr float     CaravanMatSizeY  = CaravanFarEdge - CaravanNearEdge;
-    constexpr float     CaravanCardReach = 3.0f;
+    // The hand's card shapes, in their own plane: 3.5 x 2.5 units
+    constexpr float     CaravanCardHalfX = 1.75f;
+    constexpr float     CaravanCardHalfY = 1.25f;
     constexpr float     CaravanSlotReach = 3.0f;
     constexpr float     CaravanStickiness = 0.4f;
     // A click waits this long for the menu's step to what the laser is on
@@ -1656,6 +1659,12 @@ namespace dxvk {
     VrVector3 point = vrSurfacePoint(CaravanMatCentre, CaravanMatSizeX, CaravanMatSizeY, pointer.uv);
     VrVector2 at    = { point.x, point.y };
 
+    // The hand's cards stand off the cloth and overlap: they take the laser
+    // itself, not where it meets the mat
+    const VrPose& aim = input.controllers[uint32_t(pointer.hand)].aimPose;
+    VrVector3 origin  = vrRoomToScene(m_space, aim.position);
+    VrVector3 ahead   = vrRoomToScene(m_space, aim.position + vrRotate(aim.orientation, VrVector3 { 0.0f, 0.0f, -1.0f }));
+
     uint32_t flags = field<uint32_t>(menu, VrGame::CaravanFlags);
     bool choosesSlot = (flags & VrGame::CaravanFlagSelectTrack) != 0;
     bool discards    = choosesSlot && (flags & VrGame::CaravanFlagDestroyTrack);
@@ -1669,7 +1678,7 @@ namespace dxvk {
     VrCaravanKey key  = VrCaravanKey::None;
     VrCaravanStep step;
 
-    if (!choosesSlot && caravanCardOnLaser(menu, at)) {
+    if (!choosesSlot && caravanCardOnLaser(menu, origin, ahead - origin)) {
       int32_t current = field<int32_t>(menu, VrGame::CaravanSelectedCard);
       int32_t size    = int32_t(field<uint32_t>(menu, VrGame::CaravanPlayerHand + VrGame::SimpleArraySize));
       step     = vrCaravanHandStep(m_caravanCard, current, size);
@@ -1727,6 +1736,10 @@ namespace dxvk {
     if (m_caravanClick && onTarget && idle && !m_caravanStepping) {
       m_caravanClick = false;
       press(VrGamepadButton::A);
+
+      if (!choosesSlot)
+        Logger::info(str::format("VR: The trigger takes the Caravan hand card ", field<int32_t>(menu, VrGame::CaravanSelectedCard)));
+
       m_backend.applyHaptic(pointer.hand, 0.3f, HapticTick);
     }
   }
@@ -1821,7 +1834,7 @@ namespace dxvk {
   }
 
 
-  bool VrMinigames::caravanCardOnLaser(uint8_t* menu, const VrVector2& at) {
+  bool VrMinigames::caravanCardOnLaser(uint8_t* menu, const VrVector3& origin, const VrVector3& direction) {
     auto     hand  = field<uintptr_t>(menu, VrGame::CaravanPlayerHandModel);
     uint32_t count = field<uint32_t>(menu, VrGame::CaravanPlayerHand + VrGame::SimpleArraySize);
 
@@ -1830,18 +1843,26 @@ namespace dxvk {
       return false;
     }
 
-    std::array<VrVector2, VrGame::CaravanHandSize> cards;
+    std::array<VrCaravanCard, VrGame::CaravanHandSize> cards;
 
     for (uint32_t i = 0; i < count; i++) {
       std::string name = str::format("Player-Deck_0", i + 1, ":", i);
-      auto  node  = vrFindGameObject(hand, name.c_str(), CaravanNodeDepth);
-      auto* bound = node ? field<const float*>(reinterpret_cast<void*>(node), VrGame::ObjectWorldBound) : nullptr;
+      auto* node = reinterpret_cast<uint8_t*>(vrFindGameObject(hand, name.c_str(), CaravanNodeDepth));
 
-      // Out of reach of every laser
-      cards[i] = bound ? VrVector2 { bound[0], bound[1] } : VrVector2 { FLT_MAX, FLT_MAX };
+      // A card without a shape, or culled, meets no laser
+      if (!node || (field<uint32_t>(node, VrGame::ObjectFlags) & VrGame::ObjectFlagAppCulled)) {
+        cards[i].scale = 0.0f;
+        continue;
+      }
+
+      std::memcpy(cards[i].rotate, node + VrGame::ObjectWorldRotation, sizeof(cards[i].rotate));
+      cards[i].translate = field<VrVector3>(node, VrGame::ObjectWorldTranslation);
+      cards[i].scale     = field<float>(node, VrGame::ObjectWorldScale);
+      cards[i].halfX     = CaravanCardHalfX;
+      cards[i].halfY     = CaravanCardHalfY;
     }
 
-    m_caravanCard = vrNearestPoint(cards.data(), count, at, CaravanCardReach, m_caravanCard, CaravanStickiness);
+    m_caravanCard = vrFirstCardOnRay(cards.data(), count, origin, direction);
     return m_caravanCard >= 0;
   }
 

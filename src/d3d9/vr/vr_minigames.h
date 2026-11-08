@@ -331,7 +331,7 @@ namespace dxvk {
 
     void updateCaravan(const VrPointerSurfaceState& pointer, const VrInputState& input, float dt);
 
-    bool caravanCardOnLaser(uint8_t* menu, const VrVector2& at);
+    bool caravanCardOnLaser(uint8_t* menu, const VrVector3& origin, const VrVector3& direction);
 
     bool caravanSlotOnLaser(uint8_t* menu, const VrVector2& at, bool ownTracksOnly);
 

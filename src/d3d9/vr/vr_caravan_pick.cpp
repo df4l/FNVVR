@@ -1,3 +1,4 @@
+#include <cfloat>
 #include <cmath>
 #include <cstring>
 
@@ -28,6 +29,63 @@ namespace dxvk {
     }
 
     return nearest;
+  }
+
+
+  float vrRayMeetsCard(
+    const VrVector3&      origin,
+    const VrVector3&      direction,
+    const VrCaravanCard&  card) {
+    if (card.scale <= 0.0f)
+      return -1.0f;
+
+    // Into the card's own space: the transposed rotation, then the scale
+    const auto& r = card.rotate;
+    VrVector3 f = { origin.x - card.translate.x, origin.y - card.translate.y, origin.z - card.translate.z };
+
+    auto local = [&r, &card] (const VrVector3& v) {
+      return VrVector3 {
+        (r[0][0] * v.x + r[1][0] * v.y + r[2][0] * v.z) / card.scale,
+        (r[0][1] * v.x + r[1][1] * v.y + r[2][1] * v.z) / card.scale,
+        (r[0][2] * v.x + r[1][2] * v.y + r[2][2] * v.z) / card.scale };
+    };
+
+    VrVector3 o = local(f);
+    VrVector3 d = local(direction);
+
+    if (std::abs(d.z) < 1e-6f)
+      return -1.0f;
+
+    float t = -o.z / d.z;
+
+    if (t <= 0.0f)
+      return -1.0f;
+
+    float x = o.x + t * d.x;
+    float y = o.y + t * d.y;
+
+    return std::abs(x) <= card.halfX && std::abs(y) <= card.halfY ? t : -1.0f;
+  }
+
+
+  int32_t vrFirstCardOnRay(
+    const VrCaravanCard*  cards,
+          uint32_t        count,
+    const VrVector3&      origin,
+    const VrVector3&      direction) {
+    int32_t first   = -1;
+    float   nearest = FLT_MAX;
+
+    for (uint32_t i = 0; i < count; i++) {
+      float t = vrRayMeetsCard(origin, direction, cards[i]);
+
+      if (t >= 0.0f && t < nearest) {
+        nearest = t;
+        first   = int32_t(i);
+      }
+    }
+
+    return first;
   }
 
 
