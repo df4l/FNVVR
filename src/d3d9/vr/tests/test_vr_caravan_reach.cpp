@@ -100,3 +100,15 @@ TEST_CASE(caravan_reach_takes_the_card_then_comes_back) {
   CHECK(!vrCaravanReachStep(total - 0.01f).done);
   CHECK(vrCaravanReachStep(total + 0.01f).done);
 }
+
+
+TEST_CASE(player_carry_goes_from_the_hand_to_the_row_in_time) {
+  CHECK(vrCaravanPlayerCarry(0.0f) == 0.0f);
+  CHECK(std::abs(vrCaravanPlayerCarry(0.5f * VrCaravanPlayerCarryTime) - 0.5f) < 1e-5f);
+  CHECK(vrCaravanPlayerCarry(0.25f) < vrCaravanPlayerCarry(0.5f));
+  CHECK(vrCaravanPlayerCarry(VrCaravanPlayerCarryTime) == 1.0f);
+  CHECK(vrCaravanPlayerCarry(5.0f) == 1.0f);
+  // Within the game's shortest play animation, so the card rests on its
+  // row before the game moves on
+  CHECK(VrCaravanPlayerCarryTime < 0.97f);
+}

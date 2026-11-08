@@ -300,9 +300,11 @@ namespace dxvk {
     bool              m_caravanFadingOut = false;
     VrVector3         m_caravanOpponentHold = { };
     VrVector3         m_caravanOpponentUp   = { 0.0f, 0.0f, 1.0f };
-    // The challenger playing a card: the free hand takes it from the fan
-    // (the fan's last card, the fan as big as before the play) to its
-    // row, where the card is drawn in the scene, and the arm bent for it
+    // A card played, carried from a hand to its row, where the card is
+    // drawn in the scene. The challenger's free hand takes it from the fan
+    // (the fan's last card, the fan as big as before the play), with the
+    // arm bent for it. The player's goes from its place in the left hand's
+    // fan (the hand's slot, as the table had it when the play started).
     struct CaravanPlay {
       bool               active  = false;
       float              time    = 0.0f;
@@ -310,11 +312,15 @@ namespace dxvk {
       uint32_t           row     = 0;
       uint32_t           column  = 0;
       uint32_t           fanCount = 0;
+      uint32_t           slot    = 0;
       VrCaravanReachStep step;
+      VrCaravanTransform rest;
       VrCaravanTransform card;
     };
     CaravanPlay       m_caravanPlay;
+    CaravanPlay       m_caravanOwnPlay;
     uint32_t          m_caravanLastState    = 0;
+    uint32_t          m_caravanOwnLastState = 0;
     uint32_t          m_caravanOpponentCards = 0;
     bool              m_caravanReachLeft    = true;
     VrGameWorldTransforms m_challengerArm;
@@ -411,6 +417,10 @@ namespace dxvk {
 
     VrCaravanTransform caravanCardInHand(uintptr_t card) const;
 
+    VrCaravanTransform caravanCardInHand(const VrCaravanTransform& world) const;
+
+    int32_t caravanCardLeavingHand(uint8_t* menu) const;
+
     void holdCaravanFan(std::vector<uint32_t*>& hidden, VrGameWorldTransforms& moved);
 
     void placeOpponentFan(uint8_t* menu, bool playing);
@@ -419,9 +429,11 @@ namespace dxvk {
 
     void updateOpponentPlay(uint8_t* menu, bool playing, float dt);
 
-    uintptr_t opponentPlayCard(uint8_t* menu) const;
+    void updateOwnPlay(uint8_t* menu, bool playing, float dt);
 
-    void carryOpponentPlay(std::vector<uint32_t*>& hidden, VrGameWorldTransforms& moved);
+    uintptr_t playCard(uint8_t* menu, const CaravanPlay& play) const;
+
+    void carryCaravanPlay(const CaravanPlay& play, std::vector<uint32_t*>& hidden, VrGameWorldTransforms& moved);
 
     uintptr_t challengerRoot(uint8_t* menu) const;
 

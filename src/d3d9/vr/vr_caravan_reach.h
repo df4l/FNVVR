@@ -69,4 +69,14 @@ namespace dxvk {
    */
   VrCaravanReachStep vrCaravanReachStep(float time);
 
+  /// Seconds a card the player plays takes from the hand to its row,
+  /// within the game's own animation of the play (0.97 s at least)
+  constexpr float VrCaravanPlayerCarryTime = 0.9f;
+
+  /**
+   * \brief The way of a card the player plays, from the hand (0) to its
+   *   row (1), at a time since the play
+   */
+  float vrCaravanPlayerCarry(float time);
+
 }

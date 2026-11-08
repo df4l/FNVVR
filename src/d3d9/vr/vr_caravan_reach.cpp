@@ -200,4 +200,9 @@ namespace dxvk {
     return step;
   }
 
+
+  float vrCaravanPlayerCarry(float time) {
+    return smooth(time / VrCaravanPlayerCarryTime);
+  }
+
 }
