@@ -37,13 +37,12 @@ namespace dxvk {
     const VrVector3&      centre,
     const VrVector3&      hold,
     const VrVector3&      up,
-    const VrVector3&      eye,
+    const VrVector3&      face,
           float           scale) {
     VrVector3 u = up * (1.0f / vrLength(up));
 
-    // The faces turn to the eye as far as the tips' direction lets them
-    VrVector3 toEye = eye - hold;
-    VrVector3 n = toEye - u * vrDot(toEye, u);
+    // The faces turn as far towards their direction as the tips let them
+    VrVector3 n = face - u * vrDot(face, u);
 
     if (vrLength(n) < 1e-4f)
       n = std::abs(u.z) < 0.9f ? VrVector3 { 0.0f, 0.0f, 1.0f } - u * u.z : VrVector3 { 0.0f, 1.0f, 0.0f } - u * u.y;

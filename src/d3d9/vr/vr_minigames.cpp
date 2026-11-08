@@ -145,13 +145,16 @@ namespace dxvk {
     // The player's hand of cards as the game lays it on the table (the end
     // of Player_Deck.NIF's "Deck-Cards_In": card centres from x 16.6 to
     // 20.1 at y -9.4 to -10.4, z 1.55 to 1.9, faces up, tips to +y), held
-    // in the left hand in the grip's frame: a little right of and ahead of
-    // the fist, the tips to the right and leaning away (the player turned
-    // the fan a quarter to the right from tips up, 2026-11-08). At the
-    // mat's scale the cards are already the size of real ones.
-    constexpr VrVector3 CaravanFanCentre = { 18.3f, -9.7f, 1.7f };
-    constexpr VrVector3 CaravanFanHold   = { 0.05f, 0.0f, -0.03f };
-    constexpr VrVector3 CaravanFanUp     = { 0.9f, 0.0f, -0.44f };
+    // in the left hand as a fan, fixed in the grip's frame: the bottom of
+    // the middle card on the palm, the backs against the palm and fingers,
+    // the faces out of the palm (+X of the left grip) and a little back,
+    // the tips past the fingers, up and ahead (user, 2026-11-08: the cards
+    // rest on the hand at all times, as a fan would). At the mat's scale
+    // the cards are already the size of real ones.
+    constexpr VrVector3 CaravanFanBottom = { 18.45f, -11.45f, 1.7f };
+    constexpr VrVector3 CaravanFanHold   = { 0.025f, 0.01f, 0.0f };
+    constexpr VrVector3 CaravanFanUp     = { 0.0f, 0.45f, -0.9f };
+    constexpr VrVector3 CaravanFanFace   = { 1.0f, 0.0f, 0.3f };
     constexpr float     CaravanFanScale  = 1.0f;
     // The game's fan is narrow for a laser: the cards are opened wider
     // about the point their long axes meet, below the fan (from the first
@@ -1656,7 +1659,7 @@ namespace dxvk {
   }
 
 
-  void VrMinigames::placeCaravanFan(const VrMinigameFrame& frame, const VrInputState& input, bool playing) {
+  void VrMinigames::placeCaravanFan(const VrInputState& input, bool playing) {
     const VrControllerState& left = input.controllers[uint32_t(VrHand::Left)];
     bool held = playing && left.isActive;
 
@@ -1674,10 +1677,11 @@ namespace dxvk {
     const VrPose& grip = left.gripPose;
     VrVector3 hold = grip.position + vrRotate(grip.orientation, CaravanFanHold);
     VrVector3 tips = hold + vrRotate(grip.orientation, CaravanFanUp);
+    VrVector3 face = hold + vrRotate(grip.orientation, CaravanFanFace);
 
     VrVector3 sceneHold = vrRoomToScene(m_space, hold);
-    m_caravanFan = vrCaravanFanInHand(CaravanFanCentre, sceneHold,
-      vrRoomToScene(m_space, tips) - sceneHold, vrRoomToScene(m_space, frame.head.position), CaravanFanScale);
+    m_caravanFan = vrCaravanFanInHand(CaravanFanBottom, sceneHold,
+      vrRoomToScene(m_space, tips) - sceneHold, vrRoomToScene(m_space, face) - sceneHold, CaravanFanScale);
   }
 
 
@@ -1759,7 +1763,7 @@ namespace dxvk {
     bool playing = menu && field<uint32_t>(menu, VrGame::CaravanActiveMenu) == VrGame::CaravanGameMenu;
     bool idle    = playing && field<uint32_t>(menu, VrGame::CaravanGameState) == 0;
 
-    placeCaravanFan(frame, input, playing);
+    placeCaravanFan(input, playing);
 
     // The triggers are the lasers' clicks: off the mat the right one would
     // be the gamepad's RT, which starts discarding a whole caravan

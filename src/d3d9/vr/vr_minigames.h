@@ -359,7 +359,7 @@ namespace dxvk {
 
     void updateCaravan(const VrMinigameFrame& frame, const VrPointerSurfaceState& pointer, const VrInputState& input);
 
-    void placeCaravanFan(const VrMinigameFrame& frame, const VrInputState& input, bool playing);
+    void placeCaravanFan(const VrInputState& input, bool playing);
 
     VrCaravanTransform caravanCardInHand(uintptr_t card) const;
 

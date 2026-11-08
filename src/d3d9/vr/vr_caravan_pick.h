@@ -100,19 +100,20 @@ namespace dxvk {
    * The game lays the hand on the table, faces up (+Z), tips towards the
    * opponent (+Y), the first card on the left (-X). The result moves the
    * point \c centre of that fan to \c hold, its tips along \c up and its
-   * faces towards \c eye, at \c scale times its size. All in the scene.
+   * faces as close to \c face as the tips let them, at \c scale times its
+   * size. All in the scene.
    *
-   * \param [in] centre Centre of the fan on the table
+   * \param [in] centre Point of the fan on the table the hand holds
    * \param [in] hold Where the hand holds it
    * \param [in] up Direction of the tips, not 0
-   * \param [in] eye Point the faces turn to
+   * \param [in] face Direction the faces turn to, not along \c up
    * \param [in] scale Size in the hand over size on the table
    */
   VrCaravanTransform vrCaravanFanInHand(
     const VrVector3&      centre,
     const VrVector3&      hold,
     const VrVector3&      up,
-    const VrVector3&      eye,
+    const VrVector3&      face,
           float           scale);
 
   /**
