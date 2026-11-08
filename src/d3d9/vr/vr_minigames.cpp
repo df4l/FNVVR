@@ -164,8 +164,6 @@ namespace dxvk {
     constexpr float     CaravanFanBound  = 1.0e5f;
     // Deeper than this below the hand's or a grid's root, no card or slot
     constexpr uint32_t  CaravanNodeDepth = 8;
-    // Deeper than this below the scene's root, no model of a track's row
-    constexpr uint32_t  CaravanRowModelDepth = 4;
     // The values of the tracks lie on a square of the mat, from the
     // player's edge across the middle of the tracks, just above the cloth:
     // the player's past their seventh row (y -18.2), the opponent's past
@@ -2157,7 +2155,7 @@ namespace dxvk {
     VrGameWorldTransforms moved;
 
     if (m_kind == Kind::Caravan) {
-      hideCaravanCardsOutOfFrame(state, hidden);
+      hideCaravanCardsOutOfGame(hidden);
       hideCaravanPlanks(hidden);
       holdCaravanFan(hidden, moved);
     }
@@ -2273,59 +2271,68 @@ namespace dxvk {
   }
 
 
-  void VrMinigames::hideCaravanCardsOutOfFrame(const VrGameCameraState& camera, std::vector<uint32_t*>& hidden) {
-    auto root = global<uintptr_t>(VrGame::CaravanSceneRoot);
+  void VrMinigames::hideCaravanCardsOutOfGame(std::vector<uint32_t*>& hidden) {
+    auto menu = global<uint8_t*>(VrGame::CaravanInstance);
 
-    if (!root)
+    if (!menu)
       return;
 
-    // The rows of each track (one model per row) wait with their cards
-    // where the game's camera never looks: under it on the player's side,
-    // past the opponent's tracks on theirs. Free to look around, the eyes
-    // would see them as rows of cards out of nowhere
-    std::vector<uintptr_t> rows;
+    // Each row model holds four cards, which wait at their bind pose until
+    // the game brings one to the row: past the player's edge, and in three
+    // piles past the opponent's tracks, where the game's camera does not
+    // look. Free to look around, the eyes would see them, so only the cards
+    // on a row and the one being placed are drawn
+    VrCaravanPlacing placing;
+    uint32_t state = field<uint32_t>(menu, VrGame::CaravanGameState);
 
-    vrVisitGameObjects(root, CaravanRowModelDepth, [&rows] (uintptr_t object, uint32_t) {
-      auto name = field<const char*>(reinterpret_cast<void*>(object), VrGame::ObjectName);
-
-      if (name && vrIsCaravanRowModel(name))
-        rows.push_back(object);
-    });
-
-    VrGameCameraPose pose;
-    pose.forward  = { camera.rotation[0], camera.rotation[3], camera.rotation[6] };
-    pose.up       = { camera.rotation[1], camera.rotation[4], camera.rotation[7] };
-    pose.right    = { camera.rotation[2], camera.rotation[5], camera.rotation[8] };
-    pose.position = { camera.translation[0], camera.translation[1], camera.translation[2] };
-
-    VrGameFrustum frustum;
-    frustum.left   = camera.frustum[0];
-    frustum.right  = camera.frustum[1];
-    frustum.top    = camera.frustum[2];
-    frustum.bottom = camera.frustum[3];
+    if (state >= VrGame::CaravanStatePlaceFirst && state <= VrGame::CaravanStatePlaceLast) {
+      placing.track  = field<int32_t>(menu, VrGame::CaravanSelectedTrack);
+      placing.row    = field<int32_t>(menu, VrGame::CaravanSelectedRow);
+      placing.column = field<int32_t>(menu, VrGame::CaravanSelectedColumn);
+    }
 
     size_t first = hidden.size();
 
-    for (uintptr_t row : rows) {
-      vrVisitGameObjects(row, CaravanNodeDepth, [&] (uintptr_t object, uint32_t) {
-        auto* bound = field<const float*>(reinterpret_cast<void*>(object), VrGame::ObjectWorldBound);
-        auto& flags = field<uint32_t>(reinterpret_cast<void*>(object), VrGame::ObjectFlags);
+    for (uint32_t track = 0; track < VrGame::CaravanTrackCount; track++) {
+      for (uint32_t row = 0; row < VrGame::CaravanRowCount; row++) {
+        uint32_t index = track * VrGame::CaravanRowCount + row;
+        auto     model = field<uintptr_t>(menu, VrGame::CaravanTrackModels + index * sizeof(uint32_t));
 
-        if (vrGameAsNode(object) || !bound || (flags & VrGame::ObjectFlagAppCulled)
-         || !vrSphereOutOfView(pose, frustum, { bound[0], bound[1], bound[2] }, bound[3]))
-          return;
+        if (!model)
+          continue;
 
-        flags |= VrGame::ObjectFlagAppCulled;
-        hidden.push_back(&flags);
-      });
+        uint32_t cardsOnRow = field<uint32_t>(menu, VrGame::CaravanCardTracks
+          + index * VrGame::CaravanCardListSize + VrGame::SimpleArraySize);
+
+        for (uint32_t column = 0; column < VrGame::CaravanRowCards; column++) {
+          if (vrCaravanCardInGame(track, row, column, cardsOnRow, placing))
+            continue;
+
+          std::string name = str::format("Card_0", column + 1);
+          uintptr_t   card = vrFindGameObject(model, name.c_str(), CaravanNodeDepth);
+
+          if (!card)
+            continue;
+
+          vrVisitGameObjects(card, CaravanNodeDepth, [&hidden] (uintptr_t object, uint32_t) {
+            auto& flags = field<uint32_t>(reinterpret_cast<void*>(object), VrGame::ObjectFlags);
+
+            if (vrGameAsNode(object) || (flags & VrGame::ObjectFlagAppCulled))
+              return;
+
+            flags |= VrGame::ObjectFlagAppCulled;
+            hidden.push_back(&flags);
+          });
+        }
+      }
     }
 
     size_t count = hidden.size() - first;
 
-    if (count != m_caravanCardsOutOfFrame) {
-      Logger::info(str::format("VR: ", count, " card shapes of Caravan's ", rows.size(),
-        " track rows are out of the game's frame and left out of the eyes"));
-      m_caravanCardsOutOfFrame = count;
+    if (count != m_caravanCardsOutOfGame) {
+      Logger::info(str::format("VR: ", count, " card shapes of Caravan's track rows wait out of the game"
+        " and are left out of the eyes"));
+      m_caravanCardsOutOfGame = count;
     }
   }
 

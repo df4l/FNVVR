@@ -262,27 +262,6 @@ namespace dxvk {
   }
 
 
-  bool vrSphereOutOfView(
-    const VrGameCameraPose&       camera,
-    const VrGameFrustum&          frustum,
-    const VrVector3&              centre,
-          float                   radius) {
-    VrVector3 offset = centre - camera.position;
-    float depth = vrDot(offset, camera.forward);
-    float x     = vrDot(offset, camera.right);
-    float y     = vrDot(offset, camera.up);
-
-    // Signed distance out of each side plane, the tangents set where it lies
-    auto outOf = [radius, depth] (float along, float tangent, float side) {
-      return side * (along - tangent * depth) / std::sqrt(1.0f + tangent * tangent) > radius;
-    };
-
-    return depth < -radius
-      || outOf(x, frustum.right, 1.0f) || outOf(x, frustum.left, -1.0f)
-      || outOf(y, frustum.top, 1.0f)   || outOf(y, frustum.bottom, -1.0f);
-  }
-
-
   VrGameCameraPose vrComputeMenuSceneCameraPose(
     const VrPose&           anchor,
     const VrPose&           eye,

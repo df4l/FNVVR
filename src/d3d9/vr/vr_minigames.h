@@ -251,7 +251,7 @@ namespace dxvk {
     VrCaravanBoard    m_caravanBoard;
     bool              m_caravanTilesHidden = false;
     // How many cards out of the game's frame the eyes last left out, for the log
-    size_t            m_caravanCardsOutOfFrame = 0;
+    size_t            m_caravanCardsOutOfGame = 0;
     bool              m_caravanPlanksHidden = false;
     bool              m_caravanCoinsLaid = false;
     // The selection as it was before a step was asked, put back if the menu
@@ -323,7 +323,7 @@ namespace dxvk {
 
     void hideRaisedPayoutScreen(std::vector<uint32_t*>& hidden);
 
-    void hideCaravanCardsOutOfFrame(const VrGameCameraState& camera, std::vector<uint32_t*>& hidden);
+    void hideCaravanCardsOutOfGame(std::vector<uint32_t*>& hidden);
 
     void hideCaravanPlanks(std::vector<uint32_t*>& hidden);
 

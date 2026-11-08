@@ -113,14 +113,20 @@ TEST_CASE(caravan_track_key_moves_towards_the_track) {
   CHECK(vrCaravanTrackKey(1, 1) == VrCaravanKey::None);
 }
 
-TEST_CASE(caravan_row_models_by_name) {
-  CHECK(vrIsCaravanRowModel("Player_1_01"));
-  CHECK(vrIsCaravanRowModel("Opponent_3_07"));
-  CHECK(!vrIsCaravanRowModel("Player_4_01"));
-  CHECK(!vrIsCaravanRowModel("Player_1_08"));
-  CHECK(!vrIsCaravanRowModel("Player_1_01 NonAccum"));
-  CHECK(!vrIsCaravanRowModel("Player_Deck"));
-  CHECK(!vrIsCaravanRowModel("Player_4_Shadow"));
+TEST_CASE(caravan_row_cards_past_the_row_wait_out_of_the_game) {
+  VrCaravanPlacing none;
+  CHECK(vrCaravanCardInGame(4, 2, 0, 2, none));
+  CHECK(vrCaravanCardInGame(4, 2, 1, 2, none));
+  CHECK(!vrCaravanCardInGame(4, 2, 2, 2, none));
+  CHECK(!vrCaravanCardInGame(4, 3, 0, 0, none));
+
+  // The card on its way to the row shows, not the others of its model
+  VrCaravanPlacing placing;
+  placing.track = 4; placing.row = 2; placing.column = 2;
+  CHECK(vrCaravanCardInGame(4, 2, 2, 2, placing));
+  CHECK(!vrCaravanCardInGame(4, 2, 3, 2, placing));
+  CHECK(!vrCaravanCardInGame(4, 1, 2, 2, placing));
+  CHECK(!vrCaravanCardInGame(1, 2, 2, 2, placing));
 }
 
 TEST_CASE(caravan_back_discards_a_card_on_a_tap_and_a_caravan_on_a_hold) {

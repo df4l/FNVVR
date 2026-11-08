@@ -205,18 +205,14 @@ namespace dxvk {
   }
 
 
-  bool vrIsCaravanRowModel(const char* name) {
-    for (const char* side : { "Player_", "Opponent_" }) {
-      size_t length = std::strlen(side);
-
-      if (!std::strncmp(name, side, length)) {
-        const char* rest = name + length;
-        return rest[0] >= '1' && rest[0] <= '3' && rest[1] == '_'
-            && rest[2] == '0' && rest[3] >= '1' && rest[3] <= '7' && !rest[4];
-      }
-    }
-
-    return false;
+  bool vrCaravanCardInGame(
+          uint32_t          track,
+          uint32_t          row,
+          uint32_t          column,
+          uint32_t          cardsOnRow,
+    const VrCaravanPlacing& placing) {
+    return column < cardsOnRow
+      || (int32_t(track) == placing.track && int32_t(row) == placing.row && int32_t(column) == placing.column);
   }
 
 

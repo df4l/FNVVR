@@ -889,6 +889,21 @@ namespace dxvk {
     constexpr uint32_t  CaravanRowCount      = 7;
     constexpr uint32_t  CaravanHandSize      = 8;
     constexpr uintptr_t CaravanCardListSize  = 0x10;
+    /**
+     * CaravanMenu::pTrackGeometries[6][7] (+0x198), one row model per track
+     * and row (Player_{t}_0{r}.NIF, Opponent_{t}_0{r}.NIF), each holding
+     * the nodes "Card_0{column+1}". The cards wait at their bind pose until
+     * their "Card{column+1}_In" sequence brings them to the row: past the
+     * player's edge, or in three piles past the opponent's tracks.
+     * iSelectedColumn (+0xE38) is the column a card is being placed in
+     * during eGameState 0x0B to 0x0E (DoIdle 0x00741500, case 0xD:
+     * pTrackAnimations[iSelectedTrack][iSelectedRow][iSelectedColumn][0]).
+     */
+    constexpr uintptr_t CaravanTrackModels   = 0x198;
+    constexpr uintptr_t CaravanSelectedColumn = 0xE38;
+    constexpr uint32_t  CaravanRowCards      = 4;
+    constexpr uint32_t  CaravanStatePlaceFirst = 0x0B;
+    constexpr uint32_t  CaravanStatePlaceLast  = 0x0E;
     /** uiFlags: a hand card is taken, the first three cards, a track discard */
     constexpr uint32_t  CaravanFlagSelectTrack  = 0x1000;
     constexpr uint32_t  CaravanFlagTrackSetup   = 0x800;

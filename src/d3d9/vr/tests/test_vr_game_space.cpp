@@ -546,20 +546,3 @@ TEST_CASE(camera_blend_cuts_when_too_far) {
   checkVector(result.position, 500.0f, 0.0f, 0.0f);
   CHECK_NEAR(vrComputeCameraHeading(result), 1.0f, 1e-4);
 }
-
-TEST_CASE(sphere_out_of_view_on_each_side) {
-  // Looking along +Y, up +Z, right +X, 45 degrees each side
-  VrGameCameraPose camera = vrComputeBodyCameraPose(0.0f, { 0.0f, 0.0f, 0.0f });
-  VrGameFrustum frustum;
-  frustum.left = -1.0f; frustum.right = 1.0f; frustum.top = 1.0f; frustum.bottom = -1.0f;
-
-  CHECK(!vrSphereOutOfView(camera, frustum, { 0.0f, 10.0f, 0.0f }, 1.0f));
-  CHECK(vrSphereOutOfView(camera, frustum, { 15.0f, 10.0f, 0.0f }, 1.0f));
-  CHECK(vrSphereOutOfView(camera, frustum, { -15.0f, 10.0f, 0.0f }, 1.0f));
-  CHECK(vrSphereOutOfView(camera, frustum, { 0.0f, 10.0f, 15.0f }, 1.0f));
-  CHECK(vrSphereOutOfView(camera, frustum, { 0.0f, 10.0f, -15.0f }, 1.0f));
-  CHECK(vrSphereOutOfView(camera, frustum, { 0.0f, -10.0f, 0.0f }, 1.0f));
-
-  // Across the edge: still partly in view
-  CHECK(!vrSphereOutOfView(camera, frustum, { 10.5f, 10.0f, 0.0f }, 1.0f));
-}

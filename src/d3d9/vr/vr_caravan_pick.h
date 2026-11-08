@@ -206,12 +206,31 @@ namespace dxvk {
   VrCaravanKey vrCaravanTrackKey(int32_t target, int32_t current);
 
   /**
-   * \brief Checks whether a name is the model of one row of a track
-   *
-   * The game loads one model per track and row, Player_{track}_0{row} and
-   * Opponent_{track}_0{row} (tracks 1 to 3, rows 1 to 7).
+   * \brief A card the game is placing on a row, all -1 for none
    */
-  bool vrIsCaravanRowModel(const char* name);
+  struct VrCaravanPlacing {
+    int32_t track  = -1;
+    int32_t row    = -1;
+    int32_t column = -1;
+  };
+
+  /**
+   * \brief Checks whether a card of a row model is in the game
+   *
+   * A row model holds a card per column; those past the cards on the row
+   * wait at their bind pose, except the one being placed.
+   * \param [in] track Track of the row model
+   * \param [in] row Row of the row model
+   * \param [in] column Column of the card in the model
+   * \param [in] cardsOnRow Cards the game has on that row
+   * \param [in] placing The card the game is placing
+   */
+  bool vrCaravanCardInGame(
+          uint32_t          track,
+          uint32_t          row,
+          uint32_t          column,
+          uint32_t          cardsOnRow,
+    const VrCaravanPlacing& placing);
 
   /**
    * \brief What the controller buttons ask of Caravan's game
