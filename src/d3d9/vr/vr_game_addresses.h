@@ -1313,6 +1313,23 @@ namespace dxvk {
     constexpr uintptr_t PlayerInCombat        = 0xDF0;
 
     /**
+     * What holds the Caravan challenger in place while the world runs behind
+     * the game (findings/caravan.md §3.5), as the script command SetRestrained
+     * 1 does: Actor::SetRestrained (__thiscall, bool) sets the life state
+     * Actor::uiLifeState to Restrained and stops the actor, then
+     * Actor::EndMovement (__thiscall) ends their path. A restrained actor
+     * cannot move (Actor::CanMove) and gets no idle from its AI
+     * (HighProcess::SetupSpecialIdle), only those asked for by name.
+     * SetRestrained 0 sets it back to Alive only while it is Restrained.
+     */
+    constexpr uintptr_t ActorSetRestrained    = 0x008ACE50;
+    constexpr uint8_t   ActorSetRestrainedPrologue[] = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x0F, 0xB6, 0x45, 0x08 };
+    constexpr uintptr_t ActorEndMovement      = 0x0087FAA0;
+    constexpr uint8_t   ActorEndMovementPrologue[] = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x45, 0xFC };
+    constexpr uint32_t  ActorLifeAlive        = 0;
+    constexpr uint32_t  ActorLifeRestrained   = 5;
+
+    /**
      * HUDMainMenu*, the HUD. Its top-level element groups are Tile* fields,
      * see findings/hud.md. HUDMainMenu::Create reads the pointer before it
      * stores each group, which is checked at these sites

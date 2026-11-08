@@ -19,6 +19,8 @@ namespace dxvk {
     using InterfaceIdleFn    = void (__fastcall*)(void* main, void* unused);
     using LastMinuteFn       = void (__cdecl*)();
     using AudioFn            = void (__fastcall*)(void* audio, void* unused);
+    using SetRestrainedFn    = void (__fastcall*)(void* actor, void* unused, bool restrained);
+    using EndMovementFn      = void (__fastcall*)(void* actor, void* unused);
 
     // Read by the AI threads too, written between frames
     std::atomic<bool> g_live = { false };
@@ -29,6 +31,10 @@ namespace dxvk {
     // The menus that may run live, set once at the start
     bool g_casino      = false;
     bool g_vigorTester = false;
+    bool g_caravan     = false;
+
+    // The Caravan challenger held by the mod, main thread only
+    uint8_t* g_heldChallenger = nullptr;
 
     bool realMenuMode() {
       return reinterpret_cast<IsInMenuModeFn>(VrGame::IsInMenuMode)();
@@ -43,6 +49,7 @@ namespace dxvk {
       state.casinoOnTop = (g_casino && (isTopMenu(VrGame::BlackJackMenuId)
           || isTopMenu(VrGame::RouletteMenuId)
           || isTopMenu(VrGame::SlotMachineMenuId)))
+        || (g_caravan && isTopMenu(VrGame::CaravanMenuId))
         || (g_vigorTester && isTopMenu(VrGame::LoveTesterMenuId));
 
       if (!state.casinoOnTop)
@@ -102,11 +109,55 @@ namespace dxvk {
       }
     }
 
+    uint32_t lifeState(const uint8_t* actor) {
+      return *reinterpret_cast<const uint32_t*>(actor + VrGame::ActorLifeState);
+    }
+
+    // Called on the main thread at the start of the frame, before the AI
+    // threads run, as a script's SetRestrained would be. Held only while
+    // Caravan is the top menu and the console is closed: the world is still
+    // under the pause menu or the console anyway, and a save made from them
+    // never keeps the challenger restrained.
+    void updateCaravanHold() {
+      auto menu       = *reinterpret_cast<uint8_t* const*>(VrGame::CaravanInstance);
+      bool onTop      = menu && isTopMenu(VrGame::CaravanMenuId) && !*reinterpret_cast<const uint8_t*>(VrGame::InConsole);
+      auto challenger = onTop ? *reinterpret_cast<uint8_t* const*>(menu + VrGame::CaravanChallenger) : nullptr;
+      bool alive      = challenger && lifeState(challenger) == VrGame::ActorLifeAlive;
+
+      auto step = vrCaravanHoldStep(g_heldChallenger, challenger, alive);
+
+      if (step.release) {
+        // Left as it is if anything else changed it meanwhile
+        if (lifeState(g_heldChallenger) == VrGame::ActorLifeRestrained) {
+          reinterpret_cast<SetRestrainedFn>(VrGame::ActorSetRestrained)(g_heldChallenger, nullptr, false);
+          Logger::info("VR: The Caravan challenger is released");
+        }
+
+        g_heldChallenger = nullptr;
+      }
+
+      if (step.hold) {
+        reinterpret_cast<SetRestrainedFn>(VrGame::ActorSetRestrained)(challenger, nullptr, true);
+        reinterpret_cast<EndMovementFn>(VrGame::ActorEndMovement)(challenger, nullptr);
+        g_heldChallenger = challenger;
+        Logger::info("VR: The Caravan challenger is held in place");
+      }
+    }
+
   }
 
 
-  void VrLiveCasino::install(bool casino, bool vigorTester) {
-    if (!casino && !vigorTester)
+  void VrLiveCasino::install(bool casino, bool vigorTester, bool caravan) {
+    // Without a way to hold the challenger, Caravan keeps the pause
+    if (caravan && !(VrGameMemory::matches(VrGame::ActorSetRestrained,
+          VrGame::ActorSetRestrainedPrologue, sizeof(VrGame::ActorSetRestrainedPrologue))
+        && VrGameMemory::matches(VrGame::ActorEndMovement,
+          VrGame::ActorEndMovementPrologue, sizeof(VrGame::ActorEndMovementPrologue)))) {
+      Logger::warn("VR: The game's SetRestrained was not found, Caravan pauses the world");
+      caravan = false;
+    }
+
+    if (!casino && !vigorTester && !caravan)
       return;
 
     bool found = VrGameMemory::matchesUnlessRewritten(VrGame::IsInMenuMode,
@@ -128,6 +179,7 @@ namespace dxvk {
 
     g_casino      = casino;
     g_vigorTester = vigorTester;
+    g_caravan     = caravan;
 
     VrGameMemory::redirectCall(VrGame::LiveMenuModeFrameSite, VrGame::IsInMenuMode,
       reinterpret_cast<const void*>(&VrLiveCasino::frameMenuModeHook));
@@ -144,6 +196,9 @@ namespace dxvk {
 
 
   bool __cdecl VrLiveCasino::frameMenuModeHook() {
+    if (g_caravan)
+      updateCaravanHold();
+
     bool menuMode = realMenuMode();
     bool live     = menuMode && vrCasinoRunsLive(readState());
     bool wasLive  = g_live.load(std::memory_order_relaxed);
