@@ -181,8 +181,8 @@ namespace dxvk {
     constexpr float     CaravanHandLowered   = 10.0f;
     // Held as the pose holds its sheet of paper (aoTestPaper.nif, in the
     // frame of Bip01 R Hand): the bottoms of the cards where the hand
-    // pinches the sheet's near edge, the tips a quarter turn to the
-    // player's left of the sheet's direction, the backs turned as close to the player as the tips let
+    // pinches the sheet's near edge, the tips along the sheet away from
+    // that edge, the backs turned as close to the player as the tips let
     // them. In the scene (40 units per metre): a card's centre 3.5 cm from
     // the bottoms, about 9 degrees between two cards.
     constexpr VrVector3 CaravanOpponentGrip   = { 8.3f, 2.2f, 2.1f };
@@ -1899,16 +1899,8 @@ namespace dxvk {
 
       m_caravanOpponentHold = toScene(at - m_object.position);
 
-      // The tips turn a quarter to the player's left, about the backs: the
-      // cards keep their bottoms in the pinch, across the hand
-      if (vrLength(up) > 0.0f) {
-        VrVector3 u = toScene(up);
-        const VrVector3& f = CaravanOpponentFace;
-        m_caravanOpponentUp = {
-          f.y * u.z - f.z * u.y,
-          f.z * u.x - f.x * u.z,
-          f.x * u.y - f.y * u.x };
-      }
+      if (vrLength(up) > 0.0f)
+        m_caravanOpponentUp = toScene(up);
     }
 
     if (held != m_caravanOpponentHeld) {
