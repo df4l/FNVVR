@@ -20,6 +20,10 @@
 
 - **Long quest names are no longer cut**: a quest added or completed with a long name shows whole in the top left corner, even while the XP meter is shown.
 
+### NVSE
+
+- **NVSE loads by itself on Linux**: when NVSE is installed and the game runs through Proton, the main menu offers once to make the game load NVSE by itself, as the FNV 4GB Patcher does, so it starts normally from Steam without `nvse_loader.exe`. The original `FalloutNV.exe` is kept as `FalloutNV_backup.exe`; the change takes effect at the next start.
+
 ## v0.14.0 (2026-11-06, since v0.13.0 `d232764`)
 
 ### Doc Mitchell's house

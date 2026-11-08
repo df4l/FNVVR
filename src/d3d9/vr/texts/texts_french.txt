@@ -170,6 +170,23 @@ OK
 Tant que ce fichier existe, FNVVR ne propose pas à FalloutNV.exe d'utiliser 4 Go de mémoire.
 Supprimez-le pour que la question soit reposée.
 
+# Le même patch proposé sous Proton pour charger NVSE, au menu principal. Pas de & ni de ;.
+[text nvseload.prompt]
+NVSE est installé dans le dossier du jeu. FNVVR peut faire en sorte que le jeu le charge lui-même, pour qu'il se lance normalement depuis Steam sans nvse_loader.exe, comme avec FNV 4GB Patcher : FalloutNV.exe est modifié et l'original est conservé sous le nom FalloutNV_backup.exe. La modification prend effet au prochain lancement du jeu.
+
+[text nvseload.patch]
+Charger NVSE
+
+[text nvseload.done]
+Le jeu charge désormais NVSE lui-même. Quittez et relancez-le depuis Steam, sans nvse_loader.exe.
+
+[text nvseload.failed]
+FalloutNV.exe n'a pas pu être modifié, le journal d3d9 en donne la raison. FNV 4GB Patcher, sur Nexus Mods, fait la même modification.
+
+[text nvseload.declinedfile]
+Tant que ce fichier existe, FNVVR ne propose pas de faire charger NVSE par le jeu lui-même.
+Supprimez-le pour que la question soit reposée.
+
 # Les touches du clavier de la console, courtes et sans accents : la place manque.
 [text key.ESC]
 ECH

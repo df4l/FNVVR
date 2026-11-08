@@ -35,15 +35,77 @@ namespace dxvk {
     constexpr int8_t PatchButton = FirstButton;
     constexpr int8_t NeverButton = FirstButton + 2;
 
-    constexpr wchar_t DeclinedFileName[] = L"no_large_address_prompt.txt";
     constexpr wchar_t BackupName[]       = L"FalloutNV_backup.exe";
     constexpr wchar_t SecondBackupName[] = L"FalloutNV_backup_fnvvr.exe";
     constexpr wchar_t PatchedTempName[]  = L"FalloutNV_fnvvr.tmp";
 
+    struct OfferText {
+      const char* name;
+      const char* english;
+    };
+
+    /**
+     * \brief What the main menu offers
+     *
+     * Both offers apply the same patch; they differ in why the player
+     * would want it, so in their texts and in their "don't ask again" file.
+     */
+    struct Offer {
+      const wchar_t* declinedFileName;
+      const char*    logName;
+      OfferText      prompt;
+      OfferText      patch;
+      OfferText      done;
+      OfferText      failed;
+      OfferText      declinedFile;
+    };
+
+    /// The process has 2 GB: the patch gives it 4 GB
+    const Offer LargeAddressOffer = {
+      L"no_large_address_prompt.txt", "4 GB patch",
+      { "largeaddress.prompt",
+        "Fallout: New Vegas can only use 2 GB of memory. VR and mods fill it quickly, and the game then crashes. "
+        "FNVVR can let it use 4 GB, as the FNV 4GB Patcher does: FalloutNV.exe is modified and the original is "
+        "kept as FalloutNV_backup.exe. The change takes effect the next time the game starts." },
+      { "largeaddress.patch", "Use 4 GB" },
+      { "largeaddress.done",
+        "FalloutNV.exe can now use 4 GB of memory. Quit and start the game again for the change to take effect." },
+      { "largeaddress.failed",
+        "FalloutNV.exe could not be modified, the d3d9 log says why. "
+        "The FNV 4GB Patcher from Nexus Mods makes the same change." },
+      { "largeaddress.declinedfile",
+        "While this file exists, FNVVR does not offer to let FalloutNV.exe use 4 GB of memory.\r\n"
+        "Delete it to be asked again." },
+    };
+
+    /// The process already has 4 GB (Proton) and NVSE is installed: the
+    /// patch makes the game load NVSE by itself through nvse_steam_loader.dll
+    const Offer NvseOffer = {
+      L"no_nvse_prompt.txt", "NVSE loading patch",
+      { "nvseload.prompt",
+        "NVSE is installed in the game folder. FNVVR can make the game load it by itself, so that it starts "
+        "normally from Steam without nvse_loader.exe, as with the FNV 4GB Patcher: FalloutNV.exe is modified and "
+        "the original is kept as FalloutNV_backup.exe. The change takes effect the next time the game starts." },
+      { "nvseload.patch", "Load NVSE" },
+      { "nvseload.done",
+        "The game now loads NVSE by itself. Quit and start it again from Steam, without nvse_loader.exe." },
+      { "nvseload.failed",
+        "FalloutNV.exe could not be modified, the d3d9 log says why. "
+        "The FNV 4GB Patcher from Nexus Mods makes the same change." },
+      { "nvseload.declinedfile",
+        "While this file exists, FNVVR does not offer to make the game load NVSE by itself.\r\n"
+        "Delete it to be asked again." },
+    };
+
     const VrTexts* g_texts = nullptr;
+    const Offer*   g_offer = nullptr;
 
     const char* text(const char* name, const char* english) {
       return g_texts->text(name, english);
+    }
+
+    const char* text(const OfferText& offerText) {
+      return text(offerText.name, offerText.english);
     }
 
     enum class Step {
@@ -67,9 +129,17 @@ namespace dxvk {
       return std::wstring(buffer.data(), length);
     }
 
-    std::wstring declinedFilePath() {
+    std::wstring directoryOf(const std::wstring& path) {
+      return path.substr(0, path.find_last_of(L"\\/") + 1);
+    }
+
+    bool fileExists(const std::wstring& path) {
+      return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
+    }
+
+    std::wstring declinedFilePath(const Offer& offer) {
       std::wstring directory = vrModuleDirectory();
-      return directory.empty() ? directory : directory + L"fnvvr\\" + DeclinedFileName;
+      return directory.empty() ? directory : directory + L"fnvvr\\" + offer.declinedFileName;
     }
 
     bool readFile(const std::wstring& path, std::vector<uint8_t>& content) {
@@ -128,7 +198,7 @@ namespace dxvk {
       std::wstring path = directory + BackupName;
       std::vector<uint8_t> existing;
 
-      if (GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES
+      if (!fileExists(path)
        || (readFile(path, existing) && sha1Of(existing) == originalSha1))
         return path;
 
@@ -136,7 +206,7 @@ namespace dxvk {
     }
 
     /**
-     * \brief Replaces FalloutNV.exe by its large address aware version
+     * \brief Replaces FalloutNV.exe by its patched version
      *
      * Windows lets a running executable be renamed, not written, so the
      * patched file is written beside it, the original renamed to the backup
@@ -144,7 +214,7 @@ namespace dxvk {
      */
     bool patchExecutable() {
       std::wstring path = executablePath();
-      std::wstring directory = path.substr(0, path.find_last_of(L"\\/") + 1);
+      std::wstring directory = directoryOf(path);
       std::vector<uint8_t> image;
 
       if (path.empty() || !readFile(path, image)) {
@@ -182,25 +252,23 @@ namespace dxvk {
         return false;
       }
 
-      Logger::info(str::format("VR: FalloutNV.exe is now large address aware (SHA-1 ", sha1Of(image),
+      Logger::info(str::format("VR: FalloutNV.exe is now patched (SHA-1 ", sha1Of(image),
         "), the original is ", str::fromws(backup.c_str())));
       return true;
     }
 
     void writeDeclinedFile() {
-      std::wstring path = declinedFilePath();
+      std::wstring path = declinedFilePath(*g_offer);
 
       if (path.empty())
         return;
 
       CreateDirectoryW(path.substr(0, path.find_last_of(L'\\')).c_str(), nullptr);
 
-      const char* declined = text("largeaddress.declinedfile",
-        "While this file exists, FNVVR does not offer to let FalloutNV.exe use 4 GB of memory.\r\n"
-        "Delete it to be asked again.");
+      const char* declined = text(g_offer->declinedFile);
 
       if (writeFile(path, declined, std::strlen(declined)))
-        Logger::info("VR: The player declined the 4 GB patch, it is not offered again");
+        Logger::info(str::format("VR: The player declined the ", g_offer->logName, ", it is not offered again"));
       else
         Logger::warn(str::format("VR: Could not write ", str::fromws(path.c_str())));
     }
@@ -215,7 +283,7 @@ namespace dxvk {
         if (button == NeverButton)
           writeDeclinedFile();
         else
-          Logger::info("VR: The player postponed the 4 GB patch");
+          Logger::info(str::format("VR: The player postponed the ", g_offer->logName));
 
         g_step = Step::Done;
       }
@@ -228,13 +296,9 @@ namespace dxvk {
 
     void showPrompt() {
       reinterpret_cast<MessageBoxFn>(VrGame::ShowMessageBox)(
-        text("largeaddress.prompt",
-          "Fallout: New Vegas can only use 2 GB of memory. VR and mods fill it quickly, and the game then crashes. "
-          "FNVVR can let it use 4 GB, as the FNV 4GB Patcher does: FalloutNV.exe is modified and the original is "
-          "kept as FalloutNV_backup.exe. The change takes effect the next time the game starts."),
-        nullptr, nullptr, &onPromptAnswered,
+        text(g_offer->prompt), nullptr, nullptr, &onPromptAnswered,
         FirstButton, VrGame::MessageBoxStartMenuType, 0.0f, 0.0f,
-        text("largeaddress.patch", "Use 4 GB"), text("largeaddress.later", "Not now"),
+        text(g_offer->patch), text("largeaddress.later", "Not now"),
         text("largeaddress.never", "Don't ask again"), nullptr);
     }
 
@@ -260,12 +324,7 @@ namespace dxvk {
         case Step::Report:
           if (menuReady(menu)) {
             g_step = Step::Done;
-            showMessageBox(g_patched
-              ? text("largeaddress.done",
-                  "FalloutNV.exe can now use 4 GB of memory. Quit and start the game again for the change to take effect.")
-              : text("largeaddress.failed",
-                  "FalloutNV.exe could not be modified, the d3d9 log says why. "
-                  "The FNV 4GB Patcher from Nexus Mods makes the same change."),
+            showMessageBox(text(g_patched ? g_offer->done : g_offer->failed),
               nullptr, text("largeaddress.ok", "OK"));
           }
           break;
@@ -297,27 +356,38 @@ namespace dxvk {
     uintptr_t top = reinterpret_cast<uintptr_t>(system.lpMaximumApplicationAddress);
     Logger::info(str::format("VR: Address space up to 0x", std::hex, top));
 
-    if (top >= TwoGigabytes)
-      return false;
+    std::wstring executable = executablePath();
+    std::wstring gameDirectory = directoryOf(executable);
 
-    BOOL wow64 = FALSE;
+    if (top < TwoGigabytes) {
+      BOOL wow64 = FALSE;
 
-    if (!IsWow64Process(GetCurrentProcess(), &wow64) || !wow64) {
-      Logger::info("VR: 32-bit Windows, the game cannot get more than 2 GB of memory");
+      if (!IsWow64Process(GetCurrentProcess(), &wow64) || !wow64) {
+        Logger::info("VR: 32-bit Windows, the game cannot get more than 2 GB of memory");
+        return false;
+      }
+
+      g_offer = &LargeAddressOffer;
+    } else if (fileExists(gameDirectory + L"nvse_loader.exe")
+            && fileExists(gameDirectory + L"nvse_steam_loader.dll")) {
+      // An original executable with 4 GB means Proton, which gives every
+      // executable 4 GB: NVSE then has to be started by nvse_loader.exe
+      g_offer = &NvseOffer;
+    } else {
       return false;
     }
 
-    std::wstring declined = declinedFilePath();
+    std::wstring declined = declinedFilePath(*g_offer);
 
-    if (!declined.empty() && GetFileAttributesW(declined.c_str()) != INVALID_FILE_ATTRIBUTES) {
-      Logger::info(str::format("VR: The game has 2 GB of memory; the 4 GB patch is not offered while ",
+    if (!declined.empty() && fileExists(declined)) {
+      Logger::info(str::format("VR: The ", g_offer->logName, " is not offered while ",
         str::fromws(declined.c_str()), " exists"));
       return false;
     }
 
     std::vector<uint8_t> image;
 
-    if (!readFile(executablePath(), image)) {
+    if (!readFile(executable, image)) {
       Logger::warn(str::format("VR: Could not read the executable: ", lastError()));
       return false;
     }
@@ -326,8 +396,15 @@ namespace dxvk {
     VrExecutableIdentity identity = vrIdentifyExecutable(sha1);
 
     if (identity.state != VrExecutableIdentity::State::Original) {
-      Logger::warn(str::format("VR: The game has 2 GB of memory and FalloutNV.exe (SHA-1 ", sha1,
-        ") is not a version FNVVR can patch; the FNV 4GB Patcher gives it 4 GB"));
+      if (g_offer == &LargeAddressOffer) {
+        Logger::warn(str::format("VR: The game has 2 GB of memory and FalloutNV.exe (SHA-1 ", sha1,
+          ") is not a version FNVVR can patch; the FNV 4GB Patcher gives it 4 GB"));
+      } else if (identity.state == VrExecutableIdentity::State::Patched) {
+        Logger::info("VR: FalloutNV.exe is patched, it loads NVSE through nvse_steam_loader.dll");
+      } else {
+        Logger::info(str::format("VR: NVSE is installed and FalloutNV.exe (SHA-1 ", sha1,
+          ") is not a version FNVVR can patch to load it"));
+      }
       return false;
     }
 
@@ -337,11 +414,11 @@ namespace dxvk {
           VrGame::GetMessageMenuResultPrologue, sizeof(VrGame::GetMessageMenuResultPrologue))
      || !VrGameMemory::redirectCall(VrGame::MainMenuIdleCallSite, VrGame::MainMenuIdle,
           reinterpret_cast<const void*>(&mainMenuIdleHook))) {
-      Logger::warn("VR: The main menu was not found, the 4 GB patch is not offered");
+      Logger::warn(str::format("VR: The main menu was not found, the ", g_offer->logName, " is not offered"));
       return false;
     }
 
-    Logger::info("VR: The game has 2 GB of memory, the main menu offers to patch FalloutNV.exe");
+    Logger::info(str::format("VR: The main menu offers the ", g_offer->logName, " of FalloutNV.exe"));
     return true;
   }
 

@@ -5,7 +5,7 @@
 namespace dxvk {
 
   /**
-   * \brief Offers to give the game 4 GB of address space
+   * \brief Offers to give the game 4 GB of address space, or to load NVSE
    *
    * A 32-bit process gets 4 GB on 64-bit Windows only if its executable is
    * large address aware, which the kernel reads when it creates the process.
@@ -19,7 +19,13 @@ namespace dxvk {
    * player can also decline for this run only, or for good, which writes
    * \c fnvvr\\no_large_address_prompt.txt next to d3d9.dll.
    *
-   * Under Proton every executable gets 4 GB, so nothing is shown there.
+   * Under Proton every executable gets 4 GB, but NVSE then has to be
+   * started by nvse_loader.exe. So when the process already has 4 GB, the
+   * executable is an unmodified Steam one and nvse_loader.exe and
+   * nvse_steam_loader.dll are in the game directory, the same patch is
+   * offered for what it also does: load nvse_steam_loader.dll, hence NVSE,
+   * at startup. Its "don't ask again" file is \c fnvvr\\no_nvse_prompt.txt.
+   *
    * See findings/laa.md. Only used on the game's main thread.
    */
   class VrLargeAddress {
