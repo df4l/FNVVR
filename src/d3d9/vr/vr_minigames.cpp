@@ -146,15 +146,16 @@ namespace dxvk {
     // of Player_Deck.NIF's "Deck-Cards_In": card centres from x 16.6 to
     // 20.1 at y -9.4 to -10.4, z 1.55 to 1.9, faces up, tips to +y), held
     // in the left hand as a fan, fixed in the grip's frame: the bottom of
-    // the middle card on the palm, the backs against the palm and fingers,
-    // the faces out of the palm (+X of the left grip) and a little back,
-    // the tips past the fingers, up and ahead (user, 2026-11-08: the cards
-    // rest on the hand at all times, as a fan would). At the mat's scale
-    // the cards are already the size of real ones.
+    // the middle card on the palm, held across the hand as between thumb
+    // and fingers, the faces back to the player (+Z of the left grip) and
+    // a little up, the tips to the right and up (user, 2026-11-08: the
+    // cards rest on the hand at all times, as a fan would, turned a
+    // quarter to the right from along the fingers). At the mat's scale the
+    // cards are already the size of real ones.
     constexpr VrVector3 CaravanFanBottom = { 18.45f, -11.45f, 1.7f };
     constexpr VrVector3 CaravanFanHold   = { 0.025f, 0.01f, 0.0f };
-    constexpr VrVector3 CaravanFanUp     = { 0.0f, 0.45f, -0.9f };
-    constexpr VrVector3 CaravanFanFace   = { 1.0f, 0.0f, 0.3f };
+    constexpr VrVector3 CaravanFanUp     = { 0.9f, 0.45f, 0.0f };
+    constexpr VrVector3 CaravanFanFace   = { 0.0f, 0.3f, 1.0f };
     constexpr float     CaravanFanScale  = 1.0f;
     // The game's fan is narrow for a laser: the cards are opened wider
     // about the point their long axes meet, below the fan (from the first
