@@ -872,6 +872,10 @@ namespace dxvk {
 
     constexpr uintptr_t CaravanActiveMenu    = 0x28;
     constexpr uintptr_t CaravanGameState     = 0x2C;
+    // eGameState 0x16, the game is over (its result shown), and 0x17, the
+    // menu closes (findings/caravan.md §1)
+    constexpr uint32_t  CaravanStateOver     = 0x16;
+    constexpr uint32_t  CaravanStateClosing  = 0x17;
     constexpr uintptr_t CaravanPlayerHandModel = 0x190;
     /**
      * CaravanMenu::pHandGeometries[1] (Opponent_Deck.NIF) and kNPCHand, the
@@ -1400,6 +1404,19 @@ namespace dxvk {
     constexpr uint32_t  AnimIdleAddOnCount          = 2;
     constexpr uintptr_t AnimIdleForm                = 0x2C;
     constexpr uintptr_t ProcessFreeSpecialIdleSlot  = 0xD8;
+
+    /**
+     * What has the held Caravan challenger look at the player, as a
+     * script's head tracking would: the process's virtual
+     * SetScriptHeadTrackTarget (__thiscall, the reference; slot 0x62C,
+     * HighProcess 0x00900F50) and ClearScriptHeadTrackTarget (__thiscall,
+     * bool: false gives the head back to the other targets at once; slot
+     * 0x648, HighProcess 0x00901190), both empty in the other processes.
+     * Actor::ProcessTracking then aims the head at the target's
+     * GetLookingAtLocation (findings/npc-gaze.md).
+     */
+    constexpr uintptr_t ProcessSetScriptHeadTrackSlot   = 0x62C;
+    constexpr uintptr_t ProcessClearScriptHeadTrackSlot = 0x648;
 
     /**
      * HUDMainMenu*, the HUD. Its top-level element groups are Tile* fields,

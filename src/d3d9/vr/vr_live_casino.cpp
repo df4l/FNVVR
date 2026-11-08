@@ -27,6 +27,8 @@ namespace dxvk {
     using PostAnimationFn    = void (__fastcall*)(void* process, void* unused, uint32_t action);
     using FormByIdFn         = uint8_t* (__cdecl*)(uint32_t id);
     using FreeIdleFn         = void (__fastcall*)(void* process, void* unused, void* actor);
+    using SetHeadTrackFn     = void (__fastcall*)(void* process, void* unused, void* target);
+    using ClearHeadTrackFn   = void (__fastcall*)(void* process, void* unused, bool hold);
 
     // Frames left before the hold pose is asked again: the AI picks the
     // idle a frame or two after it is asked
@@ -241,6 +243,9 @@ namespace dxvk {
 
       if (step.release) {
         // Left as it is if anything else changed it meanwhile
+        if (auto process = processOf(g_heldChallenger))
+          slot<ClearHeadTrackFn>(process, VrGame::ProcessClearScriptHeadTrackSlot)(process, nullptr, false);
+
         if (lifeState(g_heldChallenger) == VrGame::ActorLifeRestrained) {
           reinterpret_cast<SetRestrainedFn>(VrGame::ActorSetRestrained)(g_heldChallenger, nullptr, false);
           Logger::info("VR: The Caravan challenger is released");
@@ -252,6 +257,14 @@ namespace dxvk {
       if (step.hold) {
         reinterpret_cast<SetRestrainedFn>(VrGame::ActorSetRestrained)(challenger, nullptr, true);
         reinterpret_cast<EndMovementFn>(VrGame::ActorEndMovement)(challenger, nullptr);
+
+        // Looks at the player across the table, whatever their package says
+        auto process = processOf(challenger);
+        auto player  = *reinterpret_cast<uint8_t* const*>(VrGame::Player);
+
+        if (process && player)
+          slot<SetHeadTrackFn>(process, VrGame::ProcessSetScriptHeadTrackSlot)(process, nullptr, player);
+
         g_heldChallenger = challenger;
         g_poseWait       = 0;
         Logger::info("VR: The Caravan challenger is held in place");

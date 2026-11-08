@@ -113,8 +113,10 @@ namespace dxvk {
     constexpr float     CaravanSurfaceHigh = 110.0f;
     constexpr float     CaravanSurfaceFlat = 3.0f;
     constexpr float     CaravanRayTop      = 120.0f;
-    // The table opens out of black
+    // The table opens out of black, and goes back to black as the menu
+    // closes
     constexpr float     CaravanFadeIn  = 0.5f;
+    constexpr float     CaravanFadeOut = 0.3f;
     // The lasers point at the whole mat, just above its cloth (z 1.1).
     // A slot is on the laser within this reach of where the laser meets the
     // mat, the one already chosen favoured by the stickiness, in the mat's
@@ -146,16 +148,16 @@ namespace dxvk {
     // of Player_Deck.NIF's "Deck-Cards_In": card centres from x 16.6 to
     // 20.1 at y -9.4 to -10.4, z 1.55 to 1.9, faces up, tips to +y), held
     // in the left hand as a fan, fixed in the grip's frame: the bottom of
-    // the middle card on the palm, held across the hand as between thumb
-    // and fingers, the faces back to the player (+Z of the left grip) and
-    // a little up, the tips to the right and up (user, 2026-11-08: the
-    // cards rest on the hand at all times, as a fan would, turned a
-    // quarter to the right from along the fingers). At the mat's scale the
-    // cards are already the size of real ones.
+    // the middle card on the palm, the backs against the palm and fingers,
+    // the faces out of the palm (+X of the left grip) and a little back,
+    // the tips up towards the thumb and a little back, across the fingers
+    // (user, 2026-11-08: the cards rest on the hand at all times, as a fan
+    // would, a quarter turned from along the fingers, in the palm's plane).
+    // At the mat's scale the cards are already the size of real ones.
     constexpr VrVector3 CaravanFanBottom = { 18.45f, -11.45f, 1.7f };
     constexpr VrVector3 CaravanFanHold   = { 0.025f, 0.01f, 0.0f };
-    constexpr VrVector3 CaravanFanUp     = { 0.9f, 0.45f, 0.0f };
-    constexpr VrVector3 CaravanFanFace   = { 0.0f, 0.3f, 1.0f };
+    constexpr VrVector3 CaravanFanUp     = { 0.0f, 0.9f, 0.45f };
+    constexpr VrVector3 CaravanFanFace   = { 1.0f, 0.0f, 0.3f };
     constexpr float     CaravanFanScale  = 1.0f;
     // The game's fan is narrow for a laser: the cards are opened wider
     // about the point their long axes meet, below the fan (from the first
@@ -169,13 +171,13 @@ namespace dxvk {
     constexpr float     CaravanFanBound  = 1.0e5f;
     // Deeper than this below the hand's or a grid's root, no card or slot
     constexpr uint32_t  CaravanNodeDepth = 8;
-    // The opponent's hand of cards in the challenger's raised left hand
-    // (findings/caravan.md §3.8): held up when the hand bone stands this
-    // far above their feet (a hand at rest hangs at about 75 units), lowered
-    // again below the second height
+    // The opponent's hand of cards in the challenger's raised hand
+    // (findings/caravan.md §3.8; the pose raises the right one): held up
+    // when one hand bone stands this far above the other, whatever the
+    // actor's size, lowered again below the second height
     constexpr uint32_t  CaravanSkeletonDepth = 16;
-    constexpr float     CaravanHandRaised    = 90.0f;
-    constexpr float     CaravanHandLowered   = 82.0f;
+    constexpr float     CaravanHandRaised    = 15.0f;
+    constexpr float     CaravanHandLowered   = 10.0f;
     // In the scene (40 units per metre): the bottoms of the cards 3 cm
     // towards the player and 2 cm above the wrist, the fan upright and
     // leaning back a little, its backs towards the player, a card's centre
@@ -690,6 +692,7 @@ namespace dxvk {
     m_caravanButtons.reset();
     m_caravanDiscard = -1;
     m_caravanFanHeld = false;
+    m_caravanFadingOut = false;
     m_leverHeld   = { };
     m_levers      = { };
     m_signals     = VrTableSignals();
@@ -1380,6 +1383,13 @@ namespace dxvk {
     if (m_kind == Kind::None)
       return;
 
+    // The world comes back out of black, as the table came
+    if (m_kind == Kind::Caravan) {
+      m_backend.fadeView(0.0f, 1.0f);
+      m_backend.fadeView(CaravanFadeIn, 0.0f);
+      m_caravanFadingOut = false;
+    }
+
     Logger::info(str::format("VR: The ", kindName(menuId()), " is put away"));
 
     m_kind       = Kind::None;
@@ -1774,23 +1784,46 @@ namespace dxvk {
   }
 
 
+  bool VrMinigames::caravanTableGaze(VrVector3& point) const {
+    auto menu = m_kind == Kind::Caravan && m_onObject && m_fit == &CaravanFit
+      ? global<uint8_t*>(VrGame::CaravanInstance) : nullptr;
+
+    if (!menu || field<uint32_t>(menu, VrGame::CaravanActiveMenu) != VrGame::CaravanGameMenu)
+      return false;
+
+    // Cards on their way or the AI's turn, not the player's turn nor the
+    // end of the game
+    uint32_t state = field<uint32_t>(menu, VrGame::CaravanGameState);
+
+    if (state == 0 || state >= VrGame::CaravanStateOver)
+      return false;
+
+    VrVector3 c = CaravanTableCentre * (m_object.scale * CaravanScale);
+    point = m_object.position + m_object.x * c.x + m_object.y * c.y + m_object.z * c.z;
+    return true;
+  }
+
+
   void VrMinigames::placeOpponentFan(uint8_t* menu, bool playing) {
     auto challenger = playing && m_onObject && m_fit == &CaravanFit
       ? field<uint8_t*>(menu, VrGame::CaravanChallenger) : nullptr;
     auto root = challenger
       ? (*reinterpret_cast<Get3DFn*>(field<uint8_t*>(challenger, 0) + VrGame::RefGet3DSlot))(challenger) : nullptr;
-    uintptr_t hand = root
+    uintptr_t left = root
       ? vrFindGameObject(reinterpret_cast<uintptr_t>(root), VrGame::LeftHandNodeName, CaravanSkeletonDepth) : 0;
+    uintptr_t right = root
+      ? vrFindGameObject(reinterpret_cast<uintptr_t>(root), VrGame::RightHandNodeName, CaravanSkeletonDepth) : 0;
 
     bool held = false;
 
-    if (hand) {
-      // The hand is raised when it is well above the hip, whatever the pose
+    if (left && right) {
+      // A hand is raised when it is well above the other, whatever the pose
       // that raises it (the idle the mod asks for, or a script's): at rest
       // the cards stay on the table, as without a challenger
-      VrVector3 at   = field<VrVector3>(reinterpret_cast<void*>(hand), VrGame::ObjectWorldTranslation);
-      float     feet = field<VrVector3>(challenger, VrGame::RefLocation).z;
-      held = at.z - feet > (m_caravanOpponentHeld ? CaravanHandLowered : CaravanHandRaised);
+      VrVector3 l  = field<VrVector3>(reinterpret_cast<void*>(left),  VrGame::ObjectWorldTranslation);
+      VrVector3 r  = field<VrVector3>(reinterpret_cast<void*>(right), VrGame::ObjectWorldTranslation);
+      VrVector3 at = r.z > l.z ? r : l;
+      held = std::abs(r.z - l.z) > (m_caravanOpponentHeld ? CaravanHandLowered : CaravanHandRaised);
 
       // From the world to the table's model, then to the scene
       VrVector3 d = at - m_object.position;
@@ -1801,7 +1834,7 @@ namespace dxvk {
 
     if (held != m_caravanOpponentHeld) {
       Logger::info(held
-        ? "VR: The Caravan opponent's cards are held in the challenger's left hand"
+        ? "VR: The Caravan opponent's cards are held in the challenger's raised hand"
         : "VR: The Caravan opponent's cards are back on the table");
     }
 
@@ -1915,6 +1948,11 @@ namespace dxvk {
 
     bool playing = menu && field<uint32_t>(menu, VrGame::CaravanActiveMenu) == VrGame::CaravanGameMenu;
     bool idle    = playing && field<uint32_t>(menu, VrGame::CaravanGameState) == 0;
+
+    if (menu && !m_caravanFadingOut && field<uint32_t>(menu, VrGame::CaravanGameState) == VrGame::CaravanStateClosing) {
+      m_backend.fadeView(CaravanFadeOut, 1.0f);
+      m_caravanFadingOut = true;
+    }
 
     placeCaravanFan(input, playing);
 

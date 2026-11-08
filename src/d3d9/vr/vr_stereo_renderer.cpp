@@ -2061,6 +2061,14 @@ namespace dxvk {
     if (!m_npcGaze)
       return;
 
+    // The Caravan challenger looks down at the cards on their way
+    VrVector3 table;
+
+    if (m_minigames && m_minigames->caravanTableGaze(table)) {
+      m_npcGaze->setHead(&table);
+      return;
+    }
+
     if (!m_hasReference || !m_hasHeadPose) {
       m_npcGaze->setHead(nullptr);
       return;

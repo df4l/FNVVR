@@ -130,6 +130,16 @@ namespace dxvk {
      */
     void setCaravanValuesShown(bool shown);
 
+    /**
+     * \brief Where the Caravan challenger looks instead of the player
+     *
+     * The middle of the mat while cards move or the AI plays: actors look
+     * at the player's looking-at location, so it is given this point then.
+     * \param [out] point The point, in the game world
+     * \returns \c false on the player's turn or outside a Caravan game
+     */
+    bool caravanTableGaze(VrVector3& point) const;
+
     /// The camera the eyes are placed from, \c nullptr for the game's own
     const VrGameCameraPose* seatCamera() const { return m_seated ? &m_viewCamera : nullptr; }
 
@@ -274,6 +284,7 @@ namespace dxvk {
     // The opponent's hand of cards: whether the challenger's left hand is
     // raised to hold it, and where it holds it in the scene
     bool              m_caravanOpponentHeld = false;
+    bool              m_caravanFadingOut = false;
     VrVector3         m_caravanOpponentHold = { };
 
     // Vigor tester: the menu's camera as the menu made it, the hand the
