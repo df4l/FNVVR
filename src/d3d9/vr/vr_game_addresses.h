@@ -910,6 +910,7 @@ namespace dxvk {
     constexpr uintptr_t CaravanTimeDelta     = 0x011D9208;
     constexpr float     CaravanStepDelay     = 0.25f;
     constexpr uint32_t  CaravanGameMenu      = 2;
+    constexpr uint32_t  CaravanResultsMenu   = 3;
     constexpr uint32_t  CaravanTrackCount    = 6;
     constexpr uint32_t  CaravanRowCount      = 7;
     constexpr uint32_t  CaravanHandSize      = 8;

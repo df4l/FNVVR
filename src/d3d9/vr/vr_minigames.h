@@ -286,6 +286,7 @@ namespace dxvk {
     bool              m_caravanOpponentHeld = false;
     bool              m_caravanFadingOut = false;
     VrVector3         m_caravanOpponentHold = { };
+    VrVector3         m_caravanOpponentUp   = { 0.0f, 0.0f, 1.0f };
 
     // Vigor tester: the menu's camera as the menu made it, the hand the
     // cursor follows and the triggers of the last frame

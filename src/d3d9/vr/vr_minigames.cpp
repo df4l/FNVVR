@@ -150,13 +150,14 @@ namespace dxvk {
     // in the left hand as a fan, fixed in the grip's frame: the bottom of
     // the middle card on the palm, the backs against the palm and fingers,
     // the faces out of the palm (+X of the left grip) and a little back,
-    // the tips up towards the thumb and a little back, across the fingers
+    // the tips away from the thumb and a little forward, across the fingers
     // (user, 2026-11-08: the cards rest on the hand at all times, as a fan
-    // would, a quarter turned from along the fingers, in the palm's plane).
+    // would, a quarter turned from along the fingers, in the palm's plane;
+    // towards the thumb they were upside down).
     // At the mat's scale the cards are already the size of real ones.
     constexpr VrVector3 CaravanFanBottom = { 18.45f, -11.45f, 1.7f };
     constexpr VrVector3 CaravanFanHold   = { 0.025f, 0.01f, 0.0f };
-    constexpr VrVector3 CaravanFanUp     = { 0.0f, 0.9f, 0.45f };
+    constexpr VrVector3 CaravanFanUp     = { 0.0f, -0.9f, -0.45f };
     constexpr VrVector3 CaravanFanFace   = { 1.0f, 0.0f, 0.3f };
     constexpr float     CaravanFanScale  = 1.0f;
     // The game's fan is narrow for a laser: the cards are opened wider
@@ -178,12 +179,14 @@ namespace dxvk {
     constexpr uint32_t  CaravanSkeletonDepth = 16;
     constexpr float     CaravanHandRaised    = 15.0f;
     constexpr float     CaravanHandLowered   = 10.0f;
-    // In the scene (40 units per metre): the bottoms of the cards 3 cm
-    // towards the player and 2 cm above the wrist, the fan upright and
-    // leaning back a little, its backs towards the player, a card's centre
-    // 3.5 cm from the bottoms, about 9 degrees between two cards
-    constexpr VrVector3 CaravanOpponentGrip   = { 0.0f, -1.2f, 0.8f };
-    constexpr VrVector3 CaravanOpponentUp     = { 0.0f, 0.35f, 1.0f };
+    // Held as the pose holds its sheet of paper (aoTestPaper.nif, in the
+    // frame of Bip01 R Hand): the bottoms of the cards where the hand
+    // pinches the sheet's near edge, the tips along the sheet away from
+    // that edge, the backs turned as close to the player as the tips let
+    // them. In the scene (40 units per metre): a card's centre 3.5 cm from
+    // the bottoms, about 9 degrees between two cards.
+    constexpr VrVector3 CaravanOpponentGrip   = { 8.3f, 2.2f, 2.1f };
+    constexpr VrVector3 CaravanOpponentUp     = { 0.0f, 0.87f, -0.49f };
     constexpr VrVector3 CaravanOpponentFace   = { 0.0f, -1.0f, 0.3f };
     constexpr float     CaravanOpponentSpread = 0.16f;
     constexpr float     CaravanOpponentReach  = 1.4f;
@@ -1820,16 +1823,24 @@ namespace dxvk {
       // A hand is raised when it is well above the other, whatever the pose
       // that raises it (the idle the mod asks for, or a script's): at rest
       // the cards stay on the table, as without a challenger
-      VrVector3 l  = field<VrVector3>(reinterpret_cast<void*>(left),  VrGame::ObjectWorldTranslation);
-      VrVector3 r  = field<VrVector3>(reinterpret_cast<void*>(right), VrGame::ObjectWorldTranslation);
-      VrVector3 at = r.z > l.z ? r : l;
+      VrVector3 l = field<VrVector3>(reinterpret_cast<void*>(left),  VrGame::ObjectWorldTranslation);
+      VrVector3 r = field<VrVector3>(reinterpret_cast<void*>(right), VrGame::ObjectWorldTranslation);
       held = std::abs(r.z - l.z) > (m_caravanOpponentHeld ? CaravanHandLowered : CaravanHandRaised);
 
+      const auto& bone = *reinterpret_cast<const VrCaravanTransform*>((r.z > l.z ? right : left) + VrGame::ObjectWorldRotation);
+      VrVector3 at = vrCaravanTransformPoint(bone, CaravanOpponentGrip);
+      VrVector3 up = vrCaravanTransformPoint(bone, CaravanOpponentGrip + CaravanOpponentUp) - at;
+
       // From the world to the table's model, then to the scene
-      VrVector3 d = at - m_object.position;
-      VrVector3 model = VrVector3 { vrDot(d, m_object.x), vrDot(d, m_object.y), vrDot(d, m_object.z) }
-        * (1.0f / (m_object.scale * CaravanScale));
-      m_caravanOpponentHold = model + CaravanOpponentGrip;
+      auto toScene = [this] (const VrVector3& d) {
+        return VrVector3 { vrDot(d, m_object.x), vrDot(d, m_object.y), vrDot(d, m_object.z) }
+          * (1.0f / (m_object.scale * CaravanScale));
+      };
+
+      m_caravanOpponentHold = toScene(at - m_object.position);
+
+      if (vrLength(up) > 0.0f)
+        m_caravanOpponentUp = toScene(up);
     }
 
     if (held != m_caravanOpponentHeld) {
@@ -1862,7 +1873,7 @@ namespace dxvk {
         continue;
 
       const auto& world = *reinterpret_cast<const VrCaravanTransform*>(card + VrGame::ObjectWorldRotation);
-      VrCaravanTransform target = vrCaravanOpponentCard(m_caravanOpponentHold, CaravanOpponentUp, CaravanOpponentFace,
+      VrCaravanTransform target = vrCaravanOpponentCard(m_caravanOpponentHold, m_caravanOpponentUp, CaravanOpponentFace,
         i, count, CaravanOpponentSpread, CaravanOpponentReach, CaravanOpponentLayer, world.scale);
 
       carryCaravanCard(hand, card, vrCaravanCompose(target, vrCaravanInverse(world)), str::format(name, "_Shadow:0"), hidden);
@@ -2636,8 +2647,11 @@ namespace dxvk {
 
     // The row models are only filled by PrepareGameMenu, which sets the
     // game menu last: before that, during the bet and the deck building,
-    // the array holds whatever the allocation left there
-    if (!menu || field<uint32_t>(menu, VrGame::CaravanActiveMenu) != VrGame::CaravanGameMenu)
+    // the array holds whatever the allocation left there. The results
+    // menu keeps the rows of the game it follows.
+    uint32_t active = menu ? field<uint32_t>(menu, VrGame::CaravanActiveMenu) : 0;
+
+    if (active != VrGame::CaravanGameMenu && active != VrGame::CaravanResultsMenu)
       return;
 
     // Each row model holds four cards, which wait at their bind pose until
