@@ -204,6 +204,11 @@ namespace dxvk {
   }
 
 
+  uint32_t vrCaravanColumnNode(uint32_t track, uint32_t column) {
+    return track < 3 ? column + 1 : 4 - column;
+  }
+
+
   bool vrCaravanCardInGame(
           uint32_t          track,
           uint32_t          row,

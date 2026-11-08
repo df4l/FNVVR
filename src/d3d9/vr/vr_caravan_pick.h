@@ -216,6 +216,18 @@ namespace dxvk {
   };
 
   /**
+   * \brief Number N of a row's column in the models' node names
+   *
+   * Row models name their cards "Card_0N" and the grids their markers
+   * "Select{row}_0N", N from 1 to 4 left to right. The player's rows fill
+   * from the left, the opponent's from the right, as the game textures
+   * them (UpdateTrackCardTexture 0x0074E220).
+   * \param [in] track Track of the row, 0-2 the player's, 3-5 the opponent's
+   * \param [in] column Column on the row, 0 for its number card
+   */
+  uint32_t vrCaravanColumnNode(uint32_t track, uint32_t column);
+
+  /**
    * \brief Checks whether a card of a row model is in the game
    *
    * A row model holds a card per column; those past the cards on the row

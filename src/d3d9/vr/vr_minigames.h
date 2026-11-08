@@ -269,6 +269,7 @@ namespace dxvk {
     int32_t             m_caravanDeckSlot = -1;
     VrCaravanDeckPicker m_caravanDeck;
     bool              m_caravanFanHeld = false;
+    int32_t           m_caravanCursorSlot = -1;
     VrCaravanTransform m_caravanFan;
 
     // Vigor tester: the menu's camera as the menu made it, the hand the
@@ -364,6 +365,8 @@ namespace dxvk {
     VrCaravanTransform caravanCardInHand(uintptr_t card) const;
 
     void holdCaravanFan(std::vector<uint32_t*>& hidden, VrGameWorldTransforms& moved);
+
+    void placeCaravanCursor(VrGameWorldTransforms& moved);
 
     bool caravanCardOnLaser(uint8_t* menu, const VrVector3& origin, const VrVector3& direction);
 

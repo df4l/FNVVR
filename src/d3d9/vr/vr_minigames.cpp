@@ -1753,6 +1753,75 @@ namespace dxvk {
   }
 
 
+  void VrMinigames::placeCaravanCursor(VrGameWorldTransforms& moved) {
+    auto menu = global<uint8_t*>(VrGame::CaravanInstance);
+
+    if (!menu || field<uint32_t>(menu, VrGame::CaravanActiveMenu) != VrGame::CaravanGameMenu
+     || !(field<uint32_t>(menu, VrGame::CaravanFlags) & VrGame::CaravanFlagSelectTrack))
+      return;
+
+    int32_t track = field<int32_t>(menu, VrGame::CaravanSelectedTrack);
+    int32_t row   = field<int32_t>(menu, VrGame::CaravanSelectedRow);
+
+    if (track < 3 || track >= int32_t(VrGame::CaravanTrackCount) || row < 0 || row >= int32_t(VrGame::CaravanRowCount))
+      return;
+
+    // SelectTrackCard lays the cursor card on the marker of the row's next
+    // column counted from the left, on the opponent's rows too, which fill
+    // from the right: the card shows a column or more away from where it
+    // will go. It is carried to the right marker for the eyes.
+    uint32_t index = uint32_t(track) * VrGame::CaravanRowCount + uint32_t(row);
+    uint32_t cards = field<uint32_t>(menu, VrGame::CaravanCardTracks + index * VrGame::CaravanCardListSize + VrGame::SimpleArraySize);
+    uint32_t column = std::min(cards, VrGame::CaravanRowCards - 1);
+
+    auto grid = field<uintptr_t>(menu, VrGame::CaravanTrackGrids + uint32_t(track) * sizeof(uint32_t));
+    auto markerBound = [grid, row] (uint32_t node) -> const float* {
+      std::string name = str::format("Select", row + 1, "_0", node, ":0");
+      uintptr_t marker = grid ? vrFindGameObject(grid, name.c_str(), CaravanNodeDepth) : 0;
+      return marker ? field<const float*>(reinterpret_cast<void*>(marker), VrGame::ObjectWorldBound) : nullptr;
+    };
+
+    const float* laid  = markerBound(column + 1);
+    const float* right = markerBound(vrCaravanColumnNode(uint32_t(track), column));
+
+    if (!laid || !right || laid == right)
+      return;
+
+    VrVector3 shift = { right[0] - laid[0], right[1] - laid[1], right[2] - laid[2] };
+
+    for (uint32_t i = 0; i < VrGame::CaravanCursorCount; i++) {
+      auto cursor = field<uintptr_t>(menu, VrGame::CaravanCursors + i * sizeof(uint32_t));
+
+      // The cursor not shown waits under the table
+      if (!cursor || vrLength(field<VrVector3>(reinterpret_cast<void*>(cursor), VrGame::ObjectWorldTranslation)
+                            - VrVector3 { laid[0], laid[1], laid[2] }) > CaravanSlotReach)
+        continue;
+
+      moved.capture(cursor);
+
+      int32_t slot = int32_t(index * VrGame::CaravanRowCards + column);
+
+      if (slot != m_caravanCursorSlot) {
+        Logger::info(str::format("VR: The Caravan cursor card on track ", track, ", row ", row,
+          " goes to the opponent's column ", column, " from the right"));
+        m_caravanCursorSlot = slot;
+      }
+
+      vrVisitGameObjects(cursor, CaravanNodeDepth, [&shift] (uintptr_t object, uint32_t) {
+        auto& at = field<VrVector3>(reinterpret_cast<void*>(object), VrGame::ObjectWorldTranslation);
+        at = at + shift;
+
+        if (auto* bound = field<float*>(reinterpret_cast<void*>(object), VrGame::ObjectWorldBound)) {
+          bound[0] += shift.x;
+          bound[1] += shift.y;
+          bound[2] += shift.z;
+        }
+      });
+      return;
+    }
+  }
+
+
   void VrMinigames::updateCaravan(const VrMinigameFrame& frame, const VrPointerSurfaceState& pointer, const VrInputState& input) {
     auto  menu = global<uint8_t*>(VrGame::CaravanInstance);
     float dt   = frame.dt;
@@ -2129,7 +2198,8 @@ namespace dxvk {
 
     for (uint32_t track = 0; track < VrCaravanBoard::Tracks; track++) {
       auto  grid  = field<uintptr_t>(menu, VrGame::CaravanTrackGrids + track * sizeof(uint32_t));
-      auto  node  = grid ? vrFindGameObject(grid, "Select1_01:0", CaravanNodeDepth) : 0;
+      auto  name  = str::format("Select1_0", vrCaravanColumnNode(track, 0), ":0");
+      auto  node  = grid ? vrFindGameObject(grid, name.c_str(), CaravanNodeDepth) : 0;
       auto* bound = node ? field<const float*>(reinterpret_cast<void*>(node), VrGame::ObjectWorldBound) : nullptr;
 
       if (!bound)
@@ -2268,7 +2338,7 @@ namespace dxvk {
         continue;
 
       for (uint32_t row = 0; row < VrGame::CaravanRowCount; row++) {
-        std::string name = str::format("Select", row + 1, "_01:0");
+        std::string name = str::format("Select", row + 1, "_0", vrCaravanColumnNode(track, 0), ":0");
         auto  node  = vrFindGameObject(grid, name.c_str(), CaravanNodeDepth);
         auto* bound = node ? field<const float*>(reinterpret_cast<void*>(node), VrGame::ObjectWorldBound) : nullptr;
 
@@ -2312,11 +2382,13 @@ namespace dxvk {
     std::vector<uint32_t*> hidden;
 
     VrGameWorldTransforms moved;
+    VrGameWorldTransforms cursor;
 
     if (m_kind == Kind::Caravan) {
       hideCaravanCardsOutOfGame(hidden);
       hideCaravanPlanks(hidden);
       holdCaravanFan(hidden, moved);
+      placeCaravanCursor(cursor);
     }
 
     float scale = m_space.unitsPerMetre / VrGameUnitsPerMetre;
@@ -2352,6 +2424,7 @@ namespace dxvk {
 
     VrMenuScenes::showHidden(hidden);
     moved.swap();
+    cursor.swap();
 
     access.restore(state);
 
@@ -2470,7 +2543,7 @@ namespace dxvk {
           if (vrCaravanCardInGame(track, row, column, cardsOnRow, placing))
             continue;
 
-          std::string name = str::format("Card_0", column + 1);
+          std::string name = str::format("Card_0", vrCaravanColumnNode(track, column));
           uintptr_t   card = vrFindGameObject(model, name.c_str(), CaravanNodeDepth);
 
           if (!card)

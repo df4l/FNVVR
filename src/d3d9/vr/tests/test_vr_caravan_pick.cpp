@@ -113,6 +113,14 @@ TEST_CASE(caravan_track_key_moves_towards_the_track) {
   CHECK(vrCaravanTrackKey(1, 1) == VrCaravanKey::None);
 }
 
+TEST_CASE(caravan_opponent_rows_fill_from_the_right) {
+  CHECK(vrCaravanColumnNode(0, 0) == 1);
+  CHECK(vrCaravanColumnNode(2, 3) == 4);
+  CHECK(vrCaravanColumnNode(3, 0) == 4);
+  CHECK(vrCaravanColumnNode(5, 1) == 3);
+  CHECK(vrCaravanColumnNode(4, 3) == 1);
+}
+
 TEST_CASE(caravan_row_cards_past_the_row_wait_out_of_the_game) {
   VrCaravanPlacing none;
   CHECK(vrCaravanCardInGame(4, 2, 0, 2, none));

@@ -880,6 +880,18 @@ namespace dxvk {
     constexpr uintptr_t CaravanSelectedRow   = 0xE34;
     constexpr uintptr_t CaravanSelectionDelay = 0xE3C;
     constexpr uintptr_t CaravanTrackGrids    = 0xE54;
+    /**
+     * CaravanMenu::pCursors[2] (+0xE6C): Select_Add.NIF (a green card where
+     * the taken card will go) and Select_Remove.NIF (red, not allowed),
+     * children of CaravanSceneRoot. SelectTrackCard (0x0074E6D0) sets the
+     * shown one's translation to the world bound centre of the grid's
+     * "Select{row+1}_0{column+1}:0", column the cards on the row (at most
+     * 3), counted from the left on the opponent's rows too, which fill from
+     * the right; the other goes to (0, 0, -50), both to -100 in
+     * DeselectTrackCard (0x0074EDD0).
+     */
+    constexpr uintptr_t CaravanCursors       = 0xE6C;
+    constexpr uint32_t  CaravanCursorCount   = 2;
     constexpr uintptr_t CaravanFlags         = 0xE74;
     constexpr uintptr_t CaravanPendingKey    = 0xE80;
     constexpr uintptr_t CaravanTimeDelta     = 0x011D9208;
@@ -892,7 +904,9 @@ namespace dxvk {
     /**
      * CaravanMenu::pTrackGeometries[6][7] (+0x198), one row model per track
      * and row (Player_{t}_0{r}.NIF, Opponent_{t}_0{r}.NIF), each holding
-     * the nodes "Card_0{column+1}". The cards wait at their bind pose until
+     * the nodes "Card_0N:{column}", N = column + 1 on the player's rows and
+     * 4 - column on the opponent's (UpdateTrackCardTexture 0x0074E220, and
+     * "Card{column+1}_In" moves that node). The cards wait at their bind pose until
      * their "Card{column+1}_In" sequence brings them to the row: past the
      * player's edge, or in three piles past the opponent's tracks.
      * iSelectedColumn (+0xE38) is the column a card is being placed in
