@@ -621,6 +621,7 @@ namespace dxvk {
     m_pinAngle    = 0.0f;
     m_caravanCard = -1;
     m_caravanSlot = -1;
+    m_caravanPlanksHidden = false;
     m_caravanTrigger = false;
     m_caravanClick   = false;
     m_caravanStepping = false;
@@ -1924,8 +1925,10 @@ namespace dxvk {
 
     std::vector<uint32_t*> hidden;
 
-    if (m_kind == Kind::Caravan)
+    if (m_kind == Kind::Caravan) {
       hideCaravanCardsOutOfFrame(state, hidden);
+      hideCaravanPlanks(hidden);
+    }
 
     float scale = m_space.unitsPerMetre / VrGameUnitsPerMetre;
 
@@ -1980,6 +1983,31 @@ namespace dxvk {
 
     if (state != VrGame::SlotMachineStatePayoutIn && state != VrGame::SlotMachineStatePayoutOut)
       VrMenuScenes::hideObject(root, VrGame::SlotMachinePayoutScreen, hidden);
+  }
+
+
+  void VrMinigames::hideCaravanPlanks(std::vector<uint32_t*>& hidden) {
+    auto menu  = global<uint8_t*>(VrGame::CaravanInstance);
+    auto table = menu ? field<uintptr_t>(menu, VrGame::CaravanTableModel) : 0;
+    auto shape = table ? vrFindGameObject(table, VrGame::CaravanPlanksShape, CaravanNodeDepth) : 0;
+
+    // The mat lies on a table of the world or of the game's: its own wooden
+    // planks would be a second table
+    if (!shape)
+      return;
+
+    auto& flags = field<uint32_t>(reinterpret_cast<void*>(shape), VrGame::ObjectFlags);
+
+    if (flags & VrGame::ObjectFlagAppCulled)
+      return;
+
+    flags |= VrGame::ObjectFlagAppCulled;
+    hidden.push_back(&flags);
+
+    if (!m_caravanPlanksHidden) {
+      Logger::info("VR: The planks of the Caravan mat are left out of the eyes");
+      m_caravanPlanksHidden = true;
+    }
   }
 
 

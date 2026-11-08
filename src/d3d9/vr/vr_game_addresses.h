@@ -852,6 +852,15 @@ namespace dxvk {
      * as one stick step, once fTimeDelta (a global) is more than
      * CaravanStepDelay past fSelectionDelay.
      */
+    /**
+     * CaravanMenu::pTableGeometry (+0x184), NV_Caravan-Table.NIF: its shape
+     * "Table:0" is the wooden planks under the cloth (texture
+     * NV_Caravan-Table01.dds, x -28 to 28.9, y -21 to 14.7, z 0 to 1.1),
+     * the rest the bet area's sign, the deck's tray and the camera.
+     */
+    constexpr uintptr_t CaravanTableModel    = 0x184;
+    constexpr char      CaravanPlanksShape[] = "Table:0";
+
     constexpr uintptr_t CaravanActiveMenu    = 0x28;
     constexpr uintptr_t CaravanGameState     = 0x2C;
     constexpr uintptr_t CaravanPlayerHandModel = 0x190;
