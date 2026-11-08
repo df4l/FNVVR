@@ -9,6 +9,7 @@
 
 #include "vr_backend.h"
 #include "vr_caravan_pick.h"
+#include "vr_caravan_reach.h"
 #include "vr_controller_pad.h"
 #include "vr_game_camera.h"
 #include "vr_game_nodes.h"
@@ -160,6 +161,18 @@ namespace dxvk {
      */
     void drawEye(const VrEyeView& eye, float nearPlane, float farPlane);
 
+    /**
+     * \brief Bends the Caravan challenger's free arm while they play a card
+     *
+     * The hand takes the card from the fan to the mat. Only the world
+     * transforms of the arm's bones change, after the game's update, for
+     * the eyes' draws: restoreChallengerArm() puts them back.
+     */
+    void bendChallengerArm();
+
+    /// Puts back the arm bendChallengerArm() bent
+    void restoreChallengerArm();
+
     /// Whether the scene can be drawn before the first-person pass
     bool drawsBeforeFirstPerson() const { return active() && !showsRenderedMenu(); }
 
@@ -287,6 +300,24 @@ namespace dxvk {
     bool              m_caravanFadingOut = false;
     VrVector3         m_caravanOpponentHold = { };
     VrVector3         m_caravanOpponentUp   = { 0.0f, 0.0f, 1.0f };
+    // The challenger playing a card: the free hand takes it from the fan
+    // (the fan's last card, the fan as big as before the play) to its
+    // row, where the card is drawn in the scene, and the arm bent for it
+    struct CaravanPlay {
+      bool               active  = false;
+      float              time    = 0.0f;
+      uint32_t           track   = 0;
+      uint32_t           row     = 0;
+      uint32_t           column  = 0;
+      uint32_t           fanCount = 0;
+      VrCaravanReachStep step;
+      VrCaravanTransform card;
+    };
+    CaravanPlay       m_caravanPlay;
+    uint32_t          m_caravanLastState    = 0;
+    uint32_t          m_caravanOpponentCards = 0;
+    bool              m_caravanReachLeft    = true;
+    VrGameWorldTransforms m_challengerArm;
 
     // Vigor tester: the menu's camera as the menu made it, the hand the
     // cursor follows and the triggers of the last frame
@@ -385,6 +416,16 @@ namespace dxvk {
     void placeOpponentFan(uint8_t* menu, bool playing);
 
     void holdOpponentFan(std::vector<uint32_t*>& hidden, VrGameWorldTransforms& moved);
+
+    void updateOpponentPlay(uint8_t* menu, bool playing, float dt);
+
+    uintptr_t opponentPlayCard(uint8_t* menu) const;
+
+    void carryOpponentPlay(std::vector<uint32_t*>& hidden, VrGameWorldTransforms& moved);
+
+    uintptr_t challengerRoot(uint8_t* menu) const;
+
+    VrVector3 caravanSceneToWorld(const VrVector3& point) const;
 
     static void carryCaravanCard(uintptr_t model, uintptr_t card, const VrCaravanTransform& place,
       const std::string& shadow, std::vector<uint32_t*>& hidden);

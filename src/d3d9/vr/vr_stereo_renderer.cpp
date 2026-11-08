@@ -766,10 +766,17 @@ namespace dxvk {
 
     m_minigameDrawn = { };
 
+    // After the game's update, for both eyes only
+    if (m_minigames)
+      m_minigames->bendChallengerArm();
+
     for (uint32_t eye = 0; eye < VrEyeCount; eye++) {
       m_eyeCopied[eye] = false;
       renderEye(eye, views[eye], main);
     }
+
+    if (m_minigames)
+      m_minigames->restoreChallengerArm();
 
     if (m_renderPasses)
       m_renderPasses->endFrame();

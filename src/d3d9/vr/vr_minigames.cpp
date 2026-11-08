@@ -191,6 +191,11 @@ namespace dxvk {
     constexpr float     CaravanOpponentSpread = 0.16f;
     constexpr float     CaravanOpponentReach  = 1.4f;
     constexpr float     CaravanOpponentLayer  = 0.04f;
+    // The card the challenger plays rises this much (scene units) half way
+    // to its row. The free hand holds it by the fingers, along the hand
+    // bone's +X as far as the pose's sheet pinch.
+    constexpr float     CaravanCarryLift      = 2.0f;
+    constexpr VrVector3 CaravanReachGrip      = { 8.3f, 0.0f, 0.0f };
     // The values of the tracks lie on a square of the mat, from the
     // player's edge across the middle of the tracks, just above the cloth:
     // the player's past their seventh row (y -18.2), the opponent's past
@@ -697,6 +702,9 @@ namespace dxvk {
     m_caravanFanHeld = false;
     m_caravanFadingOut = false;
     m_caravanOpponentHeld = false;
+    m_caravanPlay = CaravanPlay();
+    m_caravanLastState = 0;
+    m_caravanOpponentCards = 0;
     m_leverHeld   = { };
     m_levers      = { };
     m_signals     = VrTableSignals();
@@ -1808,15 +1816,25 @@ namespace dxvk {
   }
 
 
-  void VrMinigames::placeOpponentFan(uint8_t* menu, bool playing) {
-    auto challenger = playing && m_onObject && m_fit == &CaravanFit
+  uintptr_t VrMinigames::challengerRoot(uint8_t* menu) const {
+    auto challenger = menu && m_onObject && m_fit == &CaravanFit
       ? field<uint8_t*>(menu, VrGame::CaravanChallenger) : nullptr;
-    auto root = challenger
-      ? (*reinterpret_cast<Get3DFn*>(field<uint8_t*>(challenger, 0) + VrGame::RefGet3DSlot))(challenger) : nullptr;
-    uintptr_t left = root
-      ? vrFindGameObject(reinterpret_cast<uintptr_t>(root), VrGame::LeftHandNodeName, CaravanSkeletonDepth) : 0;
-    uintptr_t right = root
-      ? vrFindGameObject(reinterpret_cast<uintptr_t>(root), VrGame::RightHandNodeName, CaravanSkeletonDepth) : 0;
+
+    return challenger ? reinterpret_cast<uintptr_t>(
+      (*reinterpret_cast<Get3DFn*>(field<uint8_t*>(challenger, 0) + VrGame::RefGet3DSlot))(challenger)) : 0;
+  }
+
+
+  VrVector3 VrMinigames::caravanSceneToWorld(const VrVector3& point) const {
+    return m_object.position
+      + (m_object.x * point.x + m_object.y * point.y + m_object.z * point.z) * (m_object.scale * CaravanScale);
+  }
+
+
+  void VrMinigames::placeOpponentFan(uint8_t* menu, bool playing) {
+    uintptr_t root  = playing ? challengerRoot(menu) : 0;
+    uintptr_t left  = root ? vrFindGameObject(root, VrGame::LeftHandNodeName,  CaravanSkeletonDepth) : 0;
+    uintptr_t right = root ? vrFindGameObject(root, VrGame::RightHandNodeName, CaravanSkeletonDepth) : 0;
 
     bool held = false;
 
@@ -1829,6 +1847,7 @@ namespace dxvk {
       held = std::abs(r.z - l.z) > (m_caravanOpponentHeld ? CaravanHandLowered : CaravanHandRaised);
 
       const auto& bone = *reinterpret_cast<const VrCaravanTransform*>((r.z > l.z ? right : left) + VrGame::ObjectWorldRotation);
+      m_caravanReachLeft = r.z > l.z;
       VrVector3 at = vrCaravanTransformPoint(bone, CaravanOpponentGrip);
       VrVector3 up = vrCaravanTransformPoint(bone, CaravanOpponentGrip + CaravanOpponentUp) - at;
 
@@ -1871,8 +1890,13 @@ namespace dxvk {
 
     moved.capture(hand);
 
-    // Only the cards in hand: the others wait on the opponent's draw pile
+    // Only the cards in hand: the others wait on the opponent's draw pile.
+    // While a card played is still in the fan or on its way, the fan keeps
+    // its size before the play and that card, its last, is the row's: the
+    // fan's own is hidden
     uint32_t count = std::min(field<uint32_t>(menu, VrGame::CaravanOpponentHand + VrGame::SimpleArraySize), CaravanFanSlots);
+    bool     taking = m_caravanPlay.active && m_caravanPlay.step.carry < 1.0f;
+    uint32_t fanned = taking ? std::max(count, m_caravanPlay.fanCount) : count;
 
     for (uint32_t i = 0; i < count; i++) {
       std::string name = str::format("Opponent-Deck_0", i + 1);
@@ -1881,12 +1905,208 @@ namespace dxvk {
       if (!card)
         continue;
 
+      if (taking && i + 1 == fanned) {
+        vrVisitGameObjects(card, CaravanNodeDepth, [&hidden] (uintptr_t object, uint32_t) {
+          auto& flags = field<uint32_t>(reinterpret_cast<void*>(object), VrGame::ObjectFlags);
+
+          if (!vrGameAsNode(object) && !(flags & VrGame::ObjectFlagAppCulled)) {
+            flags |= VrGame::ObjectFlagAppCulled;
+            hidden.push_back(&flags);
+          }
+        });
+        continue;
+      }
+
       const auto& world = *reinterpret_cast<const VrCaravanTransform*>(card + VrGame::ObjectWorldRotation);
       VrCaravanTransform target = vrCaravanOpponentCard(m_caravanOpponentHold, m_caravanOpponentUp, CaravanOpponentFace,
-        i, count, CaravanOpponentSpread, CaravanOpponentReach, CaravanOpponentLayer, world.scale);
+        i, fanned, CaravanOpponentSpread, CaravanOpponentReach, CaravanOpponentLayer, world.scale);
 
       carryCaravanCard(hand, card, vrCaravanCompose(target, vrCaravanInverse(world)), str::format(name, "_Shadow:0"), hidden);
     }
+  }
+
+
+  void VrMinigames::updateOpponentPlay(uint8_t* menu, bool playing, float dt) {
+    uint32_t state  = field<uint32_t>(menu, VrGame::CaravanGameState);
+    bool     ai     = field<uint32_t>(menu, VrGame::CaravanFlags) & VrGame::CaravanFlagOpponent;
+    bool     places = playing && ai && m_caravanOpponentHeld
+      && (state == VrGame::CaravanStateStartTrack || state == VrGame::CaravanStateAddToTrack);
+    uint32_t count  = std::min(field<uint32_t>(menu, VrGame::CaravanOpponentHand + VrGame::SimpleArraySize), CaravanFanSlots);
+
+    if (places && state != m_caravanLastState) {
+      int32_t track  = field<int32_t>(menu, VrGame::CaravanSelectedTrack);
+      int32_t row    = field<int32_t>(menu, VrGame::CaravanSelectedRow);
+      int32_t column = field<int32_t>(menu, VrGame::CaravanSelectedColumn);
+
+      if (track >= 3 && track < int32_t(VrGame::CaravanTrackCount) && row >= 0 && row < int32_t(VrGame::CaravanRowCount)
+       && column >= 0 && column < int32_t(VrGame::CaravanRowCards)) {
+        m_caravanPlay = CaravanPlay();
+        m_caravanPlay.active   = true;
+        m_caravanPlay.track    = uint32_t(track);
+        m_caravanPlay.row      = uint32_t(row);
+        m_caravanPlay.column   = uint32_t(column);
+        // The game has already put the card drawn after it in the hand,
+        // unless the draw pile was empty
+        m_caravanPlay.fanCount = std::max(count, std::min(m_caravanOpponentCards, CaravanFanSlots));
+
+        Logger::info(str::format("VR: The Caravan challenger takes a card from the hand to track ", track - 2,
+          ", row ", row, ", column ", column));
+      }
+    }
+
+    m_caravanLastState = state;
+
+    if (state < VrGame::CaravanStatePlaceFirst || state > VrGame::CaravanStatePlaceLast)
+      m_caravanOpponentCards = count;
+
+    if (!m_caravanPlay.active)
+      return;
+
+    m_caravanPlay.time += dt;
+    m_caravanPlay.step  = vrCaravanReachStep(m_caravanPlay.time);
+    uintptr_t card = opponentPlayCard(menu);
+
+    if (m_caravanPlay.step.done || !playing || !m_caravanOpponentHeld || !card) {
+      m_caravanPlay.active = false;
+      return;
+    }
+
+    // From the fan's last card, turned as the row's card lies to a fan's
+    // card on the table, to where the game's animation has the row's card,
+    // over an arc
+    const auto& slot = *reinterpret_cast<const VrCaravanTransform*>(card + VrGame::ObjectWorldRotation);
+    uint32_t fanned = std::max(count, m_caravanPlay.fanCount);
+    VrCaravanTransform inFan = vrCaravanOpponentCard(m_caravanOpponentHold, m_caravanOpponentUp, CaravanOpponentFace,
+      fanned - 1, fanned, CaravanOpponentSpread, CaravanOpponentReach, CaravanOpponentLayer, slot.scale);
+
+    auto hand = field<uintptr_t>(menu, VrGame::CaravanOpponentHandModel);
+    uintptr_t fanCard = hand ? vrFindGameObject(hand, "Opponent-Deck_01", CaravanNodeDepth) : 0;
+
+    if (fanCard) {
+      const auto& deck = *reinterpret_cast<const VrCaravanTransform*>(fanCard + VrGame::ObjectWorldRotation);
+      VrVector3 x = { slot.rotate[0][0], slot.rotate[1][0], slot.rotate[2][0] };
+      float angle = std::atan2(
+        deck.rotate[0][1] * x.x + deck.rotate[1][1] * x.y + deck.rotate[2][1] * x.z,
+        deck.rotate[0][0] * x.x + deck.rotate[1][0] * x.y + deck.rotate[2][0] * x.z);
+      float quarter = 1.5707963f;
+      angle = quarter * std::round(angle / quarter);
+
+      VrCaravanTransform turn;
+      turn.rotate[0][0] = std::cos(angle); turn.rotate[0][1] = -std::sin(angle);
+      turn.rotate[1][0] = std::sin(angle); turn.rotate[1][1] =  std::cos(angle);
+      VrVector3 at = inFan.translate;
+      inFan.translate = { 0.0f, 0.0f, 0.0f };
+      float scale = inFan.scale;
+      inFan.scale = 1.0f;
+      inFan = vrCaravanCompose(inFan, turn);
+      inFan.translate = at;
+      inFan.scale = scale;
+    }
+
+    if (!m_caravanPlay.step.taken) {
+      m_caravanPlay.card = inFan;
+    } else {
+      float carry = m_caravanPlay.step.carry;
+      m_caravanPlay.card = vrCaravanBlend(inFan, slot, carry);
+      m_caravanPlay.card.translate.z += CaravanCarryLift * std::sin(3.1415927f * carry);
+    }
+  }
+
+
+  uintptr_t VrMinigames::opponentPlayCard(uint8_t* menu) const {
+    uint32_t index = m_caravanPlay.track * VrGame::CaravanRowCount + m_caravanPlay.row;
+    auto     model = field<uintptr_t>(menu, VrGame::CaravanTrackModels + index * sizeof(uint32_t));
+
+    if (!model)
+      return 0;
+
+    std::string name = str::format("Card_0", vrCaravanColumnNode(m_caravanPlay.track, m_caravanPlay.column));
+    return vrFindGameObject(model, name.c_str(), CaravanNodeDepth);
+  }
+
+
+  void VrMinigames::carryOpponentPlay(std::vector<uint32_t*>& hidden, VrGameWorldTransforms& moved) {
+    auto menu = global<uint8_t*>(VrGame::CaravanInstance);
+
+    if (!menu || !m_caravanPlay.active || m_caravanPlay.step.carry >= 1.0f)
+      return;
+
+    uint32_t index = m_caravanPlay.track * VrGame::CaravanRowCount + m_caravanPlay.row;
+    auto     model = field<uintptr_t>(menu, VrGame::CaravanTrackModels + index * sizeof(uint32_t));
+    uintptr_t card = opponentPlayCard(menu);
+
+    if (!model || !card)
+      return;
+
+    moved.capture(model);
+
+    const auto& world = *reinterpret_cast<const VrCaravanTransform*>(card + VrGame::ObjectWorldRotation);
+    carryCaravanCard(model, card, vrCaravanCompose(m_caravanPlay.card, vrCaravanInverse(world)), std::string(), hidden);
+  }
+
+
+  void VrMinigames::bendChallengerArm() {
+    m_challengerArm.clear();
+
+    auto menu = m_kind == Kind::Caravan ? global<uint8_t*>(VrGame::CaravanInstance) : nullptr;
+
+    if (!menu || !m_caravanPlay.active || m_caravanPlay.step.weight <= 0.0f)
+      return;
+
+    uintptr_t root  = challengerRoot(menu);
+    bool      left  = m_caravanReachLeft;
+    uintptr_t upper = root ? vrFindGameObject(root, left ? VrGame::LeftUpperArmNodeName : VrGame::RightUpperArmNodeName, CaravanSkeletonDepth) : 0;
+    uintptr_t fore  = upper ? vrFindGameObject(upper, left ? VrGame::LeftForearmNodeName : VrGame::RightForearmNodeName, CaravanSkeletonDepth) : 0;
+    uintptr_t hand  = fore ? vrFindGameObject(fore, left ? VrGame::LeftHandNodeName : VrGame::RightHandNodeName, CaravanSkeletonDepth) : 0;
+
+    if (!hand)
+      return;
+
+    auto position = [] (uintptr_t bone) {
+      return field<VrVector3>(reinterpret_cast<void*>(bone), VrGame::ObjectWorldTranslation);
+    };
+
+    VrVector3 shoulder = position(upper);
+    VrVector3 elbow    = position(fore);
+    VrVector3 wrist    = position(hand);
+    const auto& handWorld = *reinterpret_cast<const VrCaravanTransform*>(hand + VrGame::ObjectWorldRotation);
+
+    // The fingers go to the card's middle, from where the pose holds them
+    float weight = m_caravanPlay.step.weight;
+    VrVector3 posed = vrCaravanTransformPoint(handWorld, CaravanReachGrip);
+    VrVector3 grip  = posed + (caravanSceneToWorld(m_caravanPlay.card.translate) - posed) * weight;
+
+    // The hand turns with the arm: a second pass puts the fingers, not the
+    // wrist, on the point
+    VrArmReach reach;
+    VrVector3 target = wrist + (grip - posed);
+
+    for (uint32_t pass = 0; pass < 2; pass++) {
+      reach = vrArmReach(shoulder, elbow, wrist, target);
+      VrCaravanTransform bent = vrCaravanCompose(reach.fore, vrCaravanCompose(reach.upper, handWorld));
+      target = target + (grip - vrCaravanTransformPoint(bent, CaravanReachGrip));
+    }
+
+    m_challengerArm.capture(upper);
+
+    auto apply = [] (uintptr_t bone, const VrCaravanTransform& turn) {
+      vrVisitGameObjects(bone, CaravanSkeletonDepth, [&turn] (uintptr_t object, uint32_t) {
+        auto* world = reinterpret_cast<VrCaravanTransform*>(object + VrGame::ObjectWorldRotation);
+        *world = vrCaravanCompose(turn, *world);
+      });
+    };
+
+    apply(upper, reach.upper);
+    apply(fore,  reach.fore);
+  }
+
+
+  void VrMinigames::restoreChallengerArm() {
+    if (m_challengerArm.empty())
+      return;
+
+    m_challengerArm.swap();
+    m_challengerArm.clear();
   }
 
 
@@ -1976,8 +2196,10 @@ namespace dxvk {
 
     placeCaravanFan(input, playing);
 
-    if (menu)
+    if (menu) {
       placeOpponentFan(menu, playing);
+      updateOpponentPlay(menu, playing, dt);
+    }
 
     // The triggers are the lasers' clicks: off the mat the right one would
     // be the gamepad's RT, which starts discarding a whole caravan
@@ -2529,12 +2751,14 @@ namespace dxvk {
     VrGameWorldTransforms moved;
     VrGameWorldTransforms opponent;
     VrGameWorldTransforms cursor;
+    VrGameWorldTransforms played;
 
     if (m_kind == Kind::Caravan) {
       hideCaravanCardsOutOfGame(hidden);
       hideCaravanPlanks(hidden);
       holdCaravanFan(hidden, moved);
       holdOpponentFan(hidden, opponent);
+      carryOpponentPlay(hidden, played);
       placeCaravanCursor(cursor);
     }
 
@@ -2573,6 +2797,7 @@ namespace dxvk {
     moved.swap();
     opponent.swap();
     cursor.swap();
+    played.swap();
 
     access.restore(state);
 

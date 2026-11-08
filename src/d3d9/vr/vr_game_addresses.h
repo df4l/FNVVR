@@ -380,6 +380,11 @@ namespace dxvk {
     /** Hand bones of the first-person skeleton (strings 0x010C4C40 and 0x010C4C20) */
     constexpr char LeftHandNodeName[]         = "Bip01 L Hand";
     constexpr char RightHandNodeName[]        = "Bip01 R Hand";
+    /** Arm bones of an actor's skeleton, above the hands (strings 0x010203C4, 0x010203B4, 0x010203A0) */
+    constexpr char LeftUpperArmNodeName[]     = "Bip01 L UpperArm";
+    constexpr char LeftForearmNodeName[]      = "Bip01 L Forearm";
+    constexpr char RightUpperArmNodeName[]    = "Bip01 R UpperArm";
+    constexpr char RightForearmNodeName[]     = "Bip01 R Forearm";
 
     /**
      * The left forearm's twist bone, which carries the Pip-Boy, and the
@@ -939,6 +944,14 @@ namespace dxvk {
     constexpr uint32_t  CaravanFlagSelectTrack  = 0x1000;
     constexpr uint32_t  CaravanFlagTrackSetup   = 0x800;
     constexpr uint32_t  CaravanFlagDestroyTrack = 0x2000;
+    /**
+     * uiFlags 0x4000: the AI plays (set by DoIdle's state 0x15). It places
+     * its card in state 0x0B (the first three) or 0x0D, as the player's,
+     * from iSelectedTrack/Row/Column, which ProcessAI's move filled
+     */
+    constexpr uint32_t  CaravanFlagOpponent     = 0x4000;
+    constexpr uint32_t  CaravanStateStartTrack  = 0x0B;
+    constexpr uint32_t  CaravanStateAddToTrack  = 0x0D;
     /** Pending keys, as DoKey writes them */
     constexpr uint32_t  CaravanKeyLeft       = 0x80000001;
     constexpr uint32_t  CaravanKeyRight      = 0x80000002;
