@@ -355,6 +355,8 @@ namespace dxvk {
 
     void placeCaravanFan(const VrMinigameFrame& frame, const VrInputState& input, bool playing);
 
+    VrCaravanTransform caravanCardInHand(uintptr_t card) const;
+
     void holdCaravanFan(std::vector<uint32_t*>& hidden, VrGameWorldTransforms& moved);
 
     bool caravanCardOnLaser(uint8_t* menu, const VrVector3& origin, const VrVector3& direction);

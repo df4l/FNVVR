@@ -197,3 +197,44 @@ TEST_CASE(caravan_fan_moves_a_card_with_its_rotation) {
   CHECK_NEAR(a.z, b.z, 1e-4f);
   CHECK_NEAR(vrCaravanCompose(fan, card).scale, 1.0f, 1e-6f);
 }
+
+
+namespace {
+
+  VrCaravanTransform cardAlong(float x, float y) {
+    // A card lying face up, its long axis (+X) along (x, y)
+    VrCaravanTransform card;
+    card.rotate[0][0] = x; card.rotate[0][1] = -y;
+    card.rotate[1][0] = y; card.rotate[1][1] =  x;
+    return card;
+  }
+
+}
+
+
+TEST_CASE(caravan_spread_turns_cards_away_from_the_middle) {
+  const VrVector3 pivot = { 18.0f, -13.0f, 1.0f };
+
+  // The middle card stays where the game put it
+  VrCaravanTransform middle = vrCaravanSpreadCard(cardAlong(0.0f, 1.0f), pivot, 0.0f, 1.5f);
+  VrVector3 point = vrCaravanTransformPoint(middle, VrVector3 { 17.0f, -9.0f, 2.0f });
+  CHECK_NEAR(point.x, 17.0f, 1e-4f);
+  CHECK_NEAR(point.y, -9.0f, 1e-4f);
+  CHECK_NEAR(point.z,  2.0f, 1e-4f);
+
+  // A card leaning 30 degrees left leans 45 degrees left, around the pivot
+  float lean = 0.5235988f;
+  VrCaravanTransform card   = cardAlong(-std::sin(lean), std::cos(lean));
+  VrCaravanTransform spread = vrCaravanSpreadCard(card, pivot, 0.0f, 1.5f);
+  VrCaravanTransform opened = vrCaravanCompose(spread, card);
+  CHECK_NEAR(std::atan2(-opened.rotate[0][0], opened.rotate[1][0]), 0.7853982f, 1e-4f);
+
+  VrVector3 still = vrCaravanTransformPoint(spread, pivot);
+  CHECK_NEAR(still.x, pivot.x, 1e-4f);
+  CHECK_NEAR(still.y, pivot.y, 1e-4f);
+
+  // The game's fan as it is
+  VrCaravanTransform same = vrCaravanSpreadCard(card, pivot, 0.0f, 1.0f);
+  CHECK_NEAR(same.rotate[0][0], 1.0f, 1e-6f);
+  CHECK_NEAR(same.translate.x, 0.0f, 1e-4f);
+}

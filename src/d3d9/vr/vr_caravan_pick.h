@@ -116,6 +116,25 @@ namespace dxvk {
           float           scale);
 
   /**
+   * \brief Opens the game's fan of cards wider
+   *
+   * The result turns a card of the fan, on the table, about +Z around
+   * \c pivot by \c factor - 1 times the angle of its long axis (+X of the
+   * card) from \c middle, so that the cards fan out \c factor times as
+   * wide. Angles in radians, from +Y, positive towards -X.
+   *
+   * \param [in] card World transform of the card's node
+   * \param [in] pivot Point the fan's cards turn about
+   * \param [in] middle Angle of the fan's middle
+   * \param [in] factor Width of the opened fan over the game's
+   */
+  VrCaravanTransform vrCaravanSpreadCard(
+    const VrCaravanTransform& card,
+    const VrVector3&      pivot,
+          float           middle,
+          float           factor);
+
+  /**
    * \brief Applies a transform to a point
    */
   VrVector3 vrCaravanTransformPoint(const VrCaravanTransform& transform, const VrVector3& point);

@@ -144,13 +144,21 @@ namespace dxvk {
     // The player's hand of cards as the game lays it on the table (the end
     // of Player_Deck.NIF's "Deck-Cards_In": card centres from x 16.6 to
     // 20.1 at y -9.4 to -10.4, z 1.55 to 1.9, faces up, tips to +y), held
-    // in the left hand in the grip's frame: a little above and ahead of
-    // the fist, the tips up and leaning away. At the mat's scale the cards
-    // are already the size of real ones.
+    // in the left hand in the grip's frame: a little right of and ahead of
+    // the fist, the tips to the right and leaning away (the player turned
+    // the fan a quarter to the right from tips up, 2026-11-08). At the
+    // mat's scale the cards are already the size of real ones.
     constexpr VrVector3 CaravanFanCentre = { 18.3f, -9.7f, 1.7f };
-    constexpr VrVector3 CaravanFanHold   = { 0.0f, 0.05f, -0.03f };
-    constexpr VrVector3 CaravanFanUp     = { 0.0f, 0.9f, -0.44f };
+    constexpr VrVector3 CaravanFanHold   = { 0.05f, 0.0f, -0.03f };
+    constexpr VrVector3 CaravanFanUp     = { 0.9f, 0.0f, -0.44f };
     constexpr float     CaravanFanScale  = 1.0f;
+    // The game's fan is narrow for a laser: the cards are opened wider
+    // about the point their long axes meet, below the fan (from the first
+    // and last cards' axes, (-0.54, 0.84) and (0.42, 0.91)), the middle
+    // card staying
+    constexpr VrVector3 CaravanFanPivot  = { 18.6f, -13.1f, 1.7f };
+    constexpr float     CaravanFanMiddle = 0.07f;
+    constexpr float     CaravanFanSpread = 1.6f;
     constexpr uint32_t  CaravanFanSlots  = 8;
     // Radius given to the bounds of the model's nodes above the held cards
     constexpr float     CaravanFanBound  = 1.0e5f;
@@ -1671,6 +1679,12 @@ namespace dxvk {
   static_assert(sizeof(VrCaravanTransform) == VrGame::ObjectWorldTransformSize,
     "A world transform of the game is read as a VrCaravanTransform");
 
+  VrCaravanTransform VrMinigames::caravanCardInHand(uintptr_t card) const {
+    auto world = *reinterpret_cast<const VrCaravanTransform*>(card + VrGame::ObjectWorldRotation);
+    return vrCaravanCompose(m_caravanFan, vrCaravanSpreadCard(world, CaravanFanPivot, CaravanFanMiddle, CaravanFanSpread));
+  }
+
+
   void VrMinigames::holdCaravanFan(std::vector<uint32_t*>& hidden, VrGameWorldTransforms& moved) {
     auto menu = global<uint8_t*>(VrGame::CaravanInstance);
     auto hand = menu && m_caravanFanHeld ? field<uintptr_t>(menu, VrGame::CaravanPlayerHandModel) : 0;
@@ -1680,26 +1694,32 @@ namespace dxvk {
 
     moved.capture(hand);
 
-    // The cards, their backs and their shadows move to the hand, the draw
-    // pile of the same model stays on the table. The game updated the
-    // world transforms for this frame, they are put back after the draw.
-    for (uint32_t i = 0; i < CaravanFanSlots; i++) {
+    // The cards of the hand, their backs and their shadows move to the
+    // hand. The draw pile of the same model stays on the table, and so do
+    // the slots past the hand's cards: they wait face down on the pile and
+    // would float beside the fan. The game updated the world transforms
+    // for this frame, they are put back after the draw.
+    uint32_t count = std::min(field<uint32_t>(menu, VrGame::CaravanPlayerHand + VrGame::SimpleArraySize), CaravanFanSlots);
+
+    for (uint32_t i = 0; i < count; i++) {
       std::string name = str::format("Player-Deck_0", i + 1);
       uintptr_t card = vrFindGameObject(hand, name.c_str(), CaravanNodeDepth);
 
       if (!card)
         continue;
 
-      vrVisitGameObjects(card, CaravanNodeDepth, [this] (uintptr_t object, uint32_t) {
+      VrCaravanTransform place = caravanCardInHand(card);
+
+      vrVisitGameObjects(card, CaravanNodeDepth, [&place] (uintptr_t object, uint32_t) {
         auto* world = reinterpret_cast<VrCaravanTransform*>(object + VrGame::ObjectWorldRotation);
-        *world = vrCaravanCompose(m_caravanFan, *world);
+        *world = vrCaravanCompose(place, *world);
 
         if (auto* bound = field<float*>(reinterpret_cast<void*>(object), VrGame::ObjectWorldBound)) {
-          VrVector3 centre = vrCaravanTransformPoint(m_caravanFan, VrVector3 { bound[0], bound[1], bound[2] });
+          VrVector3 centre = vrCaravanTransformPoint(place, VrVector3 { bound[0], bound[1], bound[2] });
           bound[0] = centre.x;
           bound[1] = centre.y;
           bound[2] = centre.z;
-          bound[3] *= m_caravanFan.scale;
+          bound[3] *= place.scale;
         }
       });
 
@@ -2059,9 +2079,11 @@ namespace dxvk {
 
       // Where the eyes see it: in the hand, or on the table
       auto world = *reinterpret_cast<const VrCaravanTransform*>(node + VrGame::ObjectWorldRotation);
+      std::string parent = str::format("Player-Deck_0", i + 1);
+      uintptr_t card = m_caravanFanHeld ? vrFindGameObject(hand, parent.c_str(), CaravanNodeDepth) : 0;
 
-      if (m_caravanFanHeld)
-        world = vrCaravanCompose(m_caravanFan, world);
+      if (card)
+        world = vrCaravanCompose(caravanCardInHand(card), world);
 
       std::memcpy(cards[i].rotate, world.rotate, sizeof(cards[i].rotate));
       cards[i].translate = world.translate;

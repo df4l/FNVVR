@@ -71,6 +71,24 @@ namespace dxvk {
   }
 
 
+  VrCaravanTransform vrCaravanSpreadCard(
+    const VrCaravanTransform& card,
+    const VrVector3&      pivot,
+          float           middle,
+          float           factor) {
+    float angle = std::atan2(-card.rotate[0][0], card.rotate[1][0]);
+    float turn  = (factor - 1.0f) * (angle - middle);
+    float c = std::cos(turn);
+    float s = std::sin(turn);
+
+    VrCaravanTransform spread;
+    spread.rotate[0][0] = c;  spread.rotate[0][1] = -s;
+    spread.rotate[1][0] = s;  spread.rotate[1][1] =  c;
+    spread.translate = pivot - vrCaravanTransformPoint(spread, pivot);
+    return spread;
+  }
+
+
   VrVector3 vrCaravanTransformPoint(const VrCaravanTransform& transform, const VrVector3& point) {
     const auto& r = transform.rotate;
     VrVector3 p = point * transform.scale;
