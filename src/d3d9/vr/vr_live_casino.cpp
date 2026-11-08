@@ -21,6 +21,15 @@ namespace dxvk {
     using AudioFn            = void (__fastcall*)(void* audio, void* unused);
     using SetRestrainedFn    = void (__fastcall*)(void* actor, void* unused, bool restrained);
     using EndMovementFn      = void (__fastcall*)(void* actor, void* unused);
+    using GetAnimationFn     = uint8_t* (__fastcall*)(void* actor, void* unused);
+    using IdlePlayingFn      = bool (__fastcall*)(void* animation, void* unused);
+    using SetIdleFn          = void (__fastcall*)(void* process, void* unused, void* idle);
+    using PostAnimationFn    = void (__fastcall*)(void* process, void* unused, uint32_t action);
+    using FormByIdFn         = uint8_t* (__cdecl*)(uint32_t id);
+
+    // Frames left before the hold pose is asked again: the AI picks the
+    // idle a frame or two after it is asked
+    constexpr uint32_t PoseRetryFrames = 30;
 
     // Read by the AI threads too, written between frames
     std::atomic<bool> g_live = { false };
@@ -35,6 +44,11 @@ namespace dxvk {
 
     // The Caravan challenger held by the mod, main thread only
     uint8_t* g_heldChallenger = nullptr;
+
+    // Whether the challenger holds a hand up as if it held cards, and the
+    // frames to wait before asking for that pose again
+    bool     g_caravanPose = false;
+    uint32_t g_poseWait    = 0;
 
     bool realMenuMode() {
       return reinterpret_cast<IsInMenuModeFn>(VrGame::IsInMenuMode)();
@@ -113,6 +127,44 @@ namespace dxvk {
       return *reinterpret_cast<const uint32_t*>(actor + VrGame::ActorLifeState);
     }
 
+    template<typename Fn>
+    Fn slot(const void* object, uintptr_t offset) {
+      auto vtable = *reinterpret_cast<const uint8_t* const*>(object);
+      return *reinterpret_cast<const Fn*>(vtable + offset);
+    }
+
+    // The challenger keeps a hand raised for the cards during the game, as
+    // a script's PlayIdle would have it: asked again whenever the idle has
+    // played its loops, since the restrained actor's AI picks none of its
+    // own (findings/caravan.md §3.8)
+    void keepCaravanPose(uint8_t* challenger) {
+      if (g_poseWait) {
+        g_poseWait--;
+        return;
+      }
+
+      auto process   = *reinterpret_cast<uint8_t* const*>(challenger + VrGame::ActorProcess);
+      auto animation = process ? slot<GetAnimationFn>(challenger, VrGame::ActorGetAnimationSlot)(challenger, nullptr) : nullptr;
+
+      if (!animation
+       || reinterpret_cast<IdlePlayingFn>(VrGame::AnimationSpecialIdlePlaying)(animation, nullptr)
+       || *reinterpret_cast<void* const*>(animation + VrGame::AnimationIdleQueued))
+        return;
+
+      auto idle = reinterpret_cast<FormByIdFn>(VrGame::FormById)(VrGame::CaravanHoldCardsIdle);
+
+      if (!idle || idle[VrGame::FormType] != VrGame::FormTypeIdle) {
+        Logger::warn("VR: The idle that holds Caravan's cards up is not in the game, the challenger keeps its pose");
+        g_caravanPose = false;
+        return;
+      }
+
+      slot<SetIdleFn>(process, VrGame::ProcessSetCurrentIdleSlot)(process, nullptr, idle);
+      slot<PostAnimationFn>(process, VrGame::ProcessAddPostAnimationSlot)(process, nullptr, VrGame::PostAnimationPickIdle);
+      g_poseWait = PoseRetryFrames;
+      Logger::info("VR: The Caravan challenger raises a hand for the cards");
+    }
+
     // Called on the main thread at the start of the frame, before the AI
     // threads run, as a script's SetRestrained would be. Held only while
     // Caravan is the top menu and the console is closed: the world is still
@@ -140,8 +192,14 @@ namespace dxvk {
         reinterpret_cast<SetRestrainedFn>(VrGame::ActorSetRestrained)(challenger, nullptr, true);
         reinterpret_cast<EndMovementFn>(VrGame::ActorEndMovement)(challenger, nullptr);
         g_heldChallenger = challenger;
+        g_poseWait       = 0;
         Logger::info("VR: The Caravan challenger is held in place");
       }
+
+      // The cards are dealt in the game menu: none to hold before
+      if (g_caravanPose && g_heldChallenger
+       && *reinterpret_cast<const uint32_t*>(menu + VrGame::CaravanActiveMenu) == VrGame::CaravanGameMenu)
+        keepCaravanPose(g_heldChallenger);
     }
 
   }
@@ -156,6 +214,15 @@ namespace dxvk {
       Logger::warn("VR: The game's SetRestrained was not found, Caravan pauses the world");
       caravan = false;
     }
+
+    // Without a way to play the idle, the challenger is held as they stand
+    bool pose = caravan
+      && VrGameMemory::matchesUnlessRewritten(VrGame::AnimationSpecialIdlePlaying,
+        VrGame::AnimationSpecialIdlePlayingPrologue, sizeof(VrGame::AnimationSpecialIdlePlayingPrologue))
+      && VrGameMemory::matchesUnlessRewritten(VrGame::FormById, VrGame::FormByIdPrologue, sizeof(VrGame::FormByIdPrologue));
+
+    if (caravan && !pose)
+      Logger::warn("VR: The game's idles were not found, the Caravan challenger holds no cards up");
 
     if (!casino && !vigorTester && !caravan)
       return;
@@ -180,6 +247,7 @@ namespace dxvk {
     g_casino      = casino;
     g_vigorTester = vigorTester;
     g_caravan     = caravan;
+    g_caravanPose = pose;
 
     VrGameMemory::redirectCall(VrGame::LiveMenuModeFrameSite, VrGame::IsInMenuMode,
       reinterpret_cast<const void*>(&VrLiveCasino::frameMenuModeHook));

@@ -14,6 +14,8 @@ namespace dxvk {
    * Caravan's challenger is held in place for the menu's time, as by the
    * script command SetRestrained, and released at its end: otherwise their
    * AI package would walk them off the table (findings/caravan.md §3.5).
+   * During the game itself they also raise their left hand, which holds
+   * their cards in the eyes (findings/caravan.md §3.8).
    */
   class VrLiveCasino {
 

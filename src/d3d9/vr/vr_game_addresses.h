@@ -873,6 +873,15 @@ namespace dxvk {
     constexpr uintptr_t CaravanActiveMenu    = 0x28;
     constexpr uintptr_t CaravanGameState     = 0x2C;
     constexpr uintptr_t CaravanPlayerHandModel = 0x190;
+    /**
+     * CaravanMenu::pHandGeometries[1] (Opponent_Deck.NIF) and kNPCHand, the
+     * opponent's hand, read at 0x0074D7C7 and 0x0074D788 in
+     * UpdateGameHandTextures 0x0074D730. The cards in hand are the subtrees
+     * "Opponent-Deck_0{i+1}" below the hand's size; their shapes
+     * "Opponent-Deck_0{i+1}:{i}" get the card back's texture on +Z.
+     */
+    constexpr uintptr_t CaravanOpponentHandModel = 0x194;
+    constexpr uintptr_t CaravanOpponentHand      = 0xB34;
     constexpr uintptr_t CaravanCardTracks    = 0xB44;
     constexpr uintptr_t CaravanPlayerHand    = 0xB24;
     constexpr uintptr_t CaravanSelectedCard  = 0xE2C;
@@ -1345,6 +1354,29 @@ namespace dxvk {
     constexpr uint8_t   ActorEndMovementPrologue[] = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x45, 0xFC };
     constexpr uint32_t  ActorLifeAlive        = 0;
     constexpr uint32_t  ActorLifeRestrained   = 5;
+
+    /**
+     * What has the Caravan challenger hold up a hand as if it held cards
+     * (findings/caravan.md §3.8), as the script command PlayIdle does
+     * (Script::PlayIdle 0x005CB2D0): the actor's virtual GetAnimation
+     * (__thiscall, the Animation or null), then, once
+     * AnimationSpecialIdlePlaying is false and Animation::spAnimIdleQueued
+     * is null, the process's virtual SetCurrentProcessIdle (__thiscall, the
+     * TESIdleForm) and AddPostAnimationAction (__thiscall,
+     * POSTANIM_ACTION_PICK_IDLE_CALL). Read from the instructions at
+     * 0x005CB3A0, 0x005CB3E4, 0x005CB4DB and 0x005CB504. Both process slots
+     * are empty but in HighProcess (0x008D9410, 0x00903180), the process of
+     * a character close to the player. The idle is LooseReadPaperOnHandA
+     * (FalloutNV.esm, a sheet read in a raised left hand, no conditions,
+     * loop of 1.7 s played 5 times), form type TESIdleForm.
+     */
+    constexpr uintptr_t ActorGetAnimationSlot       = 0x1E4;
+    constexpr uintptr_t AnimationIdleQueued         = 0x128;
+    constexpr uintptr_t ProcessSetCurrentIdleSlot   = 0x71C;
+    constexpr uintptr_t ProcessAddPostAnimationSlot = 0x614;
+    constexpr uint32_t  PostAnimationPickIdle       = 0x80;
+    constexpr uint32_t  CaravanHoldCardsIdle        = 0x0005DB21;
+    constexpr uint8_t   FormTypeIdle                = 0x48;
 
     /**
      * HUDMainMenu*, the HUD. Its top-level element groups are Tile* fields,
