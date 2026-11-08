@@ -860,6 +860,15 @@ namespace dxvk {
      */
     constexpr uintptr_t CaravanTableModel    = 0x184;
     constexpr char      CaravanPlanksShape[] = "Table:0";
+    /**
+     * CaravanMenu::kCoinObjects (+0x134), a BSSimpleArray of the bet's coins
+     * (clones of Currency-Coin_{1-3}.NIF, children of the scene's root),
+     * filled by AddCurrencyCoinNif 0x0074FC00. UpdateBettingUI 0x0074A9C0
+     * sets each new coin's translation to the centre of a Coin-Placement_NN
+     * shape of Currency-Coin_Grid.NIF (z 2.5 to 3.35); the coin's own
+     * sequence then drops it from 10.94 to 0.95 above that point.
+     */
+    constexpr uintptr_t CaravanCoinObjects   = 0x134;
 
     constexpr uintptr_t CaravanActiveMenu    = 0x28;
     constexpr uintptr_t CaravanGameState     = 0x2C;

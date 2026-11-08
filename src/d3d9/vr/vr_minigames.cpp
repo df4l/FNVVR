@@ -126,6 +126,16 @@ namespace dxvk {
     constexpr float     CaravanCardHalfX = 1.75f;
     constexpr float     CaravanCardHalfY = 1.25f;
     constexpr float     CaravanSlotReach = 3.0f;
+    // The bet's coins end their drop 0.95 above points 2.5 to 3.35 high,
+    // seen from above only: up to 4 cm over the bet area's sign (top z 1.5)
+    // from the side. A coin still that high is laid on the sign, those
+    // meant to lie higher a little above it so that overlapping coins do
+    // not cross.
+    constexpr float     CaravanCoinPlacedAbove = 2.4f;
+    constexpr float     CaravanCoinLowestPoint = 2.5f;
+    constexpr float     CaravanCoinDropEnd     = 0.95f;
+    constexpr float     CaravanSignTop         = 1.5f;
+    constexpr float     CaravanCoinLayering    = 0.25f;
     constexpr float     CaravanStickiness = 0.4f;
     // A click waits this long for the menu's step to what the laser is on
     constexpr float     CaravanClickWait = 0.6f;
@@ -622,6 +632,7 @@ namespace dxvk {
     m_caravanCard = -1;
     m_caravanSlot = -1;
     m_caravanPlanksHidden = false;
+    m_caravanCoinsLaid = false;
     m_caravanTrigger = false;
     m_caravanClick   = false;
     m_caravanStepping = false;
@@ -1603,6 +1614,9 @@ namespace dxvk {
   void VrMinigames::updateCaravan(const VrPointerSurfaceState& pointer, const VrInputState& input, float dt) {
     auto menu = global<uint8_t*>(VrGame::CaravanInstance);
 
+    if (menu)
+      layCaravanCoins(menu);
+
     bool playing = menu && field<uint32_t>(menu, VrGame::CaravanActiveMenu) == VrGame::CaravanGameMenu;
     bool idle    = playing && field<uint32_t>(menu, VrGame::CaravanGameState) == 0;
 
@@ -1983,6 +1997,35 @@ namespace dxvk {
 
     if (state != VrGame::SlotMachineStatePayoutIn && state != VrGame::SlotMachineStatePayoutOut)
       VrMenuScenes::hideObject(root, VrGame::SlotMachinePayoutScreen, hidden);
+  }
+
+
+  void VrMinigames::layCaravanCoins(uint8_t* menu) {
+    auto     coins = field<uint8_t* const*>(menu, VrGame::CaravanCoinObjects + VrGame::SimpleArrayBase);
+    uint32_t count = field<uint32_t>(menu, VrGame::CaravanCoinObjects + VrGame::SimpleArraySize);
+
+    if (!coins)
+      return;
+
+    // The game sets a coin's translation once, when it places it: the
+    // scene's next update carries the new height to the drop
+    for (uint32_t i = 0; i < count; i++) {
+      if (!coins[i])
+        continue;
+
+      float& z = field<float>(coins[i], VrGame::ObjectLocalTranslation + 2 * sizeof(float));
+
+      if (z <= CaravanCoinPlacedAbove)
+        continue;
+
+      float placed = z;
+      z = CaravanSignTop - CaravanCoinDropEnd + (placed - CaravanCoinLowestPoint) * CaravanCoinLayering;
+
+      if (!m_caravanCoinsLaid) {
+        Logger::info(str::format("VR: A Caravan coin placed at z ", placed, " is laid on the bet area's sign, at z ", z));
+        m_caravanCoinsLaid = true;
+      }
+    }
   }
 
 
