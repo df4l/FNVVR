@@ -10,6 +10,7 @@
 - **The values lie on the mat**: each caravan's value is written on the mat past its last card, red once it has bust, instead of floating on the panel.
 - **Caravan in real time**: the world goes on around the table during a game, as at the casino, and your opponent stays at the table until the game ends. It stops in combat, the pause menu, a message or the console. `d3d9.vrRealTimeCaravan = False` brings the pause back.
 - **Build your deck with the laser**: point at a card of either row and pull the trigger; the row slides to it and the card goes into your deck (from the lower row) or out of it (from the upper row). The discard prompts of the game show B, which discards in VR.
+- **Your opponent holds their cards**: in real time, your opponent raises their left hand during the game and holds their cards in it, backs towards you, one fewer each time they play.
 
 ### Terminals
 
