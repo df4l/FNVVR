@@ -696,6 +696,7 @@ namespace dxvk {
     m_caravanDiscard = -1;
     m_caravanFanHeld = false;
     m_caravanFadingOut = false;
+    m_caravanOpponentHeld = false;
     m_leverHeld   = { };
     m_levers      = { };
     m_signals     = VrTableSignals();
