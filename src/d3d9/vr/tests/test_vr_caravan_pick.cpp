@@ -3,6 +3,7 @@
 #include "test.h"
 
 #include "../vr_caravan_pick.h"
+#include "../vr_math.h"
 
 using namespace dxvk;
 
@@ -150,4 +151,49 @@ TEST_CASE(caravan_back_and_option_cancel_while_a_slot_is_chosen) {
   CHECK(buttons.update(false, true,  true,  0.1f) == C::Cancel);
   CHECK(buttons.update(false, true,  true,  0.1f) == C::None);
   CHECK(buttons.update(false, false, false, 0.1f) == C::None);
+}
+
+
+TEST_CASE(caravan_fan_goes_to_the_hand_faces_to_the_eye) {
+  const VrVector3 centre = { 18.0f, -9.7f, 1.7f };
+  const VrVector3 hold   = { -5.0f, -30.0f, 20.0f };
+  const VrVector3 eye    = { -5.0f, -60.0f, 20.0f };
+
+  // Tips up, the eye straight behind the fan on -y
+  VrCaravanTransform fan = vrCaravanFanInHand(centre, hold, VrVector3 { 0.0f, 0.0f, 2.0f }, eye, 1.5f);
+
+  VrVector3 c = vrCaravanTransformPoint(fan, centre);
+  CHECK_NEAR(c.x, hold.x, 1e-4f);
+  CHECK_NEAR(c.y, hold.y, 1e-4f);
+  CHECK_NEAR(c.z, hold.z, 1e-4f);
+
+  // The tips (+y) go up, the faces (+z) to the eye, the first card (-x) on
+  // the left of someone looking along +y
+  VrVector3 tip  = vrCaravanTransformPoint(fan, VrVector3 { centre.x, centre.y + 1.0f, centre.z }) - hold;
+  VrVector3 face = vrCaravanTransformPoint(fan, VrVector3 { centre.x, centre.y, centre.z + 1.0f }) - hold;
+  VrVector3 left = vrCaravanTransformPoint(fan, VrVector3 { centre.x - 1.0f, centre.y, centre.z }) - hold;
+  CHECK_NEAR(tip.z,   1.5f, 1e-4f);
+  CHECK_NEAR(face.y, -1.5f, 1e-4f);
+  CHECK_NEAR(left.x, -1.5f, 1e-4f);
+}
+
+
+TEST_CASE(caravan_fan_moves_a_card_with_its_rotation) {
+  VrCaravanTransform fan = vrCaravanFanInHand(VrVector3 { 0.0f, 0.0f, 0.0f }, VrVector3 { 1.0f, 2.0f, 3.0f },
+    VrVector3 { 0.0f, 0.0f, 1.0f }, VrVector3 { 1.0f, -10.0f, 3.0f }, 2.0f);
+
+  VrCaravanTransform card;
+  card.translate = { 0.5f, 0.0f, 0.0f };
+  card.scale     = 0.5f;
+  card.rotate[0][0] = 0.0f; card.rotate[0][1] = -1.0f;
+  card.rotate[1][0] = 1.0f; card.rotate[1][1] =  0.0f;
+
+  // A point of the card, moved with the card or after it, lands in the same place
+  VrVector3 point = { 1.0f, 0.5f, 0.25f };
+  VrVector3 a = vrCaravanTransformPoint(vrCaravanCompose(fan, card), point);
+  VrVector3 b = vrCaravanTransformPoint(fan, vrCaravanTransformPoint(card, point));
+  CHECK_NEAR(a.x, b.x, 1e-4f);
+  CHECK_NEAR(a.y, b.y, 1e-4f);
+  CHECK_NEAR(a.z, b.z, 1e-4f);
+  CHECK_NEAR(vrCaravanCompose(fan, card).scale, 1.0f, 1e-6f);
 }

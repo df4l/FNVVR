@@ -3,6 +3,7 @@
 #include <cstring>
 
 #include "vr_caravan_pick.h"
+#include "vr_math.h"
 
 namespace dxvk {
 
@@ -29,6 +30,72 @@ namespace dxvk {
     }
 
     return nearest;
+  }
+
+
+  VrCaravanTransform vrCaravanFanInHand(
+    const VrVector3&      centre,
+    const VrVector3&      hold,
+    const VrVector3&      up,
+    const VrVector3&      eye,
+          float           scale) {
+    VrVector3 u = up * (1.0f / vrLength(up));
+
+    // The faces turn to the eye as far as the tips' direction lets them
+    VrVector3 toEye = eye - hold;
+    VrVector3 n = toEye - u * vrDot(toEye, u);
+
+    if (vrLength(n) < 1e-4f)
+      n = std::abs(u.z) < 0.9f ? VrVector3 { 0.0f, 0.0f, 1.0f } - u * u.z : VrVector3 { 0.0f, 1.0f, 0.0f } - u * u.y;
+
+    n = n * (1.0f / vrLength(n));
+
+    VrVector3 r = {
+      u.y * n.z - u.z * n.y,
+      u.z * n.x - u.x * n.z,
+      u.x * n.y - u.y * n.x };
+
+    VrCaravanTransform fan;
+    const VrVector3* axes[3] = { &r, &u, &n };
+
+    for (uint32_t column = 0; column < 3; column++) {
+      fan.rotate[0][column] = axes[column]->x;
+      fan.rotate[1][column] = axes[column]->y;
+      fan.rotate[2][column] = axes[column]->z;
+    }
+
+    fan.scale     = scale;
+    fan.translate = { 0.0f, 0.0f, 0.0f };
+    fan.translate = hold - vrCaravanTransformPoint(fan, centre);
+    return fan;
+  }
+
+
+  VrVector3 vrCaravanTransformPoint(const VrCaravanTransform& transform, const VrVector3& point) {
+    const auto& r = transform.rotate;
+    VrVector3 p = point * transform.scale;
+
+    return VrVector3 {
+      r[0][0] * p.x + r[0][1] * p.y + r[0][2] * p.z + transform.translate.x,
+      r[1][0] * p.x + r[1][1] * p.y + r[1][2] * p.z + transform.translate.y,
+      r[2][0] * p.x + r[2][1] * p.y + r[2][2] * p.z + transform.translate.z };
+  }
+
+
+  VrCaravanTransform vrCaravanCompose(const VrCaravanTransform& outer, const VrCaravanTransform& inner) {
+    VrCaravanTransform result;
+
+    for (uint32_t i = 0; i < 3; i++) {
+      for (uint32_t j = 0; j < 3; j++) {
+        result.rotate[i][j] = outer.rotate[i][0] * inner.rotate[0][j]
+                            + outer.rotate[i][1] * inner.rotate[1][j]
+                            + outer.rotate[i][2] * inner.rotate[2][j];
+      }
+    }
+
+    result.translate = vrCaravanTransformPoint(outer, inner.translate);
+    result.scale     = outer.scale * inner.scale;
+    return result;
   }
 
 

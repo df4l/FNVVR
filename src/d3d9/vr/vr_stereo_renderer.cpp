@@ -1280,6 +1280,17 @@ namespace dxvk {
       return;
     }
 
+    // Caravan's cards are held in the left hand and chosen with the right:
+    // both hands are shown there, the weapon put away
+    if (state == VrGameStateKind::Menu && m_minigames && m_minigames->showsHands()
+     && m_hasReference && right.isActive) {
+      VrGameCameraPose hand      = handInGame(right);
+      VrGameCameraPose otherHand = handInGame(left);
+      m_weaponHand->beginFrame(gameCamera, &hand, left.isActive ? &otherHand : nullptr,
+        false, VrFirstPersonMode::FreeHands, dt);
+      return;
+    }
+
     // Menus are pointed at with the lasers, and the game animates the arms
     // in front of its camera meanwhile. V.A.T.S. is driven by the sticks
     // and shows the weapon as the game does.

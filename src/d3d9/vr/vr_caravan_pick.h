@@ -84,6 +84,49 @@ namespace dxvk {
   };
 
   /**
+   * \brief A transform of the game's scene graph, laid out as the game's
+   *
+   * A point p goes to rotate * (scale * p) + translate, rotate row-major.
+   */
+  struct VrCaravanTransform {
+    float     rotate[3][3] = { { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } };
+    VrVector3 translate    = { };
+    float     scale        = 1.0f;
+  };
+
+  /**
+   * \brief Carries the player's hand of cards from the table to a hand
+   *
+   * The game lays the hand on the table, faces up (+Z), tips towards the
+   * opponent (+Y), the first card on the left (-X). The result moves the
+   * point \c centre of that fan to \c hold, its tips along \c up and its
+   * faces towards \c eye, at \c scale times its size. All in the scene.
+   *
+   * \param [in] centre Centre of the fan on the table
+   * \param [in] hold Where the hand holds it
+   * \param [in] up Direction of the tips, not 0
+   * \param [in] eye Point the faces turn to
+   * \param [in] scale Size in the hand over size on the table
+   */
+  VrCaravanTransform vrCaravanFanInHand(
+    const VrVector3&      centre,
+    const VrVector3&      hold,
+    const VrVector3&      up,
+    const VrVector3&      eye,
+          float           scale);
+
+  /**
+   * \brief Applies a transform to a point
+   */
+  VrVector3 vrCaravanTransformPoint(const VrCaravanTransform& transform, const VrVector3& point);
+
+  /**
+   * \brief Applies \c outer after \c inner, as a parent's world transform
+   *    to a child's
+   */
+  VrCaravanTransform vrCaravanCompose(const VrCaravanTransform& outer, const VrCaravanTransform& inner);
+
+  /**
    * \brief Where a ray meets a card
    *
    * \param [in] origin The ray's origin

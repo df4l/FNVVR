@@ -11,6 +11,7 @@
 #include "vr_caravan_pick.h"
 #include "vr_controller_pad.h"
 #include "vr_game_camera.h"
+#include "vr_game_nodes.h"
 #include "vr_minigame_space.h"
 
 namespace dxvk {
@@ -102,6 +103,10 @@ namespace dxvk {
     bool showsRenderedMenu() const { return m_kind == Kind::Terminal || m_kind == Kind::Reflectron; }
 
     bool active() const { return m_kind != Kind::None; }
+
+    /// Whether the hands are shown, without the weapon: Caravan's cards are
+    /// held in the left hand and chosen with the right
+    bool showsHands() const { return m_kind == Kind::Caravan; }
 
     /// The gamepad input of the hands' gestures, for the next frame
     const VrMinigamePad& pad() const { return m_pad; }
@@ -255,6 +260,10 @@ namespace dxvk {
     int32_t           m_caravanWasCard  = 0;
     int32_t           m_caravanWasTrack = 0;
     int32_t           m_caravanWasRow   = 0;
+    // Where the player's hand of cards is carried from the table, in the
+    // left hand during the game
+    bool              m_caravanFanHeld = false;
+    VrCaravanTransform m_caravanFan;
 
     // Vigor tester: the menu's camera as the menu made it, the hand the
     // cursor follows and the triggers of the last frame
@@ -342,7 +351,11 @@ namespace dxvk {
 
     void placeCaravanSurface();
 
-    void updateCaravan(const VrPointerSurfaceState& pointer, const VrInputState& input, float dt);
+    void updateCaravan(const VrMinigameFrame& frame, const VrPointerSurfaceState& pointer, const VrInputState& input);
+
+    void placeCaravanFan(const VrMinigameFrame& frame, const VrInputState& input, bool playing);
+
+    void holdCaravanFan(std::vector<uint32_t*>& hidden, VrGameWorldTransforms& moved);
 
     bool caravanCardOnLaser(uint8_t* menu, const VrVector3& origin, const VrVector3& direction);
 
