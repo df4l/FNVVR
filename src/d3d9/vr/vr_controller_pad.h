@@ -29,6 +29,9 @@ namespace dxvk {
     bool     active      = false;
     /// Buttons pressed by a gesture
     uint16_t buttons     = 0;
+    /// Buttons of the controllers kept from the game, which the mini-game
+    /// reads itself
+    uint16_t noButtons   = 0;
     /// Left and right stick X, in [-1, 1]
     bool     driveLeftX  = false;
     float    leftX       = 0.0f;
@@ -39,6 +42,9 @@ namespace dxvk {
     bool     noTriggers  = false;
     /// Same for the shoulder buttons, which are the grips
     bool     noShoulders = false;
+    /// Triggers pressed by a gesture, also with \c noTriggers
+    bool     leftTrigger  = false;
+    bool     rightTrigger = false;
     /// The mini-game knows whether the laser is over something to click,
     /// where the interface sees a target everywhere
     bool     decidesTarget = false;
@@ -71,6 +77,7 @@ namespace dxvk {
    * \brief Gamepad input codes of the game's bindings, see findings/input.md
    */
   namespace VrGamepadInput {
+    constexpr uint8_t B = 0x0B;
     constexpr uint8_t X = 0x0C;
   }
 

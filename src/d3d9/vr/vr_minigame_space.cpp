@@ -87,6 +87,31 @@ namespace dxvk {
   }
 
 
+  bool vrTableBetween(
+    const VrVector3&        player,
+    const VrVector3&        other,
+          float             farEdge,
+          float             gap,
+          float             top,
+          VrWorldObject&    table) {
+    VrVector3 towards = { other.x - player.x, other.y - player.y, 0.0f };
+    float length = vrLength(towards);
+
+    if (length < 1e-3f)
+      return false;
+
+    towards = towards * (1.0f / length);
+
+    table.y        = towards;
+    table.z        = { 0.0f, 0.0f, 1.0f };
+    table.x        = { towards.y, -towards.x, 0.0f };
+    table.position = { other.x, other.y, top };
+    table.position = table.position - towards * (gap + farEdge);
+    table.scale    = 1.0f;
+    return true;
+  }
+
+
   VrSceneFit vrSceneFitOfModel(const VrWorldObject& model) {
     // The inverse of the model's pose: its rotation's rows, its translation
     // brought back into the model

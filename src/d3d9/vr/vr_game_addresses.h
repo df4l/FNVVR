@@ -380,6 +380,11 @@ namespace dxvk {
     /** Hand bones of the first-person skeleton (strings 0x010C4C40 and 0x010C4C20) */
     constexpr char LeftHandNodeName[]         = "Bip01 L Hand";
     constexpr char RightHandNodeName[]        = "Bip01 R Hand";
+    /** Arm bones of an actor's skeleton, above the hands (strings 0x010203C4, 0x010203B4, 0x010203A0) */
+    constexpr char LeftUpperArmNodeName[]     = "Bip01 L UpperArm";
+    constexpr char LeftForearmNodeName[]      = "Bip01 L Forearm";
+    constexpr char RightUpperArmNodeName[]    = "Bip01 R UpperArm";
+    constexpr char RightForearmNodeName[]     = "Bip01 R Forearm";
 
     /**
      * The left forearm's twist bone, which carries the Pip-Boy, and the
@@ -829,6 +834,176 @@ namespace dxvk {
     constexpr uintptr_t RouletteCamera       = 0x011DA8D0;
     constexpr uintptr_t CaravanCamera        = 0x011D91A8;
 
+    /**
+     * CaravanMenu::pMe and its challenger (Actor*, null when the script runs
+     * on an object that is not a character), set by CaravanMenu::Create
+     * 0x00741060 from the reference ShowCaravanMenu runs on
+     * (findings/caravan.md §1.1).
+     */
+    constexpr uintptr_t CaravanInstance      = 0x011D917C;
+    constexpr uintptr_t CaravanChallenger    = 0x100;
+
+    /**
+     * What the lasers read and write in CaravanMenu (findings/caravan.md
+     * §1.1, §3.3), checked in CaravanMenu::DoIdle 0x00741500,
+     * HandleTrackSelection 0x0074F360, SelectDeckCard 0x0074E480 and
+     * SelectTrackCard 0x0074E6D0. eActiveMenu 2 is the game, eGameState 0
+     * the only state that takes input. The hand cards are the nodes
+     * "Player-Deck_0{i+1}:{i}" of the player's hand model, the slots the
+     * nodes "Select{row+1}_01:0" of each track's grid (tracks 0-2 the
+     * player's, 3-5 the opponent's, 7 rows each). kCardTracks holds a
+     * BSSimpleArray (0x10 bytes) per track and row: the cards on that row.
+     * The pending key is read and cleared by DoIdle in state 0, game menu,
+     * as one stick step, once fTimeDelta (a global) is more than
+     * CaravanStepDelay past fSelectionDelay.
+     */
+    /**
+     * CaravanMenu::pTableGeometry (+0x184), NV_Caravan-Table.NIF: its shape
+     * "Table:0" is the wooden planks under the cloth (texture
+     * NV_Caravan-Table01.dds, x -28 to 28.9, y -21 to 14.7, z 0 to 1.1),
+     * the rest the bet area's sign, the deck's tray and the camera.
+     */
+    constexpr uintptr_t CaravanTableModel    = 0x184;
+    constexpr char      CaravanPlanksShape[] = "Table:0";
+    /**
+     * CaravanMenu::kCoinObjects (+0x134), a BSSimpleArray of the bet's coins
+     * (clones of Currency-Coin_{1-3}.NIF, children of the scene's root),
+     * filled by AddCurrencyCoinNif 0x0074FC00. UpdateBettingUI 0x0074A9C0
+     * sets each new coin's translation to the centre of a Coin-Placement_NN
+     * shape of Currency-Coin_Grid.NIF (z 2.5 to 3.35); the coin's own
+     * sequence then drops it from 10.94 to 0.95 above that point.
+     */
+    constexpr uintptr_t CaravanCoinObjects   = 0x134;
+
+    constexpr uintptr_t CaravanActiveMenu    = 0x28;
+    constexpr uintptr_t CaravanGameState     = 0x2C;
+    // eGameState 0x16, the game is over (its result shown), and 0x17, the
+    // menu closes (findings/caravan.md §1)
+    constexpr uint32_t  CaravanStateOver     = 0x16;
+    constexpr uint32_t  CaravanStateClosing  = 0x17;
+    constexpr uintptr_t CaravanPlayerHandModel = 0x190;
+    /**
+     * CaravanMenu::pHandGeometries[1] (Opponent_Deck.NIF) and kNPCHand, the
+     * opponent's hand, read at 0x0074D7C7 and 0x0074D788 in
+     * UpdateGameHandTextures 0x0074D730. The cards in hand are the subtrees
+     * "Opponent-Deck_0{i+1}" below the hand's size; their shapes
+     * "Opponent-Deck_0{i+1}:{i}" get the card back's texture on +Z.
+     */
+    constexpr uintptr_t CaravanOpponentHandModel = 0x194;
+    constexpr uintptr_t CaravanOpponentHand      = 0xB34;
+    constexpr uintptr_t CaravanCardTracks    = 0xB44;
+    constexpr uintptr_t CaravanPlayerHand    = 0xB24;
+    constexpr uintptr_t CaravanSelectedCard  = 0xE2C;
+    constexpr uintptr_t CaravanSelectedTrack = 0xE30;
+    constexpr uintptr_t CaravanSelectedRow   = 0xE34;
+    constexpr uintptr_t CaravanSelectionDelay = 0xE3C;
+    constexpr uintptr_t CaravanTrackGrids    = 0xE54;
+    /**
+     * CaravanMenu::pCursors[2] (+0xE6C): Select_Add.NIF (a green card where
+     * the taken card will go) and Select_Remove.NIF (red, not allowed),
+     * children of CaravanSceneRoot. SelectTrackCard (0x0074E6D0) sets the
+     * shown one's translation to the world bound centre of the grid's
+     * "Select{row+1}_0{column+1}:0", column the cards on the row (at most
+     * 3), counted from the left on the opponent's rows too, which fill from
+     * the right; the other goes to (0, 0, -50), both to -100 in
+     * DeselectTrackCard (0x0074EDD0).
+     */
+    constexpr uintptr_t CaravanCursors       = 0xE6C;
+    constexpr uint32_t  CaravanCursorCount   = 2;
+    constexpr uintptr_t CaravanFlags         = 0xE74;
+    constexpr uintptr_t CaravanPendingKey    = 0xE80;
+    constexpr uintptr_t CaravanTimeDelta     = 0x011D9208;
+    constexpr float     CaravanStepDelay     = 0.25f;
+    constexpr uint32_t  CaravanGameMenu      = 2;
+    constexpr uint32_t  CaravanResultsMenu   = 3;
+    constexpr uint32_t  CaravanTrackCount    = 6;
+    constexpr uint32_t  CaravanRowCount      = 7;
+    constexpr uint32_t  CaravanHandSize      = 8;
+    constexpr uintptr_t CaravanCardListSize  = 0x10;
+    /**
+     * CaravanMenu::pTrackGeometries[6][7] (+0x198), one row model per track
+     * and row (Player_{t}_0{r}.NIF, Opponent_{t}_0{r}.NIF), each holding
+     * the nodes "Card_0N:{column}", N = column + 1 on the player's rows and
+     * 4 - column on the opponent's (UpdateTrackCardTexture 0x0074E220, and
+     * "Card{column+1}_In" moves that node). The cards wait at their bind pose until
+     * their "Card{column+1}_In" sequence brings them to the row: past the
+     * player's edge, or in three piles past the opponent's tracks.
+     * iSelectedColumn (+0xE38) is the column a card is being placed in
+     * during eGameState 0x0B to 0x0E (DoIdle 0x00741500, case 0xD:
+     * pTrackAnimations[iSelectedTrack][iSelectedRow][iSelectedColumn][0]).
+     * The constructor leaves pTrackGeometries uninitialised: only
+     * CaravanMenu::PrepareGameMenu fills it, and sets eActiveMenu to 2
+     * afterwards (0x00740683), so it is read only in the game menu.
+     */
+    constexpr uintptr_t CaravanTrackModels   = 0x198;
+    constexpr uintptr_t CaravanSelectedColumn = 0xE38;
+    constexpr uint32_t  CaravanRowCards      = 4;
+    constexpr uint32_t  CaravanStatePlaceFirst = 0x0B;
+    constexpr uint32_t  CaravanStatePlaceLast  = 0x0E;
+    /** uiFlags: a hand card is taken, the first three cards, a track discard */
+    constexpr uint32_t  CaravanFlagSelectTrack  = 0x1000;
+    constexpr uint32_t  CaravanFlagTrackSetup   = 0x800;
+    constexpr uint32_t  CaravanFlagDestroyTrack = 0x2000;
+    /**
+     * uiFlags 0x4000: the AI plays (set by DoIdle's state 0x15). It places
+     * its card in state 0x0B (the first three) or 0x0D, as the player's,
+     * from iSelectedTrack/Row/Column, which ProcessAI's move filled
+     */
+    constexpr uint32_t  CaravanFlagOpponent     = 0x4000;
+    constexpr uint32_t  CaravanStateStartTrack  = 0x0B;
+    constexpr uint32_t  CaravanStateAddToTrack  = 0x0D;
+    /** Pending keys, as DoKey writes them */
+    constexpr uint32_t  CaravanKeyLeft       = 0x80000001;
+    constexpr uint32_t  CaravanKeyRight      = 0x80000002;
+    constexpr uint32_t  CaravanKeyUp         = 0x80000003;
+    /**
+     * The values of the tracks (findings/caravan.md §3.4): kTrackInfos holds
+     * 12 bytes per track, the value at +8 (CaravanMenu::UpdateTrackValue
+     * 0x0074EE70). The game's tiles of the values are in the rectangles
+     * CGM_PlayerTrackRect and CGM_NPCTrackRect of the tile set pTiles[2]
+     * (caravan_game_menu.xml): their visible is a constant the game sets
+     * once, at the move to the game, and the values copy it. They are found
+     * with Tile::GetTileByName (__cdecl, tile, name).
+     */
+    constexpr uintptr_t CaravanTrackInfos    = 0xDE4;
+    constexpr uintptr_t CaravanTrackInfoSize = 12;
+    constexpr uintptr_t CaravanTrackValue    = 8;
+    constexpr uintptr_t CaravanGameTiles     = 0x38;
+    constexpr char      CaravanPlayerValuesTile[] = "CGM_PlayerTrackRect";
+    constexpr char      CaravanOpponentValuesTile[] = "CGM_NPCTrackRect";
+    constexpr uintptr_t TileGetByName        = 0x00A08B20;
+    constexpr uint8_t   TileGetByNamePrologue[] = { 0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x88, 0x08, 0x00, 0x00 };
+
+    /**
+     * Caravan's deck building (eActiveMenu 1), checked in CaravanMenu::DoIdle
+     * 0x00741500, DoGamepad 0x00747D30 and SwapDeckBuildingTextures
+     * 0x0074B700. The deck meter is pTiles[15] (+0x6C); its value (the trait
+     * in the global CaravanMenu::iUT_CurrentValue) is the collection's card
+     * in the middle. Slot i (0-23) of both rows shows the card at that value
+     * minus 11 + i: shapes "Deck_{i+1:02}:{i}" of pActiveDeckGeometry (the
+     * deck's row) and "Available_{i+1:02}:{i}" of pInactiveDeckGeometry,
+     * NV_Caravan-Deck.NIF and -Available.NIF. With a gamepad DoIdle moves the
+     * value one card per animation (states 5 and 6) while the left stick is
+     * off its dead zone; A adds kDeck[value] to the deck and X takes it out,
+     * the byte +0x98 of the kDeck entry saying whether it is in.
+     */
+    constexpr uint32_t  CaravanDeckBuildingMenu  = 1;
+    constexpr uintptr_t CaravanDeckMeterTile     = 0x6C;
+    constexpr uintptr_t CaravanCurrentValueTrait = 0x011D9170;
+    constexpr uintptr_t CaravanAvailableModel    = 0x188;
+    constexpr uintptr_t CaravanDeckModel         = 0x18C;
+    constexpr uintptr_t CaravanCollection        = 0xA6C;
+    constexpr uintptr_t CaravanCollectionSize    = 0xAF0;
+    constexpr uintptr_t CaravanCardInDeck        = 0x98;
+    /**
+     * The game menu's prompts "discard card" and "discard caravan",
+     * pTiles[20] and [21] (CGM_DiscardCardButton, CGM_DiscardTrackButton of
+     * caravan_game_menu.xml): their "_xbox_button" is the LT and RT image,
+     * set once by the menu file.
+     */
+    constexpr uintptr_t CaravanDiscardCardPrompt  = 0x80;
+    constexpr uintptr_t CaravanDiscardTrackPrompt = 0x84;
+
     constexpr uint32_t  SlotMachineMenuId    = 0x438;
     constexpr uint32_t  BlackJackMenuId      = 0x439;
     constexpr uint32_t  RouletteMenuId       = 0x43A;
@@ -848,11 +1023,13 @@ namespace dxvk {
     /**
      * The calls to NiRenderer::ClearBuffer (RendererClearBuffer) that clear
      * the depth buffer at the start of the scenes that can lie on an object
-     * of the world: BlackJackMenu, SlotMachineMenu and RouletteMenu::DrawScene.
+     * of the world: BlackJackMenu, SlotMachineMenu, RouletteMenu and
+     * CaravanMenu::DrawScene (0x00740F30 for Caravan's).
      */
     constexpr uintptr_t BlackJackDepthClearSite   = 0x00733530;
     constexpr uintptr_t SlotMachineDepthClearSite = 0x007C19F0;
     constexpr uintptr_t RouletteDepthClearSite    = 0x007BBD20;
+    constexpr uintptr_t CaravanDepthClearSite     = 0x00740F60;
 
     /**
      * The vigor tester of character creation (LoveTesterMenu, findings/
@@ -1178,6 +1355,82 @@ namespace dxvk {
     constexpr uintptr_t AudioPauseWorldVoices       = 0x0070BBE0;
     constexpr uintptr_t AudioUnpauseWorldVoices     = 0x0070BC00;
     constexpr uintptr_t PlayerInCombat        = 0xDF0;
+
+    /**
+     * What holds the Caravan challenger in place while the world runs behind
+     * the game (findings/caravan.md §3.5), as the script command SetRestrained
+     * 1 does: Actor::SetRestrained (__thiscall, bool) sets the life state
+     * Actor::uiLifeState to Restrained and stops the actor, then
+     * Actor::EndMovement (__thiscall) ends their path. A restrained actor
+     * cannot move (Actor::CanMove) and gets no idle from its AI
+     * (HighProcess::SetupSpecialIdle), only those asked for by name.
+     * SetRestrained 0 sets it back to Alive only while it is Restrained.
+     */
+    constexpr uintptr_t ActorSetRestrained    = 0x008ACE50;
+    constexpr uint8_t   ActorSetRestrainedPrologue[] = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x0F, 0xB6, 0x45, 0x08 };
+    constexpr uintptr_t ActorEndMovement      = 0x0087FAA0;
+    constexpr uint8_t   ActorEndMovementPrologue[] = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x45, 0xFC };
+    constexpr uint32_t  ActorLifeAlive        = 0;
+    constexpr uint32_t  ActorLifeRestrained   = 5;
+
+    /**
+     * What has the Caravan challenger hold up a hand as if it held cards
+     * (findings/caravan.md §3.8), as the script command PlayIdle does
+     * (Script::PlayIdle 0x005CB2D0): the actor's virtual GetAnimation
+     * (__thiscall, the Animation or null), then, once
+     * AnimationSpecialIdlePlaying is false and Animation::spAnimIdleQueued
+     * is null, the process's virtual SetCurrentProcessIdle (__thiscall, the
+     * TESIdleForm) and AddPostAnimationAction (__thiscall,
+     * POSTANIM_ACTION_PICK_IDLE_CALL). Read from the instructions at
+     * 0x005CB3A0, 0x005CB3E4, 0x005CB4DB and 0x005CB504. Both process slots
+     * are empty but in HighProcess (0x008D9410, 0x00903180), the process of
+     * a character close to the player. The idle is LooseReadPaperOnHandA
+     * (FalloutNV.esm, a sheet read in a raised left hand, no conditions,
+     * loop of 1.7 s played 5 times), form type TESIdleForm.
+     */
+    constexpr uintptr_t ActorGetAnimationSlot       = 0x1E4;
+    constexpr uintptr_t AnimationIdleQueued         = 0x128;
+    constexpr uintptr_t ProcessSetCurrentIdleSlot   = 0x71C;
+    constexpr uintptr_t ProcessAddPostAnimationSlot = 0x614;
+    constexpr uint32_t  PostAnimationPickIdle       = 0x80;
+    constexpr uint32_t  CaravanHoldCardsIdle        = 0x0005DB21;
+    constexpr uint8_t   FormTypeIdle                = 0x48;
+
+    /**
+     * Keeping that idle up, then ending it. Animation::uiLoopCounts (+0x7C,
+     * an int per animation section) counts the loops a section has left:
+     * Animation::Update (0x00491180) decrements it at each loop unless it
+     * is -1, which loops for ever (the counter JohnnyGuitar's StopIdleLoop
+     * zeroes). The AnimIdle at Animation::spAnimIdle holds its section at
+     * +0x14, its two add-on objects (the TESObjectANIO models the idle
+     * brings, here the sheet aoExamPaperA 0x5DB23, attached by the game to
+     * the bone its NIF names) at +0x24 and its TESIdleForm at +0x2C. The
+     * process's virtual FreeUpSpecialIdle (__thiscall, the actor; slot
+     * 0xD8, HighProcess 0x008DAF20, empty in the other processes) ends the
+     * idle through Animation::SpecialIdleFree (0x00498910), as JIP LN's
+     * StopIdle does.
+     */
+    constexpr uintptr_t AnimationLoopCounts         = 0x7C;
+    constexpr int32_t   AnimationLoopForever        = -1;
+    constexpr uint32_t  AnimationSections           = 8;
+    constexpr uintptr_t AnimIdleSection             = 0x14;
+    constexpr uintptr_t AnimIdleAddOns              = 0x24;
+    constexpr uint32_t  AnimIdleAddOnCount          = 2;
+    constexpr uintptr_t AnimIdleForm                = 0x2C;
+    constexpr uintptr_t ProcessFreeSpecialIdleSlot  = 0xD8;
+
+    /**
+     * What has the held Caravan challenger look at the player, as a
+     * script's head tracking would: the process's virtual
+     * SetScriptHeadTrackTarget (__thiscall, the reference; slot 0x62C,
+     * HighProcess 0x00900F50) and ClearScriptHeadTrackTarget (__thiscall,
+     * bool: false gives the head back to the other targets at once; slot
+     * 0x648, HighProcess 0x00901190), both empty in the other processes.
+     * Actor::ProcessTracking then aims the head at the target's
+     * GetLookingAtLocation (findings/npc-gaze.md).
+     */
+    constexpr uintptr_t ProcessSetScriptHeadTrackSlot   = 0x62C;
+    constexpr uintptr_t ProcessClearScriptHeadTrackSlot = 0x648;
 
     /**
      * HUDMainMenu*, the HUD. Its top-level element groups are Tile* fields,
@@ -1966,6 +2219,17 @@ namespace dxvk {
     constexpr uintptr_t ShadowSceneNodeAddObject      = 0x00B5EEB0;
     constexpr uintptr_t ShadowSceneNodeRemoveObject   = 0x00B5B1C0;
     constexpr uint32_t  MenuShadowSceneNode           = 1;
+
+    /** BSFadeNode's virtual function table, to tell a model's root is one */
+    constexpr uintptr_t FadeNodeVtable                = 0x010A8F90;
+
+    /**
+     * CaravanMenu::spModel, the root of the table's scene, a child of the
+     * menu's shadow scene node (BSSM_SSN_MENU_OBJECT_3D, index 1, read in
+     * CaravanMenu::DrawScene). CaravanMenu::PrepareGameMenu detaches the last
+     * two children of spModel: nothing may be attached under it.
+     */
+    constexpr uintptr_t CaravanSceneRoot              = 0x011D91E4;
     constexpr uint32_t  ShadePropertyType             = 3;
     constexpr uintptr_t ShaderPropertyTextures        = 0xAC;
     constexpr uintptr_t TextureRendererData           = 0x24;

@@ -84,9 +84,11 @@ namespace dxvk {
     QuickWheel,
     /// The console's terminal and keyboard, in front of the player
     Terminal,
+    /// The values of Caravan's tracks, lying on the mat
+    CaravanValues,
   };
 
-  constexpr uint32_t VrPanelCount = 8;
+  constexpr uint32_t VrPanelCount = 9;
 
   /**
    * \brief What a panel's pose is relative to
@@ -327,6 +329,15 @@ namespace dxvk {
      * \param [in] durationNs Duration in nanoseconds
      */
     virtual void applyHaptic(VrHand hand, float amplitude, int64_t durationNs) = 0;
+
+    /**
+     * \brief Fades the whole view to black or back
+     *
+     * The fade goes from the opacity shown now to the given one.
+     * \param [in] seconds Duration of the fade, 0 for at once
+     * \param [in] opacity Opacity of the black in [0, 1], 0 shows the view
+     */
+    virtual void fadeView(float seconds, float opacity) = 0;
 
     /**
      * \brief Shows the runtime's own text keyboard

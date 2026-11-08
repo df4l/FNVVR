@@ -222,4 +222,17 @@ TEST_CASE(minigame_controls_change_the_gamepad) {
   CHECK(pad.leftTrigger == 0);
   CHECK(pad.thumbLeftX == 32767);
   CHECK(pad.thumbRightX <= -32767);
+
+  minigame = VrMinigamePad();
+  minigame.buttons      = VrGamepadButton::A;
+  minigame.noButtons    = VrGamepadButton::B | VrGamepadButton::A;
+  minigame.noTriggers   = true;
+  minigame.rightTrigger = true;
+  pad.buttons = VrGamepadButton::B | VrGamepadButton::Y;
+  pad.leftTrigger = 0xFF;
+  vrApplyMinigamePad(pad, minigame);
+
+  CHECK(pad.buttons == (VrGamepadButton::Y | VrGamepadButton::A));
+  CHECK(pad.leftTrigger == 0);
+  CHECK(pad.rightTrigger == 0xFF);
 }

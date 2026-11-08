@@ -8,11 +8,16 @@
 #include "../d3d9_include.h"
 
 #include "vr_backend.h"
+#include "vr_caravan_pick.h"
+#include "vr_caravan_reach.h"
 #include "vr_controller_pad.h"
 #include "vr_game_camera.h"
+#include "vr_game_nodes.h"
 #include "vr_minigame_space.h"
 
 namespace dxvk {
+
+  class VrSceneModel;
 
   /**
    * \brief Sizes the panel of a mini-game is placed with
@@ -100,6 +105,10 @@ namespace dxvk {
 
     bool active() const { return m_kind != Kind::None; }
 
+    /// Whether the hands are shown, without the weapon: Caravan's cards are
+    /// held in the left hand and chosen with the right
+    bool showsHands() const { return m_kind == Kind::Caravan; }
+
     /// The gamepad input of the hands' gestures, for the next frame
     const VrMinigamePad& pad() const { return m_pad; }
 
@@ -111,6 +120,26 @@ namespace dxvk {
 
     /// Changes whenever the panel has to be placed again
     uint32_t panelRevision() const { return m_panelRevision; }
+
+    /// The values of Caravan's tracks to lay on the mat, \c nullptr if none
+    const VrCaravanBoard* caravanBoard() const { return m_hasCaravanBoard ? &m_caravanBoard : nullptr; }
+
+    /**
+     * \brief Says whether the values of caravanBoard() are shown
+     *
+     * The game's own values are hidden while they are.
+     */
+    void setCaravanValuesShown(bool shown);
+
+    /**
+     * \brief Where the Caravan challenger looks instead of the player
+     *
+     * The middle of the mat while cards move or the AI plays: actors look
+     * at the player's looking-at location, so it is given this point then.
+     * \param [out] point The point, in the game world
+     * \returns \c false on the player's turn or outside a Caravan game
+     */
+    bool caravanTableGaze(VrVector3& point) const;
 
     /// The camera the eyes are placed from, \c nullptr for the game's own
     const VrGameCameraPose* seatCamera() const { return m_seated ? &m_viewCamera : nullptr; }
@@ -131,6 +160,18 @@ namespace dxvk {
      * \param [in] farPlane Far plane of the world's camera
      */
     void drawEye(const VrEyeView& eye, float nearPlane, float farPlane);
+
+    /**
+     * \brief Bends the Caravan challenger's free arm while they play a card
+     *
+     * The hand takes the card from the fan to the mat. Only the world
+     * transforms of the arm's bones change, after the game's update, for
+     * the eyes' draws: restoreChallengerArm() puts them back.
+     */
+    void bendChallengerArm();
+
+    /// Puts back the arm bendChallengerArm() bent
+    void restoreChallengerArm();
 
     /// Whether the scene can be drawn before the first-person pass
     bool drawsBeforeFirstPerson() const { return active() && !showsRenderedMenu(); }
@@ -178,6 +219,10 @@ namespace dxvk {
     // For a scene that holds the object's own model
     VrSceneFit        m_modelFit;
     VrGameCameraPose  m_viewCamera;
+    // Whether the world's surfaces can be found with the game's rays
+    bool              m_canPick = false;
+    // The table under Caravan's mat when the world has none
+    std::unique_ptr<VrSceneModel> m_caravanTable;
     std::vector<void*>     m_kept;
     std::vector<uint32_t*> m_objectHidden;
     // Characters hidden for now: they come and go while the world runs
@@ -185,8 +230,10 @@ namespace dxvk {
     uint32_t          m_actorsWait = 0;
     uint32_t*         m_bodyHidden = nullptr;
 
-    // The button a gesture presses, held for a few frames
+    // The button or trigger a gesture presses, held for a few frames
     uint16_t          m_pulse       = 0;
+    bool              m_pulseLeftTrigger  = false;
+    bool              m_pulseRightTrigger = false;
     uint32_t          m_pulseFrames = 0;
 
     // Lock
@@ -207,6 +254,76 @@ namespace dxvk {
     // Roulette
     bool              m_betTrigger  = false;
     int32_t           m_selectorNudge = 1;
+
+    // Caravan: what the laser is on (a hand card, a track * rows + row,
+    // -1 for nothing), and a trigger's click waiting for the menu to take
+    // the step to it
+    int32_t           m_caravanCard = -1;
+    int32_t           m_caravanSlot = -1;
+    bool              m_caravanTrigger = false;
+    bool              m_caravanClick   = false;
+    float             m_caravanClickAge = 0.0f;
+    // B and Y during the game, and the caravan a held B discards once the
+    // menu has selected it (-1 for none)
+    VrCaravanButtons  m_caravanButtons;
+    int32_t           m_caravanDiscard = -1;
+    float             m_caravanDiscardAge = 0.0f;
+    // The values of the tracks on the mat, and whether the game's are hidden
+    bool              m_canHideTiles = false;
+    bool              m_canReadTiles = false;
+    uint32_t          m_promptIconTrait = 0;
+    bool              m_hasCaravanBoard = false;
+    VrCaravanBoard    m_caravanBoard;
+    bool              m_caravanTilesHidden = false;
+    // How many cards out of the game's frame the eyes last left out, for the log
+    size_t            m_caravanCardsOutOfGame = 0;
+    bool              m_caravanPlanksHidden = false;
+    bool              m_caravanCoinsLaid = false;
+    // The selection as it was before a step was asked, put back if the menu
+    // leaves its idle state before it takes the step
+    bool              m_caravanStepping = false;
+    int32_t           m_caravanWasCard  = 0;
+    int32_t           m_caravanWasTrack = 0;
+    int32_t           m_caravanWasRow   = 0;
+    // Where the player's hand of cards is carried from the table, in the
+    // left hand during the game
+    // Deck building: the card on the laser (as caravanDeckCardOnLaser) and
+    // the clicked card brought to the middle
+    int32_t             m_caravanDeckSlot = -1;
+    VrCaravanDeckPicker m_caravanDeck;
+    bool              m_caravanFanHeld = false;
+    int32_t           m_caravanCursorSlot = -1;
+    VrCaravanTransform m_caravanFan;
+    // The opponent's hand of cards: whether the challenger's left hand is
+    // raised to hold it, and where it holds it in the scene
+    bool              m_caravanOpponentHeld = false;
+    bool              m_caravanFadingOut = false;
+    VrVector3         m_caravanOpponentHold = { };
+    VrVector3         m_caravanOpponentUp   = { 0.0f, 0.0f, 1.0f };
+    // A card played, carried from a hand to its row, where the card is
+    // drawn in the scene. The challenger's free hand takes it from the fan
+    // (the fan's last card, the fan as big as before the play), with the
+    // arm bent for it. The player's goes from its place in the left hand's
+    // fan (the hand's slot, as the table had it when the play started).
+    struct CaravanPlay {
+      bool               active  = false;
+      float              time    = 0.0f;
+      uint32_t           track   = 0;
+      uint32_t           row     = 0;
+      uint32_t           column  = 0;
+      uint32_t           fanCount = 0;
+      uint32_t           slot    = 0;
+      VrCaravanReachStep step;
+      VrCaravanTransform rest;
+      VrCaravanTransform card;
+    };
+    CaravanPlay       m_caravanPlay;
+    CaravanPlay       m_caravanOwnPlay;
+    uint32_t          m_caravanLastState    = 0;
+    uint32_t          m_caravanOwnLastState = 0;
+    uint32_t          m_caravanOpponentCards = 0;
+    bool              m_caravanReachLeft    = true;
+    VrGameWorldTransforms m_challengerArm;
 
     // Vigor tester: the menu's camera as the menu made it, the hand the
     // cursor follows and the triggers of the last frame
@@ -244,6 +361,12 @@ namespace dxvk {
 
     void takeSeat(uint8_t* root, const VrWorldObject& object, const VrSceneFit* fit, const VrMinigameFrame& frame);
 
+    bool placeCaravanTable(const VrMinigameFrame& frame);
+
+    void showCaravanTable();
+
+    bool findCaravanSurface(uint8_t* player, const VrWorldObject& table, float feet, float& surface);
+
     void standAt(uint8_t* root, const VrWorldObject& object, const VrSceneFit* fit, const VrMinigameFrame& frame);
 
     void standOnObject(const VrMinigameFrame& frame);
@@ -259,6 +382,12 @@ namespace dxvk {
     void updateActorsInTheWay(bool logActors);
 
     void hideRaisedPayoutScreen(std::vector<uint32_t*>& hidden);
+
+    void hideCaravanCardsOutOfGame(std::vector<uint32_t*>& hidden);
+
+    void hideCaravanPlanks(std::vector<uint32_t*>& hidden);
+
+    void layCaravanCoins(uint8_t* menu);
 
     void placeRouletteSurface();
 
@@ -280,7 +409,61 @@ namespace dxvk {
 
     void updateRoulette(const VrPointerSurfaceState& pointer);
 
+    void placeCaravanSurface();
+
+    void updateCaravan(const VrMinigameFrame& frame, const VrPointerSurfaceState& pointer, const VrInputState& input);
+
+    void placeCaravanFan(const VrInputState& input, bool playing);
+
+    VrCaravanTransform caravanCardInHand(uintptr_t card) const;
+
+    VrCaravanTransform caravanCardInHand(const VrCaravanTransform& world) const;
+
+    int32_t caravanCardLeavingHand(uint8_t* menu) const;
+
+    void holdCaravanFan(std::vector<uint32_t*>& hidden, VrGameWorldTransforms& moved);
+
+    void placeOpponentFan(uint8_t* menu, bool playing);
+
+    void holdOpponentFan(std::vector<uint32_t*>& hidden, VrGameWorldTransforms& moved);
+
+    void updateOpponentPlay(uint8_t* menu, bool playing, float dt);
+
+    void updateOwnPlay(uint8_t* menu, bool playing, float dt);
+
+    uintptr_t playCard(uint8_t* menu, const CaravanPlay& play) const;
+
+    void carryCaravanPlay(const CaravanPlay& play, std::vector<uint32_t*>& hidden, VrGameWorldTransforms& moved);
+
+    uintptr_t challengerRoot(uint8_t* menu) const;
+
+    VrVector3 caravanSceneToWorld(const VrVector3& point) const;
+
+    static void carryCaravanCard(uintptr_t model, uintptr_t card, const VrCaravanTransform& place,
+      const std::string& shadow, std::vector<uint32_t*>& hidden);
+
+    void placeCaravanCursor(VrGameWorldTransforms& moved);
+
+    bool caravanCardOnLaser(uint8_t* menu, const VrVector3& origin, const VrVector3& direction);
+
+    bool caravanSlotOnLaser(uint8_t* menu, const VrVector2& at, bool ownTracksOnly);
+
+    void askCaravanStep(uint8_t* menu, VrCaravanKey key, VrHand hand);
+
+    bool placeCaravanBoard(uint8_t* menu);
+
+    void updateCaravanDeck(uint8_t* menu, const VrPointerSurfaceState& pointer, const VrInputState& input, float dt);
+    /// The deck building's card on the laser: the deck's row 0-23, the
+    /// available row 24-47, -1 for none
+    int32_t caravanDeckCardOnLaser(uint8_t* menu, const VrVector3& origin, const VrVector3& direction) const;
+    bool caravanCardInDeck(uint8_t* menu, uint32_t card) const;
+    /// Shows B on the game menu's discard prompts, which show the triggers
+    void showCaravanDiscardPrompts(uint8_t* menu);
+    void commandCaravan(uint8_t* menu, VrCaravanCommand command, VrHand hand, const VrVector2* at);
+
     void press(uint16_t button);
+
+    void pressTrigger(VrHand side);
 
     void drawRenderedMenu(const VrEyeView& eye);
 

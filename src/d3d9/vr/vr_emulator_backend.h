@@ -109,6 +109,8 @@ namespace dxvk {
 
     void applyHaptic(VrHand hand, float amplitude, int64_t durationNs) override;
 
+    void fadeView(float seconds, float opacity) override;
+
     /**
      * \brief Shows no keyboard: the computer's keyboard types in the game
      */

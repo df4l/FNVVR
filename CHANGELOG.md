@@ -2,6 +2,16 @@
 
 ## Unreleased (since v0.14.0)
 
+### Caravan
+
+- **A still table at the size of real cards**: the Caravan mat no longer slides under you when the game moves from the bet to deck building and to the game; it stays in place, about 60 cm below your eyes, with cards the size of real ones, and opens out of black instead of popping up.
+- **The table stands between you and your opponent**: it lies on a table or counter of the world when there is a flat one there, else on a diner table of the game, and you sit 25 cm behind your edge. Walls and people in front of it now hide it. With nobody close enough to play against, the table stays in front of you as before.
+- **Point at the cards**: during a game, point a laser at a card of your hand or at a spot on the mat and it is selected, as with the stick; pull the trigger to take the card, place it, or choose the caravan to discard. The stick still works.
+- **The values lie on the mat**: each caravan's value is written on the mat past its last card, red once it has bust, instead of floating on the panel.
+- **Caravan in real time**: the world goes on around the table during a game, as at the casino, and your opponent stays at the table until the game ends. It stops in combat, the pause menu, a message or the console. `d3d9.vrRealTimeCaravan = False` brings the pause back.
+- **Build your deck with the laser**: point at a card of either row and pull the trigger; the row slides to it and the card goes into your deck (from the lower row) or out of it (from the upper row). The discard prompts of the game show B, which discards in VR.
+- **Your opponent holds their cards**: in real time, your opponent raises their left hand during the game and holds their cards in it, backs towards you, one fewer each time they play.
+
 ### Terminals
 
 - **Terminals show on their own screen**: the text of a desk or wall terminal, hacking included, now lights up the terminal's own glass in the world instead of a monitor floating in front of you, and the view no longer moves when you activate it. Other terminals stand in the room as before.

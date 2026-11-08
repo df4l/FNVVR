@@ -195,6 +195,7 @@ namespace dxvk {
     if (minigame.noShoulders)
       pad.buttons &= ~uint16_t(VrGamepadButton::LeftShoulder | VrGamepadButton::RightShoulder);
 
+    pad.buttons &= ~minigame.noButtons;
     pad.buttons |= minigame.buttons;
 
     if (minigame.driveLeftX)
@@ -207,6 +208,12 @@ namespace dxvk {
       pad.leftTrigger  = 0;
       pad.rightTrigger = 0;
     }
+
+    if (minigame.leftTrigger)
+      pad.leftTrigger = 0xFF;
+
+    if (minigame.rightTrigger)
+      pad.rightTrigger = 0xFF;
   }
 
 }

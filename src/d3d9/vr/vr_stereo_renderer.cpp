@@ -311,6 +311,7 @@ namespace dxvk {
     renderer->m_chargeRing = std::make_unique<VrChargeRing>(*renderer->m_painter, backend);
     renderer->m_quickWheel = std::make_unique<VrQuickWheel>(*renderer->m_painter, backend, renderer->m_gameImages);
     renderer->m_ammoLabel  = std::make_unique<VrAmmoLabel>(*renderer->m_painter, backend, renderer->m_gameImages);
+    renderer->m_caravanValues = std::make_unique<VrCaravanValues>(*renderer->m_painter, backend, renderer->m_gameImages);
 
     if (VrGameConsole::install())
       renderer->m_terminal = std::make_unique<VrConsoleTerminal>(*renderer->m_painter, backend, texts);
@@ -765,10 +766,17 @@ namespace dxvk {
 
     m_minigameDrawn = { };
 
+    // After the game's update, for both eyes only
+    if (m_minigames)
+      m_minigames->bendChallengerArm();
+
     for (uint32_t eye = 0; eye < VrEyeCount; eye++) {
       m_eyeCopied[eye] = false;
       renderEye(eye, views[eye], main);
     }
+
+    if (m_minigames)
+      m_minigames->restoreChallengerArm();
 
     if (m_renderPasses)
       m_renderPasses->endFrame();
@@ -876,6 +884,15 @@ namespace dxvk {
         frame.panelAspect = float(desc.Height) / float(desc.Width);
 
       m_minigames->update(frame, input, m_controls.pointerSurfaceState());
+
+      bool valuesShown = false;
+
+      if (const VrCaravanBoard* board = m_minigames->caravanBoard())
+        valuesShown = m_caravanValues && m_caravanValues->show(*board);
+      else if (m_caravanValues)
+        m_caravanValues->hide();
+
+      m_minigames->setCaravanValuesShown(valuesShown);
 
       m_controls.setMinigamePad(m_minigames->pad());
       m_controls.setPointerSurface(m_minigames->surface());
@@ -1267,6 +1284,17 @@ namespace dxvk {
     if (state == VrGameStateKind::PipBoy && m_hasReference && left.isActive) {
       VrGameCameraPose otherHand = handInGame(left);
       m_weaponHand->beginFrame(gameCamera, nullptr, &otherHand, false, VrFirstPersonMode::PipBoy, dt);
+      return;
+    }
+
+    // Caravan's cards are held in the left hand and chosen with the right:
+    // both hands are shown there, the weapon put away
+    if (state == VrGameStateKind::Menu && m_minigames && m_minigames->showsHands()
+     && m_hasReference && right.isActive) {
+      VrGameCameraPose hand      = handInGame(right);
+      VrGameCameraPose otherHand = handInGame(left);
+      m_weaponHand->beginFrame(gameCamera, &hand, left.isActive ? &otherHand : nullptr,
+        false, VrFirstPersonMode::FreeHands, dt);
       return;
     }
 
@@ -2040,6 +2068,14 @@ namespace dxvk {
     if (!m_npcGaze)
       return;
 
+    // The Caravan challenger looks down at the cards on their way
+    VrVector3 table;
+
+    if (m_minigames && m_minigames->caravanTableGaze(table)) {
+      m_npcGaze->setHead(&table);
+      return;
+    }
+
     if (!m_hasReference || !m_hasHeadPose) {
       m_npcGaze->setHead(nullptr);
       return;
@@ -2128,6 +2164,10 @@ namespace dxvk {
       m_renderPasses->setBeforeFirstPerson(nullptr);
 
     if (!enabled) {
+      if (m_caravanValues)
+        m_caravanValues->hide();
+
+      m_minigames->setCaravanValuesShown(false);
       m_minigames = nullptr;
       return;
     }

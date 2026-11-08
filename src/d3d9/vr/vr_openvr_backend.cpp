@@ -75,11 +75,13 @@ namespace dxvk {
     // terminal, nearer than the menu it is opened from, over all of them.
     constexpr std::array<const char*, VrPanelCount> PanelOverlayKeys  = {
       "fnvvr.panel", "fnvvr.hud.head", "fnvvr.hud.wrist", "fnvvr.hud.prompt", "fnvvr.hud.charge",
-      "fnvvr.hud.ammo", "fnvvr.quickwheel", "fnvvr.terminal" };
+      "fnvvr.hud.ammo", "fnvvr.quickwheel", "fnvvr.terminal",
+      "fnvvr.caravan.values" };
     constexpr std::array<const char*, VrPanelCount> PanelOverlayNames = {
       "Fallout: New Vegas", "Fallout: New Vegas HUD", "Fallout: New Vegas wrist HUD",
       "Fallout: New Vegas interaction prompt", "Fallout: New Vegas power attack charge",
-      "Fallout: New Vegas ammunition", "Fallout: New Vegas quick wheel", "Fallout: New Vegas console" };
+      "Fallout: New Vegas ammunition", "Fallout: New Vegas quick wheel", "Fallout: New Vegas console",
+      "Fallout: New Vegas Caravan values" };
 
     // Overlay key and name of each hand's laser, indexed by VrHand. Lasers
     // are drawn over the panels.
@@ -1317,6 +1319,15 @@ namespace dxvk {
     if (seconds > 0.0f && strength > 0.0f)
       m_runtime->input->TriggerHapticVibrationAction(m_actions.haptic[uint32_t(hand)], 0.0f, seconds, FrequencyHz, strength,
         vr::k_ulInvalidInputValueHandle);
+  }
+
+
+  void VrOpenVrBackend::fadeView(float seconds, float opacity) {
+    if (m_state != VrSessionState::Running || !m_runtime || !m_runtime->compositor)
+      return;
+
+    m_runtime->compositor->FadeToColor(std::max(0.0f, seconds), 0.0f, 0.0f, 0.0f,
+      std::max(0.0f, std::min(1.0f, opacity)));
   }
 
 
