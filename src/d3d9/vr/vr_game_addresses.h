@@ -898,6 +898,9 @@ namespace dxvk {
      * iSelectedColumn (+0xE38) is the column a card is being placed in
      * during eGameState 0x0B to 0x0E (DoIdle 0x00741500, case 0xD:
      * pTrackAnimations[iSelectedTrack][iSelectedRow][iSelectedColumn][0]).
+     * The constructor leaves pTrackGeometries uninitialised: only
+     * CaravanMenu::PrepareGameMenu fills it, and sets eActiveMenu to 2
+     * afterwards (0x00740683), so it is read only in the game menu.
      */
     constexpr uintptr_t CaravanTrackModels   = 0x198;
     constexpr uintptr_t CaravanSelectedColumn = 0xE38;

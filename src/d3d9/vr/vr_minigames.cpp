@@ -2429,7 +2429,10 @@ namespace dxvk {
   void VrMinigames::hideCaravanCardsOutOfGame(std::vector<uint32_t*>& hidden) {
     auto menu = global<uint8_t*>(VrGame::CaravanInstance);
 
-    if (!menu)
+    // The row models are only filled by PrepareGameMenu, which sets the
+    // game menu last: before that, during the bet and the deck building,
+    // the array holds whatever the allocation left there
+    if (!menu || field<uint32_t>(menu, VrGame::CaravanActiveMenu) != VrGame::CaravanGameMenu)
       return;
 
     // Each row model holds four cards, which wait at their bind pose until
