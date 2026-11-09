@@ -245,7 +245,6 @@ namespace dxvk {
 
     uint32_t       m_loggedHits = 0;
     uint32_t       m_loggedPunches = 0;
-    uint32_t       m_loggedFistSwings = 0;
     uint32_t       m_loggedGuards = 0;
     uint32_t       m_loggedDamage = 0;
     uint32_t       m_loggedMotorHits = 0;

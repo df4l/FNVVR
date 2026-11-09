@@ -71,9 +71,6 @@ namespace dxvk {
 
     constexpr uint32_t MaxLoggedHits = 200;
 
-    // Punches started, to tell a fist that misses from one that never swings
-    constexpr uint32_t MaxLoggedFistSwings = 30;
-
     // Hits the game decided for a running automatic weapon that are dealt
     // in one frame at most, the rest are dropped
     constexpr uint32_t MaxMotorHitsPerFrame = 4;
@@ -346,12 +343,6 @@ namespace dxvk {
       if (!hadFist || !m_fistSwings[i].swinging()) {
         m_sincePunch[i] = std::min(m_sincePunch[i] + dt, PunchGrace);
         continue;
-      }
-
-      if (m_sincePunch[i] >= PunchGrace && m_loggedFistSwings < MaxLoggedFistSwings) {
-        Logger::info(str::format("VR: The ", i == uint32_t(VrHand::Left) ? "left" : "right", " fist swings at ",
-          m_fistSwings[i].speed(), " m/s", fist.bare ? ", bare" : ""));
-        m_loggedFistSwings++;
       }
 
       m_sincePunch[i] = 0.0f;
