@@ -137,6 +137,17 @@ namespace dxvk {
     }
 
     /**
+     * \brief Whether a fist is punching
+     *
+     * From the frame it swings at the hit speed until shortly after it
+     * slows down, so that a fist closing as it lands on an actor is a
+     * punch and not a grab of the hand.
+     */
+    bool punches(VrHand hand) const {
+      return m_sincePunch[uint32_t(hand)] < PunchGrace;
+    }
+
+    /**
      * \brief Gives what hits world objects
      *
      * \param [in] objectHit Not owned, or \c nullptr: only actors are hit
@@ -166,6 +177,9 @@ namespace dxvk {
     }
 
   private:
+
+    /// How long a fist counts as punching after it slows down, in seconds
+    constexpr static float PunchGrace = 0.3f;
 
     VrMeleeSwing(const VrSwingConfig& config, bool motorFound, std::unique_ptr<VrBareHand> bareHand)
     : m_swing(config), m_motorFound(motorFound), m_bareHand(std::move(bareHand)),
@@ -223,12 +237,15 @@ namespace dxvk {
     std::array<VrSwingTracker, VrHandCount> m_fistSwings;
     std::array<VrSegment, VrHandCount>      m_fists;
     std::array<bool, VrHandCount>           m_hasFist = { };
+    /// Seconds since each fist last swung at the hit speed
+    std::array<float, VrHandCount>          m_sincePunch = { PunchGrace, PunchGrace };
     bool           m_fistsOut = false;
 
     VrMeleeObjectHit* m_objectHit = nullptr;
 
     uint32_t       m_loggedHits = 0;
     uint32_t       m_loggedPunches = 0;
+    uint32_t       m_loggedFistSwings = 0;
     uint32_t       m_loggedGuards = 0;
     uint32_t       m_loggedDamage = 0;
     uint32_t       m_loggedMotorHits = 0;

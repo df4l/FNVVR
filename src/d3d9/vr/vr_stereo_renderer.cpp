@@ -1511,6 +1511,15 @@ namespace dxvk {
       && !(m_handThrow && m_handThrow->throwsWithHand())
       && !(m_manualReload && m_manualReload->leftHandBusy());
 
+    // A fist closing as it lands punches, it does not take what it hits;
+    // an object already held stays held
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      VrHand hand = VrHand(i);
+
+      if (m_meleeSwing && m_meleeSwing->punches(hand) && !m_physicsGrab->holds(hand))
+        (hand == VrHand::Right ? rightFree : leftFree) = false;
+    }
+
     VrGameCameraPose rightHand;
     VrGameCameraPose leftHand;
 
