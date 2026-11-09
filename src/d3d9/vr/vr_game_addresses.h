@@ -512,6 +512,15 @@ namespace dxvk {
     constexpr uintptr_t AudioShutdownClearInitialized = 0x00AEA4DC;
     constexpr uint8_t   AudioShutdownClearInitializedCode[] = { 0xC6, 0x40, 0x05, 0x00 };
 
+    /**
+     * FaderManager::CreateFader (0x00700990) scales the screen's width and
+     * height by 0.5 for the fader quad's half extents:
+     * fmul qword ptr [0x01011588] after GetScreenWidth and GetScreenHeight
+     */
+    constexpr uintptr_t FaderHalfWidth  = 0x00700AB2;
+    constexpr uintptr_t FaderHalfHeight = 0x00700ACC;
+    constexpr uint8_t   FaderHalfExtentCode[] = { 0xDC, 0x0D, 0x88, 0x15, 0x01, 0x01 };
+
     /** State of the VATS camera, 0 when VATS is not running */
     constexpr uintptr_t VatsCameraState = 0x011F2258;
 

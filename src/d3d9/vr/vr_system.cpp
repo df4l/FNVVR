@@ -25,6 +25,7 @@
 #include "vr_gamepad_hook.h"
 #include "vr_large_address.h"
 #include "vr_live_casino.h"
+#include "vr_fader_size.h"
 #include "vr_sound_focus.h"
 #include "vr_game_window.h"
 #include "vr_launcher_overlay.h"
@@ -273,6 +274,7 @@ namespace dxvk {
 
     VrLargeAddress::install(g_vrSystem->m_texts);
     VrSoundFocus::install();
+    VrFaderSize::install();
 
     if (g_vrSystem->m_hideGameWindow)
       VrSoundFocus::keepPluginSound();

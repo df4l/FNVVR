@@ -69,6 +69,7 @@ vr_dxvk_src = files([
   'vr_roomscale.cpp',
   'vr_body_view.cpp',
   'vr_sound_focus.cpp',
+  'vr_fader_size.cpp',
   'vr_system.cpp',
   'vr_backend_factory.cpp',
   'vr_openvr_backend.cpp',
