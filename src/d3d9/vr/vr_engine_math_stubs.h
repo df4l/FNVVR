@@ -557,6 +557,94 @@ namespace dxvk {
         "ret\n\t");
     }
 
+    /**
+     * NiPoint3::operator*(NiPoint3), the dot product, thiscall, st0
+     *
+     * Why: 247 callers, a frame and x87 loads through ecx reloaded from
+     * the stack for each component.
+     * How: (x * x') + (y * y') + (z * z') in single precision, the
+     * original's order. The result goes through the argument's stack
+     * slot, which the callee owns, as the original goes through a float.
+     */
+    __attribute__((naked)) static void pointDot() {
+      asm volatile(
+        "movl 4(%esp), %edx\n\t"
+        "movss (%ecx), %xmm0\n\t"
+        "mulss (%edx), %xmm0\n\t"
+        "movss 4(%ecx), %xmm1\n\t"
+        "mulss 4(%edx), %xmm1\n\t"
+        "addss %xmm1, %xmm0\n\t"
+        "movss 8(%ecx), %xmm1\n\t"
+        "mulss 8(%edx), %xmm1\n\t"
+        "addss %xmm1, %xmm0\n\t"
+        "movss %xmm0, 4(%esp)\n\t"
+        "flds 4(%esp)\n\t"
+        "ret $4\n\t");
+    }
+
+    /**
+     * NiPlane::Distance(point), thiscall, st0
+     *
+     * Why and how: the dot product above of the plane's normal (this) and
+     * the point, minus the plane's constant (this + 12), each step
+     * rounded to single precision as the original stores it.
+     */
+    __attribute__((naked)) static void planeDistance() {
+      asm volatile(
+        "movl 4(%esp), %edx\n\t"
+        "movss (%ecx), %xmm0\n\t"
+        "mulss (%edx), %xmm0\n\t"
+        "movss 4(%ecx), %xmm1\n\t"
+        "mulss 4(%edx), %xmm1\n\t"
+        "addss %xmm1, %xmm0\n\t"
+        "movss 8(%ecx), %xmm1\n\t"
+        "mulss 8(%edx), %xmm1\n\t"
+        "addss %xmm1, %xmm0\n\t"
+        "subss 12(%ecx), %xmm0\n\t"
+        "movss %xmm0, 4(%esp)\n\t"
+        "flds 4(%esp)\n\t"
+        "ret $4\n\t");
+    }
+
+    /**
+     * NiBound::WhichSide(plane), thiscall, eax
+     *
+     * Why: the culling's per-object plane test, a frame, a call to
+     * NiPlane::Distance and two status-word branches.
+     * How: the distance of the centre (this) as NiPlane::Distance computes
+     * it; 2 when it is at or below -radius, 1 when at or above +radius,
+     * otherwise 0. A NaN distance or radius gives 0, as in the original.
+     */
+    __attribute__((naked)) static void boundWhichSide() {
+      asm volatile(
+        "movl 4(%esp), %edx\n\t"
+        "movss (%edx), %xmm0\n\t"
+        "mulss (%ecx), %xmm0\n\t"
+        "movss 4(%edx), %xmm1\n\t"
+        "mulss 4(%ecx), %xmm1\n\t"
+        "addss %xmm1, %xmm0\n\t"
+        "movss 8(%edx), %xmm1\n\t"
+        "mulss 8(%ecx), %xmm1\n\t"
+        "addss %xmm1, %xmm0\n\t"
+        "subss 12(%edx), %xmm0\n\t"
+        "movss 12(%ecx), %xmm2\n\t"
+        "movl 12(%ecx), %eax\n\t"
+        "xorl $0x80000000, %eax\n\t"
+        "movd %eax, %xmm1\n\t"
+        "xorl %eax, %eax\n\t"
+        "comiss %xmm1, %xmm0\n\t"
+        "jp 1f\n\t"
+        "jbe 2f\n\t"
+        "comiss %xmm2, %xmm0\n\t"
+        "jb 1f\n\t"
+        "movl $1, %eax\n\t"
+        "1:\n\t"
+        "ret $4\n\t"
+        "2:\n\t"
+        "movl $2, %eax\n\t"
+        "ret $4\n\t");
+    }
+
     using Function = void (*)();
 
     constexpr Function PointConstruct      = pointConstruct;
@@ -569,6 +657,9 @@ namespace dxvk {
     constexpr Function LightFrustumBound   = boundWithinLightFrustum;
     constexpr Function CrtCiSqrt           = crtCiSqrt;
     constexpr Function CrtSqrt             = crtSqrt;
+    constexpr Function PointDot            = pointDot;
+    constexpr Function PlaneDistance       = planeDistance;
+    constexpr Function BoundWhichSide      = boundWhichSide;
 
   }
 

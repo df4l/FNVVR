@@ -78,6 +78,9 @@ namespace dxvk {
       { "shadow light bound test", VrGame::LightFrustumBound, VrGame::LightFrustumBoundStart, engine_math::LightFrustumBound },
       { "__CIsqrt",              VrGame::CrtCiSqrt,          VrGame::CrtCiSqrtStart,          engine_math::CrtCiSqrt },
       { "sqrt",                  VrGame::CrtSqrt,            VrGame::CrtSqrtStart,            engine_math::CrtSqrt },
+      { "NiPoint3 dot product",  VrGame::PointDot,           VrGame::PointDotStart,           engine_math::PointDot },
+      { "NiPlane distance",      VrGame::PlaneDistance,      VrGame::PlaneDistanceStart,      engine_math::PlaneDistance },
+      { "NiBound side of a plane", VrGame::BoundWhichSide,   VrGame::BoundWhichSideStart,     engine_math::BoundWhichSide },
     };
 
     uint32_t done = 0;
@@ -96,24 +99,32 @@ namespace dxvk {
     // the critical path of every caller) and they are called very often.
     // How: mov eax, [ecx+field]; ret, written over the start of the body
     // (replaceCode compares and writes the same length, so the rest of
-    // the 13 checked bytes is filled with nops, never reached).
+    // the checked bytes is filled with nops, never reached).
     struct Getter {
       uintptr_t       address;
       const uint8_t*  start;
+      size_t          startSize;
       uint8_t         field;
     };
 
     const Getter getters[] = {
-      { VrGame::CurrentProcessGetter, VrGame::CurrentProcessGetterStart, 0x68 },
-      { VrGame::ProcessLevelGetter,   VrGame::ProcessLevelGetterStart,   0x28 },
+      { VrGame::CurrentProcessGetter, VrGame::CurrentProcessGetterStart, sizeof(VrGame::CurrentProcessGetterStart), 0x68 },
+      { VrGame::ProcessLevelGetter,   VrGame::ProcessLevelGetterStart,   sizeof(VrGame::ProcessLevelGetterStart),   0x28 },
+      { VrGame::PointerDereference,   VrGame::PointerDereferenceStart,   sizeof(VrGame::PointerDereferenceStart),   0x00 },
     };
 
     uint32_t getterDone = 0;
 
     for (const Getter& getter : getters) {
-      const uint8_t code[] = { 0x8B, 0x41, getter.field, 0xC3, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 };
+      uint8_t code[16];
+      std::memset(code, 0x90, sizeof(code));
+      code[0] = 0x8B;
+      code[1] = 0x41;
+      code[2] = getter.field;
+      code[3] = 0xC3;
 
-      if (VrGameMemory::replaceCode(getter.address, getter.start, code, sizeof(code)))
+      if (getter.startSize <= sizeof(code)
+       && VrGameMemory::replaceCode(getter.address, getter.start, code, getter.startSize))
         getterDone++;
     }
 

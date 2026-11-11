@@ -580,6 +580,20 @@ namespace dxvk {
     constexpr uint8_t   CrtSqrtStart[]            = { 0x8D, 0x54, 0x24, 0x04, 0xE8, 0x68, 0xC7, 0x00 };
 
     /**
+     * NiPoint3::operator*(NiPoint3) (dot product, 247 callers),
+     * NiPlane::Distance(point) and NiBound::WhichSide(plane), all thiscall
+     * with one stack argument and the float result in st0 (WhichSide: 0
+     * across, 1 positive side, 2 negative side, in eax).
+     */
+    constexpr uintptr_t PointDot           = 0x004B6190;
+    constexpr uintptr_t PlaneDistance      = 0x004B6160;
+    constexpr uintptr_t BoundWhichSide     = 0x004B6100;
+
+    constexpr uint8_t   PointDotStart[]           = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0x89, 0x4D };
+    constexpr uint8_t   PlaneDistanceStart[]      = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0x89, 0x4D };
+    constexpr uint8_t   BoundWhichSideStart[]     = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0x89, 0x4D };
+
+    /**
      * Two one-field getters the profiles show among the hottest blocks
      * (MobileObject::GetCurrentAIProcess returns [this+0x68],
      * BaseProcess::GetProcessLevel returns [this+0x28]). Both are the
@@ -588,6 +602,13 @@ namespace dxvk {
      */
     constexpr uintptr_t CurrentProcessGetter = 0x008D8520;
     constexpr uintptr_t ProcessLevelGetter   = 0x0045CD60;
+
+    /**
+     * NiPointer::operator-> (6,744 callers): returns [this], same unoptimised
+     * form as the getters above; the 12 bytes reach the load.
+     */
+    constexpr uintptr_t PointerDereference = 0x00559450;
+    constexpr uint8_t   PointerDereferenceStart[] = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x45, 0xFC, 0x8B, 0x00 };
 
     constexpr uint8_t   CurrentProcessGetterStart[] = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x45, 0xFC, 0x8B, 0x40, 0x68 };
     constexpr uint8_t   ProcessLevelGetterStart[]   = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x45, 0xFC, 0x8B, 0x40, 0x28 };
