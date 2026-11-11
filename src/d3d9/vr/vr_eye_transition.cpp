@@ -25,7 +25,6 @@ namespace dxvk {
     PFN_vkWaitForFences         waitForFences         = nullptr;
     PFN_vkResetFences           resetFences           = nullptr;
     PFN_vkQueueSubmit           queueSubmit           = nullptr;
-    PFN_vkGetFenceStatus        getFenceStatus        = nullptr;
 
     bool load(const VrGraphicsBinding& binding) {
       if (!binding.getInstanceProcAddr)
@@ -53,12 +52,11 @@ namespace dxvk {
       load(waitForFences, "vkWaitForFences");
       load(resetFences, "vkResetFences");
       load(queueSubmit, "vkQueueSubmit");
-      load(getFenceStatus, "vkGetFenceStatus");
 
       return createCommandPool && destroyCommandPool && allocateCommandBuffers
           && resetCommandBuffer && beginCommandBuffer && endCommandBuffer
           && cmdPipelineBarrier && createFence && destroyFence
-          && waitForFences && resetFences && queueSubmit && getFenceStatus;
+          && waitForFences && resetFences && queueSubmit;
     }
   };
 
@@ -146,12 +144,6 @@ namespace dxvk {
 
   bool VrEyeTransition::toTransferSource(const VrEyeImage* images, uint32_t count) {
     return submit(images, count, true);
-  }
-
-
-  bool VrEyeTransition::isLastSubmitDone() const {
-    uint32_t last = (m_nextSlot + SlotCount - 1) % SlotCount;
-    return m_vk->getFenceStatus(m_binding.device, m_slots[last].fence) == VK_SUCCESS;
   }
 
 

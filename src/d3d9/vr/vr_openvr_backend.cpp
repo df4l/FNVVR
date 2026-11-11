@@ -363,10 +363,6 @@ namespace dxvk {
       cycle[uint32_t(VrFrameStep::Panels)]     = frame.panelMs;
       cycle[uint32_t(VrFrameStep::Wait)]       = ms(waitStart,           posesReady);
 
-      m_gpuDoneImages  += frame.gpuDoneAtImages ? 1 : 0;
-      m_gpuDoneEyes    += frame.gpuDoneAtEyes ? 1 : 0;
-      m_gpuDoneHandOff += frame.gpuDoneAtHandOff ? 1 : 0;
-
       if (m_stats.add(cycle))
         logFrameStats();
     } else if (frame.isSubmitted) {
@@ -390,7 +386,6 @@ namespace dxvk {
     m_dropped      = stats.m_nNumDroppedFrames;
     m_statsRunning = true;
     m_stats.reset();
-    m_gpuDoneImages = m_gpuDoneEyes = m_gpuDoneHandOff = 0;
     m_statsCpu     = readCpuTimes();
   }
 
@@ -420,14 +415,6 @@ namespace dxvk {
       ", layout transition ", step(VrFrameStep::Transition), ", submission ", step(VrFrameStep::Submit),
       ", hand-off ", step(VrFrameStep::HandOff), ", after submission ", step(VrFrameStep::After),
       " (panels ", step(VrFrameStep::Panels), "), waiting for the runtime ", step(VrFrameStep::Wait)));
-
-    auto percent = [&] (uint32_t count) {
-      return std::lround(100.0 * double(count) / double(std::max(1u, m_stats.frames())));
-    };
-
-    Logger::info(str::format("VR: Eye rendering finished on the GPU before the layout transition in ",
-      percent(m_gpuDoneImages), " % of the frames, before the hand-off in ", percent(m_gpuDoneEyes),
-      " %, after the hand-off in ", percent(m_gpuDoneHandOff), " %"));
 
     // What the compositor did over the window. Its counts restart when
     // another process connects, so they are only compared within one.
@@ -1014,7 +1001,6 @@ namespace dxvk {
       return false;
 
     m_frameClock.imagesReady = high_resolution_clock::now();
-    m_frameClock.gpuDoneAtImages = m_transition->isLastSubmitDone();
 
     if (!m_loggedSubmit)
       Logger::info("VR: Eye images ready for the compositor");
@@ -1038,13 +1024,11 @@ namespace dxvk {
     }
 
     m_frameClock.eyesSubmitted = high_resolution_clock::now();
-    m_frameClock.gpuDoneAtEyes = m_transition->isLastSubmitDone();
 
     // Both eyes are in, the compositor may start on the frame
     handOffFrame();
 
     m_frameClock.submitted   = high_resolution_clock::now();
-    m_frameClock.gpuDoneAtHandOff = m_transition->isLastSubmitDone();
     m_frameClock.isSubmitted = true;
 
     if (!m_loggedSubmit) {
