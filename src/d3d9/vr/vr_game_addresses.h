@@ -564,6 +564,19 @@ namespace dxvk {
     constexpr uint8_t   MatrixMatrixStart[]       = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x28, 0x56, 0x57 };
     constexpr uint8_t   TransformTransformStart[] = { 0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x80, 0x00, 0x00 };
 
+    /**
+     * Two one-field getters the profiles show among the hottest blocks
+     * (MobileObject::GetCurrentAIProcess returns [this+0x68],
+     * BaseProcess::GetProcessLevel returns [this+0x28]). Both are the
+     * unoptimised MSVC form: frame, ecx stored to the stack and reloaded.
+     * The 13 bytes are the whole body up to the field's load.
+     */
+    constexpr uintptr_t CurrentProcessGetter = 0x008D8520;
+    constexpr uintptr_t ProcessLevelGetter   = 0x0045CD60;
+
+    constexpr uint8_t   CurrentProcessGetterStart[] = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x45, 0xFC, 0x8B, 0x40, 0x68 };
+    constexpr uint8_t   ProcessLevelGetterStart[]   = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x45, 0xFC, 0x8B, 0x40, 0x28 };
+
     /** State of the VATS camera, 0 when VATS is not running */
     constexpr uintptr_t VatsCameraState = 0x011F2258;
 

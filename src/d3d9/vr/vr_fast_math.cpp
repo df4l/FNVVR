@@ -87,6 +87,34 @@ namespace dxvk {
     }
 
     Logger::info(str::format("VR: ", done, " of ", std::size(replacements), " math functions of the game replaced"));
+
+    // Why: these two getters only return a field, but the compiled form
+    // stores ecx to the stack and reloads it (a store-forwarding delay on
+    // the critical path of every caller) and they are called very often.
+    // How: mov eax, [ecx+field]; ret, written over the start of the body
+    // (replaceCode compares and writes the same length, so the rest of
+    // the 13 checked bytes is filled with nops, never reached).
+    struct Getter {
+      uintptr_t       address;
+      const uint8_t*  start;
+      uint8_t         field;
+    };
+
+    const Getter getters[] = {
+      { VrGame::CurrentProcessGetter, VrGame::CurrentProcessGetterStart, 0x68 },
+      { VrGame::ProcessLevelGetter,   VrGame::ProcessLevelGetterStart,   0x28 },
+    };
+
+    uint32_t getterDone = 0;
+
+    for (const Getter& getter : getters) {
+      const uint8_t code[] = { 0x8B, 0x41, getter.field, 0xC3, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 };
+
+      if (VrGameMemory::replaceCode(getter.address, getter.start, code, sizeof(code)))
+        getterDone++;
+    }
+
+    Logger::info(str::format("VR: ", getterDone, " of ", std::size(getters), " field getters of the game replaced"));
   }
 
 }
