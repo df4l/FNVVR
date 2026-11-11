@@ -3,25 +3,28 @@
 namespace dxvk {
 
   /**
-   * \brief Makes the game's faders cover the whole of each eye
+   * \brief Takes the game's fader quads out of the interface
    *
-   * FaderManager::CreateFader builds its quad from half the screen's width
-   * and height, which fills the flat screen exactly. Drawn with an eye's
-   * wider projection, the fade to black of a cell change left the edges of
-   * the view uncovered. Without the halving the quad is twice as large and
-   * reaches past every edge. See findings/render.md, faders.
+   * FaderManager::CreateFader builds each fader as a screen-sized quad of
+   * the interface, which in the headset lands on a flat panel: the fade to
+   * black of a cell change then showed as a black rectangle with the world
+   * around it. The quads are given no extent, and VrFaderOverlay draws the
+   * faders over each whole eye instead. The game keeps running its faders
+   * as before: only what they draw is gone. See findings/render.md, faders.
    */
   class VrFaderSize {
 
   public:
 
     /**
-     * \brief Removes the halving from faders created from now on
+     * \brief Gives the faders created from now on no extent
      *
      * Logs if the code is not the supported version, which is then left
      * as it is.
+     *
+     * \returns \c true if the quads are gone, and the overlay must draw them
      */
-    static void install();
+    static bool install();
 
   };
 

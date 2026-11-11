@@ -13,6 +13,7 @@
 #include "vr_backend.h"
 #include "vr_body_view.h"
 #include "vr_comfort_settings.h"
+#include "vr_fader_overlay.h"
 #include "vr_roomscale.h"
 #include "vr_controls.h"
 #include "vr_culling_camera.h"
@@ -452,6 +453,10 @@ namespace dxvk {
     // The idle camera off and the kill camera in first person
     std::unique_ptr<VrComfortSettings> m_comfortSettings;
 
+    // The game's faders drawn over each eye, once their quads are gone
+    VrFaderOverlay      m_faderOverlay;
+    bool                m_fadersOverlaid = false;
+
     // The capsule goes where the player walks in the room
     std::unique_ptr<VrRoomscale> m_roomscale;
 
@@ -630,6 +635,9 @@ namespace dxvk {
     VrGameStateKind readGameState();
 
     bool createEyeTextures();
+
+    /// Puts the game's faders over both eye images
+    void drawFaders(IDirect3DTexture9* const* eyes);
 
     void renderEye(
             uint32_t              eye,

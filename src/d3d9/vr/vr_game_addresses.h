@@ -522,6 +522,19 @@ namespace dxvk {
     constexpr uint8_t   FaderHalfExtentCode[] = { 0xDC, 0x0D, 0x88, 0x15, 0x01, 0x01 };
 
     /**
+     * FaderManager::kFaders: three entries of 0x1C bytes, the black fader
+     * below the menus, the black one above them and the white one. An entry
+     * is shown while its root node (+0x10) is set; the alpha (float) is at
+     * +0x14. See findings/render.md, faders.
+     */
+    constexpr uintptr_t FaderTable       = 0x011D8828;
+    constexpr uint32_t  FaderCount       = 3;
+    constexpr uint32_t  FaderStride      = 0x1C;
+    constexpr uint32_t  FaderRoot        = 0x10;
+    constexpr uint32_t  FaderAlpha       = 0x14;
+    constexpr uint32_t  FaderWhite       = 2;
+
+    /**
      * C runtime double floor and ceil (_floor, _ceil). Both start with
      * cmp __use_sse2_mathfcns, 0 then a near jz to the x87 version, the
      * displacement differs, so only the first nine bytes are compared.

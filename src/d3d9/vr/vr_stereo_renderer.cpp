@@ -6,6 +6,7 @@
 #include "../../util/util_string.h"
 
 #include "vr_d3d9_bridge.h"
+#include "vr_fader_size.h"
 #include "vr_game_addresses.h"
 #include "vr_game_depth.h"
 #include "vr_game_ammo.h"
@@ -356,6 +357,8 @@ namespace dxvk {
 
     if (!renderer->m_comfortSettings)
       Logger::info("VR: The idle and kill camera settings were not found, the game may leave the first person");
+
+    renderer->m_fadersOverlaid = renderer->m_faderOverlay.initialize() && VrFaderSize::install();
 
     renderer->m_roomscale = VrRoomscale::install();
 
@@ -796,6 +799,8 @@ namespace dxvk {
 
     IDirect3DTexture9* eyes[VrEyeCount] = { m_eyeTextures[0].ptr(), m_eyeTextures[1].ptr() };
 
+    drawFaders(eyes);
+
     if (!VrD3D9Bridge::submitStereoFrame(m_device, m_backend, eyes, views,
         timing.predictedDisplayTime) && !m_loggedFailure) {
       Logger::err("VR: The backend rejected a stereo frame");
@@ -1028,6 +1033,23 @@ namespace dxvk {
     }
 
     return true;
+  }
+
+
+  void VrStereoRenderer::drawFaders(IDirect3DTexture9* const* eyes) {
+    if (!m_fadersOverlaid || !m_painter)
+      return;
+
+    D3DSURFACE_DESC desc = { };
+
+    if (FAILED(eyes[0]->GetLevelDesc(0, &desc)))
+      return;
+
+    if (!m_faderOverlay.update(float(desc.Width), float(desc.Height)))
+      return;
+
+    for (uint32_t eye = 0; eye < VrEyeCount; eye++)
+      m_painter->paint(eyes[eye], m_faderOverlay.fills(), false);
   }
 
 

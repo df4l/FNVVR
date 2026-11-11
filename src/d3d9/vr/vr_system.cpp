@@ -25,7 +25,6 @@
 #include "vr_gamepad_hook.h"
 #include "vr_large_address.h"
 #include "vr_live_casino.h"
-#include "vr_fader_size.h"
 #include "vr_fast_math.h"
 #include "vr_sound_focus.h"
 #include "vr_game_window.h"
@@ -275,8 +274,6 @@ namespace dxvk {
 
     VrLargeAddress::install(g_vrSystem->m_texts);
     VrSoundFocus::install();
-    VrFaderSize::install();
-
     if (config.getOption<bool>("d3d9.vrFastMath", true))
       VrFastMath::install();
 
