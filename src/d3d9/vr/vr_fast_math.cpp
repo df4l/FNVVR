@@ -39,7 +39,14 @@ namespace dxvk {
 
 
   void VrFastMath::install() {
-    // fld qword ptr [esp+4]; fabs; ret
+    // Why: the C runtime's fabs (cdecl, double on the stack, result in st0)
+    // calls __ctrlfp twice, which stores and reloads the x87 control word
+    // and flushes the pipeline each time. The profiles of a 120 Hz run
+    // showed that as about 4.5 % of the game's samples.
+    // How: the same function as three instructions, fld qword ptr [esp+4];
+    // fabs; ret. The instruction clears the sign bit and needs no control
+    // word, since the sign bit does not depend on the rounding mode.
+    // The 7 bytes fit in the 7 bytes that are checked.
     const uint8_t fabsCode[] = { 0xDD, 0x44, 0x24, 0x04, 0xD9, 0xE1, 0xC3 };
 
     if (VrGameMemory::replaceCode(VrGame::CrtFabs, VrGame::CrtFabsStart, fabsCode, sizeof(fabsCode)))
@@ -54,6 +61,12 @@ namespace dxvk {
       engine_math::Function   function;
     };
 
+    // Why: the executable keeps these as real calls with unoptimised x87
+    // code (see vr_engine_math_stubs.h for each function). A 5-byte jump to
+    // a replacement is the smallest change that speeds up every caller
+    // without touching them, and it is enough to dominate the call cost.
+    // The order of the arithmetic is the original's, so results are the
+    // same bit for bit (checked against a reference under Wine).
     const Replacement replacements[] = {
       { "NiPoint3 constructor",  VrGame::PointConstruct,     VrGame::PointConstructStart,     engine_math::PointConstruct },
       { "NiPoint3 sum",          VrGame::PointAdd,           VrGame::PointAddStart,           engine_math::PointAdd },

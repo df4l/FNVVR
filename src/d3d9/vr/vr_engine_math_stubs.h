@@ -17,7 +17,16 @@ namespace dxvk {
 
   namespace engine_math {
 
-    // NiPoint3::NiPoint3(x, y, z), thiscall, returns this
+    /**
+     * NiPoint3::NiPoint3(x, y, z), thiscall, returns this
+     *
+     * Why: it is the hottest of the group (called for every temporary
+     * vector) and its body is only three copies. The original builds a
+     * stack frame and moves the floats through the x87 stack.
+     * How: the arguments are copied as 32-bit integers, so no float
+     * register is involved and no value is converted. NaN payloads and
+     * signed zeros are kept exactly as passed.
+     */
     __attribute__((naked)) static void pointConstruct() {
       asm volatile(
         "movl 4(%esp), %eax\n\t"
@@ -30,7 +39,15 @@ namespace dxvk {
         "ret $12\n\t");
     }
 
-    // NiPoint3::operator+(out, other), thiscall, returns out
+    /**
+     * NiPoint3::operator+(out, other), thiscall, returns out
+     *
+     * Why: three float additions that the original does through a frame
+     * and x87 loads and stores.
+     * How: one scalar SSE addition per component (addss), same operand
+     * order. The three sums are held in registers and stored last, so
+     * out may be this or other.
+     */
     __attribute__((naked)) static void pointAdd() {
       asm volatile(
         "movl 4(%esp), %eax\n\t"
@@ -47,7 +64,13 @@ namespace dxvk {
         "ret $8\n\t");
     }
 
-    // NiPoint3::operator-(out, other), thiscall, returns out
+    /**
+     * NiPoint3::operator-(out, other), thiscall, returns out
+     *
+     * Why and how: as the sum, with subss. this is the left operand
+     * (this - other), and all reads happen before the stores, so out may
+     * overlap either operand.
+     */
     __attribute__((naked)) static void pointSubtract() {
       asm volatile(
         "movl 4(%esp), %eax\n\t"
@@ -64,7 +87,16 @@ namespace dxvk {
         "ret $8\n\t");
     }
 
-    // operator*(out, scale, point), cdecl, returns out
+    /**
+     * operator*(out, scale, point), cdecl, returns out
+     *
+     * Why: scaling a vector is as common as the sum, and the original
+     * pays the same frame and x87 traffic.
+     * How: the scale is loaded once into xmm3 and multiplies the three
+     * components. The caller removes the arguments (cdecl), so the stub
+     * ends with a plain ret, not ret $n. Stores come last, out may be
+     * point.
+     */
     __attribute__((naked)) static void pointScale() {
       asm volatile(
         "movl 4(%esp), %eax\n\t"
@@ -82,7 +114,17 @@ namespace dxvk {
         "ret\n\t");
     }
 
-    // NiMatrix3::operator*(out, point), thiscall, returns out
+    /**
+     * NiMatrix3::operator*(out, point), thiscall, returns out
+     *
+     * Why: rotating a vector by a matrix is the core of every node
+     * transform update in the scene graph.
+     * How: the vector is loaded once and each output is the row dot
+     * product, summed left to right ((a*x + b*y) + c*z) as the original
+     * does, so the result is bit for bit the same. The three results stay
+     * in xmm3-xmm5 until the end, which makes an out that overlaps point
+     * safe without a temporary in memory.
+     */
     __attribute__((naked)) static void matrixPoint() {
       asm volatile(
         "movl 8(%esp), %edx\n\t"
@@ -120,7 +162,18 @@ namespace dxvk {
         "ret $8\n\t");
     }
 
-    // NiMatrix3::operator*(out, matrix), thiscall, returns out
+    /**
+     * NiMatrix3::operator*(out, matrix), thiscall, returns out
+     *
+     * Why: 27 multiplications that the original does through x87 with
+     * every partial result stored to memory.
+     * How: each element is the row by column dot product, summed in the
+     * original's order. Nine results do not fit the registers that are
+     * free, so they are built in a 36-byte stack temporary and copied to
+     * out at the end as integers. That copy is what keeps out = this or
+     * out = matrix correct (a product in place needs the old values until
+     * the last element is computed).
+     */
     __attribute__((naked)) static void matrixMatrix() {
       asm volatile(
         "movl 4(%esp), %eax\n\t"
@@ -229,7 +282,18 @@ namespace dxvk {
         "ret $8\n\t");
     }
 
-    // NiTransform::operator*(out, transform), thiscall, returns out
+    /**
+     * NiTransform::operator*(out, transform), thiscall, returns out
+     *
+     * Why: it is called for every node of every skeleton and hierarchy,
+     * and it chains a matrix product and a matrix by vector product.
+     * How: the same code as the two functions above, inlined in one stub,
+     * so there is no nested call and no second frame. Rotation is
+     * R1 * R2, translation is T1 + s1 * (R1 * T2), scale is s1 * s2. All
+     * 13 floats go to a 52-byte stack temporary and are copied to out at
+     * the end, so out may be this or transform.
+     * Layout: rotation at 0, translation at 0x24, scale at 0x30, size 0x34.
+     */
     __attribute__((naked)) static void transformTransform() {
       asm volatile(
         "movl 4(%esp), %eax\n\t"
