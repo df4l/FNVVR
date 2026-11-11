@@ -452,6 +452,111 @@ namespace dxvk {
         "ret $8\n\t");
     }
 
+    /**
+     * ShadowSceneLight::BoundWithinLightFrustum(bound), thiscall, returns
+     * false when the bound is outside one of the light's active planes
+     *
+     * Why: called for every object of the scene for every shadow light
+     * (ParseObjectAddFrustum), the hottest function of the 120 Hz
+     * profiles. The original keeps the distance in memory between steps
+     * and branches on the x87 status word twice per plane.
+     * How: the same loop over the six planes (this + 0x144, normal and
+     * constant, 16 bytes each) under the mask at this + 0x1A4. The
+     * distance is (ny * cy + nx * cx) + cz * nz - constant, single
+     * precision in that order: the game thread runs the x87 unit in
+     * single precision (D3D9's default), which rounds each step as SSE
+     * does. A distance at or below -radius returns false at once; one at
+     * or above +radius clears the plane's bit, as the original does. An
+     * unordered comparison (NaN) keeps the plane, as fnstsw's flags do.
+     */
+    __attribute__((naked)) static void boundWithinLightFrustum() {
+      asm volatile(
+        "movl 4(%esp), %edx\n\t"
+        "movss (%edx), %xmm4\n\t"
+        "movss 4(%edx), %xmm5\n\t"
+        "movss 8(%edx), %xmm6\n\t"
+        "movss 12(%edx), %xmm7\n\t"
+        "movl 12(%edx), %eax\n\t"
+        "xorl $0x80000000, %eax\n\t"
+        "movd %eax, %xmm3\n\t"
+        "leal 0x144(%ecx), %edx\n\t"
+        "pushl %esi\n\t"
+        "movl $1, %esi\n\t"
+        "1:\n\t"
+        "testl %esi, 0x1A4(%ecx)\n\t"
+        "jz 2f\n\t"
+        "movss 4(%edx), %xmm0\n\t"
+        "mulss %xmm5, %xmm0\n\t"
+        "movss (%edx), %xmm1\n\t"
+        "mulss %xmm4, %xmm1\n\t"
+        "addss %xmm1, %xmm0\n\t"
+        "movss 8(%edx), %xmm1\n\t"
+        "mulss %xmm6, %xmm1\n\t"
+        "addss %xmm1, %xmm0\n\t"
+        "subss 12(%edx), %xmm0\n\t"
+        "comiss %xmm0, %xmm3\n\t"
+        "jae 3f\n\t"
+        "comiss %xmm0, %xmm7\n\t"
+        "jp 2f\n\t"
+        "ja 2f\n\t"
+        "movl %esi, %eax\n\t"
+        "notl %eax\n\t"
+        "andl %eax, 0x1A4(%ecx)\n\t"
+        "2:\n\t"
+        "addl $16, %edx\n\t"
+        "addl %esi, %esi\n\t"
+        "cmpl $64, %esi\n\t"
+        "jb 1b\n\t"
+        "popl %esi\n\t"
+        "movl $1, %eax\n\t"
+        "ret $4\n\t"
+        "3:\n\t"
+        "popl %esi\n\t"
+        "xorl %eax, %eax\n\t"
+        "ret $4\n\t");
+    }
+
+    /**
+     * C runtime's __CIsqrt: operand in st0, result in st0
+     *
+     * Why: the runtime switches the x87 unit to double precision for the
+     * square root and back (__load_CW, then the error path through
+     * _87except and __ctrlfp, taken every time under Wine), about 2 % of
+     * the game thread in the 120 Hz profiles. 266 call sites.
+     * How: sqrtsd, which rounds the root to double precision exactly as
+     * fsqrt does with the control word the runtime sets. The operand goes
+     * through a double on the stack; on the game thread it is a single
+     * precision value, which a double holds exactly. A negative operand
+     * gives the default NaN, as fsqrt does; errno is not set.
+     */
+    __attribute__((naked)) static void crtCiSqrt() {
+      asm volatile(
+        "subl $8, %esp\n\t"
+        "fstpl (%esp)\n\t"
+        "movsd (%esp), %xmm0\n\t"
+        "sqrtsd %xmm0, %xmm0\n\t"
+        "movsd %xmm0, (%esp)\n\t"
+        "fldl (%esp)\n\t"
+        "addl $8, %esp\n\t"
+        "ret\n\t");
+    }
+
+    /**
+     * C runtime's sqrt(double), cdecl, result in st0
+     *
+     * Why and how: as __CIsqrt, with the operand on the stack.
+     */
+    __attribute__((naked)) static void crtSqrt() {
+      asm volatile(
+        "movsd 4(%esp), %xmm0\n\t"
+        "sqrtsd %xmm0, %xmm0\n\t"
+        "subl $8, %esp\n\t"
+        "movsd %xmm0, (%esp)\n\t"
+        "fldl (%esp)\n\t"
+        "addl $8, %esp\n\t"
+        "ret\n\t");
+    }
+
     using Function = void (*)();
 
     constexpr Function PointConstruct      = pointConstruct;
@@ -461,6 +566,9 @@ namespace dxvk {
     constexpr Function MatrixPoint         = matrixPoint;
     constexpr Function MatrixMatrix        = matrixMatrix;
     constexpr Function TransformTransform  = transformTransform;
+    constexpr Function LightFrustumBound   = boundWithinLightFrustum;
+    constexpr Function CrtCiSqrt           = crtCiSqrt;
+    constexpr Function CrtSqrt             = crtSqrt;
 
   }
 

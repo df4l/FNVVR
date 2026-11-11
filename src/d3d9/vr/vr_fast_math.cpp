@@ -75,6 +75,9 @@ namespace dxvk {
       { "NiMatrix3 by NiPoint3", VrGame::MatrixPoint,        VrGame::MatrixPointStart,        engine_math::MatrixPoint },
       { "NiMatrix3 product",     VrGame::MatrixMatrix,       VrGame::MatrixMatrixStart,       engine_math::MatrixMatrix },
       { "NiTransform product",   VrGame::TransformTransform, VrGame::TransformTransformStart, engine_math::TransformTransform },
+      { "shadow light bound test", VrGame::LightFrustumBound, VrGame::LightFrustumBoundStart, engine_math::LightFrustumBound },
+      { "__CIsqrt",              VrGame::CrtCiSqrt,          VrGame::CrtCiSqrtStart,          engine_math::CrtCiSqrt },
+      { "sqrt",                  VrGame::CrtSqrt,            VrGame::CrtSqrtStart,            engine_math::CrtSqrt },
     };
 
     uint32_t done = 0;

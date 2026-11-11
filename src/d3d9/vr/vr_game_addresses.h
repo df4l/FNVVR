@@ -565,6 +565,21 @@ namespace dxvk {
     constexpr uint8_t   TransformTransformStart[] = { 0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x80, 0x00, 0x00 };
 
     /**
+     * Also replaced by VrFastMath: ShadowSceneLight::BoundWithinLightFrustum
+     * (thiscall, bound, retn 4; planes at this + 0x144, mask at + 0x1A4),
+     * and the C runtime's __CIsqrt (st0) and _sqrt (cdecl). The C runtime
+     * functions do not start with a frame; their first eight bytes hold a
+     * call, which pins the code as well.
+     */
+    constexpr uintptr_t LightFrustumBound  = 0x00B9BBB0;
+    constexpr uintptr_t CrtCiSqrt          = 0x00EC6040;
+    constexpr uintptr_t CrtSqrt            = 0x00EC6054;
+
+    constexpr uint8_t   LightFrustumBoundStart[]  = { 0x53, 0x55, 0x8B, 0x6C, 0x24, 0x0C, 0x56, 0x57 };
+    constexpr uint8_t   CrtCiSqrtStart[]          = { 0x83, 0xEC, 0x0C, 0xDD, 0x14, 0x24, 0xE8, 0xBD };
+    constexpr uint8_t   CrtSqrtStart[]            = { 0x8D, 0x54, 0x24, 0x04, 0xE8, 0x68, 0xC7, 0x00 };
+
+    /**
      * Two one-field getters the profiles show among the hottest blocks
      * (MobileObject::GetCurrentAIProcess returns [this+0x68],
      * BaseProcess::GetProcessLevel returns [this+0x28]). Both are the
