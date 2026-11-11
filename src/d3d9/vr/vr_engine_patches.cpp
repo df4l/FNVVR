@@ -13,7 +13,9 @@ namespace dxvk {
   namespace {
 
     bool groupChosen(const std::string& groups, const char* name) {
-      if (groups == "all")
+      // Config::getOption returns an empty string, not its fallback, for
+      // a string option that dxvk.conf does not set
+      if (groups.empty() || groups == "all")
         return true;
 
       size_t start = 0;
