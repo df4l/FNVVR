@@ -255,6 +255,7 @@ namespace dxvk {
     g_vrSystem->m_pipBoyScale = options.pipBoyScale;
     g_vrSystem->m_manualReload = options.manualReload;
     g_vrSystem->m_handPush = config.getOption<bool>("d3d9.vrHandPush", true);
+    g_vrSystem->m_asyncHandOff = config.getOption<bool>("d3d9.vrAsyncHandOff", false);
     g_vrSystem->m_scopes = options.scopeLens;
     g_vrSystem->m_roomscale = options.roomscale;
     g_vrSystem->m_immersiveMinigames = config.getOption<bool>("d3d9.vrImmersiveMinigames", true);
@@ -397,6 +398,8 @@ namespace dxvk {
 
     if (!VrD3D9Bridge::queryGraphicsBinding(device, binding))
       return false;
+
+    binding.asyncHandOff = m_asyncHandOff;
 
     logLoadedModules();
 

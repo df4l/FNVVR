@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -22,6 +23,12 @@ namespace dxvk {
     VkQueue          queue            = VK_NULL_HANDLE;
     uint32_t         queueFamilyIndex = 0;
     uint32_t         queueIndex       = 0;
+    /// Takes and releases DXVK's lock on the queue, for a backend that
+    /// uses the queue from a thread of its own
+    std::function<void()> lockQueue;
+    std::function<void()> releaseQueue;
+    /// Hand each frame off from a thread of the backend (d3d9.vrAsyncHandOff)
+    bool             asyncHandOff     = false;
   };
 
   /**
