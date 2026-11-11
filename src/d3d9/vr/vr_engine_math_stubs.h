@@ -645,6 +645,95 @@ namespace dxvk {
         "ret $4\n\t");
     }
 
+    /**
+     * NiBound::Merge(other), thiscall: grows this sphere to hold the other
+     *
+     * Why: called for every node of the scene graph when bounds update
+     * (1.7 % of the game thread), x87 with three status-word branches and
+     * every intermediate stored to memory.
+     * How: the original's steps in single precision and order. d2 is
+     * (dx * dx + dy * dy) + dz * dz with d = this - other, dr = other.r -
+     * this.r. With dr at or above 0: d2 <= dr * dr copies other into this
+     * (the radius through the x87 unit, as the original copies it).
+     * Otherwise (dr below 0 or NaN): d2 <= dr * dr, or unordered, keeps
+     * this. In the remaining cases s = sqrt(d2), rounded to double then to
+     * single as __CIsqrt and the original's store do; when s is above
+     * 1e-6 the centre moves to other + d * ((s - dr) / (s + s)); the
+     * radius becomes ((s + other.r) + this.r) * 0.5.
+     */
+    __attribute__((naked)) static void boundMerge() {
+      asm volatile(
+        "movl 4(%esp), %edx\n\t"
+        "movss (%ecx), %xmm0\n\t"
+        "subss (%edx), %xmm0\n\t"
+        "movss 4(%ecx), %xmm1\n\t"
+        "subss 4(%edx), %xmm1\n\t"
+        "movss 8(%ecx), %xmm2\n\t"
+        "subss 8(%edx), %xmm2\n\t"
+        "movaps %xmm0, %xmm3\n\t"
+        "mulss %xmm0, %xmm3\n\t"
+        "movaps %xmm1, %xmm4\n\t"
+        "mulss %xmm1, %xmm4\n\t"
+        "addss %xmm4, %xmm3\n\t"
+        "movaps %xmm2, %xmm4\n\t"
+        "mulss %xmm2, %xmm4\n\t"
+        "addss %xmm4, %xmm3\n\t"
+        "movss 12(%edx), %xmm5\n\t"
+        "subss 12(%ecx), %xmm5\n\t"
+        "movaps %xmm5, %xmm6\n\t"
+        "mulss %xmm5, %xmm6\n\t"
+        "xorps %xmm7, %xmm7\n\t"
+        "comiss %xmm7, %xmm5\n\t"
+        "jb 2f\n\t"
+        "comiss %xmm6, %xmm3\n\t"
+        "jp 3f\n\t"
+        "ja 3f\n\t"
+        "movl (%edx), %eax\n\t"
+        "movl %eax, (%ecx)\n\t"
+        "movl 4(%edx), %eax\n\t"
+        "movl %eax, 4(%ecx)\n\t"
+        "movl 8(%edx), %eax\n\t"
+        "movl %eax, 8(%ecx)\n\t"
+        "flds 12(%edx)\n\t"
+        "fstps 12(%ecx)\n\t"
+        "ret $4\n\t"
+        "2:\n\t"
+        "comiss %xmm6, %xmm3\n\t"
+        "jp 1f\n\t"
+        "jbe 1f\n\t"
+        "3:\n\t"
+        "cvtss2sd %xmm3, %xmm4\n\t"
+        "sqrtsd %xmm4, %xmm4\n\t"
+        "cvtsd2ss %xmm4, %xmm4\n\t"
+        "movl $0x358637BD, %eax\n\t"
+        "movd %eax, %xmm7\n\t"
+        "comiss %xmm7, %xmm4\n\t"
+        "jbe 4f\n\t"
+        "movaps %xmm4, %xmm6\n\t"
+        "subss %xmm5, %xmm6\n\t"
+        "movaps %xmm4, %xmm7\n\t"
+        "addss %xmm4, %xmm7\n\t"
+        "divss %xmm7, %xmm6\n\t"
+        "mulss %xmm6, %xmm0\n\t"
+        "mulss %xmm6, %xmm1\n\t"
+        "mulss %xmm6, %xmm2\n\t"
+        "addss (%edx), %xmm0\n\t"
+        "addss 4(%edx), %xmm1\n\t"
+        "addss 8(%edx), %xmm2\n\t"
+        "movss %xmm0, (%ecx)\n\t"
+        "movss %xmm1, 4(%ecx)\n\t"
+        "movss %xmm2, 8(%ecx)\n\t"
+        "4:\n\t"
+        "addss 12(%edx), %xmm4\n\t"
+        "addss 12(%ecx), %xmm4\n\t"
+        "movl $0x3F000000, %eax\n\t"
+        "movd %eax, %xmm7\n\t"
+        "mulss %xmm7, %xmm4\n\t"
+        "movss %xmm4, 12(%ecx)\n\t"
+        "1:\n\t"
+        "ret $4\n\t");
+    }
+
     using Function = void (*)();
 
     constexpr Function PointConstruct      = pointConstruct;
@@ -660,6 +749,7 @@ namespace dxvk {
     constexpr Function PointDot            = pointDot;
     constexpr Function PlaneDistance       = planeDistance;
     constexpr Function BoundWhichSide      = boundWhichSide;
+    constexpr Function BoundMerge          = boundMerge;
 
   }
 

@@ -81,6 +81,7 @@ namespace dxvk {
       { "NiPoint3 dot product",  VrGame::PointDot,           VrGame::PointDotStart,           engine_math::PointDot },
       { "NiPlane distance",      VrGame::PlaneDistance,      VrGame::PlaneDistanceStart,      engine_math::PlaneDistance },
       { "NiBound side of a plane", VrGame::BoundWhichSide,   VrGame::BoundWhichSideStart,     engine_math::BoundWhichSide },
+      { "NiBound merge",         VrGame::BoundMerge,         VrGame::BoundMergeStart,         engine_math::BoundMerge },
     };
 
     uint32_t done = 0;

@@ -593,6 +593,10 @@ namespace dxvk {
     constexpr uint8_t   PlaneDistanceStart[]      = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0x89, 0x4D };
     constexpr uint8_t   BoundWhichSideStart[]     = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0x89, 0x4D };
 
+    /** NiBound::Merge(other), thiscall, retn 4 */
+    constexpr uintptr_t BoundMerge         = 0x00A7F3F0;
+    constexpr uint8_t   BoundMergeStart[]         = { 0x83, 0xEC, 0x20, 0x56, 0x8B, 0xF1, 0xD9, 0x06 };
+
     /**
      * Two one-field getters the profiles show among the hottest blocks
      * (MobileObject::GetCurrentAIProcess returns [this+0x68],

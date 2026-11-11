@@ -50,6 +50,7 @@ TEST_CASE(enginePatchesLeaveTheFunctionsTheModReplaces) {
     VrGame::CurrentProcessGetter, VrGame::ProcessLevelGetter,
     VrGame::LightFrustumBound, VrGame::CrtCiSqrt, VrGame::CrtSqrt,
     VrGame::PointDot, VrGame::PlaneDistance, VrGame::BoundWhichSide, VrGame::PointerDereference,
+    VrGame::BoundMerge,
   };
 
   for (const Range& range : Ranges) {
