@@ -535,13 +535,12 @@ namespace dxvk {
     constexpr uint32_t  FaderWhite       = 2;
 
     /**
-     * C runtime double floor and ceil (_floor, _ceil). Both start with
-     * cmp __use_sse2_mathfcns, 0 then a near jz to the x87 version, the
-     * displacement differs, so only the first nine bytes are compared.
+     * C runtime double fabs (_fabs): sets the x87 control word with
+     * __ctrlfp before and after masking the sign. The profile names it the
+     * caller of __ctrlfp (0x00ED5ABB); _floor and _ceil never reach it.
      */
-    constexpr uintptr_t CrtFloor = 0x00EC6940;
-    constexpr uintptr_t CrtCeil  = 0x00EC9E10;
-    constexpr uint8_t   MathFunctionStart[] = { 0x83, 0x3D, 0x64, 0x0A, 0x27, 0x01, 0x00, 0x0F, 0x84 };
+    constexpr uintptr_t CrtFabs = 0x00EC6CDE;
+    constexpr uint8_t   CrtFabsStart[] = { 0x8B, 0xFF, 0x55, 0x8B, 0xEC, 0x51, 0x51 };
 
     /** State of the VATS camera, 0 when VATS is not running */
     constexpr uintptr_t VatsCameraState = 0x011F2258;
