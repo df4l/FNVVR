@@ -16,6 +16,10 @@ namespace dxvk {
    * function Tweaks, NVTF or another plugin already rewrote stays as it is,
    * and functions the VR code hooks are not in the table.
    *
+   * The group Accessors adds the one-load accessors MSVC left unoptimised
+   * (a frame, this stored to the stack and reloaded, one load): each
+   * becomes the load alone, leaving the registers as the original does.
+   *
    * Machine code from lStewieAl's Tweaks (MIT licence according to the
    * project, notice to be added next to DXVK's LICENSE before a release),
    * see findings/engine-optimizations.md, section 11.
