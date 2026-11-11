@@ -25,6 +25,7 @@
 #include "vr_gamepad_hook.h"
 #include "vr_large_address.h"
 #include "vr_live_casino.h"
+#include "vr_engine_patches.h"
 #include "vr_fast_math.h"
 #include "vr_sound_focus.h"
 #include "vr_game_window.h"
@@ -276,6 +277,8 @@ namespace dxvk {
     VrSoundFocus::install();
     if (config.getOption<bool>("d3d9.vrFastMath", true))
       VrFastMath::install();
+    if (config.getOption<bool>("d3d9.vrEnginePatches", true))
+      VrEnginePatches::install(config.getOption<std::string>("d3d9.vrEnginePatchGroups", "all"));
 
     if (g_vrSystem->m_hideGameWindow)
       VrSoundFocus::keepPluginSound();

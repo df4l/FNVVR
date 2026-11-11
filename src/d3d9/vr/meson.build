@@ -72,6 +72,7 @@ vr_dxvk_src = files([
   'vr_fader_overlay.cpp',
   'vr_fader_size.cpp',
   'vr_fast_math.cpp',
+  'vr_engine_patches.cpp',
   'vr_system.cpp',
   'vr_backend_factory.cpp',
   'vr_openvr_backend.cpp',
@@ -162,6 +163,7 @@ vr_dxvk_src = files([
 if add_languages('cpp', native: true, required: false)
   vr_test_sources = files([
     'tests/test_main.cpp',
+    'tests/test_vr_engine_patch_table.cpp',
     'tests/test_vr_math.cpp',
     'tests/test_vr_emulator.cpp',
     'tests/test_vr_game_space.cpp',
