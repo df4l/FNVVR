@@ -521,6 +521,15 @@ namespace dxvk {
     constexpr uintptr_t FaderHalfHeight = 0x00700ACC;
     constexpr uint8_t   FaderHalfExtentCode[] = { 0xDC, 0x0D, 0x88, 0x15, 0x01, 0x01 };
 
+    /**
+     * C runtime double floor and ceil (_floor, _ceil). Both start with
+     * cmp __use_sse2_mathfcns, 0 then a near jz to the x87 version, the
+     * displacement differs, so only the first nine bytes are compared.
+     */
+    constexpr uintptr_t CrtFloor = 0x00EC6940;
+    constexpr uintptr_t CrtCeil  = 0x00EC9E10;
+    constexpr uint8_t   MathFunctionStart[] = { 0x83, 0x3D, 0x64, 0x0A, 0x27, 0x01, 0x00, 0x0F, 0x84 };
+
     /** State of the VATS camera, 0 when VATS is not running */
     constexpr uintptr_t VatsCameraState = 0x011F2258;
 

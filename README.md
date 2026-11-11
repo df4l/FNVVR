@@ -79,6 +79,7 @@ Settings are read from `dxvk.conf` next to the executable. The main VR options a
 | `d3d9.vrLauncherOverlay` | on | With the `openvr` backend, shows the game's launcher in the headset and lets the lasers drive it. It stays usable with the mouse on the desktop. |
 | `d3d9.vrHideGameWindow` | on | With a headset, hides the game's window from the desktop and no longer presents to it. Also keeps the game running without the window's focus. |
 | `d3d9.vrForceGameSettings` | on | With a headset, replaces some game settings for performance and stutter, values from the Viva New Vegas guide (cheaper water reflections, audio, cell unloading, grass shader). |
+| `d3d9.vrFastMath` | on | Replaces the game's slow `floor` and `ceil` (x87 control word) with SSE4.1 versions, about 4 % of the game's CPU time at 120 Hz. Skipped without SSE4.1 or if another mod already rewrote them. |
 
 The GPU is not spoofed: the deployed `dxvk.conf` sets `d3d9.hideNvidiaGpu` to `False`.
 
