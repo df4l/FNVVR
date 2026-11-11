@@ -3,23 +3,26 @@
 namespace dxvk {
 
   /**
-   * \brief Replaces the game's slow fabs with the x87 instruction
+   * \brief Replaces slow functions of the game's math code
    *
-   * The game's C runtime has a double precision fabs that saves and loads
-   * the x87 control word twice (fstcw, fldcw) around a bit mask, which
-   * stalls the pipeline: the profiles of a 120 Hz run (findings/engine-
-   * optimizations.md, sections 7 and 9) put it at about 4.5 % of the game's
-   * samples. One fabs instruction gives the same result.
+   * Two kinds. The C runtime's fabs saves and loads the x87 control word
+   * twice around a bit mask, which stalls the pipeline: about 4.5 % of the
+   * game's samples in the profiles of a 120 Hz run. And the small NiPoint3,
+   * NiMatrix3 and NiTransform operations the executable keeps as real,
+   * unoptimised calls (stack frames, x87 loads and stores): together about
+   * 10 %. See findings/engine-optimizations.md, sections 7 to 10.
+   *
+   * Every function is checked against its original bytes first, so one
+   * that a plugin already rewrote, or another executable, is left alone.
    */
   class VrFastMath {
 
   public:
 
     /**
-     * \brief Redirects the C runtime's fabs
+     * \brief Redirects the functions
      *
-     * Does nothing if the function is not the original one. Logs which
-     * it was.
+     * Logs how many were replaced, and the ones that were not.
      */
     static void install();
 

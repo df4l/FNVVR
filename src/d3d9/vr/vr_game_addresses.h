@@ -542,6 +542,28 @@ namespace dxvk {
     constexpr uintptr_t CrtFabs = 0x00EC6CDE;
     constexpr uint8_t   CrtFabsStart[] = { 0x8B, 0xFF, 0x55, 0x8B, 0xEC, 0x51, 0x51 };
 
+    /**
+     * Small math functions of the game, replaced by VrFastMath (names from
+     * the GOG database, findings/engine-optimizations.md section 10). Each
+     * is a plain MSVC function that starts with push ebp / mov ebp, esp, so
+     * the first eight bytes tell a plugin's rewrite from the original.
+     */
+    constexpr uintptr_t PointConstruct     = 0x00416870;
+    constexpr uintptr_t PointAdd           = 0x00439E90;
+    constexpr uintptr_t PointSubtract      = 0x00439EF0;
+    constexpr uintptr_t PointScale         = 0x004A3760;
+    constexpr uintptr_t MatrixPoint        = 0x004B4500;
+    constexpr uintptr_t MatrixMatrix       = 0x0043F8D0;
+    constexpr uintptr_t TransformTransform = 0x0062C250;
+
+    constexpr uint8_t   PointConstructStart[]     = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B };
+    constexpr uint8_t   PointAddStart[]           = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x10, 0x89, 0x4D };
+    constexpr uint8_t   PointSubtractStart[]      = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x10, 0x89, 0x4D };
+    constexpr uint8_t   PointScaleStart[]         = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C, 0xD9, 0x45 };
+    constexpr uint8_t   MatrixPointStart[]        = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x10, 0x89, 0x4D };
+    constexpr uint8_t   MatrixMatrixStart[]       = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x28, 0x56, 0x57 };
+    constexpr uint8_t   TransformTransformStart[] = { 0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x80, 0x00, 0x00 };
+
     /** State of the VATS camera, 0 when VATS is not running */
     constexpr uintptr_t VatsCameraState = 0x011F2258;
 
