@@ -80,6 +80,7 @@ Settings are read from `dxvk.conf` next to the executable. The main VR options a
 | `d3d9.vrHideGameWindow` | on | With a headset, hides the game's window from the desktop and no longer presents to it. Also keeps the game running without the window's focus. |
 | `d3d9.vrForceGameSettings` | on | With a headset, replaces some game settings for performance and stutter, values from the Viva New Vegas guide (cheaper water reflections, audio, cell unloading, grass shader). |
 | `d3d9.vrFastMath` | on | Replaces slow functions of the game: the C runtime's `fabs` (reloads the x87 control word twice per call, about 4.5 % of the game's CPU time at 120 Hz) and the small NiPoint3, NiMatrix3 and NiTransform operations (about 10 %), with faster versions. Each one is checked against its original bytes and skipped if a plugin already rewrote it. |
+| `d3d9.vrAsyncHandOff` | on | Hands each frame off to the OpenVR compositor (`PostPresentHandoff`, about 2 ms inside the runtime) from a thread of its own, so the game thread starts the next frame meanwhile. Set to `False` if the game stutters or crashes in the compositor. |
 
 The GPU is not spoofed: the deployed `dxvk.conf` sets `d3d9.hideNvidiaGpu` to `False`.
 

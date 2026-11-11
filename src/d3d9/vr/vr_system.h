@@ -108,7 +108,7 @@ namespace dxvk {
     bool                                 m_scopes = true;
     bool                                 m_roomscale = false;
     bool                                 m_handPush = true;
-    bool                                 m_asyncHandOff = false;
+    bool                                 m_asyncHandOff = true;
     VrSneakConfig                        m_sneakConfig;
     bool                                 m_weaponInHand;
     VrGameTimerConfig                    m_timerConfig;
