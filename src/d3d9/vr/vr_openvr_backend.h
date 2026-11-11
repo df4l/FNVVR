@@ -238,7 +238,16 @@ namespace dxvk {
       double                            syncMs      = 0.0;
       double                            panelMs     = 0.0;
       bool                              isSubmitted = false;
+      bool                              gpuDoneAtImages = false;
+      bool                              gpuDoneAtEyes   = false;
+      bool                              gpuDoneAtHandOff = false;
     };
+
+    // Frames of the window whose eye rendering had finished on the GPU at
+    // each point of the submission
+    uint32_t                          m_gpuDoneImages  = 0;
+    uint32_t                          m_gpuDoneEyes    = 0;
+    uint32_t                          m_gpuDoneHandOff = 0;
 
     FrameClock                        m_frameClock;
     VrFrameStats                      m_stats        = VrFrameStats(1, 0.0);

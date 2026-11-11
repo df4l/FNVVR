@@ -60,6 +60,13 @@ namespace dxvk {
      */
     bool restore(const VrEyeImage* images, uint32_t count);
 
+    /**
+     * \brief Whether the GPU has finished the last submitted transition
+     *
+     * Queue order makes it true only once all rendering before it is done.
+     */
+    bool isLastSubmitDone() const;
+
   private:
 
     struct Functions;
