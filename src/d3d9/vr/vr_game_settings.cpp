@@ -39,6 +39,9 @@ namespace dxvk {
       { VrGame::SettingDoHighDynamicRange,         "bDoHighDynamicRange:BlurShaderHDR",                SettingType::Bool,  1,     0.0f   },
       { VrGame::SettingUseBlurShader,              "bUseBlurShader:BlurShader",                        SettingType::Bool,  0,     0.0f   },
       { VrGame::SettingLightEffectFadeDuration,    "fLightEffectFadeDuration:Pipboy",                  SettingType::Float, 0,     400.0f },
+      { VrGame::SettingDrawShadows,                "bDrawShadows:Display",                             SettingType::Bool,  0,     0.0f   },
+      { VrGame::SettingActorShadowCountInt,        "iActorShadowCountInt:Display",                     SettingType::Int,   0,     0.0f   },
+      { VrGame::SettingActorShadowCountExt,        "iActorShadowCountExt:Display",                     SettingType::Int,   0,     0.0f   },
     };
 
 

@@ -1312,6 +1312,10 @@ namespace dxvk {
     constexpr uintptr_t SettingDoHighDynamicRange         = 0x011C76C0;
     constexpr uintptr_t SettingUseBlurShader              = 0x011C7768;
     constexpr uintptr_t SettingLightEffectFadeDuration    = 0x011DB2BC;
+    /// Display settings named by JIP LN and JohnnyGuitar NVSE (same addresses)
+    constexpr uintptr_t SettingDrawShadows                = 0x011C74D4;
+    constexpr uintptr_t SettingActorShadowCountInt        = 0x011C72D8;
+    constexpr uintptr_t SettingActorShadowCountExt        = 0x011C72E4;
     /// bAlwaysActive:General, TESMain::SetActive (0x00871C90) keeps the game
     /// running when its window is deactivated
     constexpr uintptr_t SettingAlwaysActive               = 0x011DEED8;
