@@ -191,6 +191,19 @@ namespace dxvk {
       bool     premultiplied = false;
     };
 
+    // Where a panel's submissions spend their time over a statistics window
+    struct PanelCost {
+      uint32_t submissions = 0;
+      double   syncMs      = 0.0;
+      double   placementMs = 0.0;
+      double   transitionMs = 0.0;
+      double   textureMs   = 0.0;
+    };
+
+    std::array<PanelCost, VrPanelCount> m_panelCosts = { };
+
+    void logPanelCosts(uint32_t frames);
+
     bool createPanel(VrPanelId id);
 
     void destroyPanels();
