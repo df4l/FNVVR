@@ -971,6 +971,17 @@ namespace dxvk {
     constexpr uintptr_t CaravanGameTiles     = 0x38;
     constexpr char      CaravanPlayerValuesTile[] = "CGM_PlayerTrackRect";
     constexpr char      CaravanOpponentValuesTile[] = "CGM_NPCTrackRect";
+    /**
+     * The cards left in the draw piles: kPlayerDeck (+0xB04) and kNPCDeck
+     * (+0xB14), BSSimpleArrays whose size DoIdle writes to the "_Value" of
+     * pTiles[29] and [30] (e.g. at 0x00743CB4-0x00743D19).
+     * Those tiles, CGM_PlayerCardNum and CGM_NPCCardNum, are children of
+     * CGM_CardNumRect (caravan_game_menu.xml), whose visible copies its
+     * parent's.
+     */
+    constexpr uintptr_t CaravanPlayerPile    = 0xB04;
+    constexpr uintptr_t CaravanOpponentPile  = 0xB14;
+    constexpr char      CaravanPilesTile[]   = "CGM_CardNumRect";
     constexpr uintptr_t TileGetByName        = 0x00A08B20;
     constexpr uint8_t   TileGetByNamePrologue[] = { 0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x88, 0x08, 0x00, 0x00 };
 

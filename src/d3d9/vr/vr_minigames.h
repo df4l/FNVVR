@@ -121,13 +121,13 @@ namespace dxvk {
     /// Changes whenever the panel has to be placed again
     uint32_t panelRevision() const { return m_panelRevision; }
 
-    /// The values of Caravan's tracks to lay on the mat, \c nullptr if none
+    /// The values of Caravan's tracks and piles to lay on the mat, \c nullptr if none
     const VrCaravanBoard* caravanBoard() const { return m_hasCaravanBoard ? &m_caravanBoard : nullptr; }
 
     /**
-     * \brief Says whether the values of caravanBoard() are shown
+     * \brief Says whether the numbers of caravanBoard() are shown
      *
-     * The game's own values are hidden while they are.
+     * The game's own values and cards left are hidden while they are.
      */
     void setCaravanValuesShown(bool shown);
 
