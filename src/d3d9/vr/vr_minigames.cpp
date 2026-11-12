@@ -107,6 +107,10 @@ namespace dxvk {
     constexpr char      CaravanTableModel[] = "Meshes\\Furniture\\DinerTable01_NV.nif";
     constexpr float     CaravanTableTop    = 55.3f;
     constexpr VrVector3 CaravanTableCentre = { 0.45f, 0.5f * (CaravanNearEdge + CaravanFarEdge), 0.0f };
+    // The mat's wooden planks (z 0 to 1.1) are left out of the eyes: the
+    // mat goes down by their thickness, so that its cards, sign and coins
+    // rest on the table under it as they rested on the planks
+    constexpr float     CaravanPlanksTop   = 1.1f;
     // A surface of the world takes the mat when the rays down at its centre
     // and corners all meet it this high above the player's feet, this flat
     constexpr float     CaravanSurfaceLow  = 55.0f;
@@ -1037,8 +1041,8 @@ namespace dxvk {
     }
 
     // The mat in the middle of a counter between the player and the
-    // challenger, shrunk to its depth as far as allowed, if the counter is
-    // long enough for the mat's width
+    // challenger, shrunk to its depth as far as allowed. A counter shorter
+    // than the mat's width still takes it: the mat overhangs its ends.
     bool layCaravanOnCounter(const CaravanRay& ray, const VrVector3& feet, const VrVector3& other, VrWorldObject& table) {
       VrVector3 towards = { other.x - feet.x, other.y - feet.y, 0.0f };
       float distance = vrLength(towards);
@@ -1077,18 +1081,15 @@ namespace dxvk {
 
       float nearY = std::max(CaravanArea.minY * scale, counter.front - along + CaravanEdgeInset);
       float farY  = std::min(CaravanArea.maxY * scale, counter.back  - along - CaravanEdgeInset);
+      uint32_t off = 0;
 
       for (float x : { CaravanArea.minX * scale, CaravanArea.maxX * scale }) {
-        for (float y : { nearY, farY }) {
-          if (!caravanTopIs(ray, table.position + table.x * x + table.y * y, feet.z, counter.top)) {
-            Logger::info("VR: The counter is too short for the Caravan table");
-            return false;
-          }
-        }
+        for (float y : { nearY, farY })
+          off += caravanTopIs(ray, table.position + table.x * x + table.y * y, feet.z, counter.top) ? 0 : 1;
       }
 
       Logger::info(str::format("VR: The Caravan table lies on the counter at ", scale, " of its size, overhanging it by ",
-        std::max(0.0f, 0.5f * (matDepth * scale - depth)), " units at each edge"));
+        std::max(0.0f, 0.5f * (matDepth * scale - depth)), " units at each edge, ", off, " of its 4 corners off the counter"));
       return true;
     }
 
@@ -1118,8 +1119,10 @@ namespace dxvk {
     CaravanRay ray;
     bool canPick = m_canPick && makeCaravanRay(player, ray);
 
-    if (canPick && layCaravanOnCounter(ray, feet, other, table)) {
-      takeSeat(nullptr, table, &CaravanFit, frame);
+    VrWorldObject onCounter = table;
+
+    if (canPick && layCaravanOnCounter(ray, feet, other, onCounter)) {
+      layCaravanMat(onCounter, frame);
       return true;
     }
 
@@ -1135,8 +1138,14 @@ namespace dxvk {
       " units apart, ", onWorld ? "on a surface of the world " : "at a table's height, ",
       table.position.z - feet.z, " units above the feet"));
 
-    takeSeat(nullptr, table, &CaravanFit, frame);
+    layCaravanMat(table, frame);
     return true;
+  }
+
+
+  void VrMinigames::layCaravanMat(VrWorldObject table, const VrMinigameFrame& frame) {
+    table.position.z -= CaravanPlanksTop * CaravanScale * table.scale;
+    takeSeat(nullptr, table, &CaravanFit, frame);
   }
 
 
@@ -1147,7 +1156,7 @@ namespace dxvk {
       return;
 
     VrVector3 origin = CaravanTableCentre;
-    origin.z = -CaravanTableTop / CaravanScale;
+    origin.z = CaravanPlanksTop - CaravanTableTop / CaravanScale;
 
     if (m_caravanTable->show(scene, origin, 1.0f / CaravanScale))
       Logger::info("VR: The game's diner table stands under the Caravan mat");

@@ -363,6 +363,8 @@ namespace dxvk {
 
     bool placeCaravanTable(const VrMinigameFrame& frame);
 
+    void layCaravanMat(VrWorldObject table, const VrMinigameFrame& frame);
+
     void showCaravanTable();
 
     void standAt(uint8_t* root, const VrWorldObject& object, const VrSceneFit* fit, const VrMinigameFrame& frame);

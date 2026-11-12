@@ -11,7 +11,8 @@
 
 ### Caravan
 
-- **Lacey's counter**: the mat now lies on a counter standing between you and your opponent, sized to it, instead of on the diner table.
+- **Counters**: when a counter stands between you and your opponent, the mat lies on it, sized to its depth, instead of on the game's diner table.
+- **No board under the cards**: the mat's wooden planks are gone and the cards, sign and coins rest directly on the table or counter.
 - **Cards left in the piles**: the number of cards left in each draw pile lies on the mat beside its pile instead of on the panel.
 
 ### World
