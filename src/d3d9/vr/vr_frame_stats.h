@@ -25,10 +25,9 @@ namespace dxvk {
     Submit,
     /// Telling the runtime the frame is complete
     HandOff,
-    /// From the hand-off to the next wait: panels, then the game logic of
-    /// the next frame
+    /// From the hand-off to the next wait: the game logic of the next frame
     After,
-    /// Part of After spent submitting panels, their sync included
+    /// Submitting panels, their sync included, before the eye images
     Panels,
     /// Blocked until the runtime wants the next frame
     Wait,

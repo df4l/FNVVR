@@ -805,12 +805,8 @@ namespace dxvk {
 
     drawFaders(eyes);
 
-    if (!VrD3D9Bridge::submitStereoFrame(m_device, m_backend, eyes, views,
-        timing.predictedDisplayTime) && !m_loggedFailure) {
-      Logger::err("VR: The backend rejected a stereo frame");
-      m_loggedFailure = true;
-    }
-
+    // The panels go first: the eye submission starts the hand-off, which
+    // holds DXVK's queue on its thread, and each panel waits for that queue
     if (m_hudRendered)
       submitHud();
     else
@@ -830,6 +826,12 @@ namespace dxvk {
       submitMenu();
     else if (m_overPipBoy)
       hidePanel();
+
+    if (!VrD3D9Bridge::submitStereoFrame(m_device, m_backend, eyes, views,
+        timing.predictedDisplayTime) && !m_loggedFailure) {
+      Logger::err("VR: The backend rejected a stereo frame");
+      m_loggedFailure = true;
+    }
 
     m_menuOverPipBoy = m_overPipBoy && m_menuRendered;
 

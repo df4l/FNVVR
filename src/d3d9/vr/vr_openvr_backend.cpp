@@ -355,7 +355,7 @@ namespace dxvk {
 
       VrFrameCycle cycle = { };
       cycle[uint32_t(VrFrameStep::Interval)]   = ms(frame.posesReady,    posesReady);
-      cycle[uint32_t(VrFrameStep::Render)]     = ms(frame.posesReady,    frame.submitStart) - frame.syncMs;
+      cycle[uint32_t(VrFrameStep::Render)]     = ms(frame.posesReady,    frame.submitStart) - frame.syncMs - frame.panelMs;
       cycle[uint32_t(VrFrameStep::Sync)]       = frame.syncMs;
       cycle[uint32_t(VrFrameStep::Transition)] = ms(frame.submitStart,   frame.imagesReady);
       cycle[uint32_t(VrFrameStep::Submit)]     = ms(frame.imagesReady,   frame.eyesSubmitted);
@@ -435,10 +435,11 @@ namespace dxvk {
       " s, ", seconds > 0.0 ? std::lround(double(m_stats.frames()) / seconds) : 0, " fps, ",
       m_stats.lateFrames(), " late by a display period or more, ", m_stats.busyFrames(),
       " busy for longer than a period. Average/longest ms: frame ", step(VrFrameStep::Interval),
-      ", eye rendering ", step(VrFrameStep::Render), ", DXVK sync ", step(VrFrameStep::Sync),
+      ", eye rendering ", step(VrFrameStep::Render), ", panels ", step(VrFrameStep::Panels),
+      ", DXVK sync ", step(VrFrameStep::Sync),
       ", layout transition ", step(VrFrameStep::Transition), ", submission ", step(VrFrameStep::Submit),
       ", hand-off ", step(VrFrameStep::HandOff), ", after submission ", step(VrFrameStep::After),
-      " (panels ", step(VrFrameStep::Panels), "), waiting for the runtime ", step(VrFrameStep::Wait)));
+      ", waiting for the runtime ", step(VrFrameStep::Wait)));
 
     // What the compositor did over the window. Its counts restart when
     // another process connects, so they are only compared within one.
