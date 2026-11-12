@@ -35,6 +35,9 @@ namespace dxvk {
     /// Strikers: the blade, then each fist
     constexpr static uint32_t StrikerCount = 3;
 
+    /// Shortest time between two hits on the same object, in seconds
+    constexpr static float RehitTime = 1.0f / 3.0f;
+
     ~VrMeleeObjectHit();
 
     /**

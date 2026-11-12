@@ -196,7 +196,7 @@ namespace dxvk {
         return false;
 
       // Once per swing, as an actor
-      if (body == strike.lastBody && strike.lastAge < VrSwingTracker::RehitTime)
+      if (body == strike.lastBody && strike.lastAge < RehitTime)
         return false;
 
       VrVector3 point  = ray.a + length * readField<float>(pick, VrGame::PickDataHitFraction);

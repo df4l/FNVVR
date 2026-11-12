@@ -246,7 +246,7 @@ namespace dxvk {
 
 
   bool VrSwingTracker::blocks(const Hit& hit) const {
-    return (swinging() && hit.swing == m_swing) || hit.age < RehitTime;
+    return (swinging() && hit.swing == m_swing) || hit.age < rehitTime();
   }
 
 

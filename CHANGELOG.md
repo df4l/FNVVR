@@ -24,6 +24,7 @@
 
 - **Punching a held actor**: a fist thrown at an actor held in your other hand punches it instead of grabbing it.
 - **X picks a dialogue topic**: with the left laser on a topic, X chooses it, as A does with the right laser (Touch controllers).
+- **Melee hit rate** ([#3](https://github.com/df4l/FNVVR/issues/3)): `d3d9.vrMeleeHitsPerSecond` in `dxvk.conf` sets how many hits per second a melee weapon or a fist can deal to the same target (3 by default, 1 to 30), and `d3d9.vrMeleeHitSpeed` how fast a swing must be to hit (2 m/s by default); both are now described in `dxvk.conf`.
 
 ### Other mods
 

@@ -199,7 +199,7 @@ namespace dxvk {
            reinterpret_cast<const void*>(&VrMeleeSwing::setTargetedLimbHook));
 
     Logger::info(str::format("VR: Melee weapons hit when swung faster than ", config.hitSpeed,
-      " m/s, power attacks when charged"));
+      " m/s, at most ", config.hitsPerSecond, " hits per second on a target, power attacks when charged"));
 
     if (!limbFound)
       Logger::warn("VR: The limb of melee hits could not be patched, the game picks it along the view");

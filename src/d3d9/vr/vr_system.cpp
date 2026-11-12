@@ -245,6 +245,8 @@ namespace dxvk {
 
     VrSwingConfig swing;
     swing.hitSpeed = config.getOption<float>("d3d9.vrMeleeHitSpeed", swing.hitSpeed);
+    swing.hitsPerSecond = std::min(std::max(config.getOption<float>("d3d9.vrMeleeHitsPerSecond",
+      swing.hitsPerSecond), 1.0f), 30.0f);
     swing.powerCost.base = config.getOption<int32_t>("d3d9.vrPowerAttackApCost", swing.powerCost.base);
     swing.powerCost.max  = config.getOption<int32_t>("d3d9.vrPowerAttackApCostMax", swing.powerCost.max);
     swing.powerCost.weightMult = config.getOption<float>("d3d9.vrPowerAttackApWeightMult", swing.powerCost.weightMult);
