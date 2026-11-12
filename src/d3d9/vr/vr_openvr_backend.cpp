@@ -355,7 +355,7 @@ namespace dxvk {
 
       VrFrameCycle cycle = { };
       cycle[uint32_t(VrFrameStep::Interval)]   = ms(frame.posesReady,    posesReady);
-      cycle[uint32_t(VrFrameStep::Render)]     = ms(frame.posesReady,    frame.submitStart) - frame.syncMs;
+      cycle[uint32_t(VrFrameStep::Render)]     = ms(frame.posesReady,    frame.submitStart) - frame.syncMs - frame.panelMs;
       cycle[uint32_t(VrFrameStep::Sync)]       = frame.syncMs;
       cycle[uint32_t(VrFrameStep::Transition)] = ms(frame.submitStart,   frame.imagesReady);
       cycle[uint32_t(VrFrameStep::Submit)]     = ms(frame.imagesReady,   frame.eyesSubmitted);
@@ -388,7 +388,29 @@ namespace dxvk {
     m_dropped      = stats.m_nNumDroppedFrames;
     m_statsRunning = true;
     m_stats.reset();
+    m_panelCosts   = { };
     m_statsCpu     = readCpuTimes();
+  }
+
+
+  void VrOpenVrBackend::logPanelCosts(uint32_t frames) {
+    std::ostringstream line;
+    line << std::fixed << std::setprecision(2);
+
+    for (uint32_t i = 0; i < VrPanelCount; i++) {
+      const PanelCost& cost = m_panelCosts[i];
+
+      if (!cost.submissions)
+        continue;
+
+      double n = double(cost.submissions);
+      line << (line.tellp() > 0 ? "; " : "") << PanelOverlayKeys[i] << " " << cost.submissions
+        << " times, DXVK sync " << cost.syncMs / n << ", placement " << cost.placementMs / n
+        << ", layout transition " << cost.transitionMs / n << ", SetOverlayTexture " << cost.textureMs / n;
+    }
+
+    if (line.tellp() > 0)
+      Logger::info(str::format("VR: Panels over ", frames, " frames, average ms per submission: ", line.str()));
   }
 
 
@@ -413,10 +435,11 @@ namespace dxvk {
       " s, ", seconds > 0.0 ? std::lround(double(m_stats.frames()) / seconds) : 0, " fps, ",
       m_stats.lateFrames(), " late by a display period or more, ", m_stats.busyFrames(),
       " busy for longer than a period. Average/longest ms: frame ", step(VrFrameStep::Interval),
-      ", eye rendering ", step(VrFrameStep::Render), ", DXVK sync ", step(VrFrameStep::Sync),
+      ", eye rendering ", step(VrFrameStep::Render), ", panels ", step(VrFrameStep::Panels),
+      ", DXVK sync ", step(VrFrameStep::Sync),
       ", layout transition ", step(VrFrameStep::Transition), ", submission ", step(VrFrameStep::Submit),
       ", hand-off ", step(VrFrameStep::HandOff), ", after submission ", step(VrFrameStep::After),
-      " (panels ", step(VrFrameStep::Panels), "), waiting for the runtime ", step(VrFrameStep::Wait)));
+      ", waiting for the runtime ", step(VrFrameStep::Wait)));
 
     // What the compositor did over the window. Its counts restart when
     // another process connects, so they are only compared within one.
@@ -482,6 +505,8 @@ namespace dxvk {
     }
 
     Logger::info(str::format("VR: Compositor: ", counts, " in the window; ", recent));
+
+    logPanelCosts(m_stats.frames());
 
     // Whether the game thread computes or waits during the time the steps
     // above attribute to it, and how much the other threads work
@@ -1163,6 +1188,9 @@ namespace dxvk {
     vr::IVROverlay* overlay = m_runtime->overlay;
     Panel& state = m_panels[uint32_t(id)];
 
+    PanelCost& cost = m_panelCosts[uint32_t(id)];
+    auto placementStart = high_resolution_clock::now();
+
     vr::HmdMatrix34_t transform = { };
     vrPoseToMatrix34(panel.pose, transform.m);
 
@@ -1183,14 +1211,26 @@ namespace dxvk {
     if (!m_transition->toTransferSource(&panel.image, 1))
       return false;
 
+    auto transitioned = high_resolution_clock::now();
+
     vr::VRVulkanTextureData_t data = { };
     fillTextureData(panel.image, data);
 
     vr::Texture_t texture = { &data, vr::TextureType_Vulkan, vr::ColorSpace_Gamma };
     vr::EVROverlayError error = overlay->SetOverlayTexture(state.handle, &texture);
 
-    m_frameClock.panelMs += panel.syncMs
-      + std::chrono::duration<double, std::milli>(high_resolution_clock::now() - start).count();
+    auto end = high_resolution_clock::now();
+    auto ms = [] (high_resolution_clock::time_point from, high_resolution_clock::time_point to) {
+      return std::chrono::duration<double, std::milli>(to - from).count();
+    };
+
+    m_frameClock.panelMs += panel.syncMs + ms(start, end);
+
+    cost.submissions  += 1;
+    cost.syncMs       += panel.syncMs;
+    cost.placementMs  += ms(placementStart, start);
+    cost.transitionMs += ms(start, transitioned);
+    cost.textureMs    += ms(transitioned, end);
 
     if (error == vr::VROverlayError_None && !state.visible) {
       error = overlay->ShowOverlay(state.handle);
