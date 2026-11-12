@@ -204,6 +204,14 @@ namespace dxvk {
     constexpr float     CaravanBoardHeight = 1.15f;
     constexpr float     CaravanValueNearY  = -19.6f;
     constexpr float     CaravanValueFarY   = 4.8f;
+    // The square goes on to the right as far as the cards left in each
+    // draw pile, beside the pile's right edge (x 23.84; centres at y -9.65
+    // and -4.38 in Player_Deck.NIF and Opponent_Deck.NIF), at the image's
+    // aspect so that its pixels stay square
+    constexpr float     CaravanBoardWidth  = CaravanBoardSide
+      * float(VrCaravanBoard::ImageWidth) / float(VrCaravanBoard::ImageHeight);
+    constexpr float     CaravanPileCountX  = 26.3f;
+    constexpr std::array<float, VrCaravanBoard::Piles> CaravanPileCountY = { -9.65f, -4.38f };
 
     // Top of the blackjack table, in its model
     constexpr float     BlackJackHalfX = 22.75f;
@@ -2699,12 +2707,21 @@ namespace dxvk {
     for (uint32_t track = 0; track < VrCaravanBoard::Tracks; track++) {
       float y = track < 3 ? CaravanValueNearY : CaravanValueFarY;
       m_caravanBoard.spots[track] = {
-        clamp((xs[track] - left) / CaravanBoardSide, 0.0f, 1.0f),
+        clamp((xs[track] - left) / CaravanBoardWidth, 0.0f, 1.0f),
         clamp((top - y) / CaravanBoardSide, 0.0f, 1.0f) };
     }
 
-    VrVector3 centre = { left + 0.5f * CaravanBoardSide, top - 0.5f * CaravanBoardSide, CaravanBoardHeight };
-    m_caravanBoard.placement = vrSceneSurface(m_space, centre, CaravanBoardSide, CaravanBoardSide);
+    const std::array<uintptr_t, VrCaravanBoard::Piles> piles = { VrGame::CaravanPlayerPile, VrGame::CaravanOpponentPile };
+
+    for (uint32_t pile = 0; pile < VrCaravanBoard::Piles; pile++) {
+      m_caravanBoard.piles[pile] = int32_t(field<uint32_t>(menu, piles[pile] + VrGame::SimpleArraySize));
+      m_caravanBoard.pileSpots[pile] = {
+        clamp((CaravanPileCountX - left) / CaravanBoardWidth, 0.0f, 1.0f),
+        clamp((top - CaravanPileCountY[pile]) / CaravanBoardSide, 0.0f, 1.0f) };
+    }
+
+    VrVector3 centre = { left + 0.5f * CaravanBoardWidth, top - 0.5f * CaravanBoardSide, CaravanBoardHeight };
+    m_caravanBoard.placement = vrSceneSurface(m_space, centre, CaravanBoardWidth, CaravanBoardSide);
     return true;
   }
 
@@ -2727,7 +2744,7 @@ namespace dxvk {
     if (!tiles)
       return;
 
-    for (const char* name : { VrGame::CaravanPlayerValuesTile, VrGame::CaravanOpponentValuesTile }) {
+    for (const char* name : { VrGame::CaravanPlayerValuesTile, VrGame::CaravanOpponentValuesTile, VrGame::CaravanPilesTile }) {
       void* tile = game<TileByNameFn>(VrGame::TileGetByName)(tiles, name);
 
       if (tile)
@@ -2736,8 +2753,8 @@ namespace dxvk {
 
     if (shown != m_caravanTilesHidden) {
       Logger::info(shown
-        ? "VR: The values of Caravan's tracks lie on the mat"
-        : "VR: The values of Caravan's tracks are back on the panel");
+        ? "VR: The values of Caravan's tracks and the cards left in its piles lie on the mat"
+        : "VR: The values of Caravan's tracks and the cards left in its piles are back on the panel");
     }
 
     m_caravanTilesHidden = shown;

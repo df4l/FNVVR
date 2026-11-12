@@ -9,20 +9,28 @@
 namespace dxvk {
 
   /**
-   * \brief The values of Caravan's six tracks, where they lie on the mat
+   * \brief The values of Caravan's six tracks and the cards left in the two
+   *    draw piles, where they lie on the mat
    */
   struct VrCaravanBoard {
     constexpr static uint32_t Tracks      = 6;
-    constexpr static uint32_t ImageSize   = 512;
+    /// The player's draw pile, then the opponent's
+    constexpr static uint32_t Piles       = 2;
+    constexpr static uint32_t ImageWidth  = 768;
+    constexpr static uint32_t ImageHeight = 512;
     /// A track's value over this has bust
     constexpr static int32_t  MostValue   = 26;
 
-    /// The square of the mat the values are drawn on, facing up
+    /// The rectangle of the mat the numbers are drawn on, facing up
     VrPanelPlacement placement;
     /// Value of each track, -1 for a track without a card
     std::array<int32_t, Tracks>   values = { -1, -1, -1, -1, -1, -1 };
     /// Centre of each value in the image, (0, 0) top left, (1, 1) bottom right
     std::array<VrVector2, Tracks> spots  = { };
+    /// Cards left in each draw pile
+    std::array<int32_t, Piles>    piles  = { 0, 0 };
+    /// Centre of each pile's count in the image
+    std::array<VrVector2, Piles>  pileSpots = { };
   };
 
   /**

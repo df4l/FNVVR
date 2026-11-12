@@ -11,19 +11,37 @@ namespace dxvk {
     const VrColour Plate = { 0.0f, 0.0f, 0.0f, 0.6f };
     const VrColour Bust  = { 0.9f, 0.15f, 0.1f, 1.0f };
 
-    // Size of a value's plate, in parts of the image
-    constexpr float PlateWidth  = 0.11f;
-    constexpr float PlateHeight = 0.065f;
+    // Size of a number's plate, in pixels
+    constexpr float PlateWidth  = 56.0f;
+    constexpr float PlateHeight = 33.0f;
+
+    bool sameSpot(const VrVector2& a, const VrVector2& b) {
+      return a.x == b.x && a.y == b.y;
+    }
 
     bool sameBoard(const VrCaravanBoard& a, const VrCaravanBoard& b) {
       for (uint32_t i = 0; i < VrCaravanBoard::Tracks; i++) {
-        if (a.values[i] != b.values[i]
-         || a.spots[i].x != b.spots[i].x
-         || a.spots[i].y != b.spots[i].y)
+        if (a.values[i] != b.values[i] || !sameSpot(a.spots[i], b.spots[i]))
+          return false;
+      }
+
+      for (uint32_t i = 0; i < VrCaravanBoard::Piles; i++) {
+        if (a.piles[i] != b.piles[i] || !sameSpot(a.pileSpots[i], b.pileSpots[i]))
           return false;
       }
 
       return true;
+    }
+
+    void paintNumber(VrPaintList& list, const VrPaintFont& font, const VrVector2& spot,
+        int32_t number, const VrColour& colour) {
+      float cx = spot.x * float(list.width());
+      float cy = spot.y * float(list.height());
+      float hw = 0.5f * PlateWidth;
+      float hh = 0.5f * PlateHeight;
+
+      list.fillRoundedRect(cx - hw, cy - hh, cx + hw, cy + hh, 0.4f * hh, Plate);
+      list.drawTextBlock(font, std::to_string(number), cx, cy, 2.0f * hw, 1.0f, 0.5f, 1, colour);
     }
 
   }
@@ -31,33 +49,26 @@ namespace dxvk {
 
   void vrPaintCaravanValues(VrPaintList& list, const VrCaravanBoard& board,
       const VrColour& colour, const VrPaintFont* font) {
-    float width  = float(list.width());
-    float height = float(list.height());
-
     list.clear();
 
     if (!font)
       return;
 
     for (uint32_t i = 0; i < VrCaravanBoard::Tracks; i++) {
-      if (board.values[i] < 0)
-        continue;
-
-      float cx = board.spots[i].x * width;
-      float cy = board.spots[i].y * height;
-      float hw = 0.5f * PlateWidth * width;
-      float hh = 0.5f * PlateHeight * height;
-
-      list.fillRoundedRect(cx - hw, cy - hh, cx + hw, cy + hh, 0.4f * hh, Plate);
-      list.drawTextBlock(*font, std::to_string(board.values[i]), cx, cy, 2.0f * hw, 1.0f, 0.5f, 1,
-        board.values[i] > VrCaravanBoard::MostValue ? Bust : colour);
+      if (board.values[i] >= 0) {
+        paintNumber(list, *font, board.spots[i], board.values[i],
+          board.values[i] > VrCaravanBoard::MostValue ? Bust : colour);
+      }
     }
+
+    for (uint32_t i = 0; i < VrCaravanBoard::Piles; i++)
+      paintNumber(list, *font, board.pileSpots[i], board.piles[i], colour);
   }
 
 
   VrCaravanValues::VrCaravanValues(VrPainter& painter, IVRBackend& backend, VrGameImages& images)
   : m_panel(painter, backend, VrPanelId::CaravanValues),
-    m_list(VrCaravanBoard::ImageSize, VrCaravanBoard::ImageSize),
+    m_list(VrCaravanBoard::ImageWidth, VrCaravanBoard::ImageHeight),
     m_images(images) { }
 
 
@@ -72,7 +83,7 @@ namespace dxvk {
       vrPaintCaravanValues(m_list, board, VrGameImages::hudColour(), m_images.font());
 
       if (!m_panel.paint(m_list)) {
-        Logger::err("VR: Failed to draw the values of Caravan's tracks, the game shows them");
+        Logger::err("VR: Failed to draw the values of Caravan's tracks and piles, the game shows them");
         m_failed = true;
         hide();
         return false;
