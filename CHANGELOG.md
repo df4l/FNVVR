@@ -4,7 +4,7 @@
 
 ### Performance
 
-- **Faster game engine**: hundreds of small, slow functions of the game are replaced by faster versions giving exactly the same results (the inline patches of lStewieAl's Tweaks, unoptimised accessors, the math, culling and bound functions). A function a plugin already rewrote is left to that plugin. `d3d9.vrEnginePatches = False` and `d3d9.vrFastMath = False` turn them off.
+- **Faster game engine**: hundreds of small, slow functions of the game are replaced by faster versions giving exactly the same results (inline patches, unoptimised accessors, the math, culling and bound functions). A function a plugin already rewrote is left to that plugin. `d3d9.vrEnginePatches = False` and `d3d9.vrFastMath = False` turn them off.
 - **Frames handed to the headset on their own thread**: the game no longer waits about 2 ms per frame for the compositor. `d3d9.vrAsyncHandOff = False` brings the old behaviour back.
 - **No actor shadows**: they cost a lot in the headset for little gain, and are turned off as in Viva New Vegas.
 - **Pip-Boy band measured once**: the sleeve cut under the Pip-Boy no longer walks the whole model every frame.
