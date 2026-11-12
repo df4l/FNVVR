@@ -10,6 +10,7 @@
 #include <sstream>
 
 #include "../../util/log/log.h"
+#include "../../util/util_env.h"
 #include "../../util/util_string.h"
 
 #ifdef __GNUC__
@@ -358,7 +359,8 @@ namespace dxvk {
       cycle[uint32_t(VrFrameStep::Sync)]       = frame.syncMs;
       cycle[uint32_t(VrFrameStep::Transition)] = ms(frame.submitStart,   frame.imagesReady);
       cycle[uint32_t(VrFrameStep::Submit)]     = ms(frame.imagesReady,   frame.eyesSubmitted);
-      cycle[uint32_t(VrFrameStep::HandOff)]    = ms(frame.eyesSubmitted, frame.submitted);
+      cycle[uint32_t(VrFrameStep::HandOff)]    = frame.handOffMs >= 0.0
+        ? frame.handOffMs : ms(frame.eyesSubmitted, frame.submitted);
       cycle[uint32_t(VrFrameStep::After)]      = ms(frame.submitted,     waitStart);
       cycle[uint32_t(VrFrameStep::Panels)]     = frame.panelMs;
       cycle[uint32_t(VrFrameStep::Wait)]       = ms(waitStart,           posesReady);
@@ -656,6 +658,10 @@ namespace dxvk {
     m_runtime->compositor->SetExplicitTimingMode(
       vr::VRCompositorTimingMode_Explicit_ApplicationPerformsPostPresentHandoff);
     m_frameStarted = false;
+
+    if (binding.asyncHandOff && binding.lockQueue && binding.releaseQueue)
+      startHandOffThread();
+
     startSession();
     return true;
   }
@@ -687,6 +693,7 @@ namespace dxvk {
 
 
   void VrOpenVrBackend::endSession() {
+    stopHandOffThread();
     destroyPanels();
     destroyPointers();
     m_transition = nullptr;
@@ -765,6 +772,9 @@ namespace dxvk {
 
     auto waitStart = high_resolution_clock::now();
 
+    // WaitGetPoses must follow the previous frame's hand-off
+    finishHandOff();
+
     // Blocks until the compositor wants the next frame. The poses are
     // converted here and handed out by pollInput. In the explicit timing
     // mode the call does not use the queue, so it needs no lock.
@@ -838,6 +848,84 @@ namespace dxvk {
   void VrOpenVrBackend::handOffFrame() {
     m_runtime->compositor->PostPresentHandoff();
     m_frameStarted = false;
+  }
+
+
+  void VrOpenVrBackend::handOffSubmittedFrame() {
+    if (!m_handOffThread.joinable()) {
+      m_frameClock.handOffMs = -1.0;
+      handOffFrame();
+      return;
+    }
+
+    std::unique_lock<dxvk::mutex> lock(m_handOffMutex);
+    m_handOffPending = true;
+    m_frameStarted   = false;
+    m_handOffCond.notify_all();
+  }
+
+
+  void VrOpenVrBackend::finishHandOff() {
+    if (!m_handOffThread.joinable())
+      return;
+
+    std::unique_lock<dxvk::mutex> lock(m_handOffMutex);
+    m_handOffCond.wait(lock, [this] { return !m_handOffPending; });
+    m_frameClock.handOffMs = m_handOffMs;
+  }
+
+
+  void VrOpenVrBackend::startHandOffThread() {
+    if (m_handOffThread.joinable())
+      return;
+
+    m_handOffStop    = false;
+    m_handOffPending = false;
+    m_handOffThread  = dxvk::thread([this] { runHandOffThread(); });
+    Logger::info("VR: Frames are handed off to the compositor on a thread of their own");
+  }
+
+
+  void VrOpenVrBackend::stopHandOffThread() {
+    if (!m_handOffThread.joinable())
+      return;
+
+    { std::unique_lock<dxvk::mutex> lock(m_handOffMutex);
+      m_handOffStop = true;
+      m_handOffCond.notify_all();
+    }
+
+    m_handOffThread.join();
+  }
+
+
+  void VrOpenVrBackend::runHandOffThread() {
+    env::setThreadName("vr-handoff");
+
+    std::unique_lock<dxvk::mutex> lock(m_handOffMutex);
+
+    while (true) {
+      m_handOffCond.wait(lock, [this] { return m_handOffPending || m_handOffStop; });
+
+      // A pending frame is handed off before stopping, WaitGetPoses or the
+      // end of the session expects it
+      if (!m_handOffPending)
+        return;
+
+      lock.unlock();
+
+      // The runtime may use the game's queue, which DXVK shares between threads
+      m_binding.lockQueue();
+      auto start = high_resolution_clock::now();
+      m_runtime->compositor->PostPresentHandoff();
+      auto end = high_resolution_clock::now();
+      m_binding.releaseQueue();
+
+      lock.lock();
+      m_handOffMs      = std::chrono::duration<double, std::milli>(end - start).count();
+      m_handOffPending = false;
+      m_handOffCond.notify_all();
+    }
   }
 
 
@@ -1026,7 +1114,7 @@ namespace dxvk {
     m_frameClock.eyesSubmitted = high_resolution_clock::now();
 
     // Both eyes are in, the compositor may start on the frame
-    handOffFrame();
+    handOffSubmittedFrame();
 
     m_frameClock.submitted   = high_resolution_clock::now();
     m_frameClock.isSubmitted = true;

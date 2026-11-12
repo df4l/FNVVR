@@ -4,6 +4,7 @@
 #include <memory>
 #include <vector>
 
+#include "../../util/thread.h"
 #include "../../util/util_time.h"
 
 #include "vr_backend.h"
@@ -210,6 +211,35 @@ namespace dxvk {
     void handOffFrame();
 
     /**
+     * \brief Hands the frame off now, or on the hand-off thread
+     *
+     * Called with the queue locked. The thread takes the lock itself, so it
+     * runs once the caller has released it.
+     */
+    void handOffSubmittedFrame();
+
+    /**
+     * \brief Waits until the hand-off thread is done with the last frame
+     */
+    void finishHandOff();
+
+    void startHandOffThread();
+
+    void stopHandOffThread();
+
+    void runHandOffThread();
+
+    /// Hand-off thread (d3d9.vrAsyncHandOff): PostPresentHandoff takes about
+    /// 2 ms in the runtime without using the CPU, see findings/render.md.
+    /// The game logic of the next frame runs meanwhile.
+    dxvk::thread                      m_handOffThread;
+    dxvk::mutex                       m_handOffMutex;
+    dxvk::condition_variable          m_handOffCond;
+    bool                              m_handOffPending = false;
+    bool                              m_handOffStop    = false;
+    double                            m_handOffMs      = 0.0;
+
+    /**
      * \brief Time from now until the next frame reaches the eyes, in seconds
      */
     float secondsToPhotons() const;
@@ -237,6 +267,8 @@ namespace dxvk {
       high_resolution_clock::time_point submitted;
       double                            syncMs      = 0.0;
       double                            panelMs     = 0.0;
+      /// Hand-off measured on the hand-off thread, negative when done inline
+      double                            handOffMs   = -1.0;
       bool                              isSubmitted = false;
     };
 

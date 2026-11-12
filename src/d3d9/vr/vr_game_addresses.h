@@ -512,6 +512,111 @@ namespace dxvk {
     constexpr uintptr_t AudioShutdownClearInitialized = 0x00AEA4DC;
     constexpr uint8_t   AudioShutdownClearInitializedCode[] = { 0xC6, 0x40, 0x05, 0x00 };
 
+    /**
+     * FaderManager::CreateFader (0x00700990) scales the screen's width and
+     * height by 0.5 for the fader quad's half extents:
+     * fmul qword ptr [0x01011588] after GetScreenWidth and GetScreenHeight
+     */
+    constexpr uintptr_t FaderHalfWidth  = 0x00700AB2;
+    constexpr uintptr_t FaderHalfHeight = 0x00700ACC;
+    constexpr uint8_t   FaderHalfExtentCode[] = { 0xDC, 0x0D, 0x88, 0x15, 0x01, 0x01 };
+
+    /**
+     * FaderManager::kFaders: three entries of 0x1C bytes, the black fader
+     * below the menus, the black one above them and the white one. An entry
+     * is shown while its root node (+0x10) is set; the alpha (float) is at
+     * +0x14. See findings/render.md, faders.
+     */
+    constexpr uintptr_t FaderTable       = 0x011D8828;
+    constexpr uint32_t  FaderCount       = 3;
+    constexpr uint32_t  FaderStride      = 0x1C;
+    constexpr uint32_t  FaderRoot        = 0x10;
+    constexpr uint32_t  FaderAlpha       = 0x14;
+    constexpr uint32_t  FaderWhite       = 2;
+
+    /**
+     * C runtime double fabs (_fabs): sets the x87 control word with
+     * __ctrlfp before and after masking the sign. The profile names it the
+     * caller of __ctrlfp (0x00ED5ABB); _floor and _ceil never reach it.
+     */
+    constexpr uintptr_t CrtFabs = 0x00EC6CDE;
+    constexpr uint8_t   CrtFabsStart[] = { 0x8B, 0xFF, 0x55, 0x8B, 0xEC, 0x51, 0x51 };
+
+    /**
+     * Small math functions of the game, replaced by VrFastMath (names from
+     * the GOG database, findings/engine-optimizations.md section 10). Each
+     * is a plain MSVC function that starts with push ebp / mov ebp, esp, so
+     * the first eight bytes tell a plugin's rewrite from the original.
+     */
+    constexpr uintptr_t PointConstruct     = 0x00416870;
+    constexpr uintptr_t PointAdd           = 0x00439E90;
+    constexpr uintptr_t PointSubtract      = 0x00439EF0;
+    constexpr uintptr_t PointScale         = 0x004A3760;
+    constexpr uintptr_t MatrixPoint        = 0x004B4500;
+    constexpr uintptr_t MatrixMatrix       = 0x0043F8D0;
+    constexpr uintptr_t TransformTransform = 0x0062C250;
+
+    constexpr uint8_t   PointConstructStart[]     = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B };
+    constexpr uint8_t   PointAddStart[]           = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x10, 0x89, 0x4D };
+    constexpr uint8_t   PointSubtractStart[]      = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x10, 0x89, 0x4D };
+    constexpr uint8_t   PointScaleStart[]         = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C, 0xD9, 0x45 };
+    constexpr uint8_t   MatrixPointStart[]        = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x10, 0x89, 0x4D };
+    constexpr uint8_t   MatrixMatrixStart[]       = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x28, 0x56, 0x57 };
+    constexpr uint8_t   TransformTransformStart[] = { 0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x80, 0x00, 0x00 };
+
+    /**
+     * Also replaced by VrFastMath: ShadowSceneLight::BoundWithinLightFrustum
+     * (thiscall, bound, retn 4; planes at this + 0x144, mask at + 0x1A4),
+     * and the C runtime's __CIsqrt (st0) and _sqrt (cdecl). The C runtime
+     * functions do not start with a frame; their first eight bytes hold a
+     * call, which pins the code as well.
+     */
+    constexpr uintptr_t LightFrustumBound  = 0x00B9BBB0;
+    constexpr uintptr_t CrtCiSqrt          = 0x00EC6040;
+    constexpr uintptr_t CrtSqrt            = 0x00EC6054;
+
+    constexpr uint8_t   LightFrustumBoundStart[]  = { 0x53, 0x55, 0x8B, 0x6C, 0x24, 0x0C, 0x56, 0x57 };
+    constexpr uint8_t   CrtCiSqrtStart[]          = { 0x83, 0xEC, 0x0C, 0xDD, 0x14, 0x24, 0xE8, 0xBD };
+    constexpr uint8_t   CrtSqrtStart[]            = { 0x8D, 0x54, 0x24, 0x04, 0xE8, 0x68, 0xC7, 0x00 };
+
+    /**
+     * NiPoint3::operator*(NiPoint3) (dot product, 247 callers),
+     * NiPlane::Distance(point) and NiBound::WhichSide(plane), all thiscall
+     * with one stack argument and the float result in st0 (WhichSide: 0
+     * across, 1 positive side, 2 negative side, in eax).
+     */
+    constexpr uintptr_t PointDot           = 0x004B6190;
+    constexpr uintptr_t PlaneDistance      = 0x004B6160;
+    constexpr uintptr_t BoundWhichSide     = 0x004B6100;
+
+    constexpr uint8_t   PointDotStart[]           = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0x89, 0x4D };
+    constexpr uint8_t   PlaneDistanceStart[]      = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0x89, 0x4D };
+    constexpr uint8_t   BoundWhichSideStart[]     = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0x89, 0x4D };
+
+    /** NiBound::Merge(other), thiscall, retn 4 */
+    constexpr uintptr_t BoundMerge         = 0x00A7F3F0;
+    constexpr uint8_t   BoundMergeStart[]         = { 0x83, 0xEC, 0x20, 0x56, 0x8B, 0xF1, 0xD9, 0x06 };
+
+    /**
+     * Two one-field getters the profiles show among the hottest blocks
+     * (MobileObject::GetCurrentAIProcess returns [this+0x68],
+     * BaseProcess::GetProcessLevel returns [this+0x28]). Both are the
+     * unoptimised MSVC form: frame, ecx stored to the stack and reloaded.
+     * The 13 bytes are the whole body up to the field's load.
+     */
+    constexpr uintptr_t CurrentProcessGetter = 0x008D8520;
+    constexpr uintptr_t ProcessLevelGetter   = 0x0045CD60;
+
+    /**
+     * NiPointer::operator-> (6,744 callers): returns [this], same unoptimised
+     * form as the getters above; the 12 bytes reach the load.
+     */
+    constexpr uintptr_t PointerDereference = 0x00559450;
+    constexpr uint8_t   PointerDereferenceStart[] = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x45, 0xFC, 0x8B, 0x00 };
+
+    constexpr uint8_t   CurrentProcessGetterStart[] = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x45, 0xFC, 0x8B, 0x40, 0x68 };
+    constexpr uint8_t   ProcessLevelGetterStart[]   = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x45, 0xFC, 0x8B, 0x40, 0x28 };
+
     /** State of the VATS camera, 0 when VATS is not running */
     constexpr uintptr_t VatsCameraState = 0x011F2258;
 
@@ -971,6 +1076,17 @@ namespace dxvk {
     constexpr uintptr_t CaravanGameTiles     = 0x38;
     constexpr char      CaravanPlayerValuesTile[] = "CGM_PlayerTrackRect";
     constexpr char      CaravanOpponentValuesTile[] = "CGM_NPCTrackRect";
+    /**
+     * The cards left in the draw piles: kPlayerDeck (+0xB04) and kNPCDeck
+     * (+0xB14), BSSimpleArrays whose size DoIdle writes to the "_Value" of
+     * pTiles[29] and [30] (e.g. at 0x00743CB4-0x00743D19).
+     * Those tiles, CGM_PlayerCardNum and CGM_NPCCardNum, are children of
+     * CGM_CardNumRect (caravan_game_menu.xml), whose visible copies its
+     * parent's.
+     */
+    constexpr uintptr_t CaravanPlayerPile    = 0xB04;
+    constexpr uintptr_t CaravanOpponentPile  = 0xB14;
+    constexpr char      CaravanPilesTile[]   = "CGM_CardNumRect";
     constexpr uintptr_t TileGetByName        = 0x00A08B20;
     constexpr uint8_t   TileGetByNamePrologue[] = { 0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x88, 0x08, 0x00, 0x00 };
 
@@ -1207,6 +1323,10 @@ namespace dxvk {
     constexpr uintptr_t SettingDoHighDynamicRange         = 0x011C76C0;
     constexpr uintptr_t SettingUseBlurShader              = 0x011C7768;
     constexpr uintptr_t SettingLightEffectFadeDuration    = 0x011DB2BC;
+    /// Display settings named by JIP LN and JohnnyGuitar NVSE (same addresses)
+    constexpr uintptr_t SettingDrawShadows                = 0x011C74D4;
+    constexpr uintptr_t SettingActorShadowCountInt        = 0x011C72D8;
+    constexpr uintptr_t SettingActorShadowCountExt        = 0x011C72E4;
     /// bAlwaysActive:General, TESMain::SetActive (0x00871C90) keeps the game
     /// running when its window is deactivated
     constexpr uintptr_t SettingAlwaysActive               = 0x011DEED8;
@@ -1872,6 +1992,22 @@ namespace dxvk {
     constexpr uintptr_t BillboardFlags           = 0xAC;
     constexpr uint16_t  BillboardModeMask        = 0x7;
     constexpr uint16_t  BillboardAlwaysFaceCenter = 3;
+
+    /**
+     * SpeedTree leaf cards, see findings/render.md. The leaf shader's
+     * SetupTransformations (0x00BB25D0) calls UpdateScaleAdjustment, which
+     * copies the columns 2 (right) and 1 (up) of BSShaderManager::pCamera's
+     * world rotation into the BillboardRight and BillboardUp vertex constants
+     * (float4, part of SpeedTreeLeafShader::Const::GroupedConstants, register
+     * c11 onwards). Its only call. The leaf geometry being drawn is the first
+     * member of BSShaderManager::pCurrentRenderPass (SetupGeometryConstants
+     * 0x00BB2760).
+     */
+    constexpr uintptr_t LeafScaleAdjustment         = 0x00BB1A90;
+    constexpr uintptr_t LeafScaleAdjustmentCallSite = 0x00BB26B0;
+    constexpr uintptr_t LeafBillboardRight          = 0x01200638;
+    constexpr uintptr_t LeafBillboardUp             = 0x01200648;
+    constexpr uintptr_t ShaderCurrentRenderPass     = 0x011F91E0;
 
     /**
      * Settings pages of the start menu, see findings/options-menu.md. The

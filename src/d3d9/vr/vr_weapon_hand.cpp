@@ -162,6 +162,9 @@ namespace dxvk {
     /** More vertices than the Pip-Boy has: a model this large is not measured */
     constexpr uint32_t MaxPipBoyVertices = 65536;
 
+    /// Frames a measure of the Pip-Boy's band is reused for at most
+    constexpr uint32_t RemeasureFrames = 120;
+
     constexpr float Pi               = 3.14159265f;
     constexpr float DegreesPerRadian = 180.0f / Pi;
 
@@ -3118,11 +3121,16 @@ namespace dxvk {
     VrVector3 elbow = readVector(forearm, VrGame::ObjectWorldTranslation);
     VrVector3 wrist = readVector(hand, VrGame::ObjectWorldTranslation);
 
-    // The band's edge on the elbow's side is the vertex furthest from the
-    // wrist along the forearm. The twist bone turns the Pip-Boy about that
-    // axis, so the distance does not depend on the pose.
-    float furthest = -FLT_MAX;
+    // The drawn geometry of the Pip-Boy, in the walk's order
+    struct Part {
+      uint8_t*          geometry;
+      const VrVector3*  points;
+      uint32_t          count;
+    };
+
+    std::vector<Part> parts;
     uint32_t vertices = 0;
+    uintptr_t models = 0;
 
     forEachObject(nodes.device, MaxModelDepth, [&] (uint8_t* object) {
       uint8_t* geometry = (field<uint32_t>(object, VrGame::ObjectFlags) & VrGame::ObjectFlagAppCulled)
@@ -3138,22 +3146,65 @@ namespace dxvk {
       if (!points || vertices + count > MaxPipBoyVertices)
         return;
 
-      VrGameRotation rotate = readRotation(geometry, VrGame::ObjectWorldRotation);
-      VrVector3 translate   = readVector(geometry, VrGame::ObjectWorldTranslation);
-      float scale           = field<float>(geometry, VrGame::ObjectWorldScale);
-
-      for (uint32_t i = 0; i < count; i++) {
-        VrVector3 point = translate + (rotate * points[i]) * scale;
-        furthest = std::max(furthest, vrDistanceTowardsElbow(elbow, wrist, point));
-      }
-
+      parts.push_back({ geometry, points, count });
+      models = models * 31u + reinterpret_cast<uintptr_t>(data);
       vertices += count;
     });
 
-    if (!vertices)
+    if (!vertices) {
+      m_pipBoyCut.valid = false;
       return false;
+    }
+
+    // The band's edge on the elbow's side is the vertex furthest from the
+    // wrist along the forearm. The twist bone turns the Pip-Boy about that
+    // axis, so the distance does not depend on the pose: it is measured
+    // again only when the model, the forearm's length or the scale change.
+    VrVector3 axis = wrist - elbow;
+    float length = vrLength(axis);
+    float scale  = field<float>(parts.front().geometry, VrGame::ObjectWorldScale);
+
+    auto close = [] (float a, float b) {
+      return std::fabs(a - b) <= 1e-3f * std::max(std::fabs(a), std::fabs(b));
+    };
+
+    PipBoyCutMeasure& last = m_pipBoyCut;
+
+    if (last.valid && last.device == nodes.device && last.forearm == forearm && last.hand == hand
+     && last.models == models && last.vertices == vertices
+     && close(last.length, length) && close(last.scale, scale)
+     && ++last.age < RemeasureFrames) {
+      distance = last.distance;
+      return true;
+    }
+
+    // As vrDistanceTowardsElbow for each vertex, with the axis taken once
+    float furthest = -FLT_MAX;
+    float inverse  = length > 0.0f ? 1.0f / length : 0.0f;
+
+    for (const Part& part : parts) {
+      VrGameRotation rotate = readRotation(part.geometry, VrGame::ObjectWorldRotation);
+      VrVector3 translate   = readVector(part.geometry, VrGame::ObjectWorldTranslation);
+      float partScale       = field<float>(part.geometry, VrGame::ObjectWorldScale);
+
+      for (uint32_t i = 0; i < part.count; i++) {
+        VrVector3 point = translate + (rotate * part.points[i]) * partScale;
+        furthest = std::max(furthest, length > 0.0f ? vrDot(wrist - point, axis) * inverse : 0.0f);
+      }
+    }
 
     distance = furthest - PipBoyBandOverlap;
+
+    last.device   = nodes.device;
+    last.forearm  = forearm;
+    last.hand     = hand;
+    last.models   = models;
+    last.vertices = vertices;
+    last.length   = length;
+    last.scale    = scale;
+    last.distance = distance;
+    last.age      = 0;
+    last.valid    = true;
     return true;
   }
 

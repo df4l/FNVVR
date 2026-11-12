@@ -10,12 +10,12 @@
 namespace dxvk {
 
   /**
-   * \brief Draws the values of the tracks
+   * \brief Draws the values of the tracks and the cards left in the piles
    *
-   * Each value on a small dark plate, in the HUD's colour, red once the
-   * track has bust, as the game's tiles show them.
+   * Each number on a small dark plate, in the HUD's colour, a value red
+   * once the track has bust, as the game's tiles show them.
    *
-   * \param [out] list Paint list of VrCaravanBoard::ImageSize squared
+   * \param [out] list Paint list of VrCaravanBoard::ImageWidth by ImageHeight
    * \param [in] board The values and where they go
    * \param [in] colour The HUD's colour
    * \param [in] font Font of the text, or \c nullptr to draw nothing
@@ -25,7 +25,8 @@ namespace dxvk {
 
   /**
    * \brief The values of Caravan's tracks, lying on the mat at the end of
-   *    each track (findings/caravan.md §3.4)
+   *    each track, and the cards left beside each draw pile
+   *    (findings/caravan.md §3.4)
    */
   class VrCaravanValues {
 

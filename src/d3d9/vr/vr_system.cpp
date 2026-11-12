@@ -25,6 +25,8 @@
 #include "vr_gamepad_hook.h"
 #include "vr_large_address.h"
 #include "vr_live_casino.h"
+#include "vr_engine_patches.h"
+#include "vr_fast_math.h"
 #include "vr_sound_focus.h"
 #include "vr_game_window.h"
 #include "vr_launcher_overlay.h"
@@ -253,6 +255,7 @@ namespace dxvk {
     g_vrSystem->m_pipBoyScale = options.pipBoyScale;
     g_vrSystem->m_manualReload = options.manualReload;
     g_vrSystem->m_handPush = config.getOption<bool>("d3d9.vrHandPush", true);
+    g_vrSystem->m_asyncHandOff = config.getOption<bool>("d3d9.vrAsyncHandOff", true);
     g_vrSystem->m_scopes = options.scopeLens;
     g_vrSystem->m_roomscale = options.roomscale;
     g_vrSystem->m_immersiveMinigames = config.getOption<bool>("d3d9.vrImmersiveMinigames", true);
@@ -273,6 +276,10 @@ namespace dxvk {
 
     VrLargeAddress::install(g_vrSystem->m_texts);
     VrSoundFocus::install();
+    if (config.getOption<bool>("d3d9.vrFastMath", true))
+      VrFastMath::install();
+    if (config.getOption<bool>("d3d9.vrEnginePatches", true))
+      VrEnginePatches::install(config.getOption<std::string>("d3d9.vrEnginePatchGroups", "all"));
 
     if (g_vrSystem->m_hideGameWindow)
       VrSoundFocus::keepPluginSound();
@@ -391,6 +398,8 @@ namespace dxvk {
 
     if (!VrD3D9Bridge::queryGraphicsBinding(device, binding))
       return false;
+
+    binding.asyncHandOff = m_asyncHandOff;
 
     logLoadedModules();
 

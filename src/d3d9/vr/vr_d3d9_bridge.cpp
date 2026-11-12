@@ -27,6 +27,12 @@ namespace dxvk {
 
     interop->GetVulkanHandles(&binding.instance, &binding.physicalDevice, &binding.device);
     interop->GetSubmissionQueue(&binding.queue, &binding.queueIndex, &binding.queueFamilyIndex);
+
+    // The interop interface belongs to the device, which outlives the
+    // session; no reference is kept so the device can still be released
+    ID3D9VkInteropDevice* lock = interop.ptr();
+    binding.lockQueue    = [lock] { lock->LockSubmissionQueue(); };
+    binding.releaseQueue = [lock] { lock->ReleaseSubmissionQueue(); };
     return true;
   }
 

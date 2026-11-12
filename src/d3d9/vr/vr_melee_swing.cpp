@@ -324,6 +324,7 @@ namespace dxvk {
       if (!player || !fist.hand || !fist.closed || (fist.bare && !covered)) {
         m_hasFist[i] = false;
         m_fistSwings[i].reset();
+        m_sincePunch[i] = PunchGrace;
         continue;
       }
 
@@ -339,8 +340,12 @@ namespace dxvk {
       m_hasFist[i] = true;
       m_fistSwings[i].update(m_fists[i].b, dt);
 
-      if (!hadFist || !m_fistSwings[i].swinging())
+      if (!hadFist || !m_fistSwings[i].swinging()) {
+        m_sincePunch[i] = std::min(m_sincePunch[i] + dt, PunchGrace);
         continue;
+      }
+
+      m_sincePunch[i] = 0.0f;
 
       // The game's unarmed attack, never a power attack: the trigger is
       // the fist's index

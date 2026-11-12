@@ -33,8 +33,11 @@ namespace dxvk {
     /**
      * \brief Checks that code belongs to neither the game nor this library
      *
-     * Only executable memory counts: a different executable can hold data or
-     * a stray displacement where a call is expected, and that is no plugin.
+     * A different executable can hold data or a stray displacement where a
+     * call is expected, and that is no plugin: the target must be executable
+     * memory or lie in another module's image. The game does not enforce
+     * data execution prevention, and a tester's xNVSE hook was reported in a
+     * read-only page of nvse_1_4.dll.
      */
     bool isForeignCode(uintptr_t target) {
       constexpr DWORD Executable = PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
@@ -42,7 +45,10 @@ namespace dxvk {
       MEMORY_BASIC_INFORMATION info = { };
 
       if (!VirtualQuery(reinterpret_cast<void*>(target), &info, sizeof(info))
-       || info.State != MEM_COMMIT || !(info.Protect & Executable))
+       || info.State != MEM_COMMIT || (info.Protect & (PAGE_NOACCESS | PAGE_GUARD)))
+        return false;
+
+      if (!(info.Protect & Executable) && info.Type != MEM_IMAGE)
         return false;
 
       HMODULE self = nullptr;

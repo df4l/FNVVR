@@ -1049,6 +1049,28 @@ namespace dxvk {
     bool             m_loggedSleeveCut = false;
     // Whether the last placement cut the sleeves under the Pip-Boy's band
     bool             m_cutsSleeves = false;
+
+    /**
+     * \brief Last measure of the Pip-Boy's band, see measurePipBoyCut
+     *
+     * The measure walks every vertex of the Pip-Boy, while its result only
+     * changes with the model, the forearm's length or the scale. It is
+     * reused while those stay, and taken again every RemeasureFrames.
+     */
+    struct PipBoyCutMeasure {
+      uint8_t*  device   = nullptr;
+      uint8_t*  forearm  = nullptr;
+      uint8_t*  hand     = nullptr;
+      uintptr_t models   = 0;
+      uint32_t  vertices = 0;
+      float     length   = 0.0f;
+      float     scale    = 0.0f;
+      float     distance = 0.0f;
+      uint32_t  age      = 0;
+      bool      valid    = false;
+    };
+
+    PipBoyCutMeasure m_pipBoyCut;
     uint32_t         m_loggedBodyMeshes = 0;
     bool             m_loggedOtherHand = false;
     bool             m_loggedTwoHanded = false;

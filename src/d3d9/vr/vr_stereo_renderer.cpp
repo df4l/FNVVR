@@ -6,6 +6,7 @@
 #include "../../util/util_string.h"
 
 #include "vr_d3d9_bridge.h"
+#include "vr_fader_size.h"
 #include "vr_game_addresses.h"
 #include "vr_game_depth.h"
 #include "vr_game_ammo.h"
@@ -17,6 +18,7 @@
 #include "vr_options_file.h"
 #include "vr_math.h"
 #include "vr_stereo_renderer.h"
+#include "vr_tree_leaves.h"
 #include "vr_weapon_types.h"
 
 namespace dxvk {
@@ -329,6 +331,9 @@ namespace dxvk {
     if (!renderer->m_skyAnchor)
       Logger::warn("VR: The sky placement was not found, the sky is drawn around the camera instead of each eye");
 
+    if (!VrTreeLeaves::install())
+      Logger::warn("VR: The SpeedTree leaf shader was not found, tree leaves turn with the head");
+
     VrStereoRenderer* self = renderer.get();
     renderer->m_cullingCamera = VrCullingCamera::install(
       [self] (VrGameCameraPose& pose, VrGameFrustum& frustum) { return self->cullingView(pose, frustum); });
@@ -356,6 +361,8 @@ namespace dxvk {
 
     if (!renderer->m_comfortSettings)
       Logger::info("VR: The idle and kill camera settings were not found, the game may leave the first person");
+
+    renderer->m_fadersOverlaid = renderer->m_faderOverlay.initialize() && VrFaderSize::install();
 
     renderer->m_roomscale = VrRoomscale::install();
 
@@ -796,6 +803,8 @@ namespace dxvk {
 
     IDirect3DTexture9* eyes[VrEyeCount] = { m_eyeTextures[0].ptr(), m_eyeTextures[1].ptr() };
 
+    drawFaders(eyes);
+
     if (!VrD3D9Bridge::submitStereoFrame(m_device, m_backend, eyes, views,
         timing.predictedDisplayTime) && !m_loggedFailure) {
       Logger::err("VR: The backend rejected a stereo frame");
@@ -904,6 +913,7 @@ namespace dxvk {
       m_controls.setSystemKeyboardShown(m_textFieldKeyboard->shown());
     }
 
+    m_controls.setDialogueShown(stereo && m_dialogueSpeaker);
     m_controls.setTerminalPanel(m_terminal ? m_terminal->placement() : nullptr);
     m_controls.update(input, state, m_hasReference ? &m_reference : nullptr, menuPanel(), dt);
 
@@ -1028,6 +1038,23 @@ namespace dxvk {
     }
 
     return true;
+  }
+
+
+  void VrStereoRenderer::drawFaders(IDirect3DTexture9* const* eyes) {
+    if (!m_fadersOverlaid || !m_painter)
+      return;
+
+    D3DSURFACE_DESC desc = { };
+
+    if (FAILED(eyes[0]->GetLevelDesc(0, &desc)))
+      return;
+
+    if (!m_faderOverlay.update(float(desc.Width), float(desc.Height)))
+      return;
+
+    for (uint32_t eye = 0; eye < VrEyeCount; eye++)
+      m_painter->paint(eyes[eye], m_faderOverlay.fills(), false);
   }
 
 
@@ -1510,6 +1537,15 @@ namespace dxvk {
     bool leftFree = !(m_weaponHand && m_weaponHand->leftHandOnWeapon())
       && !(m_handThrow && m_handThrow->throwsWithHand())
       && !(m_manualReload && m_manualReload->leftHandBusy());
+
+    // A fist closing as it lands punches, it does not take what it hits;
+    // an object already held stays held
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      VrHand hand = VrHand(i);
+
+      if (m_meleeSwing && m_meleeSwing->punches(hand) && !m_physicsGrab->holds(hand))
+        (hand == VrHand::Right ? rightFree : leftFree) = false;
+    }
 
     VrGameCameraPose rightHand;
     VrGameCameraPose leftHand;

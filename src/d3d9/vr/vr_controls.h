@@ -153,6 +153,16 @@ namespace dxvk {
     }
 
     /**
+     * \brief Makes X click with the left laser, as its trigger does
+     *
+     * \param [in] shown Whether a dialogue menu is shown, where X picks
+     *    the topic under the left laser instead of reaching the game
+     */
+    void setDialogueShown(bool shown) {
+      m_dialogueShown = shown;
+    }
+
+    /**
      * \brief Makes the right grip holster or draw the weapon
      *
      * \param [in] atHolster Whether the right hand is at the holster of the
@@ -339,6 +349,7 @@ namespace dxvk {
     const VrPanelPlacement*     m_pointerSurface = nullptr;
     VrPointerSurfaceState       m_pointerSurfaceState;
     bool                        m_hotKeyWheelShown = false;
+    bool                        m_dialogueShown = false;
     bool                        m_menuBack = false;
     bool                        m_menuBackDown = false;
 
