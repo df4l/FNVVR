@@ -365,8 +365,6 @@ namespace dxvk {
 
     void showCaravanTable();
 
-    bool findCaravanSurface(uint8_t* player, const VrWorldObject& table, float feet, float& surface);
-
     void standAt(uint8_t* root, const VrWorldObject& object, const VrSceneFit* fit, const VrMinigameFrame& frame);
 
     void standOnObject(const VrMinigameFrame& frame);

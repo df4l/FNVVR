@@ -874,6 +874,227 @@ namespace dxvk {
   }
 
 
+  namespace {
+
+    // The game's grab ray, which skips the player, cast straight down
+    struct CaravanRay {
+      uint8_t* world  = nullptr;
+      uint32_t filter = 0;
+    };
+
+    // A counter between the player and the challenger: rays down every step
+    // along the line between them find the first raised, flat surface, whose
+    // edges are then narrowed down to the precision
+    constexpr float CaravanScanStep      = 5.0f;
+    constexpr float CaravanScanPrecision = 0.5f;
+    // The mat shrinks to the counter's depth down to this fraction of its
+    // size (cards the size of real ones at 1), then overhangs the counter by
+    // at most this much at each edge. The rays checking the counter's length
+    // stay this far inside its depth.
+    constexpr float CaravanShrinkLeast   = 0.85f;
+    constexpr float CaravanOverhang      = 8.0f;
+    constexpr float CaravanEdgeInset     = 1.0f;
+
+    // Distances from the player's feet along the line, height of the top
+    struct CaravanCounter {
+      float front = 0.0f;
+      float back  = 0.0f;
+      float top   = 0.0f;
+    };
+
+    bool makeCaravanRay(uint8_t* player, CaravanRay& ray) {
+      uint8_t* cell = reinterpret_cast<GetPartFn>(VrGame::RefGetParentCell)(player, nullptr);
+      ray.world = cell ? reinterpret_cast<GetPartFn>(VrGame::CellGetWorld)(cell, nullptr) : nullptr;
+
+      if (!ray.world)
+        return false;
+
+      uint32_t playerFilter = 0;
+      reinterpret_cast<GetFilterFn>(VrGame::GetCollisionFilter)(player, nullptr, &playerFilter);
+      ray.filter = (playerFilter >> VrGame::FilterGroupShift << VrGame::FilterGroupShift) | VrGame::LayerItemPick;
+      return true;
+    }
+
+    bool castCaravanRay(const CaravanRay& ray, VrVector3 from, float top, float bottom, float& z) {
+      alignas(16) uint8_t pick[VrGame::PickDataSize];
+      from.z = top;
+      VrVector3 length = { 0.0f, 0.0f, bottom - top };
+
+      reinterpret_cast<PickConstructFn>(VrGame::PickDataConstruct)(pick, nullptr);
+      reinterpret_cast<PickSetFilterFn>(VrGame::PickDataSetFilter)(pick, nullptr, ray.filter);
+      reinterpret_cast<PickSetPointFn>(VrGame::PickDataSetFrom)(pick, nullptr, &from);
+      reinterpret_cast<PickSetPointFn>(VrGame::PickDataSetLength)(pick, nullptr, &length);
+
+      auto vtable = field<uint8_t*>(ray.world, 0);
+
+      if (!(*reinterpret_cast<PickObjectFn*>(vtable + VrGame::WorldPickObjectSlot))(ray.world, nullptr, pick))
+        return false;
+
+      z = from.z + length.z * field<float>(pick, VrGame::PickDataHitFraction);
+      return true;
+    }
+
+    // A surface at a table's height under the point
+    bool caravanTopAt(const CaravanRay& ray, const VrVector3& point, float feet, float& z) {
+      return castCaravanRay(ray, point, feet + CaravanRayTop, feet + CaravanSurfaceLow, z)
+          && z - feet <= CaravanSurfaceHigh;
+    }
+
+    bool caravanTopIs(const CaravanRay& ray, const VrVector3& point, float feet, float top) {
+      float z = 0.0f;
+      return caravanTopAt(ray, point, feet, z) && std::abs(z - top) <= CaravanSurfaceFlat;
+    }
+
+    // The edge of the counter between a distance off it and one on it
+    float findCaravanEdge(const CaravanRay& ray, const VrVector3& feet, const VrVector3& towards,
+        float off, float on, float top) {
+      while (std::abs(on - off) > CaravanScanPrecision) {
+        float middle = 0.5f * (on + off);
+
+        if (caravanTopIs(ray, feet + towards * middle, feet.z, top))
+          on = middle;
+        else
+          off = middle;
+      }
+
+      return on;
+    }
+
+    bool findCaravanCounter(const CaravanRay& ray, const VrVector3& feet, const VrVector3& towards,
+        float end, CaravanCounter& counter) {
+      float first = -1.0f;
+
+      for (float t = 0.0f; t <= end; t += CaravanScanStep) {
+        float z = 0.0f;
+        bool hit = caravanTopAt(ray, feet + towards * t, feet.z, z);
+
+        if (first < 0.0f) {
+          if (hit) {
+            first       = t;
+            counter.top = z;
+          }
+        } else if (!hit || std::abs(z - counter.top) > CaravanSurfaceFlat) {
+          counter.back = findCaravanEdge(ray, feet, towards, t, t - CaravanScanStep, counter.top);
+          break;
+        } else {
+          counter.back = t;
+        }
+      }
+
+      if (first < 0.0f)
+        return false;
+
+      counter.front = first > 0.0f
+        ? findCaravanEdge(ray, feet, towards, first - CaravanScanStep, first, counter.top)
+        : 0.0f;
+      counter.back = std::max(counter.back, first);
+      return true;
+    }
+
+    // The surface under the mat where it lies between the player and the
+    // challenger, if the rays at its centre and corners all meet it
+    bool findCaravanSurface(const CaravanRay& ray, const VrWorldObject& table, float feet, float& surface) {
+      const VrVector2 points[] = {
+        { 0.5f * (CaravanArea.minX + CaravanArea.maxX), 0.5f * (CaravanArea.minY + CaravanArea.maxY) },
+        { CaravanArea.minX, CaravanArea.minY }, { CaravanArea.maxX, CaravanArea.minY },
+        { CaravanArea.minX, CaravanArea.maxY }, { CaravanArea.maxX, CaravanArea.maxY } };
+
+      float lowest  = FLT_MAX;
+      float highest = -FLT_MAX;
+      bool  meets   = true;
+      std::string heights;
+
+      for (const VrVector2& point : points) {
+        VrVector3 from = table.position + table.x * point.x + table.y * point.y;
+        float z = 0.0f;
+
+        if (castCaravanRay(ray, from, feet + CaravanRayTop, feet + CaravanSurfaceLow, z)) {
+          lowest  = std::min(lowest, z);
+          highest = std::max(highest, z);
+          heights += str::format(" ", z - feet);
+        } else {
+          meets = false;
+          heights += " none";
+        }
+      }
+
+      Logger::info(str::format("VR: The rays down at the Caravan table's centre, near left, near right, far left and far",
+        " right meet", heights, " units above the feet"));
+
+      if (!meets) {
+        Logger::info("VR: No surface of the world under the whole Caravan table");
+        return false;
+      }
+
+      if (highest - lowest > CaravanSurfaceFlat || highest - feet > CaravanSurfaceHigh) {
+        Logger::info(str::format("VR: The surface under the Caravan table is uneven, from ",
+          lowest - feet, " to ", highest - feet, " units above the feet"));
+        return false;
+      }
+
+      surface = highest;
+      return true;
+    }
+
+    // The mat in the middle of a counter between the player and the
+    // challenger, shrunk to its depth as far as allowed, if the counter is
+    // long enough for the mat's width
+    bool layCaravanOnCounter(const CaravanRay& ray, const VrVector3& feet, const VrVector3& other, VrWorldObject& table) {
+      VrVector3 towards = { other.x - feet.x, other.y - feet.y, 0.0f };
+      float distance = vrLength(towards);
+
+      if (distance <= CaravanGap)
+        return false;
+
+      towards = towards * (1.0f / distance);
+      CaravanCounter counter;
+
+      if (!findCaravanCounter(ray, feet, towards, distance - CaravanGap, counter)) {
+        Logger::info("VR: No counter between the player and the Caravan challenger");
+        return false;
+      }
+
+      float depth    = counter.back - counter.front;
+      float matDepth = CaravanArea.maxY - CaravanArea.minY;
+      float scale    = std::clamp(depth / matDepth, CaravanShrinkLeast, 1.0f);
+
+      Logger::info(str::format("VR: A counter stands between the player and the Caravan challenger, from ",
+        counter.front, " to ", counter.back, " units out of ", distance, ", ", counter.top - feet.z, " above the feet"));
+
+      if (matDepth * scale - depth > 2.0f * CaravanOverhang) {
+        Logger::info("VR: The counter is too narrow for the Caravan table");
+        return false;
+      }
+
+      table.y        = towards;
+      table.z        = { 0.0f, 0.0f, 1.0f };
+      table.x        = { towards.y, -towards.x, 0.0f };
+      table.scale    = scale;
+
+      float along    = 0.5f * (counter.front + counter.back) - 0.5f * (CaravanArea.minY + CaravanArea.maxY) * scale;
+      table.position = feet + towards * along - table.x * (0.5f * (CaravanArea.minX + CaravanArea.maxX) * scale);
+      table.position.z = counter.top;
+
+      float nearY = std::max(CaravanArea.minY * scale, counter.front - along + CaravanEdgeInset);
+      float farY  = std::min(CaravanArea.maxY * scale, counter.back  - along - CaravanEdgeInset);
+
+      for (float x : { CaravanArea.minX * scale, CaravanArea.maxX * scale }) {
+        for (float y : { nearY, farY }) {
+          if (!caravanTopIs(ray, table.position + table.x * x + table.y * y, feet.z, counter.top)) {
+            Logger::info("VR: The counter is too short for the Caravan table");
+            return false;
+          }
+        }
+      }
+
+      Logger::info(str::format("VR: The Caravan table lies on the counter at ", scale, " of its size, overhanging it by ",
+        std::max(0.0f, 0.5f * (matDepth * scale - depth)), " units at each edge"));
+      return true;
+    }
+
+  }
+
+
   bool VrMinigames::placeCaravanTable(const VrMinigameFrame& frame) {
     auto menu       = global<uint8_t*>(VrGame::CaravanInstance);
     auto challenger = menu ? field<uint8_t*>(menu, VrGame::CaravanChallenger) : nullptr;
@@ -894,8 +1115,16 @@ namespace dxvk {
       return false;
     }
 
+    CaravanRay ray;
+    bool canPick = m_canPick && makeCaravanRay(player, ray);
+
+    if (canPick && layCaravanOnCounter(ray, feet, other, table)) {
+      takeSeat(nullptr, table, &CaravanFit, frame);
+      return true;
+    }
+
     float surface = 0.0f;
-    bool  onWorld = findCaravanSurface(player, table, feet.z, surface);
+    bool  onWorld = canPick && findCaravanSurface(ray, table, feet.z, surface);
 
     if (onWorld)
       table.position.z = surface;
@@ -922,69 +1151,6 @@ namespace dxvk {
 
     if (m_caravanTable->show(scene, origin, 1.0f / CaravanScale))
       Logger::info("VR: The game's diner table stands under the Caravan mat");
-  }
-
-
-  bool VrMinigames::findCaravanSurface(uint8_t* player, const VrWorldObject& table, float feet, float& surface) {
-    if (!m_canPick)
-      return false;
-
-    uint8_t* cell  = reinterpret_cast<GetPartFn>(VrGame::RefGetParentCell)(player, nullptr);
-    uint8_t* world = cell ? reinterpret_cast<GetPartFn>(VrGame::CellGetWorld)(cell, nullptr) : nullptr;
-
-    if (!world)
-      return false;
-
-    // The game's grab ray: it skips the player
-    uint32_t playerFilter = 0;
-    reinterpret_cast<GetFilterFn>(VrGame::GetCollisionFilter)(player, nullptr, &playerFilter);
-    uint32_t rayFilter = (playerFilter >> VrGame::FilterGroupShift << VrGame::FilterGroupShift) | VrGame::LayerItemPick;
-
-    const VrVector2 points[] = {
-      { 0.5f * (CaravanArea.minX + CaravanArea.maxX), 0.5f * (CaravanArea.minY + CaravanArea.maxY) },
-      { CaravanArea.minX, CaravanArea.minY }, { CaravanArea.maxX, CaravanArea.minY },
-      { CaravanArea.minX, CaravanArea.maxY }, { CaravanArea.maxX, CaravanArea.maxY } };
-
-    float lowest  = FLT_MAX;
-    float highest = -FLT_MAX;
-    bool  meets   = true;
-
-    for (const VrVector2& point : points) {
-      alignas(16) uint8_t pick[VrGame::PickDataSize];
-      VrVector3 from = table.position + table.x * point.x + table.y * point.y;
-      from.z = feet + CaravanRayTop;
-      VrVector3 length = { 0.0f, 0.0f, CaravanSurfaceLow - CaravanRayTop };
-
-      reinterpret_cast<PickConstructFn>(VrGame::PickDataConstruct)(pick, nullptr);
-      reinterpret_cast<PickSetFilterFn>(VrGame::PickDataSetFilter)(pick, nullptr, rayFilter);
-      reinterpret_cast<PickSetPointFn>(VrGame::PickDataSetFrom)(pick, nullptr, &from);
-      reinterpret_cast<PickSetPointFn>(VrGame::PickDataSetLength)(pick, nullptr, &length);
-
-      auto vtable = field<uint8_t*>(world, 0);
-
-      if (!(*reinterpret_cast<PickObjectFn*>(vtable + VrGame::WorldPickObjectSlot))(world, nullptr, pick)) {
-        meets = false;
-        break;
-      }
-
-      float z = from.z + length.z * field<float>(pick, VrGame::PickDataHitFraction);
-      lowest  = std::min(lowest, z);
-      highest = std::max(highest, z);
-    }
-
-    if (!meets) {
-      Logger::info("VR: No surface of the world under the whole Caravan table");
-      return false;
-    }
-
-    if (highest - lowest > CaravanSurfaceFlat || highest - feet > CaravanSurfaceHigh) {
-      Logger::info(str::format("VR: The surface under the Caravan table is uneven, from ",
-        lowest - feet, " to ", highest - feet, " units above the feet"));
-      return false;
-    }
-
-    surface = highest;
-    return true;
   }
 
 
