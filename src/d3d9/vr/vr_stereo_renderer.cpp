@@ -18,6 +18,7 @@
 #include "vr_options_file.h"
 #include "vr_math.h"
 #include "vr_stereo_renderer.h"
+#include "vr_tree_leaves.h"
 #include "vr_weapon_types.h"
 
 namespace dxvk {
@@ -329,6 +330,9 @@ namespace dxvk {
 
     if (!renderer->m_skyAnchor)
       Logger::warn("VR: The sky placement was not found, the sky is drawn around the camera instead of each eye");
+
+    if (!VrTreeLeaves::install())
+      Logger::warn("VR: The SpeedTree leaf shader was not found, tree leaves turn with the head");
 
     VrStereoRenderer* self = renderer.get();
     renderer->m_cullingCamera = VrCullingCamera::install(

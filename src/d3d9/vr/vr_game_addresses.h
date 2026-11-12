@@ -1994,6 +1994,22 @@ namespace dxvk {
     constexpr uint16_t  BillboardAlwaysFaceCenter = 3;
 
     /**
+     * SpeedTree leaf cards, see findings/render.md. The leaf shader's
+     * SetupTransformations (0x00BB25D0) calls UpdateScaleAdjustment, which
+     * copies the columns 2 (right) and 1 (up) of BSShaderManager::pCamera's
+     * world rotation into the BillboardRight and BillboardUp vertex constants
+     * (float4, part of SpeedTreeLeafShader::Const::GroupedConstants, register
+     * c11 onwards). Its only call. The leaf geometry being drawn is the first
+     * member of BSShaderManager::pCurrentRenderPass (SetupGeometryConstants
+     * 0x00BB2760).
+     */
+    constexpr uintptr_t LeafScaleAdjustment         = 0x00BB1A90;
+    constexpr uintptr_t LeafScaleAdjustmentCallSite = 0x00BB26B0;
+    constexpr uintptr_t LeafBillboardRight          = 0x01200638;
+    constexpr uintptr_t LeafBillboardUp             = 0x01200648;
+    constexpr uintptr_t ShaderCurrentRenderPass     = 0x011F91E0;
+
+    /**
      * Settings pages of the start menu, see findings/options-menu.md. The
      * menu builds its pages from two global arrays of option objects, filled
      * by CreateMenuElements; an option's mask selects the page it shows on.
