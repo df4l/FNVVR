@@ -913,6 +913,7 @@ namespace dxvk {
       m_controls.setSystemKeyboardShown(m_textFieldKeyboard->shown());
     }
 
+    m_controls.setDialogueShown(stereo && m_dialogueSpeaker);
     m_controls.setTerminalPanel(m_terminal ? m_terminal->placement() : nullptr);
     m_controls.update(input, state, m_hasReference ? &m_reference : nullptr, menuPanel(), dt);
 

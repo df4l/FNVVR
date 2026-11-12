@@ -127,6 +127,17 @@ namespace dxvk {
     if (m_context == VrInputContext::Menu && input.hasActions && VrMenuCursor::pointerAllowed())
       panel = menuPanel;
 
+    // In a dialogue X is the left laser's trigger. It only reaches the
+    // game as that trigger while the left laser points at the panel.
+    bool leftTrigger = actions.isPressed(VrAction::MenuLeftTrigger);
+    bool xClicks = m_context == VrInputContext::Menu && m_dialogueShown
+      && actions.isPressed(VrAction::MenuAlternate);
+
+    if (xClicks) {
+      actions.setPressed(VrAction::MenuAlternate,   false);
+      actions.setPressed(VrAction::MenuLeftTrigger, true);
+    }
+
     bool padUsed = std::max(std::abs(actions.move.x), std::abs(actions.move.y)) >= NavigateThreshold;
 
     for (VrAction action : MenuButtons)
@@ -148,6 +159,9 @@ namespace dxvk {
 
     VrPointerState pointer = updatePointer(input, actions, panel, surface, padUsed, overTarget, dt);
     m_pointerSurfaceState = pointer.surface;
+
+    if (xClicks && !leftTrigger && !pointer.triggersTaken)
+      actions.setPressed(VrAction::MenuLeftTrigger, false);
     VrGamepadHook::setCursorMode(pointer.cursorActive);
     VrMenuCursor::update(pointer);
 
