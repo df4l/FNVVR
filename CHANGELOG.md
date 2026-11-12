@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.16.0 (2026-11-12, since v0.15.0 `6390fd0`)
+
+### Performance
+
+- **Faster game engine**: hundreds of small, slow functions of the game are replaced by faster versions giving exactly the same results (the inline patches of lStewieAl's Tweaks, unoptimised accessors, the math, culling and bound functions). A function a plugin already rewrote is left to that plugin. `d3d9.vrEnginePatches = False` and `d3d9.vrFastMath = False` turn them off.
+- **Frames handed to the headset on their own thread**: the game no longer waits about 2 ms per frame for the compositor. `d3d9.vrAsyncHandOff = False` brings the old behaviour back.
+- **No actor shadows**: they cost a lot in the headset for little gain, and are turned off as in Viva New Vegas.
+- **Pip-Boy band measured once**: the sleeve cut under the Pip-Boy no longer walks the whole model every frame.
+
+### Caravan
+
+- **Lacey's counter**: the mat now lies on a counter standing between you and your opponent, sized to it, instead of on the diner table.
+- **Cards left in the piles**: the number of cards left in each draw pile lies on the mat beside its pile instead of on the panel.
+
+### World
+
+- **Leaves stay put**: tree and bush leaves no longer turn and roll with your head.
+- **Fades cover your whole view**: a fade to black darkens each eye entirely, instead of a black rectangle with the world around it.
+
+### Hands and controls
+
+- **Punching a held actor**: a fist thrown at an actor held in your other hand punches it instead of grabbing it.
+- **X picks a dialogue topic**: with the left laser on a topic, X chooses it, as A does with the right laser (Touch controllers).
+
+### Other mods
+
+- **Manual reload with xNVSE**: reloading by hand works again when xNVSE hooks the player's reload.
+
 ## v0.15.0 (2026-11-08, since v0.14.0 `8aa00fd`)
 
 ### Caravan
