@@ -2637,7 +2637,26 @@ namespace dxvk {
     float cornerRight = vrComputeHudCornerRight(hasMessages ? &messagesGroup : nullptr,
       hasObjectives ? &objectivesGroup : nullptr) * imageSize.x / size.x;
 
-    VrHeadHudLayout layout = vrComputeHeadHudLayout(imageSize, shift,
+    // A list of objectives can end below the middle, the move must not tear it
+    float cornerBottom = std::max(hasMessages ? messagesGroup.bottom : 0.0f,
+      hasObjectives ? objectivesGroup.bottom : 0.0f);
+
+    VrInterfaceRect sneak;
+    VrInterfaceRect subtitles;
+    bool hasSneak     = m_hudLayers.groupContent(VrGame::HudSneakMeter, sneak);
+    bool hasSubtitles = m_hudLayers.groupContent(VrGame::HudSubtitles, subtitles);
+
+    float split = vrComputeHeadHudSplit(size.y, cornerBottom,
+      hasSneak ? &sneak : nullptr, hasSubtitles ? &subtitles : nullptr);
+
+    if (split > std::floor(0.5f * size.y) && !m_loggedHudSplitLowered) {
+      Logger::info(str::format("VR: The HUD texts in the top left corner reach ", cornerBottom,
+        " units down, the corner moves down to ", split, " units"));
+      m_loggedHudSplitLowered = true;
+    }
+
+    VrHeadHudLayout layout = vrComputeHeadHudLayout(imageSize,
+      std::round(split * imageSize.y / size.y), shift,
       hasMeters ? &meters : nullptr, std::round(cornerRight));
 
     if (FAILED(m_device->ColorFill(destination.ptr(), nullptr, D3DCOLOR_ARGB(0, 0, 0, 0))))
