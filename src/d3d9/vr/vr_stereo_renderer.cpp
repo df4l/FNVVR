@@ -822,6 +822,8 @@ namespace dxvk {
     // and the runtime would draw the menu over it.
     if (m_terminal && m_terminal->showsScreen())
       hidePanel();
+    else if (leftRenderedMenu(state))
+      hidePanel();
     else if (m_menuRendered)
       submitMenu();
     else if (m_overPipBoy)
@@ -2321,6 +2323,25 @@ namespace dxvk {
       m_gameTarget.ptr(), nullptr, destination.ptr(), nullptr, D3DTEXF_LINEAR));
   }
 
+
+
+  bool VrStereoRenderer::leftRenderedMenu(VrGameStateKind state) {
+    // A terminal leaves the game in its menu mode for a few frames after
+    // it closes, with nothing but the interface's cursor to draw: the panel
+    // waits for a menu to be drawn there
+    bool renderedMenu = m_minigames && m_minigames->active() && m_minigames->showsRenderedMenu();
+
+    if (m_renderedMenuShown && !renderedMenu)
+      m_leavingRenderedMenu = true;
+
+    m_renderedMenuShown = renderedMenu;
+
+    if (m_leavingRenderedMenu && (state != VrGameStateKind::Menu || renderedMenu
+     || !m_hudLayers.menusFound() || m_hudLayers.isMenuDrawn()))
+      m_leavingRenderedMenu = false;
+
+    return m_leavingRenderedMenu;
+  }
 
 
   VrStereoRenderer::InterfaceLayer VrStereoRenderer::chooseLayer(VrGameStateKind state) const {
