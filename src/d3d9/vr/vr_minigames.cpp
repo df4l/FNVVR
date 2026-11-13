@@ -70,9 +70,17 @@ namespace dxvk {
     // The slot machine's reels at the height of the chest and the lever at
     // the right hand's reach
     constexpr VrVector3 SlotTarget     = { 162.0f, 0.0f, 0.0f };
-    constexpr VrVector3 SlotLeverBall  = { 177.0f, 16.0f, 16.7f };
     constexpr float     SlotDistance   = 0.45f;
     constexpr float     SlotDrop       = 0.25f;
+
+    // The lever's knob in the lever's frame (VrSlotLever), model units, the
+    // depth the lever's node is looked for below the scene's root, and that
+    // of its shapes below it
+    constexpr VrVector3 SlotLeverTop   = { 2.84f, 0.0f, 21.6f };
+    constexpr uint32_t  SlotLeverDepth = 8;
+    constexpr uint32_t  SlotLeverShapeDepth = 2;
+    // Time a hand takes to come onto the lever or back to its controller
+    constexpr float     SlotGlueTime   = 0.1f;
 
     // Caravan's mat at 1.75 times its model, so that its cards are the size
     // of real ones. The eyes are put above the middle of the mat, behind the
@@ -321,11 +329,15 @@ namespace dxvk {
     constexpr float SlotMachineEyeHeight = 44.0f;
 
     // The root of the scene is 175 units ahead of the menu's camera and 18
-    // below it, and the machine's feet are 1.2 units below its origin
+    // below it, and the machine's feet are 1.2 units below its origin. The
+    // seat is close enough for the lever's knob (y 2.8, 33 cm to the right,
+    // 9 cm above the eyes) to be 53 cm ahead of the eyes, in reach of a
+    // seated player's arm; the reels are 39 cm ahead, the machine's lower
+    // front (24 cm below the eyes) 22 cm.
     constexpr VrSceneFit SlotMachineFit = {
       { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f },
       { 0.0f, -245.0f, 26.9f }, 1.4f,
-      { 0.0f, -45.0f, 0.0f }, { 0.0f, 1.0f, 0.0f },
+      { 0.0f, -34.0f, 0.0f }, { 0.0f, 1.0f, 0.0f },
       SlotMachineAreas, 1, SlotMachineEyeHeight };
 
     // The vigor tester's front is along its model's +Y: the counter with
@@ -662,8 +674,11 @@ namespace dxvk {
         break;
 
       case Kind::SlotMachine:
+        // A message over the machine: the hands go back to their controllers
         if (onTop)
-          updateSlotMachine(input);
+          updateSlotMachine(input, frame.dt);
+        else
+          m_leverGlue = { };
         break;
 
       case Kind::BlackJack:
@@ -721,8 +736,10 @@ namespace dxvk {
     m_caravanOwnPlay = CaravanPlay();
     m_caravanOwnLastState = 0;
     m_caravanOpponentCards = 0;
-    m_leverHeld   = { };
-    m_levers      = { };
+    m_lever       = VrSlotLever(SlotLeverTop);
+    m_leverGlue   = { };
+    m_leverShift  = { };
+    m_leverMissing = false;
     m_signals     = VrTableSignals();
     m_tension     = VrLockTension();
 
@@ -1772,35 +1789,154 @@ namespace dxvk {
   }
 
 
-  void VrMinigames::updateSlotMachine(const VrInputState& input) {
-    void* menu = global<void*>(VrGame::SlotMachineInstance);
+  uintptr_t VrMinigames::slotLever(VrCaravanTransform& frame) const {
+    auto root  = global<uintptr_t>(VrGame::SlotMachineSceneRoot);
+    auto lever = root ? vrFindGameObject(root, VrGame::SlotMachineLever, SlotLeverDepth) : 0;
+    auto parent = lever ? field<uintptr_t>(reinterpret_cast<void*>(lever), VrGame::ObjectParent) : 0;
+
+    if (!parent)
+      return 0;
+
+    // The lever's own rotation is the game's animation: at rest it has none
+    VrCaravanTransform pivot;
+    pivot.translate = field<VrVector3>(reinterpret_cast<void*>(lever), VrGame::ObjectLocalTranslation);
+
+    frame = vrCaravanCompose(
+      *reinterpret_cast<const VrCaravanTransform*>(parent + VrGame::ObjectWorldRotation), pivot);
+    return lever;
+  }
+
+
+  void VrMinigames::updateSlotMachine(const VrInputState& input, float dt) {
+    auto menu = global<uint8_t*>(VrGame::SlotMachineInstance);
 
     if (!menu)
       return;
 
+    // The grips take the lever: they are the shoulder buttons
     m_pad.noShoulders = true;
 
-    VrVector3 ball = vrSceneToRoom(m_space, SlotLeverBall);
+    VrCaravanTransform frame;
+    uintptr_t lever = slotLever(frame);
+
+    if (!lever || frame.scale <= 0.0f) {
+      if (!m_leverMissing)
+        Logger::warn("VR: The slot machine's scene has no lever, it is pulled with A");
+
+      m_leverMissing = true;
+      m_leverGlue    = { };
+      return;
+    }
+
+    // The game's animation, played by A, turns the lever about its X axis
+    const auto& rotation = field<float[3][3]>(reinterpret_cast<void*>(lever), VrGame::ObjectLocalRotation);
+    m_lever.follow(VrSlotLever::angleOf(VrVector3 { rotation[0][2], rotation[1][2], rotation[2][2] }));
+
+    VrCaravanTransform toLever = vrCaravanInverse(frame);
+    std::array<VrSlotLeverHand, VrHandCount> hands;
 
     const VrAction grips[VrHandCount] = { VrAction::MenuPrevious, VrAction::MenuNext };
 
     for (uint32_t i = 0; i < VrHandCount; i++) {
       const VrControllerState& controller = input.controllers[i];
+      hands[i].active   = controller.isActive;
+      hands[i].grip     = controller.isActive && input.actions.isPressed(grips[i]);
+      hands[i].position = vrCaravanTransformPoint(toLever,
+        vrRoomToScene(m_space, controller.gripPose.position));
+    }
 
-      bool pulled = m_levers[i].update(controller.isActive && input.actions.isPressed(grips[i]),
-        controller.gripPose.position, ball);
+    VrSlotLeverEvents events = m_lever.update(hands, m_space.unitsPerMetre / frame.scale, dt);
+    int32_t holder = m_lever.holder();
 
-      if (m_levers[i].holds() && !m_leverHeld[i])
-        m_backend.applyHaptic(VrHand(i), 0.3f, HapticTick);
+    if (events.taken >= 0) {
+      m_backend.applyHaptic(VrHand(events.taken), 0.35f, HapticTick);
+      Logger::info(str::format("VR: The ", events.taken ? "right" : "left", " hand takes the slot machine's lever"));
+    }
 
-      m_leverHeld[i] = m_levers[i].holds();
+    if (events.released)
+      Logger::info("VR: The slot machine's lever is let go");
 
-      if (pulled && field<uint32_t>(menu, VrGame::MinigameState) == VrGame::SlotMachineStateBet) {
-        m_backend.applyHaptic(VrHand(i), 0.8f, HapticPulse);
+    if (holder >= 0) {
+      if (events.notch)
+        m_backend.applyHaptic(VrHand(holder), 0.15f, HapticTick);
+
+      if (events.stop)
+        m_backend.applyHaptic(VrHand(holder), 0.5f, HapticTick);
+    }
+
+    // A spin, or the payout shown put away, as A does
+    uint32_t state = field<uint32_t>(menu, VrGame::MinigameState);
+
+    if (events.pulled && holder >= 0) {
+      m_backend.applyHaptic(VrHand(holder), 0.9f, HapticPulse);
+
+      if (state == VrGame::SlotMachineStateBet || state == VrGame::SlotMachineStatePayoutIn) {
         press(VrGamepadButton::A);
-        Logger::info("VR: The slot machine's lever is pulled");
+        Logger::info(str::format("VR: The slot machine's lever is pulled, in the menu's stage ", state));
       }
     }
+
+    // The hand that holds the lever is drawn on it
+    VrVector3 held = vrSceneToRoom(m_space, vrCaravanTransformPoint(frame, m_lever.heldPoint()));
+
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      bool holds = int32_t(i) == holder;
+
+      if (holds)
+        m_leverShift[i] = held - input.controllers[i].gripPose.position;
+
+      float step = dt / SlotGlueTime;
+      m_leverGlue[i] = holds
+        ? std::min(m_leverGlue[i] + step, 1.0f)
+        : std::max(m_leverGlue[i] - step, 0.0f);
+    }
+  }
+
+
+  VrVector3 VrMinigames::handShift(VrHand hand) const {
+    uint32_t i = uint32_t(hand);
+
+    if (m_kind != Kind::SlotMachine || i >= VrHandCount)
+      return VrVector3 { 0.0f, 0.0f, 0.0f };
+
+    return m_leverShift[i] * m_leverGlue[i];
+  }
+
+
+  void VrMinigames::turnSlotLever(VrGameWorldTransforms& moved) const {
+    if (!m_lever.driven())
+      return;
+
+    VrCaravanTransform frame;
+    uintptr_t lever = slotLever(frame);
+
+    if (!lever)
+      return;
+
+    // From where the game drew the lever this frame to the hand's angle
+    float c = std::cos(m_lever.angle());
+    float s = std::sin(m_lever.angle());
+
+    VrCaravanTransform turned;
+    turned.rotate[1][1] = c;  turned.rotate[1][2] = -s;
+    turned.rotate[2][1] = s;  turned.rotate[2][2] =  c;
+
+    const auto& drawn = *reinterpret_cast<const VrCaravanTransform*>(lever + VrGame::ObjectWorldRotation);
+    VrCaravanTransform move = vrCaravanCompose(vrCaravanCompose(frame, turned), vrCaravanInverse(drawn));
+
+    moved.capture(lever);
+
+    vrVisitGameObjects(lever, SlotLeverShapeDepth, [&move] (uintptr_t object, uint32_t) {
+      auto* world = reinterpret_cast<VrCaravanTransform*>(object + VrGame::ObjectWorldRotation);
+      *world = vrCaravanCompose(move, *world);
+
+      if (auto* bound = field<float*>(reinterpret_cast<void*>(object), VrGame::ObjectWorldBound)) {
+        VrVector3 centre = vrCaravanTransformPoint(move, VrVector3 { bound[0], bound[1], bound[2] });
+        bound[0] = centre.x;
+        bound[1] = centre.y;
+        bound[2] = centre.z;
+      }
+    });
   }
 
 
@@ -3098,8 +3234,12 @@ namespace dxvk {
     if (m_kind == Kind::Lock)
       VrMenuScenes::hideLockBackdrop(hidden);
 
-    if (m_kind == Kind::SlotMachine)
+    VrGameWorldTransforms lever;
+
+    if (m_kind == Kind::SlotMachine) {
       hideRaisedPayoutScreen(hidden);
+      turnSlotLever(lever);
+    }
 
     // The first-person pass moves every point light by minus the player's
     // position, this scene's too: it would have none
@@ -3122,6 +3262,7 @@ namespace dxvk {
       *offset = gameOffset;
 
     VrMenuScenes::showHidden(hidden);
+    lever.swap();
     moved.swap();
     opponent.swap();
     cursor.swap();

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Mini-games
+
+- **Slot machine lever by hand**: your hands show at the slot machine. Close a grip on the lever and pull it towards you: it follows your hand, clicks in your palm on the way down and starts the spin near the bottom, then springs back when you let go. A still works.
+
 ## v0.16.0 (2026-11-12, since v0.15.0 `6390fd0`)
 
 ### Performance

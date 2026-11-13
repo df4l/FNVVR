@@ -539,29 +539,153 @@ namespace dxvk {
   }
 
 
-  bool VrLeverPull::update(bool grip, const VrVector3& hand, const VrVector3& ball) {
-    bool closes = grip && !m_gripWas;
-    m_gripWas = grip;
+  namespace {
 
-    if (!grip) {
-      m_holds  = false;
-      m_pulled = false;
-      return false;
+    constexpr float Pi = 3.14159265f;
+
+  }
+
+
+  VrSlotLever::VrSlotLever(const VrVector3& top)
+  : m_top(top) {
+
+  }
+
+
+  VrVector3 VrSlotLever::turn(const VrVector3& point, float angle) {
+    float c = std::cos(angle);
+    float s = std::sin(angle);
+
+    return VrVector3 { point.x, point.y * c - point.z * s, point.y * s + point.z * c };
+  }
+
+
+  float VrSlotLever::angleOf(const VrVector3& point) {
+    return std::atan2(-point.y, point.z);
+  }
+
+
+  void VrSlotLever::follow(float angle) {
+    if (!driven())
+      m_angle = std::min(std::max(angle, 0.0f), MaxAngle);
+  }
+
+
+  float VrSlotLever::distanceToLever(const VrVector3& point, VrVector3& closest) const {
+    // The part of the lever a hand can close on, at rest: the point is
+    // brought back by the lever's angle
+    VrVector3 local = turn(point, -m_angle);
+    VrVector3 from  = m_top * HoldFrom;
+    VrVector3 along = m_top - from;
+
+    float length = vrDot(along, along);
+    float t = length > 0.0f ? vrDot(local - from, along) / length : 1.0f;
+    t = std::min(std::max(t, 0.0f), 1.0f);
+
+    closest = from + along * t;
+    return vrLength(local - closest);
+  }
+
+
+  VrSlotLeverEvents VrSlotLever::update(
+    const std::array<VrSlotLeverHand, VrHandCount>& hands,
+          float                                     unitsPerMetre,
+          float                                     dt) {
+    VrSlotLeverEvents events;
+
+    if (m_holder >= 0 && (!hands[m_holder].active || !hands[m_holder].grip)) {
+      m_holder = -1;
+      events.released = true;
     }
 
-    if (closes && vrLength(hand - ball) <= Reach) {
-      m_holds  = true;
-      m_pulled = false;
-      m_startY = hand.y;
+    // A grip closing near the lever takes it, from the other hand too
+    int32_t taker = -1;
+    float   nearest = Reach * unitsPerMetre;
+    VrVector3 heldAt;
+
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      bool grip = hands[i].active && hands[i].grip;
+
+      if (grip && !m_gripWas[i] && int32_t(i) != m_holder) {
+        VrVector3 closest;
+        float distance = distanceToLever(hands[i].position, closest);
+
+        if (distance <= nearest) {
+          nearest = distance;
+          taker   = int32_t(i);
+          heldAt  = closest;
+        }
+      }
+
+      m_gripWas[i] = grip;
     }
 
-    if (!m_holds || m_pulled)
-      return false;
+    if (taker >= 0) {
+      m_holder     = taker;
+      m_heldAt     = heldAt;
+      m_takenHand  = angleOf(hands[taker].position);
+      m_takenAngle = m_angle;
+      m_speed      = 0.0f;
+      events.taken = taker;
+    }
 
-    // The hand may have started above: a pull counts from its highest point
-    m_startY = std::max(m_startY, hand.y);
-    m_pulled = m_startY - hand.y >= PullDown;
-    return m_pulled;
+    float before = m_angle;
+
+    if (m_holder >= 0) {
+      const VrVector3& hand = hands[m_holder].position;
+
+      // Near the axis the hand's angle means nothing: the lever stays
+      if (std::sqrt(hand.y * hand.y + hand.z * hand.z) > AxisDistance * unitsPerMetre) {
+        float turned = angleOf(hand) - m_takenHand;
+
+        if (turned >  Pi) turned -= 2.0f * Pi;
+        if (turned < -Pi) turned += 2.0f * Pi;
+
+        m_angle = std::min(std::max(m_takenAngle + turned, 0.0f), MaxAngle);
+      }
+
+      // Pulled away from where it holds the lever, the hand lets go: the
+      // lever stays where the hand left it and springs back
+      if (vrLength(hand - heldPoint()) > BreakDistance * unitsPerMetre) {
+        m_holder = -1;
+        events.released = true;
+      }
+
+      if (m_angle >= MaxAngle && before < MaxAngle)
+        events.stop = true;
+
+      if (std::floor(m_angle / NotchAngle) != std::floor(before / NotchAngle))
+        events.notch = true;
+    } else if (m_angle > 0.0f || m_speed != 0.0f) {
+      m_speed += (-Stiffness * m_angle - Damping * m_speed) * dt;
+      m_angle += m_speed * dt;
+
+      if (m_angle > MaxAngle) {
+        m_angle = MaxAngle;
+        m_speed = 0.0f;
+      }
+
+      if (m_angle <= 0.0f) {
+        m_angle = 0.0f;
+        m_speed = -m_speed * Bounce;
+
+        if (m_speed < RestSpeed)
+          m_speed = 0.0f;
+      }
+    }
+
+    m_spinTime = std::max(m_spinTime - dt, 0.0f);
+
+    if (m_angle <= ReturnAngle)
+      m_armed = true;
+
+    if (m_holder >= 0 && m_armed && m_angle >= PullAngle) {
+      m_armed    = false;
+      m_spinTime = SpinTime;
+      events.pulled = true;
+    }
+
+    return events;
   }
 
 
