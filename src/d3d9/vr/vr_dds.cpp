@@ -15,8 +15,26 @@ namespace dxvk {
     constexpr size_t   BitCountOffset    = 88;
     constexpr size_t   MasksOffset       = 92;
 
+    // The DX10 extension follows the header, its DXGI format first
+    constexpr size_t   Dx10HeaderSize    = 20;
+
     constexpr uint32_t FlagAlphaPixels = 0x1;
+    constexpr uint32_t FlagAlphaOnly   = 0x2;
     constexpr uint32_t FlagFourCc      = 0x4;
+    constexpr uint32_t FlagLuminance   = 0x20000;
+
+    // DXGI formats of the same encodings, plain and sRGB
+    constexpr uint32_t DxgiR8G8B8A8     = 28;
+    constexpr uint32_t DxgiR8G8B8A8Srgb = 29;
+    constexpr uint32_t DxgiA8           = 65;
+    constexpr uint32_t DxgiBc1          = 71;
+    constexpr uint32_t DxgiBc1Srgb      = 72;
+    constexpr uint32_t DxgiBc2          = 74;
+    constexpr uint32_t DxgiBc2Srgb      = 75;
+    constexpr uint32_t DxgiBc3          = 77;
+    constexpr uint32_t DxgiBc3Srgb      = 78;
+    constexpr uint32_t DxgiB8G8R8A8     = 87;
+    constexpr uint32_t DxgiB8G8R8A8Srgb = 91;
 
     // Images larger than this are not textures of the game
     constexpr uint32_t MaxExtent = 16384;
@@ -177,34 +195,78 @@ namespace dxvk {
       return ((pixel & mask) >> shift) * 255 / maximum;
     }
 
-    bool decodePixels(const uint8_t* data, size_t size, const uint8_t* header, uint32_t flags, VrImage& image) {
-      uint32_t bits = read32(header + BitCountOffset);
+    // Uncompressed pixels described by their channel masks: red, green,
+    // blue and alpha. A luminance image keeps its one value in red.
+    struct PixelLayout {
+      uint32_t bits      = 0;
+      uint32_t masks[4]  = { };
+      bool     luminance = false;
+    };
 
-      if (bits != 16 && bits != 24 && bits != 32)
+    bool decodePixels(const uint8_t* data, size_t size, const PixelLayout& layout, VrImage& image) {
+      if (layout.bits != 8 && layout.bits != 16 && layout.bits != 24 && layout.bits != 32)
         return false;
 
-      uint32_t masks[4];
-
-      for (uint32_t i = 0; i < 4; i++)
-        masks[i] = read32(header + MasksOffset + 4 * i);
-
-      if (!(flags & FlagAlphaPixels))
-        masks[3] = 0;
-
-      size_t bytesPerPixel = bits / 8;
+      size_t bytesPerPixel = layout.bits / 8;
 
       if (size < size_t(image.width) * image.height * bytesPerPixel)
         return false;
+
+      const uint32_t* masks = layout.masks;
 
       for (size_t i = 0; i < image.pixels.size(); i++) {
         uint32_t pixel = 0;
         std::memcpy(&pixel, data + i * bytesPerPixel, bytesPerPixel);
 
-        image.pixels[i] = argb(channel(pixel, masks[3], 255), channel(pixel, masks[0], 0),
-          channel(pixel, masks[1], 0), channel(pixel, masks[2], 0));
+        uint32_t r = channel(pixel, masks[0], 0);
+        uint32_t g = layout.luminance ? r : channel(pixel, masks[1], 0);
+        uint32_t b = layout.luminance ? r : channel(pixel, masks[2], 0);
+
+        image.pixels[i] = argb(channel(pixel, masks[3], 255), r, g, b);
       }
 
       return true;
+    }
+
+    PixelLayout headerLayout(const uint8_t* header, uint32_t flags) {
+      PixelLayout layout;
+      layout.bits      = read32(header + BitCountOffset);
+      layout.luminance = (flags & FlagLuminance) != 0;
+
+      for (uint32_t i = 0; i < 4; i++)
+        layout.masks[i] = read32(header + MasksOffset + 4 * i);
+
+      if (!(flags & (FlagAlphaPixels | FlagAlphaOnly)))
+        layout.masks[3] = 0;
+
+      return layout;
+    }
+
+    // The DXGI formats of the DX10 extension this reads, as the legacy
+    // header would describe them: a DXT four-character code or a layout
+    bool dxgiFormat(uint32_t format, uint32_t& blocks, PixelLayout& layout) {
+      blocks = 0;
+
+      switch (format) {
+        case DxgiBc1: case DxgiBc1Srgb: blocks = fourCc('D', 'X', 'T', '1'); return true;
+        case DxgiBc2: case DxgiBc2Srgb: blocks = fourCc('D', 'X', 'T', '3'); return true;
+        case DxgiBc3: case DxgiBc3Srgb: blocks = fourCc('D', 'X', 'T', '5'); return true;
+
+        case DxgiR8G8B8A8: case DxgiR8G8B8A8Srgb:
+          layout = { 32, { 0x000000FFu, 0x0000FF00u, 0x00FF0000u, 0xFF000000u }, false };
+          return true;
+
+        case DxgiB8G8R8A8: case DxgiB8G8R8A8Srgb:
+          layout = { 32, { 0x00FF0000u, 0x0000FF00u, 0x000000FFu, 0xFF000000u }, false };
+          return true;
+
+        case DxgiA8:
+          layout = { 8, { 0u, 0u, 0u, 0xFFu }, false };
+          return true;
+
+        default:
+          return false;
+      }
     }
 
   }
@@ -234,13 +296,25 @@ namespace dxvk {
 
     bool decoded = false;
 
+    PixelLayout layout = headerLayout(data, flags);
+    uint32_t    blocks = 0;
+
     if (flags & FlagFourCc) {
       if (format == fourCc('D', 'X', 'T', '1') || format == fourCc('D', 'X', 'T', '3')
        || format == fourCc('D', 'X', 'T', '5'))
-        decoded = decodeBlocks(pixels, left, format, image);
-    } else {
-      decoded = decodePixels(pixels, left, data, flags, image);
+        blocks = format;
+      else if (format == fourCc('D', 'X', '1', '0') && left >= Dx10HeaderSize
+            && dxgiFormat(read32(pixels), blocks, layout)) {
+        pixels += Dx10HeaderSize;
+        left   -= Dx10HeaderSize;
+      } else
+        layout.bits = 0;
     }
+
+    if (blocks)
+      decoded = decodeBlocks(pixels, left, blocks, image);
+    else if (layout.bits)
+      decoded = decodePixels(pixels, left, layout, image);
 
     if (!decoded)
       image = VrImage();

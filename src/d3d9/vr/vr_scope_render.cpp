@@ -103,32 +103,50 @@ namespace dxvk {
 
 
   VrImage VrScopeRender::readReticle(const std::string& model) {
-    VrImage image;
     std::vector<uint8_t> data;
+    std::string texture;
 
-    if (!VrGameFile::read(("Data\\Meshes\\" + model).c_str(), VrGame::ArchiveMeshes, data)) {
-      Logger::warn(str::format("VR: The scope model '", model, "' could not be read, the lens has no reticle"));
-      return image;
+    if (VrGameFile::read(("Data\\Meshes\\" + model).c_str(), VrGame::ArchiveMeshes, data))
+      texture = vrFindScopeReticleTexture(data.data(), data.size());
+    else
+      Logger::warn(str::format("VR: The scope model '", model, "' could not be read"));
+
+    VrImage image;
+
+    if (!texture.empty() && !readReticleTexture(texture, image)) {
+      Logger::warn(str::format("VR: The reticle '", texture, "' could not be read"));
+      texture.clear();
     }
 
-    std::string texture = vrFindScopeReticleTexture(data.data(), data.size());
-
-    // Its crosshair is geometry (scope01.nif): one of the game's reticles stands in
-    if (texture.empty())
+    // A crosshair made of geometry (scope01.nif), or a model or texture a mod
+    // replaced in a form not read here: one of the game's reticles stands in,
+    // so that a scope always has one
+    if (texture.empty()) {
       texture = ReplacementReticle;
 
-    if (!VrGameFile::read(("Data\\" + texture).c_str(), VrGame::ArchiveTextures, data)
-     || !vrDecodeDds(data.data(), data.size(), image)) {
-      Logger::warn(str::format("VR: The reticle '", texture, "' could not be read"));
-      return VrImage();
+      if (!readReticleTexture(texture, image)) {
+        Logger::warn(str::format("VR: The reticle '", texture, "' could not be read, the lens has none"));
+        return VrImage();
+      }
     }
-
-    if (vrIsReticleSheet(texture))
-      image = vrComposeReticleSheet(image);
 
     Logger::info(str::format("VR: Scope model '", model, "' uses the reticle '", texture, "', ",
       image.width, "x", image.height));
     return image;
+  }
+
+
+  bool VrScopeRender::readReticleTexture(const std::string& texture, VrImage& image) {
+    std::vector<uint8_t> data;
+
+    if (!VrGameFile::read(("Data\\" + texture).c_str(), VrGame::ArchiveTextures, data)
+     || !vrDecodeDds(data.data(), data.size(), image))
+      return false;
+
+    if (vrIsReticleSheet(texture))
+      image = vrComposeReticleSheet(image);
+
+    return true;
   }
 
 
