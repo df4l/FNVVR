@@ -37,7 +37,7 @@ TEST_CASE(xp_meter_crop_stays_on_screen) {
 
 
 TEST_CASE(head_hud_without_xp_meter_shifts_the_upper_half) {
-  VrHeadHudLayout layout = vrComputeHeadHudLayout(Image, 400.0f, nullptr, 0.0f);
+  VrHeadHudLayout layout = vrComputeHeadHudLayout(Image, 960.0f, 400.0f, nullptr, 0.0f);
   CHECK(layout.count == 2);
 
   // Lower half unchanged
@@ -54,7 +54,7 @@ TEST_CASE(head_hud_without_xp_meter_shifts_the_upper_half) {
 
 TEST_CASE(head_hud_moves_the_xp_meter_towards_the_centre) {
   const VrInterfaceRect xp = { 1756.0f, 50.0f, 2560.0f, 562.0f };
-  VrHeadHudLayout layout = vrComputeHeadHudLayout(Image, 400.0f, &xp, 0.0f);
+  VrHeadHudLayout layout = vrComputeHeadHudLayout(Image, 960.0f, 400.0f, &xp, 0.0f);
   CHECK(layout.count == 3);
 
   // The upper half stops before the meter, so the meter is copied once
@@ -76,7 +76,7 @@ TEST_CASE(head_hud_moves_the_xp_meter_towards_the_centre) {
 
 TEST_CASE(head_hud_keeps_the_xp_meter_in_the_upper_half) {
   const VrInterfaceRect xp = { 1756.0f, 800.0f, 2560.0f, 1312.0f };
-  VrHeadHudLayout layout = vrComputeHeadHudLayout(Image, 400.0f, &xp, 0.0f);
+  VrHeadHudLayout layout = vrComputeHeadHudLayout(Image, 960.0f, 400.0f, &xp, 0.0f);
   CHECK(layout.count == 3);
   CHECK_NEAR(layout.copies[2].source.bottom, 960.0f, 1e-3f);
 }
@@ -101,7 +101,7 @@ TEST_CASE(head_hud_meters_stop_before_long_messages) {
   const VrInterfaceRect messages = { 25.0f, 55.0f, 485.0f, 145.0f };
 
   float cornerRight = 2.0f * vrComputeHudCornerRight(&messages, nullptr);
-  VrHeadHudLayout layout = vrComputeHeadHudLayout(Image, 427.0f, &meters, cornerRight);
+  VrHeadHudLayout layout = vrComputeHeadHudLayout(Image, 960.0f, 427.0f, &meters, cornerRight);
   CHECK(layout.count == 3);
 
   // The messages keep the whole shift
@@ -121,14 +121,14 @@ TEST_CASE(head_hud_meters_stop_before_long_messages) {
 
 TEST_CASE(head_hud_meters_keep_the_shift_with_room) {
   const VrInterfaceRect meters = { 1696.0f, 110.0f, 2560.0f, 862.0f };
-  VrHeadHudLayout layout = vrComputeHeadHudLayout(Image, 400.0f, &meters, 600.0f);
+  VrHeadHudLayout layout = vrComputeHeadHudLayout(Image, 960.0f, 400.0f, &meters, 600.0f);
   CHECK_NEAR(layout.copies[2].target.left, 1296.0f, 1e-3f);
 }
 
 
 TEST_CASE(head_hud_meters_stay_with_no_room) {
   const VrInterfaceRect meters = { 1696.0f, 110.0f, 2560.0f, 862.0f };
-  VrHeadHudLayout layout = vrComputeHeadHudLayout(Image, 400.0f, &meters, 1500.0f);
+  VrHeadHudLayout layout = vrComputeHeadHudLayout(Image, 960.0f, 400.0f, &meters, 1500.0f);
   CHECK_NEAR(layout.copies[2].target.left, 1696.0f, 1e-3f);
   CHECK_NEAR(layout.copies[1].target.left, 196.0f, 1e-3f);
 }
@@ -141,7 +141,7 @@ TEST_CASE(head_hud_keeps_a_long_quest_name_whole) {
   const VrInterfaceRect objectives = { 30.0f, 150.0f, 760.0f, 350.0f };
 
   float cornerRight = 2.0f * vrComputeHudCornerRight(nullptr, &objectives);
-  VrHeadHudLayout layout = vrComputeHeadHudLayout(Image, 427.0f, &meters, cornerRight);
+  VrHeadHudLayout layout = vrComputeHeadHudLayout(Image, 960.0f, 427.0f, &meters, cornerRight);
   CHECK(layout.count == 3);
 
   // The meters stay, the corner moves only as far as the room allows
@@ -163,7 +163,7 @@ TEST_CASE(head_hud_without_meters_keeps_the_shift_for_a_long_name) {
   const VrInterfaceRect objectives = { 30.0f, 150.0f, 760.0f, 350.0f };
 
   float cornerRight = 2.0f * vrComputeHudCornerRight(nullptr, &objectives);
-  VrHeadHudLayout layout = vrComputeHeadHudLayout(Image, 427.0f, nullptr, cornerRight);
+  VrHeadHudLayout layout = vrComputeHeadHudLayout(Image, 960.0f, 427.0f, nullptr, cornerRight);
   CHECK(layout.count == 2);
   CHECK_NEAR(layout.copies[1].target.left, 427.0f, 1e-3f);
   CHECK_NEAR(layout.copies[1].target.right, 2560.0f, 1e-3f);
@@ -212,4 +212,54 @@ TEST_CASE(hud_meters_crop_with_one_meter) {
   CHECK_NEAR(crop.bottom, 281.0f, 1e-3f);
 
   CHECK(!vrComputeHudMetersCrop(nullptr, nullptr, Interface, crop));
+}
+
+
+TEST_CASE(head_hud_split_stays_in_the_middle_for_short_corners) {
+  // The QuestReminder group with a safe zone of 15 units ends at 400
+  CHECK_NEAR(vrComputeHeadHudSplit(960.0f, 400.0f, nullptr, nullptr), 480.0f, 1e-3f);
+  CHECK_NEAR(vrComputeHeadHudSplit(960.0f, 0.0f, nullptr, nullptr), 480.0f, 1e-3f);
+}
+
+
+TEST_CASE(head_hud_split_goes_below_three_objectives) {
+  // Three wrapped objectives under the quest's name, ending at 530 units
+  CHECK_NEAR(vrComputeHeadHudSplit(960.0f, 530.0f, nullptr, nullptr), 540.0f, 1e-3f);
+}
+
+
+TEST_CASE(head_hud_split_moves_the_sneak_meter_whole) {
+  // [HIDDEN] just below the middle, crossed by the objectives' row
+  const VrInterfaceRect sneak = { 580.0f, 500.0f, 700.0f, 530.0f };
+  CHECK_NEAR(vrComputeHeadHudSplit(960.0f, 510.0f, &sneak, nullptr), 540.0f, 1e-3f);
+
+  // Left alone while the corner stays above the middle
+  CHECK_NEAR(vrComputeHeadHudSplit(960.0f, 400.0f, &sneak, nullptr), 480.0f, 1e-3f);
+
+  // Left alone below the objectives' row
+  const VrInterfaceRect lowSneak = { 580.0f, 600.0f, 700.0f, 630.0f };
+  CHECK_NEAR(vrComputeHeadHudSplit(960.0f, 510.0f, &lowSneak, nullptr), 520.0f, 1e-3f);
+}
+
+
+TEST_CASE(head_hud_split_stays_above_the_subtitles) {
+  const VrInterfaceRect subtitles = { 240.0f, 520.0f, 1040.0f, 900.0f };
+  CHECK_NEAR(vrComputeHeadHudSplit(960.0f, 600.0f, nullptr, &subtitles), 520.0f, 1e-3f);
+
+  // Never above the middle, whatever the subtitles
+  const VrInterfaceRect highSubtitles = { 240.0f, 300.0f, 1040.0f, 900.0f };
+  CHECK_NEAR(vrComputeHeadHudSplit(960.0f, 600.0f, nullptr, &highSubtitles), 480.0f, 1e-3f);
+}
+
+
+TEST_CASE(head_hud_moves_objectives_below_the_middle_whole) {
+  // Split at 540 units, i.e. 1080 pixels
+  VrHeadHudLayout layout = vrComputeHeadHudLayout(Image, 1080.0f, 427.0f, nullptr, 0.0f);
+  CHECK(layout.count == 2);
+
+  CHECK_NEAR(layout.copies[0].source.top, 1080.0f, 1e-3f);
+  CHECK_NEAR(layout.copies[0].target.top, 1080.0f, 1e-3f);
+  CHECK_NEAR(layout.copies[1].source.bottom, 1080.0f, 1e-3f);
+  CHECK_NEAR(layout.copies[1].target.bottom, 1080.0f, 1e-3f);
+  CHECK_NEAR(layout.copies[1].target.left, 427.0f, 1e-3f);
 }

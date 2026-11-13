@@ -99,12 +99,38 @@ namespace dxvk {
     const VrInterfaceRect*      objectives);
 
   /**
+   * \brief Row of the HUD image above which the top left corner moves
+   *
+   * The middle of the image, unless the messages and objectives reach
+   * below it: the game stacks up to three objectives under the quest's
+   * name, so a long list ends past the middle and would be torn by the
+   * move. The row then goes below them, and below the sneak meter if it
+   * would cut it, so that the meter moves whole. It never goes below the
+   * top of the subtitles, which do not fit the image once moved.
+   * See findings/hud.md §17.
+   *
+   * \param [in] height Height of the interface, in interface units
+   * \param [in] cornerBottom Bottom of the messages and objectives, in
+   *    interface units, or 0 if unknown
+   * \param [in] sneak What the sneak meter draws in interface units, or
+   *    \c nullptr if it draws nothing
+   * \param [in] subtitles What the subtitles draw in interface units, or
+   *    \c nullptr if they draw nothing
+   * \returns The row, in interface units
+   */
+  float vrComputeHeadHudSplit(
+          float                 height,
+          float                 cornerBottom,
+    const VrInterfaceRect*      sneak,
+    const VrInterfaceRect*      subtitles);
+
+  /**
    * \brief Rearranges the HUD image for the panel in front of the head
    *
    * The messages and objectives are in the top left corner and the
    * subtitles at the bottom, in the centre. Seen from the head, a corner
-   * is too far to the side to read comfortably, so the upper half of the
-   * image moves towards the centre by \c shift and the lower half stays.
+   * is too far to the side to read comfortably, so the part of the image
+   * above \c split moves towards the centre by \c shift and the rest stays.
    * The radiation and XP meters, placed by the VR layer in a column in the
    * top right corner (see VrHudMeters), move towards the centre from the
    * other side, by the same distance at most: they stop where the moved
@@ -114,6 +140,8 @@ namespace dxvk {
    * allows, so the text is not cut. See findings/hud.md §16.
    *
    * \param [in] size Size of the image, in pixels
+   * \param [in] split Row above which the image moves, in pixels
+   *    (vrComputeHeadHudSplit)
    * \param [in] shift How far the corners move towards the centre, in pixels
    * \param [in] meters Crop of the meters' column in pixels, or \c nullptr
    *    if neither is shown in the top right corner
@@ -122,6 +150,7 @@ namespace dxvk {
    */
   VrHeadHudLayout vrComputeHeadHudLayout(
     const VrVector2&            size,
+          float                 split,
           float                 shift,
     const VrInterfaceRect*      meters,
           float                 cornerRight);

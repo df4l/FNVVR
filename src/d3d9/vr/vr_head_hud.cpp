@@ -88,14 +88,34 @@ namespace dxvk {
   }
 
 
+  float vrComputeHeadHudSplit(
+          float                 height,
+          float                 cornerBottom,
+    const VrInterfaceRect*      sneak,
+    const VrInterfaceRect*      subtitles) {
+    float middle = std::floor(0.5f * height);
+    float split  = std::max(middle, cornerBottom + HudCornerGap);
+
+    // The sneak meter, just below the middle, moves whole or not at all
+    if (split > middle && sneak && sneak->top < split && sneak->bottom > middle)
+      split = std::max(split, sneak->bottom + HudCornerGap);
+
+    if (subtitles)
+      split = std::min(split, subtitles->top);
+
+    return std::clamp(split, middle, height);
+  }
+
+
   VrHeadHudLayout vrComputeHeadHudLayout(
     const VrVector2&            size,
+          float                 split,
           float                 shift,
     const VrInterfaceRect*      meters,
           float                 cornerRight) {
     VrHeadHudLayout layout;
 
-    float split = std::floor(0.5f * size.y);
+    split = std::clamp(std::floor(split), 0.0f, size.y);
     shift = std::clamp(shift, 0.0f, std::floor(0.5f * size.x));
 
     layout.copies[layout.count++] = {

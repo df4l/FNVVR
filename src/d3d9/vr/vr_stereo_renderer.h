@@ -351,6 +351,7 @@ namespace dxvk {
     bool   m_handsHeldStill = false;
     bool   m_loggedMeasuredPrompt = false;
     bool   m_loggedHudTextPastGroup = false;
+    bool   m_loggedHudSplitLowered = false;
     VrVector2 m_promptImageSize;
     UINT   m_promptImageSourceWidth = 0;
     bool   m_loggedWrist      = false;
