@@ -903,6 +903,23 @@ namespace dxvk {
     constexpr uintptr_t GetPipBoy                  = 0x00705990;
 
     /**
+     * UpdateOffscreenInterface (0x00871A50) calls the rendered menu's Draw
+     * only when IsPipBoyOpen (in a rendered menu, call at 0x00871B92) and
+     * either the rendered menu's own menu is the top menu
+     * (IsRenderedMenuOnTop, __cdecl, read only, call at 0x00871B3D) or a
+     * message, quantity or computers menu has a tile (GetMenuTile, __cdecl
+     * menu id, calls at 0x00871B4E, 0x00871B5F, 0x00871B70). Closing a
+     * terminal frees the computers menu's tiles while the rendered menu is
+     * still current: that gate keeps them from being drawn. Read in the GOG
+     * executable, whose code addresses are the Steam build's.
+     */
+    constexpr uintptr_t IsRenderedMenuOnTop        = 0x00707B30;
+    constexpr uintptr_t GetMenuTile                = 0x00A09030;
+    constexpr uint32_t  MessageMenuId              = 0x3E9;
+    constexpr uint32_t  QuantityMenuId             = 0x3F8;
+    constexpr uint32_t  ComputersMenuId            = 0x423;
+
+    /**
      * The rendered-menu render then draws the menu's screen, such as the
      * Reflectron's with the menu and the face, through RenderPipBoy (see
      * PipBoyScreenCallSite), with the same camera. Its arguments are the

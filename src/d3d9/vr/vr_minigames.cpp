@@ -28,6 +28,8 @@ namespace dxvk {
     using IsMenuActiveFn  = bool  (__cdecl*)(uint32_t menuId, uint32_t unused);
     using IsTopMenuFn     = bool  (__cdecl*)(uint32_t menuId);
     using PointerFn       = void* (__cdecl*)();
+    using BoolFn          = bool  (__cdecl*)();
+    using MenuTileFn      = void* (__cdecl*)(uint32_t menuId);
     using SceneFn         = void  (__cdecl*)();
     using GetFloatFn      = float (__thiscall*)(void* tile, uint32_t trait);
     using HoveredBetFn    = uint32_t (__thiscall*)(void* menu);
@@ -1624,6 +1626,28 @@ namespace dxvk {
         && field<void*>(rendered, VrGame::TerminalCamera)
         && field<void*>(rendered, VrGame::TerminalModel)
         && field<void*>(rendered, VrGame::TerminalScreen);
+  }
+
+
+  bool VrMinigames::renderedMenuCurrent() const {
+    return m_rendered
+        && m_rendered == game<PointerFn>(VrGame::GetCurrentRenderedMenu)()
+        && renderedMenuReady(m_rendered);
+  }
+
+
+  bool VrMinigames::drawsRenderedMenu() const {
+    // The game frees a closing terminal's tiles during its update, then
+    // keeps the terminal current while the Pip-Boy sound of its power-off
+    // plays: its screen is drawn only when the game's
+    // UpdateOffscreenInterface would draw it
+    if (!showsRenderedMenu() || !renderedMenuCurrent() || !game<BoolFn>(VrGame::IsPipBoyOpen)())
+      return false;
+
+    return game<BoolFn>(VrGame::IsRenderedMenuOnTop)()
+        || game<MenuTileFn>(VrGame::GetMenuTile)(VrGame::MessageMenuId)
+        || game<MenuTileFn>(VrGame::GetMenuTile)(VrGame::QuantityMenuId)
+        || game<MenuTileFn>(VrGame::GetMenuTile)(VrGame::ComputersMenuId);
   }
 
 
@@ -3258,7 +3282,7 @@ namespace dxvk {
     void* renderer = global<void*>(VrGame::Renderer);
     uint8_t* graph = global<uint8_t*>(VrGame::WorldSceneGraph);
 
-    if (!m_rendered || !m_texture || !main || !renderer || !graph)
+    if (!renderedMenuCurrent() || !m_texture || !main || !renderer || !graph)
       return;
 
     void* camera = field<void*>(m_rendered, VrGame::TerminalCamera);
@@ -3310,7 +3334,7 @@ namespace dxvk {
 
 
   void VrMinigames::renderRenderedMenuScreen() {
-    if (!showsRenderedMenu() || !m_rendered)
+    if (!drawsRenderedMenu())
       return;
 
     void* renderer = global<void*>(VrGame::Renderer);

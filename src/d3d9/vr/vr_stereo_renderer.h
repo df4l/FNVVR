@@ -368,6 +368,11 @@ namespace dxvk {
     // left eye's pass finds one
     bool   m_overPipBoy    = false;
     bool   m_menuDrawn     = false;
+
+    // A terminal or the Reflectron was shown last frame, and the panel waits
+    // for a menu after it closed, see leftRenderedMenu
+    bool   m_renderedMenuShown   = false;
+    bool   m_leavingRenderedMenu = false;
     bool   m_interfaceFailed = false;
     bool   m_loggedHudFailure = false;
 
@@ -716,6 +721,13 @@ namespace dxvk {
     void captureEye();
 
     bool copyRenderTarget(uint32_t eye);
+
+    /**
+     * \brief Whether the menu panel stays hidden after a rendered menu
+     *
+     * Called once per stereo frame, before the menu panel is submitted.
+     */
+    bool leftRenderedMenu(VrGameStateKind state);
 
     InterfaceLayer chooseLayer(VrGameStateKind state) const;
 
