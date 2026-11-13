@@ -257,6 +257,7 @@ namespace dxvk {
     g_vrSystem->m_pipBoyScale = options.pipBoyScale;
     g_vrSystem->m_manualReload = options.manualReload;
     g_vrSystem->m_handPush = config.getOption<bool>("d3d9.vrHandPush", true);
+    g_vrSystem->m_eyeAspect = config.getOption<bool>("d3d9.vrEyeAspect", true);
     g_vrSystem->m_asyncHandOff = config.getOption<bool>("d3d9.vrAsyncHandOff", true);
     g_vrSystem->m_scopes = options.scopeLens;
     g_vrSystem->m_roomscale = options.roomscale;
@@ -332,7 +333,7 @@ namespace dxvk {
       return;
     }
 
-    VrExtent size = vrComputeGameResolution(eye, VrGameMinAspect);
+    VrExtent size = vrComputeGameResolution(eye, m_eyeAspect ? 0.0f : VrGameMinAspect);
 
     if (!m_resolution.apply(size)) {
       Logger::info("VR: The game's display settings were not found, the game keeps its own resolution");

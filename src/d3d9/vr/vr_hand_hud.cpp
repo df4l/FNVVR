@@ -58,12 +58,13 @@ namespace dxvk {
     if (!width || !height)
       return { InterfaceLongSide, InterfaceShortSide };
 
+    // Same tests as InterfaceManager::GetScreenWidth and GetScreenHeight,
+    // which give a square screen 1280 by 960 units
     float aspect = float(width) / float(height);
 
-    if (width > height)
-      return { InterfaceShortSide * aspect, InterfaceShortSide };
-
-    return { InterfaceLongSide, InterfaceLongSide / aspect };
+    return {
+      height >= width ? InterfaceLongSide : InterfaceShortSide * aspect,
+      width >= height ? InterfaceShortSide : InterfaceLongSide / aspect };
   }
 
 

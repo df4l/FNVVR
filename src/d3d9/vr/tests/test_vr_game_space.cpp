@@ -196,6 +196,20 @@ TEST_CASE(narrow_eye_is_widened_to_the_interface_aspect) {
 }
 
 
+TEST_CASE(eye_aspect_keeps_the_eye_size_and_is_never_square) {
+  VrExtent quest = vrComputeGameResolution({ 2244, 2352 }, 0.0f);
+  CHECK(quest.width  == 2244);
+  CHECK(quest.height == 2352);
+
+  VrExtent odd = vrComputeGameResolution({ 1831, 1920 }, 0.0f);
+  CHECK(odd.width == 1832);
+
+  VrExtent square = vrComputeGameResolution({ 2000, 2000 }, 0.0f);
+  CHECK(square.width  == 2002);
+  CHECK(square.height == 2000);
+}
+
+
 TEST_CASE(wide_eye_keeps_its_size_and_width_is_even) {
   VrExtent size = vrComputeGameResolution({ 2501, 1400 }, VrGameMinAspect);
 

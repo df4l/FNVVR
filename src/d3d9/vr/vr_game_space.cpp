@@ -321,6 +321,10 @@ namespace dxvk {
     result.width  = std::max(eye.width, minWidth);
     result.height = eye.height;
     result.width += result.width & 1;
+
+    if (result.width == result.height)
+      result.width += 2;
+
     return result;
   }
 

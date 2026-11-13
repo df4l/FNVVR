@@ -47,6 +47,16 @@ TEST_CASE(interface_size_keeps_the_short_side) {
   VrVector2 portrait = vrComputeInterfaceSize(1080, 1920);
   CHECK_NEAR(portrait.x, 1280.0f, 1e-3f);
   CHECK_NEAR(portrait.y, 1280.0f * 16.0f / 9.0f, 1e-2f);
+
+  // A Quest 2 eye drawn at its own aspect
+  VrVector2 eye = vrComputeInterfaceSize(2244, 2352);
+  CHECK_NEAR(eye.x, 1280.0f, 1e-3f);
+  CHECK_NEAR(eye.y, 1280.0f * 2352.0f / 2244.0f, 1e-2f);
+
+  // The game's rule for a square screen
+  VrVector2 square = vrComputeInterfaceSize(2000, 2000);
+  CHECK_NEAR(square.x, 1280.0f, 1e-3f);
+  CHECK_NEAR(square.y,  960.0f, 1e-3f);
 }
 
 

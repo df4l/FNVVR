@@ -367,10 +367,13 @@ namespace dxvk {
   constexpr float VrMaxCullingAngle = 1.3962634f;
 
   /**
-   * \brief Narrowest width to height ratio the game's interface is laid out for
+   * \brief Narrowest width to height ratio of the former 4:3 game target
    *
-   * The interface is designed for 4:3 and wider screens. A headset eye is
-   * usually narrower than that.
+   * The interface's menus are designed for 4:3 and wider screens, so the
+   * game used to render at least that wide and the eye copy squeezed the
+   * extra columns away. The game also lays its interface out on narrower
+   * and portrait screens (1280 units wide, see vrComputeInterfaceSize), so
+   * the eye's own aspect is the default (d3d9.vrEyeAspect).
    */
   constexpr float VrGameMinAspect = 4.0f / 3.0f;
 
@@ -380,10 +383,12 @@ namespace dxvk {
    * The game draws one frame per eye into its backbuffer, which is then
    * scaled into the eye image. The height is the eye's, so that no detail
    * is lost vertically, and the width is the eye's or more, so that the
-   * frame is at least as wide as \c minAspect allows. The width is even.
+   * frame is at least as wide as \c minAspect allows. The width is even
+   * and never equal to the height: the game sizes its interface for a
+   * square screen as 1280 by 960 units, which would squeeze it.
    *
    * \param [in] eye Recommended size of one eye's image
-   * \param [in] minAspect Narrowest width to height ratio
+   * \param [in] minAspect Narrowest width to height ratio, 0 for the eye's
    */
   VrExtent vrComputeGameResolution(const VrExtent& eye, float minAspect);
 
