@@ -349,6 +349,9 @@ namespace dxvk {
 
     static bool renderedMenuReady(uint8_t* rendered);
 
+    /** The menu being drawn is still the game's current rendered menu */
+    bool renderedMenuAlive() const;
+
     bool placeRenderedMenu(const VrMinigameFrame& frame, bool onScreen, float distance, float width);
 
     bool placeTerminalOnScreen(const VrMinigameFrame& frame);

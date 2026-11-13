@@ -1627,6 +1627,15 @@ namespace dxvk {
   }
 
 
+  bool VrMinigames::renderedMenuAlive() const {
+    // The game frees a closing terminal during its update, after the
+    // mini-game's own update has seen it: only the current menu is drawn
+    return m_rendered
+        && m_rendered == game<PointerFn>(VrGame::GetCurrentRenderedMenu)()
+        && renderedMenuReady(m_rendered);
+  }
+
+
   bool VrMinigames::placeRenderedMenu(const VrMinigameFrame& frame, bool onScreen, float distance, float width) {
     auto rendered = static_cast<uint8_t*>(game<PointerFn>(VrGame::GetCurrentRenderedMenu)());
 
@@ -3258,7 +3267,7 @@ namespace dxvk {
     void* renderer = global<void*>(VrGame::Renderer);
     uint8_t* graph = global<uint8_t*>(VrGame::WorldSceneGraph);
 
-    if (!m_rendered || !m_texture || !main || !renderer || !graph)
+    if (!renderedMenuAlive() || !m_texture || !main || !renderer || !graph)
       return;
 
     void* camera = field<void*>(m_rendered, VrGame::TerminalCamera);
@@ -3310,7 +3319,7 @@ namespace dxvk {
 
 
   void VrMinigames::renderRenderedMenuScreen() {
-    if (!showsRenderedMenu() || !m_rendered)
+    if (!showsRenderedMenu() || !renderedMenuAlive())
       return;
 
     void* renderer = global<void*>(VrGame::Renderer);
