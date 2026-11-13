@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.17.0 (2026-11-13, since v0.16.0 `277231a`)
+## Unreleased
 
 ### Mini-games
 
