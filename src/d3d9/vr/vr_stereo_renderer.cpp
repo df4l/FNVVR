@@ -2326,10 +2326,10 @@ namespace dxvk {
 
 
   bool VrStereoRenderer::leftRenderedMenu(VrGameStateKind state) {
-    // A terminal leaves the game in its menu mode for a few frames after
-    // it closes, with nothing but the interface's cursor to draw: the panel
-    // waits for a menu to be drawn there
-    bool renderedMenu = m_minigames && m_minigames->active() && m_minigames->showsRenderedMenu();
+    // A terminal powering off, then the menu mode the game stays in for a
+    // few frames, leave nothing but the interface's cursor to draw: the
+    // panel waits for a menu to be drawn there
+    bool renderedMenu = m_minigames && m_minigames->drawsRenderedMenu();
 
     if (m_renderedMenuShown && !renderedMenu)
       m_leavingRenderedMenu = true;

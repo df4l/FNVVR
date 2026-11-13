@@ -103,6 +103,14 @@ namespace dxvk {
     /// Whether the eyes show a rendered menu: a world's terminal or the Reflectron
     bool showsRenderedMenu() const { return m_kind == Kind::Terminal || m_kind == Kind::Reflectron; }
 
+    /**
+     * \brief Whether the game draws the rendered menu's tiles this frame
+     *
+     * False while a terminal powers off: its tiles are gone, the game's
+     * interface only has its cursor left, and the menu is still current.
+     */
+    bool drawsRenderedMenu() const;
+
     bool active() const { return m_kind != Kind::None; }
 
     /// Whether the hands are shown, without the weapon: Caravan's cards are
@@ -349,8 +357,8 @@ namespace dxvk {
 
     static bool renderedMenuReady(uint8_t* rendered);
 
-    /** The menu being drawn is still the game's current rendered menu */
-    bool renderedMenuAlive() const;
+    /** The menu kept is still the game's current rendered menu, set up */
+    bool renderedMenuCurrent() const;
 
     bool placeRenderedMenu(const VrMinigameFrame& frame, bool onScreen, float distance, float width);
 

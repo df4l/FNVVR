@@ -1629,14 +1629,19 @@ namespace dxvk {
   }
 
 
-  bool VrMinigames::renderedMenuAlive() const {
-    // The game frees a closing terminal's tiles during its update, after
-    // the mini-game's own update has seen it: the menu is drawn only when
-    // the game's UpdateOffscreenInterface would draw it
-    if (!m_rendered
-     || m_rendered != game<PointerFn>(VrGame::GetCurrentRenderedMenu)()
-     || !renderedMenuReady(m_rendered)
-     || !game<BoolFn>(VrGame::IsPipBoyOpen)())
+  bool VrMinigames::renderedMenuCurrent() const {
+    return m_rendered
+        && m_rendered == game<PointerFn>(VrGame::GetCurrentRenderedMenu)()
+        && renderedMenuReady(m_rendered);
+  }
+
+
+  bool VrMinigames::drawsRenderedMenu() const {
+    // The game frees a closing terminal's tiles during its update, then
+    // keeps the terminal current while the Pip-Boy sound of its power-off
+    // plays: its screen is drawn only when the game's
+    // UpdateOffscreenInterface would draw it
+    if (!showsRenderedMenu() || !renderedMenuCurrent() || !game<BoolFn>(VrGame::IsPipBoyOpen)())
       return false;
 
     return game<BoolFn>(VrGame::IsRenderedMenuOnTop)()
@@ -3277,7 +3282,7 @@ namespace dxvk {
     void* renderer = global<void*>(VrGame::Renderer);
     uint8_t* graph = global<uint8_t*>(VrGame::WorldSceneGraph);
 
-    if (!renderedMenuAlive() || !m_texture || !main || !renderer || !graph)
+    if (!renderedMenuCurrent() || !m_texture || !main || !renderer || !graph)
       return;
 
     void* camera = field<void*>(m_rendered, VrGame::TerminalCamera);
@@ -3329,7 +3334,7 @@ namespace dxvk {
 
 
   void VrMinigames::renderRenderedMenuScreen() {
-    if (!showsRenderedMenu() || !renderedMenuAlive())
+    if (!drawsRenderedMenu())
       return;
 
     void* renderer = global<void*>(VrGame::Renderer);
