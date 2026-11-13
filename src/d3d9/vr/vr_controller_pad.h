@@ -42,6 +42,10 @@ namespace dxvk {
     bool     noTriggers  = false;
     /// Same for the shoulder buttons, which are the grips
     bool     noShoulders = false;
+    /// Keeps one controller's trigger from the game and from its laser,
+    /// as long as a gesture holds it
+    bool     noLeftHandTrigger  = false;
+    bool     noRightHandTrigger = false;
     /// Triggers pressed by a gesture, also with \c noTriggers
     bool     leftTrigger  = false;
     bool     rightTrigger = false;

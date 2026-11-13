@@ -632,6 +632,58 @@ TEST_CASE(slot_lever_follows_the_hand_that_holds_it) {
 }
 
 
+TEST_CASE(slot_lever_keeps_the_trigger_of_a_hand_closed_on_it) {
+  const VrVector3 top = { 2.84f, 0.0f, 21.6f };
+  constexpr float UnitsPerMetre = 50.0f;
+  constexpr float Step = 1.0f / 90.0f;
+
+  VrSlotLever lever(top);
+  std::array<VrSlotLeverHand, VrHandCount> hands;
+  hands[0].active   = true;
+  hands[0].position = top + VrVector3 { 0.0f, -60.0f, 0.0f };
+  hands[1].active   = true;
+  hands[1].position = top;
+
+  // The trigger closes on the knob just before the grip: kept
+  hands[1].trigger = true;
+  lever.update(hands, UnitsPerMetre, Step);
+  CHECK(lever.keepsTrigger(1));
+
+  hands[1].grip = true;
+  CHECK(lever.update(hands, UnitsPerMetre, Step).taken == 1);
+  CHECK(lever.keepsTrigger(1));
+
+  // Kept while the lever is pulled, and after the hand leaves it squeezed
+  hands[1].position = VrSlotLever::turn(top, 0.8f);
+  CHECK(lever.update(hands, UnitsPerMetre, Step).pulled);
+  CHECK(lever.keepsTrigger(1));
+
+  hands[1].grip     = false;
+  hands[1].position = top + VrVector3 { 0.0f, -60.0f, 0.0f };
+  lever.update(hands, UnitsPerMetre, Step);
+  CHECK(lever.keepsTrigger(1));
+
+  // Released, the trigger is the menu's again
+  hands[1].trigger = false;
+  lever.update(hands, UnitsPerMetre, Step);
+  CHECK(!lever.keepsTrigger(1));
+
+  hands[1].trigger = true;
+  lever.update(hands, UnitsPerMetre, Step);
+  CHECK(!lever.keepsTrigger(1));
+
+  // Away from the lever, the other hand's trigger stays a click, even
+  // when that hand then comes close with it held
+  hands[0].trigger = true;
+  lever.update(hands, UnitsPerMetre, Step);
+  CHECK(!lever.keepsTrigger(0));
+
+  hands[0].position = top;
+  lever.update(hands, UnitsPerMetre, Step);
+  CHECK(!lever.keepsTrigger(0));
+}
+
+
 TEST_CASE(slot_lever_starts_where_the_game_has_it) {
   const VrVector3 top = { 2.84f, 0.0f, 21.6f };
   constexpr float UnitsPerMetre = 50.0f;

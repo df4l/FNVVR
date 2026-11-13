@@ -1835,18 +1835,25 @@ namespace dxvk {
     VrCaravanTransform toLever = vrCaravanInverse(frame);
     std::array<VrSlotLeverHand, VrHandCount> hands;
 
-    const VrAction grips[VrHandCount] = { VrAction::MenuPrevious, VrAction::MenuNext };
+    const VrAction grips[VrHandCount]    = { VrAction::MenuPrevious,    VrAction::MenuNext };
+    const VrAction triggers[VrHandCount] = { VrAction::MenuLeftTrigger, VrAction::MenuRightTrigger };
 
     for (uint32_t i = 0; i < VrHandCount; i++) {
       const VrControllerState& controller = input.controllers[i];
       hands[i].active   = controller.isActive;
       hands[i].grip     = controller.isActive && input.actions.isPressed(grips[i]);
+      hands[i].trigger  = controller.isActive && input.actions.isPressed(triggers[i]);
       hands[i].position = vrCaravanTransformPoint(toLever,
         vrRoomToScene(m_space, controller.gripPose.position));
     }
 
     VrSlotLeverEvents events = m_lever.update(hands, m_space.unitsPerMetre / frame.scale, dt);
     int32_t holder = m_lever.holder();
+
+    // A whole hand closed on the lever changes no bet (the triggers) and
+    // clicks nothing under its laser
+    m_pad.noLeftHandTrigger  = m_lever.keepsTrigger(uint32_t(VrHand::Left));
+    m_pad.noRightHandTrigger = m_lever.keepsTrigger(uint32_t(VrHand::Right));
 
     if (events.taken >= 0) {
       m_backend.applyHaptic(VrHand(events.taken), 0.35f, HapticTick);
