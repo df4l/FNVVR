@@ -308,6 +308,68 @@ TEST_CASE(dds_decodes_a4r4g4b4) {
 }
 
 
+TEST_CASE(dds_decodes_alpha_and_luminance) {
+  // A8: alpha only, black
+  std::vector<uint8_t> file = ddsHeader(2, 1);
+  put32(file, 80, 0x2);
+  put32(file, 88, 8);
+  put32(file, 104, 0xFF);
+  file.push_back(0x00);
+  file.push_back(0x80);
+
+  VrImage image;
+  CHECK(vrDecodeDds(file.data(), file.size(), image));
+  CHECK(image.at(0, 0) == 0x00000000u);
+  CHECK(image.at(1, 0) == 0x80000000u);
+
+  // A8L8: the luminance in every colour channel
+  file = ddsHeader(1, 1);
+  put32(file, 80, 0x20001);
+  put32(file, 88, 16);
+  put32(file, 92, 0x00FF);
+  put32(file, 104, 0xFF00);
+  file.push_back(0x40);
+  file.push_back(0xC0);
+
+  CHECK(vrDecodeDds(file.data(), file.size(), image));
+  CHECK(image.at(0, 0) == 0xC0404040u);
+}
+
+
+TEST_CASE(dds_decodes_the_dx10_extension) {
+  // BC1 behind the extension: the same block as the DXT1 test
+  std::vector<uint8_t> file = dxtFile("DX10", { });
+  std::vector<uint8_t> extension(20, 0);
+  put32(extension, 0, 72);
+  file.insert(file.end(), extension.begin(), extension.end());
+
+  for (uint8_t byte : { 0xFF, 0xFF, 0x00, 0x00, 0x04, 0xFF, 0xFF, 0xFF })
+    file.push_back(byte);
+
+  VrImage image;
+  CHECK(vrDecodeDds(file.data(), file.size(), image));
+  CHECK(image.at(0, 0) == 0xFFFFFFFFu);
+  CHECK(image.at(1, 0) == 0xFF000000u);
+
+  // R8G8B8A8, one pixel
+  file = ddsHeader(1, 1);
+  put32(file, 80, 0x4);
+  std::memcpy(file.data() + 84, "DX10", 4);
+  put32(extension, 0, 28);
+  file.insert(file.end(), extension.begin(), extension.end());
+
+  for (uint8_t byte : { 0x11, 0x22, 0x33, 0x44 })
+    file.push_back(byte);
+
+  CHECK(vrDecodeDds(file.data(), file.size(), image));
+  CHECK(image.at(0, 0) == 0x44112233u);
+
+  // BC7 is not read
+  put32(file, 128, 98);
+  CHECK(!vrDecodeDds(file.data(), file.size(), image));
+}
+
+
 TEST_CASE(dds_rejects_other_files) {
   std::vector<uint8_t> file = dxtFile("ATI2", std::vector<uint8_t>(16, 0));
   VrImage image;

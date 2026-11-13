@@ -269,7 +269,9 @@ namespace dxvk {
       std::string path = stringEndingAt(data, end);
       std::string name = lowerCase(path);
 
-      if (!path.empty() && !endsWith(name, "\\scope01.dds") && !endsWith(name, "\\scope03_n.dds"))
+      // The surround's colour and normal maps (scope01, scope03_n), or a
+      // mod's model that lists its own normal map first
+      if (!path.empty() && !endsWith(name, "\\scope01.dds") && !endsWith(name, "_n.dds"))
         return path;
     }
 

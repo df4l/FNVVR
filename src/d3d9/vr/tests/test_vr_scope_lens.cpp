@@ -293,6 +293,16 @@ TEST_CASE(scope_reticle_texture_is_found_past_the_surround) {
 }
 
 
+TEST_CASE(scope_reticle_texture_is_found_past_a_normal_map) {
+  std::vector<uint8_t> file;
+  addString(file, "textures\\weapons\\scope\\NewScope_n.dds");
+  addString(file, "textures\\weapons\\scope\\NewMilDot.dds");
+
+  CHECK(vrFindScopeReticleTexture(file.data(), file.size())
+     == "textures\\weapons\\scope\\NewMilDot.dds");
+}
+
+
 TEST_CASE(scope_model_without_a_reticle_names_none) {
   std::vector<uint8_t> file;
   addString(file, "textures\\weapons\\scope\\Scope01.dds");

@@ -25,9 +25,12 @@ namespace dxvk {
    * \brief Decodes the top level of a DDS file
    *
    * Reads the formats the game's textures use: DXT1, DXT3 and DXT5, and
-   * uncompressed 16, 24 and 32 bit pixels described by their channel masks
-   * (such as the A4R4G4B4 of the game's font textures). Mipmaps, cube maps
-   * and volume textures beyond the first image are ignored.
+   * uncompressed 8, 16, 24 and 32 bit pixels described by their channel
+   * masks (such as the A4R4G4B4 of the game's font textures), luminance
+   * and alpha-only images included. Textures saved by newer tools with the
+   * DX10 extension are read in the same encodings (BC1 to BC3, RGBA and
+   * BGRA, A8). Mipmaps, cube maps and volume textures beyond the first
+   * image are ignored.
    *
    * \param [in] data The file's content
    * \param [in] size Size of the content in bytes

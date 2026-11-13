@@ -178,6 +178,8 @@ namespace dxvk {
 
     static VrImage readReticle(const std::string& model);
 
+    static bool readReticleTexture(const std::string& texture, VrImage& image);
+
   };
 
 }

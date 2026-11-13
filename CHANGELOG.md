@@ -6,6 +6,10 @@
 
 - **Slot machine lever by hand**: your hands show at the slot machine. Close a grip on the lever and pull it towards you: it follows your hand, clicks in your palm on the way down and starts the spin near the bottom, then springs back when you let go. A still works.
 
+### Scopes
+
+- **A scope always has a reticle**: when a mod replaces a scope's model or reticle with a file the mod could not read, the lens now shows the game's duplex reticle instead of none. Reticles saved by newer tools (DX10 header, alpha-only or grey images) are read too.
+
 ### Terminals
 
 - **No crash when closing a terminal**: closing a desk terminal, also after hacking, could crash the game.
