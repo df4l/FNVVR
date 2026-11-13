@@ -443,37 +443,132 @@ namespace dxvk {
   };
 
   /**
-   * \brief The slot machine's lever under a hand
-   *
-   * A pull starts with the grip closed on the lever's ball and ends when
-   * the hand has come down far enough. The grip has to open before the next.
+   * \brief A hand near the slot machine's lever
    */
-  class VrLeverPull {
+  struct VrSlotLeverHand {
+    bool      active = false;
+    /// Whether the hand's grip is held
+    bool      grip   = false;
+    /// Position in the lever's frame, in its model's units
+    VrVector3 position;
+  };
+
+  /**
+   * \brief What happened to the slot machine's lever in an update
+   */
+  struct VrSlotLeverEvents {
+    /// The hand that took the lever, -1 if none did
+    int32_t taken    = -1;
+    /// The hand let go of the lever, or was pulled away from it
+    bool    released = false;
+    /// The lever went past one of its notches while held
+    bool    notch    = false;
+    /// The lever reached its end stop while held
+    bool    stop     = false;
+    /// The lever was pulled far enough to start a spin
+    bool    pulled   = false;
+  };
+
+  /**
+   * \brief The slot machine's lever, taken and pulled by a hand
+   *
+   * Everything is in the lever's frame, in its model's units: the pivot at
+   * the origin, the lever upright along +Z at rest and turning about +X
+   * towards -Y, the machine's front, as far as the game's own animation
+   * takes it. A grip closed on the upper part of the lever takes it, and
+   * the lever then follows the hand's angle about the pivot. Pulled far
+   * enough, it starts a spin; let go, it springs back up to its rest and
+   * bounces a little there. A hand pulled away from the lever lets go.
+   * A new spin needs the lever back near its rest first.
+   */
+  class VrSlotLever {
 
   public:
 
-    /// Distance from the ball at which the grip takes the lever, in metres
-    constexpr static float Reach    = 0.20f;
-    /// Way down of a pull, in metres
-    constexpr static float PullDown = 0.10f;
+    /// Angle of the game's animation at its lowest, in radians
+    constexpr static float MaxAngle      = 0.861f;
+    /// Angle a held lever starts a spin at, in radians
+    constexpr static float PullAngle     = 0.72f;
+    /// Angle under which the lever can start a spin again, in radians
+    constexpr static float ReturnAngle   = 0.2f;
+    /// Angle between two notches felt in the hand, in radians
+    constexpr static float NotchAngle    = 0.12f;
+    /// Distance from the lever at which a grip takes it, in metres
+    constexpr static float Reach         = 0.15f;
+    /// Part of the lever's length from the pivot where a hand can take it
+    constexpr static float HoldFrom      = 0.35f;
+    /// Distance between the hand and its place on the lever that lets go
+    constexpr static float BreakDistance = 0.3f;
+    /// Distance from the axis under which the hand's angle is not read, in metres
+    constexpr static float AxisDistance  = 0.02f;
+    /// Spring back to the rest: stiffness and damping per second
+    constexpr static float Stiffness     = 140.0f;
+    constexpr static float Damping       = 12.0f;
+    /// Speed kept by a bounce on the rest stop
+    constexpr static float Bounce        = 0.3f;
+    /// Speed under which the lever stays at its rest, in radians a second
+    constexpr static float RestSpeed     = 0.3f;
+    /// Time the lever stays driven after a spin started, the length of
+    /// the game's own animation, in seconds
+    constexpr static float SpinTime      = 0.9f;
 
     /**
-     * \param [in] grip Whether the hand's grip is held
-     * \param [in] hand Hand's position in tracking space
-     * \param [in] ball Lever's ball in tracking space
-     * \returns Whether the lever was pulled in this update
+     * \param [in] top The lever's knob in its frame, at rest
      */
-    bool update(bool grip, const VrVector3& hand, const VrVector3& ball);
+    explicit VrSlotLever(const VrVector3& top = VrVector3 { 0.0f, 0.0f, 1.0f });
 
-    /// Whether the hand holds the lever
-    bool holds() const { return m_holds; }
+    /**
+     * \brief Takes the angle the game gives the lever
+     *
+     * Only while the lever is not driven: a hand taking it then starts there.
+     * \param [in] angle The angle in radians, towards the front
+     */
+    void follow(float angle);
+
+    /**
+     * \param [in] hands The hands, in the lever's frame
+     * \param [in] unitsPerMetre The frame's units per metre of the room
+     * \param [in] dt Time since the last update, in seconds
+     */
+    VrSlotLeverEvents update(
+      const std::array<VrSlotLeverHand, VrHandCount>& hands,
+            float                                     unitsPerMetre,
+            float                                     dt);
+
+    /// The lever's angle towards the front, in radians
+    float angle() const { return m_angle; }
+
+    /// The hand that holds the lever, -1 if none
+    int32_t holder() const { return m_holder; }
+
+    /// Whether the lever's angle is ours rather than the game's
+    bool driven() const { return m_holder >= 0 || m_angle > 0.0f || m_speed != 0.0f || m_spinTime > 0.0f; }
+
+    /// Where the hand holds the lever, in its frame at its angle
+    VrVector3 heldPoint() const { return turn(m_heldAt, m_angle); }
+
+    /// A point of the lever at rest, turned with the lever by an angle
+    static VrVector3 turn(const VrVector3& point, float angle);
+
+    /// The angle of a point about the lever's axis, from +Z towards -Y
+    static float angleOf(const VrVector3& point);
 
   private:
 
-    bool  m_holds    = false;
-    bool  m_gripWas  = false;
-    bool  m_pulled   = false;
-    float m_startY   = 0.0f;
+    VrVector3 m_top;
+    float     m_angle     = 0.0f;
+    float     m_speed     = 0.0f;
+    float     m_spinTime  = 0.0f;
+    int32_t   m_holder    = -1;
+    bool      m_armed     = true;
+    // Where the hand took the lever, at rest, the hand's angle and the
+    // lever's then
+    VrVector3 m_heldAt;
+    float     m_takenHand  = 0.0f;
+    float     m_takenAngle = 0.0f;
+    std::array<bool, VrHandCount> m_gripWas = { };
+
+    float distanceToLever(const VrVector3& point, VrVector3& closest) const;
 
   };
 

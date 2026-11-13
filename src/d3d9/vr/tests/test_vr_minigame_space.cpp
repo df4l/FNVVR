@@ -540,30 +540,127 @@ TEST_CASE(tension_turns_from_the_trigger_or_the_wrist) {
 }
 
 
-TEST_CASE(lever_is_pulled_with_a_closed_hand) {
-  VrLeverPull lever;
-  VrVector3 ball = { 0.2f, 1.5f, -0.6f };
+TEST_CASE(slot_lever_follows_the_hand_that_holds_it) {
+  // The game's lever, in model units at the casino's scale
+  const VrVector3 top = { 2.84f, 0.0f, 21.6f };
+  constexpr float UnitsPerMetre = 50.0f;
+  constexpr float Step = 1.0f / 90.0f;
 
-  // A hand passing by with an open grip
-  CHECK(!(lever.update(false, ball, ball)));
-  CHECK(!(lever.holds()));
+  VrSlotLever lever(top);
+  std::array<VrSlotLeverHand, VrHandCount> hands;
+  hands[1].active   = true;
+  hands[1].position = top;
 
-  // A grip closed elsewhere does not take it, even if it comes to the ball
-  CHECK(!(lever.update(true, { 0.8f, 1.5f, -0.6f }, ball)));
-  CHECK(!(lever.update(true, ball, ball)));
-  CHECK(!(lever.holds()));
-  CHECK(!(lever.update(false, ball, ball)));
+  // The lever turns towards the machine's front, -Y
+  VrVector3 down = VrSlotLever::turn(top, 0.5f);
+  CHECK(down.y < 0.0f);
+  CHECK(down.z < top.z);
+  CHECK_NEAR(VrSlotLever::angleOf(down), 0.5f, Near);
 
-  // Closed on it, then down
-  CHECK(!(lever.update(true, ball, ball)));
-  CHECK(lever.holds());
-  CHECK(!(lever.update(true, ball + VrVector3 { 0.0f, -0.05f, 0.0f }, ball)));
-  CHECK(lever.update(true, ball + VrVector3 { 0.0f, -0.11f, 0.0f }, ball));
+  // An open hand on the knob does nothing
+  CHECK(lever.update(hands, UnitsPerMetre, Step).taken == -1);
+  CHECK(!lever.driven());
 
-  // One spin for one pull
-  CHECK(!(lever.update(true, ball + VrVector3 { 0.0f, -0.2f, 0.0f }, ball)));
-  CHECK(!(lever.update(false, ball, ball)));
-  CHECK(!(lever.holds()));
+  // A grip closed half a metre away does not take it, even brought to the knob
+  hands[1].grip     = true;
+  hands[1].position = top + VrVector3 { 25.0f, 0.0f, 0.0f };
+  CHECK(lever.update(hands, UnitsPerMetre, Step).taken == -1);
+  hands[1].position = top;
+  CHECK(lever.update(hands, UnitsPerMetre, Step).taken == -1);
+  hands[1].grip = false;
+  lever.update(hands, UnitsPerMetre, Step);
+
+  // Closed a few centimetres from the knob, it takes the lever
+  hands[1].grip     = true;
+  hands[1].position = top + VrVector3 { 2.0f, -2.0f, 1.0f };
+  CHECK(lever.update(hands, UnitsPerMetre, Step).taken == 1);
+  CHECK(lever.holder() == 1);
+  CHECK(lever.driven());
+
+  // Halfway: the lever follows, notches felt, no spin yet
+  bool notch = false;
+  bool pulled = false;
+
+  for (uint32_t i = 1; i <= 10; i++) {
+    hands[1].position = VrSlotLever::turn(top + VrVector3 { 2.0f, -2.0f, 1.0f }, 0.04f * float(i));
+    VrSlotLeverEvents events = lever.update(hands, UnitsPerMetre, Step);
+    notch  = notch  || events.notch;
+    pulled = pulled || events.pulled;
+  }
+
+  CHECK_NEAR(lever.angle(), 0.4f, 0.01f);
+  CHECK(notch);
+  CHECK(!pulled);
+
+  // The hand stays where it holds the lever
+  CHECK(vrLength(lever.heldPoint() - VrSlotLever::turn(top, 0.4f)) < 0.5f);
+
+  // Down: one spin, then the end stop
+  const VrVector3 grab = top + VrVector3 { 2.0f, -2.0f, 1.0f };
+  hands[1].position = VrSlotLever::turn(grab, 0.75f);
+  CHECK(lever.update(hands, UnitsPerMetre, Step).pulled);
+  hands[1].position = VrSlotLever::turn(grab, 1.3f);
+  VrSlotLeverEvents end = lever.update(hands, UnitsPerMetre, Step);
+  CHECK(end.stop);
+  CHECK(!end.pulled);
+  CHECK_NEAR(lever.angle(), VrSlotLever::MaxAngle, Near);
+
+  // Let go: it springs back to its rest
+  hands[1].grip = false;
+  CHECK(lever.update(hands, UnitsPerMetre, Step).released);
+  CHECK(lever.holder() == -1);
+
+  for (uint32_t i = 0; i < 180; i++) {
+    lever.update(hands, UnitsPerMetre, Step);
+    CHECK(lever.angle() >= 0.0f);
+    CHECK(lever.angle() <= VrSlotLever::MaxAngle);
+  }
+
+  CHECK((lever.angle()) == (0.0f));
+  CHECK(!lever.driven());
+
+  // Back at rest it starts another spin
+  hands[1].grip     = true;
+  hands[1].position = top;
+  CHECK(lever.update(hands, UnitsPerMetre, Step).taken == 1);
+  hands[1].position = VrSlotLever::turn(top, 0.8f);
+  CHECK(lever.update(hands, UnitsPerMetre, Step).pulled);
+
+  // A hand pulled away from the lever lets go of it
+  hands[1].position = VrSlotLever::turn(top, 0.8f) + VrVector3 { 0.0f, 0.0f, -20.0f };
+  CHECK(lever.update(hands, UnitsPerMetre, Step).released);
+}
+
+
+TEST_CASE(slot_lever_starts_where_the_game_has_it) {
+  const VrVector3 top = { 2.84f, 0.0f, 21.6f };
+  constexpr float UnitsPerMetre = 50.0f;
+  constexpr float Step = 1.0f / 90.0f;
+
+  VrSlotLever lever(top);
+  std::array<VrSlotLeverHand, VrHandCount> hands;
+
+  // The game's own animation, played by a button
+  lever.follow(0.5f);
+  CHECK_NEAR(lever.angle(), 0.5f, Near);
+
+  // The left hand takes it where it is: no jump
+  hands[0].active   = true;
+  hands[0].grip     = true;
+  hands[0].position = VrSlotLever::turn(top, 0.5f);
+  CHECK(lever.update(hands, UnitsPerMetre, Step).taken == 0);
+  CHECK_NEAR(lever.angle(), 0.5f, Near);
+
+  // Held, the game no longer moves it
+  lever.follow(0.0f);
+  CHECK_NEAR(lever.angle(), 0.5f, Near);
+
+  // The other hand takes it over
+  hands[1].active   = true;
+  hands[1].grip     = true;
+  hands[1].position = VrSlotLever::turn(top * 0.7f, 0.5f);
+  CHECK(lever.update(hands, UnitsPerMetre, Step).taken == 1);
+  CHECK(lever.holder() == 1);
 }
 
 

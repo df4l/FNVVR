@@ -1150,6 +1150,9 @@ namespace dxvk {
     constexpr uint32_t  SlotMachineStatePayoutIn  = 4;
     constexpr uint32_t  SlotMachineStatePayoutOut = 5;
     constexpr char      SlotMachinePayoutScreen[] = "Payout_Screen";
+    /** The lever's node: it turns about its own X axis, its translation is
+     *  the pivot (NV_SlotMachine-Minigame*.nif, findings/minigames.md §13) */
+    constexpr char      SlotMachineLever[]        = "Slot-Machine_Arm";
     constexpr uint32_t  BlackJackStateTurn   = 4;
     constexpr uint32_t  RouletteStateBet     = 4;
 

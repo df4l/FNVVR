@@ -1318,12 +1318,18 @@ namespace dxvk {
       return;
     }
 
-    // Caravan's cards are held in the left hand and chosen with the right:
-    // both hands are shown there, the weapon put away
+    // Caravan's cards are held in the left hand and chosen with the right,
+    // the slot machine's lever is pulled by hand: both hands are shown
+    // there, the weapon put away. A hand on the lever stays on it.
     if (state == VrGameStateKind::Menu && m_minigames && m_minigames->showsHands()
      && m_hasReference && right.isActive) {
-      VrGameCameraPose hand      = handInGame(right);
-      VrGameCameraPose otherHand = handInGame(left);
+      VrControllerState onRight = right;
+      VrControllerState onLeft  = left;
+      onRight.gripPose.position = right.gripPose.position + m_minigames->handShift(VrHand::Right);
+      onLeft.gripPose.position  = left.gripPose.position  + m_minigames->handShift(VrHand::Left);
+
+      VrGameCameraPose hand      = handInGame(onRight);
+      VrGameCameraPose otherHand = handInGame(onLeft);
       m_weaponHand->beginFrame(gameCamera, &hand, left.isActive ? &otherHand : nullptr,
         false, VrFirstPersonMode::FreeHands, dt);
       return;

@@ -114,8 +114,17 @@ namespace dxvk {
     bool active() const { return m_kind != Kind::None; }
 
     /// Whether the hands are shown, without the weapon: Caravan's cards are
-    /// held in the left hand and chosen with the right
-    bool showsHands() const { return m_kind == Kind::Caravan; }
+    /// held in the left hand and chosen with the right, the slot machine's
+    /// lever is pulled by hand
+    bool showsHands() const { return m_kind == Kind::Caravan || m_kind == Kind::SlotMachine; }
+
+    /**
+     * \brief How far a hand is drawn from its controller
+     *
+     * A hand holding the slot machine's lever stays on it.
+     * \returns The move in tracking space, in metres
+     */
+    VrVector3 handShift(VrHand hand) const;
 
     /// The gamepad input of the hands' gestures, for the next frame
     const VrMinigamePad& pad() const { return m_pad; }
@@ -252,9 +261,12 @@ namespace dxvk {
     VrLockTension     m_tension;
     float             m_hapticWait  = 0.0f;
 
-    // Slot machine
-    std::array<VrLeverPull, VrHandCount> m_levers;
-    std::array<bool, VrHandCount>        m_leverHeld = { };
+    // Slot machine: the lever, and how much of the way to it each hand is
+    // drawn, from its controller, while it holds it and just after
+    VrSlotLever       m_lever;
+    std::array<float, VrHandCount>     m_leverGlue  = { };
+    std::array<VrVector3, VrHandCount> m_leverShift = { };
+    bool              m_leverMissing = false;
 
     // Blackjack
     VrTableSignals    m_signals;
@@ -414,7 +426,19 @@ namespace dxvk {
 
     void updateLock(const VrInputState& input, float dt);
 
-    void updateSlotMachine(const VrInputState& input);
+    void updateSlotMachine(const VrInputState& input, float dt);
+
+    /**
+     * \brief Finds the slot machine's lever
+     *
+     * \param [out] frame The lever's frame at rest in the scene: its pivot
+     *    and its parent's axes (VrSlotLever)
+     * \returns The lever's node, 0 if the scene has none
+     */
+    uintptr_t slotLever(VrCaravanTransform& frame) const;
+
+    /// Turns the lever's world transforms to the angle the hand gave it
+    void turnSlotLever(VrGameWorldTransforms& moved) const;
 
     void updateBlackJack(const VrInputState& input, float dt);
 
