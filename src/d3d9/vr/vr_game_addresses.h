@@ -535,6 +535,27 @@ namespace dxvk {
     constexpr uint32_t  FaderWhite       = 2;
 
     /**
+     * The game's heap, MemoryManager (singleton 0x011F6238 through
+     * MemoryManager::GetSingleton), see findings/performance.md (D7).
+     * Every function is __thiscall on the manager, 16-byte aligned, and
+     * starts with push ebp; mov ebp, esp; sub esp, imm8 (6 bytes, no
+     * relative address), then stores ECX. Allocate(size) takes pools of up
+     * to 596 bytes, then the heap of the thread's memory context.
+     * Deallocate(block) and Size(block) find the owner from the address
+     * (pool by the address's top byte, then heap, then the C runtime).
+     * Both Reallocate functions (0x00AA4150, 0x00AA4200) and the aligned
+     * allocator (0x00C74EA0) go through these three by direct calls;
+     * MemoryPool::Free and GetHeapForPointer have no other callers.
+     */
+    constexpr uintptr_t HeapAllocateBlock          = 0x00AA3E40;
+    constexpr uint8_t   HeapAllocateBlockStart[]   = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x3C, 0x89, 0x4D };
+    constexpr uintptr_t HeapFreeBlock              = 0x00AA4060;
+    constexpr uint8_t   HeapFreeBlockStart[]       = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x14, 0x89, 0x4D };
+    constexpr uintptr_t HeapBlockSize              = 0x00AA44C0;
+    constexpr uint8_t   HeapBlockSizeStart[]       = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x18, 0x89, 0x4D };
+    constexpr size_t    HeapFunctionFrameLength    = 6;
+
+    /**
      * C runtime double fabs (_fabs): sets the x87 control word with
      * __ctrlfp before and after masking the sign. The profile names it the
      * caller of __ctrlfp (0x00ED5ABB); _floor and _ceil never reach it.
