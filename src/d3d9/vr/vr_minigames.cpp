@@ -28,6 +28,8 @@ namespace dxvk {
     using IsMenuActiveFn  = bool  (__cdecl*)(uint32_t menuId, uint32_t unused);
     using IsTopMenuFn     = bool  (__cdecl*)(uint32_t menuId);
     using PointerFn       = void* (__cdecl*)();
+    using BoolFn          = bool  (__cdecl*)();
+    using MenuTileFn      = void* (__cdecl*)(uint32_t menuId);
     using SceneFn         = void  (__cdecl*)();
     using GetFloatFn      = float (__thiscall*)(void* tile, uint32_t trait);
     using HoveredBetFn    = uint32_t (__thiscall*)(void* menu);
@@ -1628,11 +1630,19 @@ namespace dxvk {
 
 
   bool VrMinigames::renderedMenuAlive() const {
-    // The game frees a closing terminal during its update, after the
-    // mini-game's own update has seen it: only the current menu is drawn
-    return m_rendered
-        && m_rendered == game<PointerFn>(VrGame::GetCurrentRenderedMenu)()
-        && renderedMenuReady(m_rendered);
+    // The game frees a closing terminal's tiles during its update, after
+    // the mini-game's own update has seen it: the menu is drawn only when
+    // the game's UpdateOffscreenInterface would draw it
+    if (!m_rendered
+     || m_rendered != game<PointerFn>(VrGame::GetCurrentRenderedMenu)()
+     || !renderedMenuReady(m_rendered)
+     || !game<BoolFn>(VrGame::IsPipBoyOpen)())
+      return false;
+
+    return game<BoolFn>(VrGame::IsRenderedMenuOnTop)()
+        || game<MenuTileFn>(VrGame::GetMenuTile)(VrGame::MessageMenuId)
+        || game<MenuTileFn>(VrGame::GetMenuTile)(VrGame::QuantityMenuId)
+        || game<MenuTileFn>(VrGame::GetMenuTile)(VrGame::ComputersMenuId);
   }
 
 
