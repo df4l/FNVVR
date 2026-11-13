@@ -6,6 +6,19 @@
 
 - **Slot machine lever by hand**: your hands show at the slot machine. Close a grip on the lever and pull it towards you: it follows your hand, clicks in your palm on the way down and starts the spin near the bottom, then springs back when you let go. A still works.
 
+### Terminals
+
+- **No crash when closing a terminal**: closing a desk terminal, also after hacking, could crash the game.
+- **No cursor flash**: closing a terminal no longer shows the game's cursor for a moment on its screen or on the menu panel.
+
+### HUD
+
+- **Several objectives read whole**: when several objectives show at once, their lines are no longer torn, part of them shifted away from the rest.
+
+### Performance
+
+- **Panels before the eyes**: menus, HUD and other panels are handed to the headset before the eye images, so they no longer wait about 2.5 ms per frame behind the eyes' hand-off.
+
 ## v0.16.0 (2026-11-12, since v0.15.0 `6390fd0`)
 
 ### Performance
