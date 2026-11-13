@@ -449,6 +449,8 @@ namespace dxvk {
     bool      active = false;
     /// Whether the hand's grip is held
     bool      grip   = false;
+    /// Whether the hand's trigger is held
+    bool      trigger = false;
     /// Position in the lever's frame, in its model's units
     VrVector3 position;
   };
@@ -479,7 +481,9 @@ namespace dxvk {
    * the lever then follows the hand's angle about the pivot. Pulled far
    * enough, it starts a spin; let go, it springs back up to its rest and
    * bounces a little there. A hand pulled away from the lever lets go.
-   * A new spin needs the lever back near its rest first.
+   * A new spin needs the lever back near its rest first. A trigger pressed
+   * on or near the lever belongs to it until released: a whole hand
+   * closing on the lever is not a click.
    */
   class VrSlotLever {
 
@@ -541,6 +545,10 @@ namespace dxvk {
     /// The hand that holds the lever, -1 if none
     int32_t holder() const { return m_holder; }
 
+    /// Whether the hand's trigger was pressed on or near the lever and is
+    /// still held, so it is no click of the menu
+    bool keepsTrigger(uint32_t hand) const { return m_triggerKept[hand]; }
+
     /// Whether the lever's angle is ours rather than the game's
     bool driven() const { return m_holder >= 0 || m_angle > 0.0f || m_speed != 0.0f || m_spinTime > 0.0f; }
 
@@ -566,7 +574,9 @@ namespace dxvk {
     VrVector3 m_heldAt;
     float     m_takenHand  = 0.0f;
     float     m_takenAngle = 0.0f;
-    std::array<bool, VrHandCount> m_gripWas = { };
+    std::array<bool, VrHandCount> m_gripWas     = { };
+    std::array<bool, VrHandCount> m_triggerWas  = { };
+    std::array<bool, VrHandCount> m_triggerKept = { };
 
     float distanceToLever(const VrVector3& point, VrVector3& closest) const;
 

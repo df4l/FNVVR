@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Mini-games
+
+- **Slot machine lever with the whole hand**: grabbing the lever with grip and trigger together no longer changes the bet or clicks the button under the laser. Away from the lever, the triggers still change the bet.
+
 ## v0.17.0 (2026-11-13, since v0.16.0 `277231a`)
 
 ### Mini-games

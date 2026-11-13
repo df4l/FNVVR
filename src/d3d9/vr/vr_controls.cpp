@@ -138,12 +138,20 @@ namespace dxvk {
       actions.setPressed(VrAction::MenuLeftTrigger, true);
     }
 
+    bool minigame = m_context == VrInputContext::Menu && m_minigamePad.active;
+
+    // A trigger a mini-game's gesture holds is neither the laser's click
+    // nor the gamepad's
+    if (minigame && m_minigamePad.noLeftHandTrigger)
+      actions.setPressed(VrAction::MenuLeftTrigger, false);
+
+    if (minigame && m_minigamePad.noRightHandTrigger)
+      actions.setPressed(VrAction::MenuRightTrigger, false);
+
     bool padUsed = std::max(std::abs(actions.move.x), std::abs(actions.move.y)) >= NavigateThreshold;
 
     for (VrAction action : MenuButtons)
       padUsed |= actions.isPressed(action);
-
-    bool minigame = m_context == VrInputContext::Menu && m_minigamePad.active;
 
     // A mini-game's own controls are buttons of the gamepad
     padUsed |= minigame && m_minigamePad.buttons;

@@ -685,6 +685,21 @@ namespace dxvk {
       events.pulled = true;
     }
 
+    // A trigger closing with the hand on the lever, before or after its
+    // grip, stays the lever's until it opens
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      bool trigger = hands[i].active && hands[i].trigger;
+      bool onLever = int32_t(i) == m_holder;
+
+      if (!onLever && hands[i].active) {
+        VrVector3 closest;
+        onLever = distanceToLever(hands[i].position, closest) <= Reach * unitsPerMetre;
+      }
+
+      m_triggerKept[i] = trigger && (m_triggerKept[i] || (!m_triggerWas[i] && onLever));
+      m_triggerWas[i]  = trigger;
+    }
+
     return events;
   }
 
