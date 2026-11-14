@@ -17,6 +17,13 @@ namespace dxvk {
    * picked on rendered menus' screens (terminals, hacking), which the game
    * turns into pixels for a 4:3 window, are turned into the window's.
    *
+   * Where the game derives a shape from the window rather than addressing
+   * its pixels (the save game's picture, the cameras of the menus' 3D
+   * scenes, the grass and camera shot frustums, the loading and credits
+   * menus, the rendered menus' textures), it is given the 4:3 window the
+   * interface is laid out on, so these keep the shape they had on the 4:3
+   * target. The save game's picture would otherwise be read past its end.
+   *
    * Nothing changes on a window that is 4:3 or wider.
    */
   class VrInterfaceShape {

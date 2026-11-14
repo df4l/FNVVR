@@ -1904,6 +1904,62 @@ namespace dxvk {
     constexpr uintptr_t PipBoyPickAspectSite       = 0x007F88EE;
     constexpr uint8_t   PickAspectInstruction[]    = { 0xDC, 0x0D, 0x28, 0x81, 0x07, 0x01 };
 
+    /**
+     * Calls of TESRenderer::GetScreenWidth (GameScreenWidth) where the game
+     * derives a shape from the window, for a 4:3 or wider window. ida-gog.
+     * - ScreenShot::TakeSaveGameScreenShot (0x00878F60, every save through
+     *   TESSaveLoadGame::SaveHeader 0x00861130): it reads height * H / W rows
+     *   of a capture that is height rows high, past its end on a window
+     *   taller than wide;
+     * - BGSSaveLoadHeader::SaveHeader (0x0084D4B0, two calls): the size of
+     *   the same capture;
+     * - the cameras of the menus' 3D scenes, frustum height from H / W:
+     *   HUDMainMenu::Create3DCamera (0x0077EE50, scope overlay),
+     *   LockPickMenu::Create3DCamera (0x0078E900), LoveTesterMenu::SetupCamera
+     *   (0x007945F0), BlackJackMenu::SetupCamera (0x007C2180),
+     *   SPECIALBookMenu::InitCamera (0x007C99C0),
+     *   FORenderedMenuRaceSex::Initialize (0x007FC970) and
+     *   FORenderedTerminal::Initialize (0x007FEEB0);
+     * - CreditsMenu::Create (0x0075F2A0): moves a tile when H / W is not 0.75.
+     */
+    constexpr uintptr_t WindowShapeScreenWidthCallSites[] = {
+      0x008790ED, 0x0084D58B, 0x0084D6D9,
+      0x0077EF9A, 0x0078EA1D, 0x00794743, 0x007C22A6, 0x007C9B13, 0x007FD200, 0x007FF342,
+      0x0075F51D,
+    };
+
+    /**
+     * Calls of NiRenderer::GetScreenWidth (RendererScreenWidth) where the game
+     * builds a camera from the window's aspect. ida-gog.
+     * - TESTerrainLODManager::UpdateGrassForCell (0x0057D4F0): the frustum
+     *   that chooses the grass to update, width times 0.75 / (H / W);
+     * - BGSCameraShot::Update (0x0058CF60): the frustum of a camera shot,
+     *   width times W / H / (4/3).
+     */
+    constexpr uintptr_t WindowShapeRendererWidthCallSites[] = { 0x0057D669, 0x0058D3F5 };
+
+    /**
+     * Interface::GetRealScreenWidth (__cdecl, returns a double) and its call
+     * in LoadingMenu::_Create (0x007890E0), which gives the loading menu's
+     * tile the window's W / H as user0. ida-gog.
+     */
+    constexpr uintptr_t InterfaceRealScreenWidth       = 0x00706E40;
+    constexpr uintptr_t LoadingMenuScreenWidthCallSite = 0x0078965F;
+
+    /**
+     * BSTextureManager::LookupTextureParameters (0x00B6C2C0), cases
+     * TEX_INTERFACE_FIRST / TEX_INTERFACE_TEMP and TEX_INTERFACE_RACESEXMENU:
+     * the rendered menus' textures (terminal and Pip-Boy screens, the
+     * Reflectron's face) are 1280 wide and 1280 * H / W high, from the
+     * default render target group's size. At each site the edi = group,
+     * `mov eax, [edx+GetWidth]; push 0; mov ecx, edi; call eax`. ida-gog.
+     */
+    constexpr uintptr_t InterfaceTextureWidthSites[] = { 0x00B6CD75, 0x00B6CF0C };
+    constexpr uint8_t   InterfaceTextureWidthCall[]  = {
+      0x8B, 0x82, 0x8C, 0x00, 0x00, 0x00, 0x6A, 0x00, 0x8B, 0xCF, 0xFF, 0xD0 };
+    constexpr uintptr_t RenderTargetGroupGetWidth  = 0x8C;
+    constexpr uintptr_t RenderTargetGroupGetHeight = 0x90;
+
     /** Menus driven by the sticks, where the pointer is off */
     constexpr uint32_t  VatsMenuId = 0x420;
 
