@@ -189,29 +189,42 @@ TEST_CASE(frustum_uses_tangents_of_the_field_of_view) {
 
 
 TEST_CASE(narrow_eye_is_widened_to_the_interface_aspect) {
-  VrExtent size = vrComputeGameResolution({ 1832, 1920 }, VrGameMinAspect);
+  VrExtent size = vrComputeGameResolution({ 1832, 1920 }, VrInterfaceMinAspect);
 
   CHECK(size.height == 1920);
   CHECK(size.width  == 2560);
 }
 
 
-TEST_CASE(eye_aspect_keeps_the_eye_size_and_is_never_square) {
+TEST_CASE(eye_aspect_keeps_the_eye_size) {
   VrExtent quest = vrComputeGameResolution({ 2244, 2352 }, 0.0f);
   CHECK(quest.width  == 2244);
   CHECK(quest.height == 2352);
 
   VrExtent odd = vrComputeGameResolution({ 1831, 1920 }, 0.0f);
   CHECK(odd.width == 1832);
+}
 
-  VrExtent square = vrComputeGameResolution({ 2000, 2000 }, 0.0f);
-  CHECK(square.width  == 2002);
-  CHECK(square.height == 2000);
+
+TEST_CASE(interface_is_at_least_four_by_three) {
+  // A Quest 2 eye: the panels' images are as wide as the former target
+  VrExtent quest = vrComputeInterfaceExtent({ 2244, 2352 });
+  CHECK(quest.width  == 3136);
+  CHECK(quest.height == 2352);
+  CHECK_NEAR(vrComputeInterfaceAspect(2244, 2352), 4.0 / 3.0, 1e-6);
+
+  // A wide enough target is kept, odd width included
+  VrExtent wide = vrComputeInterfaceExtent({ 2501, 1400 });
+  CHECK(wide.width  == 2501);
+  CHECK(wide.height == 1400);
+  CHECK_NEAR(vrComputeInterfaceAspect(2501, 1400), 2501.0 / 1400.0, 1e-9);
+
+  CHECK_NEAR(vrComputeInterfaceAspect(0, 0), 4.0 / 3.0, 1e-6);
 }
 
 
 TEST_CASE(wide_eye_keeps_its_size_and_width_is_even) {
-  VrExtent size = vrComputeGameResolution({ 2501, 1400 }, VrGameMinAspect);
+  VrExtent size = vrComputeGameResolution({ 2501, 1400 }, VrInterfaceMinAspect);
 
   CHECK(size.height == 1400);
   CHECK(size.width  == 2502);

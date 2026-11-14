@@ -367,15 +367,16 @@ namespace dxvk {
   constexpr float VrMaxCullingAngle = 1.3962634f;
 
   /**
-   * \brief Narrowest width to height ratio of the former 4:3 game target
+   * \brief Narrowest width to height ratio of the game's interface
    *
-   * The interface's menus are designed for 4:3 and wider screens, so the
-   * game used to render at least that wide and the eye copy squeezed the
-   * extra columns away. The game also lays its interface out on narrower
-   * and portrait screens (1280 units wide, see vrComputeInterfaceSize), so
-   * the eye's own aspect is the default (d3d9.vrEyeAspect).
+   * The menus are laid out for 4:3 and wider screens. The game lays them
+   * out 1280 units wide on a narrower screen, but its interface camera
+   * always shows 960 units of height, so it only shows the middle of them.
+   * When the game renders at the eye's aspect, VrInterfaceShape makes the
+   * interface as wide as this and it is stretched over the narrower target
+   * (findings/resolution.md, eye aspect).
    */
-  constexpr float VrGameMinAspect = 4.0f / 3.0f;
+  constexpr float VrInterfaceMinAspect = 4.0f / 3.0f;
 
   /**
    * \brief Computes the resolution the game renders at for a headset
@@ -383,13 +384,32 @@ namespace dxvk {
    * The game draws one frame per eye into its backbuffer, which is then
    * scaled into the eye image. The height is the eye's, so that no detail
    * is lost vertically, and the width is the eye's or more, so that the
-   * frame is at least as wide as \c minAspect allows. The width is even
-   * and never equal to the height: the game sizes its interface for a
-   * square screen as 1280 by 960 units, which would squeeze it.
+   * frame is at least as wide as \c minAspect allows. The width is even.
    *
    * \param [in] eye Recommended size of one eye's image
    * \param [in] minAspect Narrowest width to height ratio, 0 for the eye's
    */
   VrExtent vrComputeGameResolution(const VrExtent& eye, float minAspect);
+
+  /**
+   * \brief Width to height ratio of the interface on a screen
+   *
+   * The screen's, or \ref VrInterfaceMinAspect if it is narrower.
+   *
+   * \param [in] width Width of the screen, in pixels
+   * \param [in] height Height of the screen, in pixels
+   */
+  double vrComputeInterfaceAspect(uint32_t width, uint32_t height);
+
+  /**
+   * \brief Size of the images the interface's panels are made of
+   *
+   * The game's target, widened to \ref VrInterfaceMinAspect so that the
+   * interface's pixels are square in them. The target itself when it is
+   * wide enough.
+   *
+   * \param [in] target Size of the game's render target
+   */
+  VrExtent vrComputeInterfaceExtent(const VrExtent& target);
 
 }

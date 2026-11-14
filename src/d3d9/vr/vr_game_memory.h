@@ -213,6 +213,24 @@ namespace dxvk {
       const uint8_t*              replacement,
             size_t                size);
 
+    /**
+     * \brief Makes a game function jump to a replacement
+     *
+     * Its first bytes become a 5-byte relative jump, so no code may jump
+     * into them.
+     *
+     * \param [in] function Address of the function
+     * \param [in] expected Bytes the function must start with, at least 5
+     * \param [in] size Number of bytes checked
+     * \param [in] replacement Function with the same convention
+     * \returns \c true if the bytes matched and the jump was written
+     */
+    static bool redirectFunction(
+            uintptr_t             function,
+      const uint8_t*              expected,
+            size_t                size,
+      const void*                 replacement);
+
   };
 
 }

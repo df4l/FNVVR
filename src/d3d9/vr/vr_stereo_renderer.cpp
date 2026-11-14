@@ -161,6 +161,13 @@ namespace dxvk {
         std::clamp(LONG(std::lround(rect.bottom * scale)), LONG(0), LONG(desc.Height)) };
     }
 
+    /**
+     * \brief Size of the interface's panel images for the game's frame
+     */
+    VrExtent interfaceExtent(const D3DSURFACE_DESC& frame) {
+      return vrComputeInterfaceExtent({ frame.Width, frame.Height });
+    }
+
     VrInterfaceRect pixelsToRect(const RECT& rect) {
       return { float(rect.left), float(rect.top), float(rect.right), float(rect.bottom) };
     }
@@ -765,8 +772,10 @@ namespace dxvk {
     D3DSURFACE_DESC targetDesc = { };
     m_gameTarget->GetDesc(&targetDesc);
 
+    VrExtent interfaceSize = interfaceExtent(targetDesc);
+
     m_hudMetersPlaced = m_hudMetersAvailable
-      ? m_hudMeters.place(vrComputeInterfaceSize(targetDesc.Width, targetDesc.Height).y)
+      ? m_hudMeters.place(vrComputeInterfaceSize(interfaceSize.width, interfaceSize.height).y)
       : VrHudMetersPlaced();
 
     renderScope(state, main, views);
@@ -893,8 +902,10 @@ namespace dxvk {
       D3DSURFACE_DESC desc = { };
 
       if (SUCCEEDED(m_device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer))
-       && SUCCEEDED(backBuffer->GetDesc(&desc)) && desc.Width)
-        frame.panelAspect = float(desc.Height) / float(desc.Width);
+       && SUCCEEDED(backBuffer->GetDesc(&desc)) && desc.Width) {
+        VrExtent panel = interfaceExtent(desc);
+        frame.panelAspect = float(panel.height) / float(panel.width);
+      }
 
       m_minigames->update(frame, input, m_controls.pointerSurfaceState());
 
@@ -2398,11 +2409,15 @@ namespace dxvk {
     else if (layer == InterfaceLayer::HandHud)
       texture = m_handHudTexture.ptr();
 
+    // The game draws its interface over the whole target, which must have
+    // the size of its window for its scissor rectangles
     Com<IDirect3DSurface9> layerSurface;
+    Com<IDirect3DSurface9> drawSurface;
     Com<IDirect3DSurface9> renderTarget;
     Com<IDirect3DSurface9> depthStencil;
 
     if (FAILED(texture->GetSurfaceLevel(0, &layerSurface))
+     || FAILED(interfaceDrawTexture(texture)->GetSurfaceLevel(0, &drawSurface))
      || FAILED(m_device->GetRenderTarget(0, &renderTarget)))
       return false;
 
@@ -2410,7 +2425,7 @@ namespace dxvk {
     // match the texture's sample count
     m_device->GetDepthStencilSurface(&depthStencil);
     m_device->SetDepthStencilSurface(nullptr);
-    m_device->SetRenderTarget(0, layerSurface.ptr());
+    m_device->SetRenderTarget(0, drawSurface.ptr());
 
     if (layer == InterfaceLayer::Menu && m_menuScenes.isAnyOpen())
       renderMenuScenes();
@@ -2427,7 +2442,11 @@ namespace dxvk {
 
     Com<IDirect3DSurface9> usedTarget;
     m_device->GetRenderTarget(0, &usedTarget);
-    bool kept = usedTarget == layerSurface;
+    bool kept = usedTarget == drawSurface;
+
+    // Stretched back to square pixels, see VrInterfaceShape
+    if (kept && drawSurface != layerSurface)
+      kept = SUCCEEDED(m_device->StretchRect(drawSurface.ptr(), nullptr, layerSurface.ptr(), nullptr, D3DTEXF_LINEAR));
     // Menus are shown even if the HUD could not be hidden: the game hides
     // most of it while a menu is open
     bool rendered = kept && (m_hudIsolated || layer == InterfaceLayer::Menu);
@@ -2486,7 +2505,7 @@ namespace dxvk {
     // depth: the test does not depend on which way depth goes
     float cleared = vrGameDepthClear();
     D3DSURFACE_DESC desc = { };
-    m_menuTexture->GetLevelDesc(0, &desc);
+    interfaceDrawTexture(m_menuTexture.ptr())->GetLevelDesc(0, &desc);
 
     m_menuSceneState->Capture();
 
@@ -2541,7 +2560,7 @@ namespace dxvk {
       return false;
 
     D3DSURFACE_DESC desc = { };
-    m_menuTexture->GetLevelDesc(0, &desc);
+    interfaceDrawTexture(m_menuTexture.ptr())->GetLevelDesc(0, &desc);
 
     if (FAILED(m_device->CreateDepthStencilSurface(desc.Width, desc.Height, D3DFMT_D24S8,
         D3DMULTISAMPLE_NONE, 0, TRUE, &m_menuDepth, nullptr))
@@ -2592,26 +2611,41 @@ namespace dxvk {
     // One texture per panel, since a panel keeps showing its last image.
     // The HUD is drawn into one texture and rearranged into the panel's,
     // and the hand HUD into another, which is cut out into the hand panels'.
-    bool created = SUCCEEDED(m_device->CreateTexture(desc.Width, desc.Height, 1,
+    // They have the interface's aspect; a target narrower than that gets a
+    // texture of its own size for the game to draw into.
+    VrExtent size = interfaceExtent(desc);
+
+    bool created = SUCCEEDED(m_device->CreateTexture(size.width, size.height, 1,
         D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &m_hudTexture, nullptr))
-      && SUCCEEDED(m_device->CreateTexture(desc.Width, desc.Height, 1,
+      && SUCCEEDED(m_device->CreateTexture(size.width, size.height, 1,
         D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &m_hudPanelTexture, nullptr))
-      && SUCCEEDED(m_device->CreateTexture(desc.Width, desc.Height, 1,
+      && SUCCEEDED(m_device->CreateTexture(size.width, size.height, 1,
         D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &m_handHudTexture, nullptr))
-      && SUCCEEDED(m_device->CreateTexture(desc.Width, desc.Height, 1,
+      && SUCCEEDED(m_device->CreateTexture(size.width, size.height, 1,
         D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &m_menuTexture, nullptr));
 
+    if (created && size.width != desc.Width) {
+      created = SUCCEEDED(m_device->CreateTexture(desc.Width, desc.Height, 1,
+        D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &m_interfaceDrawTexture, nullptr));
+    }
+
     if (!created) {
-      Logger::err(str::format("VR: Failed to create the ", desc.Width, "x", desc.Height,
+      Logger::err(str::format("VR: Failed to create the ", size.width, "x", size.height,
         " interface textures, the HUD and menus are not shown in the headset"));
       m_hudTexture  = nullptr;
       m_hudPanelTexture = nullptr;
       m_handHudTexture = nullptr;
       m_menuTexture = nullptr;
+      m_interfaceDrawTexture = nullptr;
       m_interfaceFailed = true;
     }
 
     return created;
+  }
+
+
+  IDirect3DTexture9* VrStereoRenderer::interfaceDrawTexture(IDirect3DTexture9* layer) const {
+    return m_interfaceDrawTexture != nullptr ? m_interfaceDrawTexture.ptr() : layer;
   }
 
 
@@ -3088,10 +3122,11 @@ namespace dxvk {
      || FAILED(backBuffer->GetDesc(&desc)) || !desc.Width)
       return nullptr;
 
-    // Both images of the panel are the size of the game's frame
+    // Both images of the panel have the interface's aspect
+    VrExtent size = interfaceExtent(desc);
     m_menuPanel.pose   = m_panelPose;
     m_menuPanel.width  = m_panelWidth;
-    m_menuPanel.height = m_panelWidth * float(desc.Height) / float(desc.Width);
+    m_menuPanel.height = m_panelWidth * float(size.height) / float(size.width);
     return &m_menuPanel;
   }
 
@@ -3155,18 +3190,21 @@ namespace dxvk {
 
 
   bool VrStereoRenderer::createPanelTextures(const D3DSURFACE_DESC& desc) {
+    VrExtent size = interfaceExtent(desc);
+
     if (m_panelTexture != nullptr) {
       D3DSURFACE_DESC current = { };
       m_panelTexture->GetLevelDesc(0, &current);
 
-      if (current.Width == desc.Width && current.Height == desc.Height)
+      if (current.Width == size.width && current.Height == size.height)
         return true;
 
       m_panelTexture = nullptr;
       m_panelStaging = nullptr;
     }
 
-    bool created = SUCCEEDED(m_device->CreateTexture(desc.Width, desc.Height, 1,
+    // The panel has the interface's aspect, which the frame is stretched to
+    bool created = SUCCEEDED(m_device->CreateTexture(size.width, size.height, 1,
       D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &m_panelTexture, nullptr));
 
     if (created && desc.Format != D3DFMT_X8R8G8B8) {
@@ -3175,7 +3213,7 @@ namespace dxvk {
     }
 
     if (!created) {
-      Logger::err(str::format("VR: Failed to create the ", desc.Width, "x", desc.Height,
+      Logger::err(str::format("VR: Failed to create the ", size.width, "x", size.height,
         " panel texture, menus are not shown in the headset"));
       m_panelTexture = nullptr;
       m_panelStaging = nullptr;
@@ -3215,7 +3253,7 @@ namespace dxvk {
     }
 
     return SUCCEEDED(m_device->StretchRect(
-      source.ptr(), nullptr, panel.ptr(), nullptr, D3DTEXF_NONE));
+      source.ptr(), nullptr, panel.ptr(), nullptr, D3DTEXF_LINEAR));
   }
 
 }

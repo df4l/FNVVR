@@ -1856,11 +1856,38 @@ namespace dxvk {
     /**
      * Size of the interface in its own units (__cdecl, returns a float):
      * 960 high and as wide as the screen's aspect makes it, or 1280 wide
-     * and taller on a portrait screen.
+     * and taller on a portrait screen. VrInterfaceShape replaces both.
      */
     constexpr uintptr_t InterfaceWidth  = 0x00715D40;
     constexpr uintptr_t InterfaceHeight = 0x00715DA0;
     constexpr uint8_t   InterfaceSizePrologue[] = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x14, 0xE8 };
+
+    /**
+     * CalculateScaledHeight (__cdecl, returns a double): 1280 times the
+     * height over the width of the default render target, the height in
+     * units of the tiles that fade out (Tile::UpdateTile 0x00A04640 and
+     * Tile::ReClipChildren 0x00A07A40 scale their scissor rectangles with
+     * it). ida-gog.
+     */
+    constexpr uintptr_t InterfaceScaledHeight = 0x00706E90;
+    constexpr uint8_t   InterfaceScaledHeightPrologue[] = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x30, 0xE8 };
+
+    /**
+     * Call of NiRenderer::GetScreenWidth (__thiscall, returns the width in
+     * pixels) in InterfaceManager::InitSceneGraph (0x00712E90), which builds
+     * the interface's orthographic camera: fAspectRatioRatio = width /
+     * height / (4/3), frustum 1280 * fAspectRatioRatio units wide and always
+     * 960 high. On a portrait screen it shows the middle of the 1280 units
+     * the menus are laid out on. ida-gog.
+     */
+    constexpr uintptr_t InterfaceCameraWidthCallSite  = 0x00712FBB;
+    constexpr uintptr_t InterfaceCameraHeightCallSite = 0x00712FDF;
+    constexpr uintptr_t RendererScreenWidth          = 0x004DEE10;
+    constexpr uintptr_t RendererScreenHeight         = 0x004DEE70;
+
+    /** TESRenderer::GetScreenWidth and GetScreenHeight (__cdecl, return the window's size as int) */
+    constexpr uintptr_t GameScreenWidth  = 0x004DC1F0;
+    constexpr uintptr_t GameScreenHeight = 0x004DC200;
 
     /** Menus driven by the sticks, where the pointer is off */
     constexpr uint32_t  VatsMenuId = 0x420;

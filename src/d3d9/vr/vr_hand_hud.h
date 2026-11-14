@@ -35,9 +35,10 @@ namespace dxvk {
    * \brief Size of the game's interface in its own units
    *
    * The interface is laid out in units where the shorter side of the
-   * screen is 960 (landscape) or 1280 (portrait, as a headset eye) units
-   * long, whatever the resolution, see findings/hud.md. Like the game, a
-   * square screen counts as 1280 by 960 units.
+   * screen is 960 (landscape) or 1280 (portrait) units long, whatever the
+   * resolution, see findings/hud.md. Like the game, a square screen counts
+   * as 1280 by 960 units. The panels' images are always landscape, see
+   * vrComputeInterfaceExtent.
    *
    * \param [in] width Width of the render target, in pixels
    * \param [in] height Height of the render target, in pixels

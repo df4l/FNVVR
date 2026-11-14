@@ -329,6 +329,9 @@ namespace dxvk {
     Com<IDirect3DTexture9> m_hudTexture;
     Com<IDirect3DTexture9> m_hudPanelTexture;
     Com<IDirect3DTexture9> m_menuTexture;
+    // What the game draws its interface into when the target is narrower
+    // than the interface (see VrInterfaceShape), stretched into the above
+    Com<IDirect3DTexture9> m_interfaceDrawTexture;
     InterfaceLayer m_layer = InterfaceLayer::None;
 
     // Health bar, compass, action points, ammunition and interaction prompt,
@@ -750,6 +753,8 @@ namespace dxvk {
     void isolateHud();
 
     bool createInterfaceTextures();
+
+    IDirect3DTexture9* interfaceDrawTexture(IDirect3DTexture9* layer) const;
 
     bool composeHud();
 

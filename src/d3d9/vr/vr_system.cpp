@@ -30,6 +30,7 @@
 #include "vr_fast_math.h"
 #include "vr_sound_focus.h"
 #include "vr_game_window.h"
+#include "vr_interface_shape.h"
 #include "vr_launcher_overlay.h"
 #include "vr_menu_cursor.h"
 #include "vr_options_file.h"
@@ -336,7 +337,10 @@ namespace dxvk {
       return;
     }
 
-    VrExtent size = vrComputeGameResolution(eye, m_eyeAspect ? 0.0f : VrGameMinAspect);
+    // At the eye's aspect, the interface keeps its 4:3 layout and is
+    // stretched over the narrower target; without that, the 4:3 target
+    bool eyeAspect = m_eyeAspect && VrInterfaceShape::install();
+    VrExtent size = vrComputeGameResolution(eye, eyeAspect ? 0.0f : VrInterfaceMinAspect);
 
     if (!m_resolution.apply(size)) {
       Logger::info("VR: The game's display settings were not found, the game keeps its own resolution");
