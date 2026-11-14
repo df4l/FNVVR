@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.18.0 (2026-11-14, since v0.17.0 `c301f6d`)
 
 ### Performance
 
@@ -10,6 +10,10 @@
 ### Mini-games
 
 - **Slot machine lever with the whole hand**: grabbing the lever with grip and trigger together no longer changes the bet or clicks the button under the laser. Away from the lever, the triggers still change the bet.
+
+### Hands and controls
+
+- **Unarmed right hand grabs**: with no weapon or a hand-to-hand weapon drawn, the right grip now takes objects, as the left one does.
 
 ## v0.17.0 (2026-11-13, since v0.16.0 `277231a`)
 
