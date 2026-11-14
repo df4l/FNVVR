@@ -3,6 +3,8 @@
 #include <array>
 #include <cstdint>
 
+#include "vr_frame_stats.h"
+
 namespace dxvk {
 
   /**
@@ -125,6 +127,13 @@ namespace dxvk {
     bool     paced                = false;
     int64_t  predictedDisplayTime = 0;
     int64_t  predictedPeriod      = 0;
+    /// The previous frame's cycle, which this wait ended, is measured
+    bool         hasPreviousCycle = false;
+    /// Steps of that cycle, see VrFrameStep
+    VrFrameCycle previousCycle    = { };
+    /// Wall clock when that cycle ended, in seconds since 1970, to line it
+    /// up with a profiler's samples
+    double       previousCycleEnd = 0.0;
   };
 
   /**

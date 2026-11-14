@@ -165,7 +165,10 @@ namespace dxvk {
 
 
   void VrRenderPasses::endFrame() {
-    if (m_profile.endFrame()) {
+    bool full = m_profile.endFrame();
+    m_lastFrame = m_profile.lastFrame();
+
+    if (full) {
       logWindow();
       m_profile.reset();
       m_shadowsReused = 0;

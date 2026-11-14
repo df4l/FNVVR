@@ -229,6 +229,7 @@ namespace dxvk {
     passes.scopeResolution = uint32_t(std::max<int32_t>(0,
       config.getOption<int32_t>("d3d9.vrScopeResolution", int32_t(passes.scopeResolution))));
     passes.gpuTimings = config.getOption<bool>("d3d9.vrGpuTimings", passes.gpuTimings);
+    passes.spikeLog   = config.getOption<bool>("d3d9.vrSpikeLog", passes.spikeLog);
 
     VrDeveloperConfig developer;
     developer.enabled = config.getOption<bool>("d3d9.vrDeveloperMode", developer.enabled);

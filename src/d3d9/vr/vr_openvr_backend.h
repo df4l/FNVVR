@@ -286,6 +286,10 @@ namespace dxvk {
     };
 
     FrameClock                        m_frameClock;
+    // The cycle the last wait ended, handed out with the next frame's timing
+    bool                              m_hasLastCycle = false;
+    VrFrameCycle                      m_lastCycle    = { };
+    double                            m_lastCycleEnd = 0.0;
     VrFrameStats                      m_stats        = VrFrameStats(1, 0.0);
     bool                              m_statsRunning = false;
 

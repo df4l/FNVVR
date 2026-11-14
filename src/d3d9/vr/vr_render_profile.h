@@ -45,6 +45,9 @@ namespace dxvk {
 
     static constexpr uint32_t EyeCount = 2;
 
+    /// Time of each pass of each eye in one frame, in milliseconds
+    using EyePasses = std::array<std::array<double, VrRenderPassCount>, EyeCount>;
+
     /**
      * \param [in] windowFrames Frames covered by a window
      */
@@ -89,6 +92,11 @@ namespace dxvk {
      */
     double otherMs(uint32_t eye) const;
 
+    /**
+     * \brief Times of the frame closed last by endFrame
+     */
+    const EyePasses& lastFrame() const { return m_last; }
+
   private:
 
     struct PassStats {
@@ -97,11 +105,10 @@ namespace dxvk {
       uint32_t frames = 0;
     };
 
-    using EyePasses = std::array<std::array<double, VrRenderPassCount>, EyeCount>;
-
     uint32_t  m_windowFrames;
     uint32_t  m_frames = 0;
     EyePasses m_current = { };
+    EyePasses m_last    = { };
 
     std::array<std::array<PassStats, VrRenderPassCount>, EyeCount> m_stats = { };
 

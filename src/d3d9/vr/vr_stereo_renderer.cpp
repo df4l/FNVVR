@@ -454,6 +454,8 @@ namespace dxvk {
     if (!renderer->m_renderPasses)
       Logger::info("VR: The world render's passes were not found, they are drawn for each eye and not timed");
 
+    renderer->m_spikeLogWanted = passes.spikeLog && renderer->m_renderPasses;
+
     if (passes.gpuTimings) {
       renderer->m_gpuTimer = VrGpuTimer::create(device);
 
@@ -658,6 +660,7 @@ namespace dxvk {
     VrFrameTiming timing = m_backend.waitFrame();
     VrD3D9Bridge::beginFrame(m_device, m_backend);
     m_paced = timing.paced;
+    countFrame(timing);
 
     if (!timing.shouldRender) {
       VrD3D9Bridge::submitEmptyFrame(m_device, m_backend, timing.predictedDisplayTime);
@@ -796,7 +799,7 @@ namespace dxvk {
       : VrHudMetersPlaced();
 
     if (m_gpuTimer)
-      m_gpuTimer->beginFrame();
+      m_gpuTimer->beginFrame(m_frameId);
 
     uint32_t scopeGpu = gpuBegin(VrGpuSection::part(VrGpuFramePart::Scope));
     renderScope(state, main, views);
@@ -818,6 +821,9 @@ namespace dxvk {
 
     if (m_renderPasses)
       m_renderPasses->endFrame();
+
+    if (m_spikeLog && m_renderPasses)
+      m_spikeLog->setCpuPasses(m_frameId, m_renderPasses->lastFrame());
 
     m_renderCamera.restore(m_gameCamera);
     m_gameTarget = nullptr;
@@ -890,6 +896,7 @@ namespace dxvk {
     VrFrameTiming timing = m_backend.waitFrame();
     VrD3D9Bridge::beginFrame(m_device, m_backend);
     m_paced = timing.paced;
+    countFrame(timing);
     VrInputState input = m_backend.pollInput(timing.predictedDisplayTime);
     trackHead(input);
 
@@ -2366,6 +2373,31 @@ namespace dxvk {
       Logger::info("VR: The eye is drawn with the headset's frustum");
       m_loggedEyeFrustum = true;
     }
+  }
+
+
+  void VrStereoRenderer::countFrame(const VrFrameTiming& timing) {
+    if (m_spikeLog && timing.hasPreviousCycle)
+      m_spikeLog->setCycle(m_frameId, timing.previousCycle, timing.previousCycleEnd);
+
+    m_frameId += 1;
+
+    double periodMs = double(timing.predictedPeriod) * 1e-6;
+
+    if (!m_spikeLogWanted || periodMs <= 0.0 || (m_spikeLog && m_spikeLogPeriodMs == periodMs))
+      return;
+
+    m_spikeLogPeriodMs = periodMs;
+    m_spikeLog = std::make_unique<VrSpikeLog>(periodMs, m_gpuTimer != nullptr,
+      [] (const std::string& line) { Logger::info(line); });
+
+    if (m_gpuTimer) {
+      m_gpuTimer->setFrameCallback([this] (uint64_t frameId, const VrGpuFrameTimes& times) {
+        m_spikeLog->setGpu(frameId, times);
+      });
+    }
+
+    Logger::info(str::format("VR: Frames longer than the period of ", periodMs, " ms are logged one by one"));
   }
 
 

@@ -38,7 +38,7 @@ namespace dxvk {
   }
 
 
-  void VrGpuTimer::beginFrame() {
+  void VrGpuTimer::beginFrame(uint64_t frameId) {
     if (m_recording)
       cancelFrame();
 
@@ -49,8 +49,9 @@ namespace dxvk {
       return;
     }
 
-    slot.used  = 0;
-    slot.waits = 0;
+    slot.frameId = frameId;
+    slot.used    = 0;
+    slot.waits   = 0;
     slot.marks.clear();
 
     m_recording  = true;
@@ -162,6 +163,8 @@ namespace dxvk {
 
 
   void VrGpuTimer::addFrame(const Slot& slot) {
+    VrGpuFrameTimes times;
+
     for (const Mark& mark : slot.marks) {
       if (mark.end == NoQuery)
         continue;
@@ -169,8 +172,13 @@ namespace dxvk {
       double ms = vrGpuTimestampMs(slot.values[mark.begin], slot.values[mark.end], m_frequency);
 
       if (ms >= 0.0)
-        m_profile.add(mark.section, ms);
+        times.add(mark.section, ms);
     }
+
+    if (m_frameCallback)
+      m_frameCallback(slot.frameId, times);
+
+    m_profile.add(times);
 
     if (m_profile.endFrame()) {
       Logger::info(m_profile.describe(m_untimed));

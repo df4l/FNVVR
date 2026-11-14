@@ -22,6 +22,7 @@
 #include "vr_game_state.h"
 #include "vr_game_timer.h"
 #include "vr_gpu_timer.h"
+#include "vr_spike_log.h"
 #include "vr_hand_activate_pick.h"
 #include "vr_hand_hud.h"
 #include "vr_hud_layers.h"
@@ -509,6 +510,13 @@ namespace dxvk {
     std::unique_ptr<VrGameTimer> m_gameTimer;
     // GPU time of the frame's parts (d3d9.vrGpuTimings), used by m_renderPasses
     std::unique_ptr<VrGpuTimer> m_gpuTimer;
+    // Frames that miss their period (d3d9.vrSpikeLog), made at the first
+    // frame, once the period is known
+    std::unique_ptr<VrSpikeLog> m_spikeLog;
+    bool     m_spikeLogWanted = false;
+    // Counts the waits for the runtime: the frame the next cycle belongs to
+    uint64_t m_frameId = 0;
+    double   m_spikeLogPeriodMs = 0.0;
     std::unique_ptr<VrRenderPasses> m_renderPasses;
 
     // The game's flat scope is off with a headset, findings/optics.md §10
@@ -726,6 +734,9 @@ namespace dxvk {
     void logEyeCapture();
 
     void captureEye();
+
+    // Starts a frame: hands the cycle the wait ended to the spike log
+    void countFrame(const VrFrameTiming& timing);
 
     // Sections of the GPU timings, nothing without d3d9.vrGpuTimings
     uint32_t gpuBegin(VrGpuSection section);

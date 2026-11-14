@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -34,6 +35,9 @@ namespace dxvk {
 
     static constexpr uint32_t NoToken = ~0u;
 
+    /// Receives the times of each frame the GPU has finished
+    using FrameFn = std::function<void (uint64_t frameId, const VrGpuFrameTimes& times)>;
+
     /**
      * \returns \c nullptr if the device has no timestamp queries
      */
@@ -44,8 +48,14 @@ namespace dxvk {
      *
      * The frame is not timed when all the frames kept are still waiting
      * for the GPU.
+     *
+     * \param [in] frameId Given back with the frame's times
      */
-    void beginFrame();
+    void beginFrame(uint64_t frameId);
+
+    void setFrameCallback(FrameFn callback) {
+      m_frameCallback = std::move(callback);
+    }
 
     /**
      * \brief Ends the frame started by beginFrame
@@ -86,6 +96,7 @@ namespace dxvk {
       std::vector<Com<IDirect3DQuery9>> queries;
       std::vector<uint64_t>             values;
       std::vector<Mark>                 marks;
+      uint64_t frameId = 0;
       uint32_t used    = 0;
       uint32_t waits   = 0;
       bool     pending = false;
@@ -106,6 +117,7 @@ namespace dxvk {
     uint32_t m_frameToken = NoToken;
     uint32_t m_untimed    = 0;
     bool     m_loggedFailure = false;
+    FrameFn  m_frameCallback;
 
     uint32_t issue(Slot& slot);
 

@@ -17,6 +17,14 @@ namespace dxvk {
   }
 
 
+  void VrGpuFrameTimes::add(VrGpuSection section, double ms) {
+    if (section.isPart())
+      parts[uint32_t(section.part())] += ms;
+    else if (section.eye() < VrRenderProfile::EyeCount)
+      eyes[section.eye()][uint32_t(section.pass())] += ms;
+  }
+
+
   double vrGpuTimestampMs(uint64_t begin, uint64_t end, uint64_t frequency) {
     if (!frequency || end < begin)
       return -1.0;
@@ -37,6 +45,17 @@ namespace dxvk {
       m_current[uint32_t(section.part())] += ms;
     else
       m_eyes.add(section.eye(), section.pass(), ms);
+  }
+
+
+  void VrGpuProfile::add(const VrGpuFrameTimes& frame) {
+    for (uint32_t i = 0; i < VrGpuFramePartCount; i++)
+      add(VrGpuSection::part(VrGpuFramePart(i)), frame.parts[i]);
+
+    for (uint32_t eye = 0; eye < VrRenderProfile::EyeCount; eye++) {
+      for (uint32_t pass = 0; pass < VrRenderPassCount; pass++)
+        add(VrGpuSection::pass(eye, VrRenderPass(pass)), frame.eyes[eye][pass]);
+    }
   }
 
 

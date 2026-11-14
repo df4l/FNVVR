@@ -51,6 +51,17 @@ namespace dxvk {
       return (uint64_t(time.dwHighDateTime) << 32) | time.dwLowDateTime;
     }
 
+    // FILETIME units between 1601 and 1970
+    constexpr uint64_t FileTimeUnixEpoch = 116444736000000000ull;
+
+    // The wall clock (CLOCK_REALTIME under Wine), which perf can record its
+    // samples with, unlike the performance counter
+    double wallClockSeconds() {
+      FILETIME now;
+      GetSystemTimePreciseAsFileTime(&now);
+      return double(fileTimeValue(now) - FileTimeUnixEpoch) / (FileTimeUnitsPerMs * 1000.0);
+    }
+
     // CPU time used so far by the calling thread and by the whole process.
     // Windows counts it in clock ticks, so only a sum over many frames is
     // meaningful.
@@ -364,6 +375,10 @@ namespace dxvk {
       cycle[uint32_t(VrFrameStep::After)]      = ms(frame.submitted,     waitStart);
       cycle[uint32_t(VrFrameStep::Panels)]     = frame.panelMs;
       cycle[uint32_t(VrFrameStep::Wait)]       = ms(waitStart,           posesReady);
+
+      m_hasLastCycle = true;
+      m_lastCycle    = cycle;
+      m_lastCycleEnd = wallClockSeconds();
 
       if (m_stats.add(cycle))
         logFrameStats();
@@ -818,8 +833,13 @@ namespace dxvk {
       return timing;
     }
 
+    m_hasLastCycle = false;
     measureFrame(waitStart, high_resolution_clock::now());
     m_frameStarted = true;
+
+    timing.hasPreviousCycle = m_hasLastCycle;
+    timing.previousCycle    = m_lastCycle;
+    timing.previousCycleEnd = m_lastCycleEnd;
     m_poses = VrInputState();
 
     const vr::TrackedDevicePose_t& head = poses[vr::k_unTrackedDeviceIndex_Hmd];

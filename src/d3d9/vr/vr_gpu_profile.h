@@ -57,6 +57,16 @@ namespace dxvk {
   };
 
   /**
+   * \brief GPU time of the sections of one frame, in milliseconds
+   */
+  struct VrGpuFrameTimes {
+    std::array<double, VrGpuFramePartCount> parts = { };
+    VrRenderProfile::EyePasses              eyes  = { };
+
+    void add(VrGpuSection section, double ms);
+  };
+
+  /**
    * \brief Milliseconds between two GPU timestamps
    *
    * \param [in] begin First timestamp, in ticks
@@ -80,6 +90,11 @@ namespace dxvk {
     explicit VrGpuProfile(uint32_t windowFrames);
 
     void add(VrGpuSection section, double ms);
+
+    /**
+     * \brief Adds every section of a frame
+     */
+    void add(const VrGpuFrameTimes& frame);
 
     /**
      * \brief Closes the current frame

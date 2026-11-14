@@ -26,6 +26,8 @@ namespace dxvk {
     uint32_t scopeResolution = 768;
     /// The GPU time of the passes is measured and logged
     bool gpuTimings = false;
+    /// Frames that miss their display period are logged one by one
+    bool spikeLog = false;
   };
 
   /**
@@ -92,6 +94,13 @@ namespace dxvk {
     void endFrame();
 
     /**
+     * \brief CPU time of each pass of the frame ended last
+     */
+    const VrRenderProfile::EyePasses& lastFrame() const {
+      return m_lastFrame;
+    }
+
+    /**
      * \brief Limits the scene pass to a part of its target
      *
      * Only the scene pass: the game's scissor applies to what is drawn before
@@ -142,6 +151,7 @@ namespace dxvk {
     ViewFn             m_view;
     VrGameCamera       m_camera;
     VrRenderProfile    m_profile;
+    VrRenderProfile::EyePasses m_lastFrame = { };
 
     uint32_t m_eye = NoEye;
     high_resolution_clock::time_point m_eyeStart;
