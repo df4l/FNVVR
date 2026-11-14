@@ -143,6 +143,9 @@ namespace dxvk {
     m_eye      = eye;
     m_eyeStart = high_resolution_clock::now();
 
+    if (m_gpuTimer)
+      m_eyeGpuToken = m_gpuTimer->begin(VrGpuSection::pass(eye, VrRenderPass::Eye));
+
     if (eye == 0)
       m_shadowsDrawnForLeft = false;
   }
@@ -151,6 +154,9 @@ namespace dxvk {
   void VrRenderPasses::endEye() {
     if (m_eye == NoEye)
       return;
+
+    if (m_gpuTimer)
+      m_gpuTimer->end(m_eyeGpuToken);
 
     auto ms = std::chrono::duration<double, std::milli>(high_resolution_clock::now() - m_eyeStart).count();
     m_profile.add(m_eye, VrRenderPass::Eye, ms);
@@ -178,8 +184,15 @@ namespace dxvk {
       return fn();
 
     uint32_t eye = m_eye;
+    uint32_t gpuToken = m_gpuTimer
+      ? m_gpuTimer->begin(VrGpuSection::pass(eye, pass))
+      : VrGpuTimer::NoToken;
+
     auto start = high_resolution_clock::now();
     uintptr_t result = fn();
+
+    if (m_gpuTimer)
+      m_gpuTimer->end(gpuToken);
 
     m_profile.add(eye, pass,
       std::chrono::duration<double, std::milli>(high_resolution_clock::now() - start).count());

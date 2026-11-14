@@ -6,6 +6,7 @@
 #include "../../util/util_time.h"
 
 #include "vr_game_camera.h"
+#include "vr_gpu_timer.h"
 #include "vr_render_profile.h"
 #include "vr_scope_lens.h"
 
@@ -23,6 +24,8 @@ namespace dxvk {
     bool handsDepthTest = true;
     /// Side in pixels of the square the scope's view is drawn in
     uint32_t scopeResolution = 768;
+    /// The GPU time of the passes is measured and logged
+    bool gpuTimings = false;
   };
 
   /**
@@ -122,6 +125,15 @@ namespace dxvk {
       m_beforeFirstPerson = std::move(callback);
     }
 
+    /**
+     * \brief Sets what times the eyes and their passes on the GPU
+     *
+     * \param [in] timer Outlives this object, or \c nullptr
+     */
+    void setGpuTimer(VrGpuTimer* timer) {
+      m_gpuTimer = timer;
+    }
+
   private:
 
     VrRenderPasses(const VrRenderPassConfig& config, ViewFn view);
@@ -133,6 +145,9 @@ namespace dxvk {
 
     uint32_t m_eye = NoEye;
     high_resolution_clock::time_point m_eyeStart;
+
+    VrGpuTimer* m_gpuTimer = nullptr;
+    uint32_t    m_eyeGpuToken = VrGpuTimer::NoToken;
 
     const VrScopeArea* m_sceneScissor = nullptr;
     std::function<void()> m_afterFirstPerson;

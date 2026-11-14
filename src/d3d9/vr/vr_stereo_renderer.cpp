@@ -454,6 +454,15 @@ namespace dxvk {
     if (!renderer->m_renderPasses)
       Logger::info("VR: The world render's passes were not found, they are drawn for each eye and not timed");
 
+    if (passes.gpuTimings) {
+      renderer->m_gpuTimer = VrGpuTimer::create(device);
+
+      if (!renderer->m_gpuTimer)
+        Logger::warn("VR: The device has no timestamp queries, GPU timings are off");
+      else if (renderer->m_renderPasses)
+        renderer->m_renderPasses->setGpuTimer(renderer->m_gpuTimer.get());
+    }
+
     renderer->m_scopeGame = VrScopeGame::install();
 
     if (renderer->m_weaponHand && renderer->m_renderPasses) {
@@ -499,7 +508,15 @@ namespace dxvk {
     if (g_stereoRenderer) {
       g_stereoRenderer->captureEye();
 
-      if (g_stereoRenderer->renderLayer(interfaceManager, arg0, arg1))
+      uint32_t eye = g_stereoRenderer->m_eye;
+      uint32_t token = eye != NoEye
+        ? g_stereoRenderer->gpuBegin(VrGpuSection::pass(eye, VrRenderPass::Interface))
+        : VrGpuTimer::NoToken;
+
+      bool drawn = g_stereoRenderer->renderLayer(interfaceManager, arg0, arg1);
+      g_stereoRenderer->gpuEnd(token);
+
+      if (drawn)
         return;
     }
 
@@ -778,7 +795,12 @@ namespace dxvk {
       ? m_hudMeters.place(vrComputeInterfaceSize(interfaceSize.width, interfaceSize.height).y)
       : VrHudMetersPlaced();
 
+    if (m_gpuTimer)
+      m_gpuTimer->beginFrame();
+
+    uint32_t scopeGpu = gpuBegin(VrGpuSection::part(VrGpuFramePart::Scope));
     renderScope(state, main, views);
+    gpuEnd(scopeGpu);
 
     m_minigameDrawn = { };
 
@@ -806,11 +828,16 @@ namespace dxvk {
         m_loggedFailure = true;
       }
 
+      if (m_gpuTimer)
+        m_gpuTimer->cancelFrame();
+
       VrD3D9Bridge::submitEmptyFrame(m_device, m_backend, timing.predictedDisplayTime);
       return;
     }
 
     IDirect3DTexture9* eyes[VrEyeCount] = { m_eyeTextures[0].ptr(), m_eyeTextures[1].ptr() };
+
+    uint32_t panelsGpu = gpuBegin(VrGpuSection::part(VrGpuFramePart::Panels));
 
     drawFaders(eyes);
 
@@ -837,6 +864,11 @@ namespace dxvk {
       submitMenu();
     else if (m_overPipBoy)
       hidePanel();
+
+    gpuEnd(panelsGpu);
+
+    if (m_gpuTimer)
+      m_gpuTimer->endFrame();
 
     if (!VrD3D9Bridge::submitStereoFrame(m_device, m_backend, eyes, views,
         timing.predictedDisplayTime) && !m_loggedFailure) {
@@ -2195,7 +2227,9 @@ namespace dxvk {
 
     logEyeCapture();
 
+    uint32_t copyGpu = gpuBegin(VrGpuSection::pass(m_eye, VrRenderPass::EyeCopy));
     m_eyeCopied[m_eye] = copyRenderTarget(m_eye);
+    gpuEnd(copyGpu);
 
     if (m_eyeCopied[m_eye] && m_scopeVisible) {
       Com<IDirect3DSurface9> eyeSurface;
@@ -2327,6 +2361,17 @@ namespace dxvk {
       Logger::info("VR: The eye is drawn with the headset's frustum");
       m_loggedEyeFrustum = true;
     }
+  }
+
+
+  uint32_t VrStereoRenderer::gpuBegin(VrGpuSection section) {
+    return m_gpuTimer ? m_gpuTimer->begin(section) : VrGpuTimer::NoToken;
+  }
+
+
+  void VrStereoRenderer::gpuEnd(uint32_t token) {
+    if (m_gpuTimer)
+      m_gpuTimer->end(token);
   }
 
 

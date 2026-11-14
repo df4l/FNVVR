@@ -21,6 +21,7 @@
 #include "vr_game_camera.h"
 #include "vr_game_state.h"
 #include "vr_game_timer.h"
+#include "vr_gpu_timer.h"
 #include "vr_hand_activate_pick.h"
 #include "vr_hand_hud.h"
 #include "vr_hud_layers.h"
@@ -506,6 +507,8 @@ namespace dxvk {
 
     // The game's frame timer, measured against real time
     std::unique_ptr<VrGameTimer> m_gameTimer;
+    // GPU time of the frame's parts (d3d9.vrGpuTimings), used by m_renderPasses
+    std::unique_ptr<VrGpuTimer> m_gpuTimer;
     std::unique_ptr<VrRenderPasses> m_renderPasses;
 
     // The game's flat scope is off with a headset, findings/optics.md §10
@@ -723,6 +726,11 @@ namespace dxvk {
     void logEyeCapture();
 
     void captureEye();
+
+    // Sections of the GPU timings, nothing without d3d9.vrGpuTimings
+    uint32_t gpuBegin(VrGpuSection section);
+
+    void gpuEnd(uint32_t token);
 
     bool copyRenderTarget(uint32_t eye);
 
