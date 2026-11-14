@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Performance
+
+- **World at the eye's shape**: the game now renders at the headset eye's own size (2244x2352) instead of a wider 4:3 image cut down afterwards, about 28 % fewer pixels in every world pass. Menus, HUD, terminals and saves keep their usual layout. `d3d9.vrEyeAspect = False` restores the old target.
+- **Heap of the mod**: the game's small memory blocks (up to 4096 bytes) come from an allocator of the mod, to cut stutters from the game's own heap. `d3d9.vrGameHeap = False` turns it off.
+
 ### Mini-games
 
 - **Slot machine lever with the whole hand**: grabbing the lever with grip and trigger together no longer changes the bet or clicks the button under the laser. Away from the lever, the triggers still change the bet.
