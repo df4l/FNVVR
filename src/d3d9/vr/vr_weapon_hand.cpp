@@ -14,6 +14,7 @@
 #include "vr_forearm_cut.h"
 #include "vr_game_space.h"
 #include "vr_hand_fingers.h"
+#include "vr_scope_finder.h"
 #include "vr_melee.h"
 #include "vr_throw.h"
 #include "vr_weapon_hand.h"
@@ -1134,12 +1135,14 @@ namespace dxvk {
       if (!muzzle)
         return;
 
-      placement = VrScopeTable::guess(
-        vrTranspose(modelRotation) * (readVector(muzzle, VrGame::ObjectWorldTranslation) - modelOrigin) * (1.0f / modelScale));
+      if (!findModelScope(weapon, muzzle, equipped.weaponModel, placement)) {
+        placement = VrScopeTable::guess(
+          vrTranspose(modelRotation) * (readVector(muzzle, VrGame::ObjectWorldTranslation) - modelOrigin) * (1.0f / modelScale));
 
-      if (form != m_loggedScopeForm) {
-        Logger::warn(str::format("VR: The scope of the model '", equipped.weaponModel ? equipped.weaponModel : "",
-          "' is not known, its place is a guess. fnvvr\\scopes.ini can correct it."));
+        if (form != m_loggedScopeForm) {
+          Logger::warn(str::format("VR: The scope of the model '", equipped.weaponModel ? equipped.weaponModel : "",
+            "' is not known and was not found in its geometry, its place is a guess. fnvvr\\scopes.ini can correct it."));
+        }
       }
     }
 
@@ -1232,6 +1235,88 @@ namespace dxvk {
     m_scopeTwoHanded   = pointedByBothHands;
     m_scopeSupport     = supportInHand;
     m_hasScopeLens     = true;
+  }
+
+
+  bool VrWeaponHand::findModelScope(
+          uint8_t*          weapon,
+          uint8_t*          muzzle,
+    const char*             model,
+          VrScopePlacement& placement) {
+    std::string key = model ? model : "";
+    auto known = m_foundScopes.find(key);
+
+    if (known != m_foundScopes.end()) {
+      placement = known->second.placement;
+      return known->second.found;
+    }
+
+    // Everything in the frame of the weapon's model, as the table's values
+    VrGameRotation modelRotation = vrTranspose(readRotation(weapon, VrGame::ObjectWorldRotation));
+    VrVector3      modelOrigin   = readVector(weapon, VrGame::ObjectWorldTranslation);
+    float          modelScale    = field<float>(weapon, VrGame::ObjectWorldScale);
+    float          inverseScale  = modelScale > 0.0f ? 1.0f / modelScale : 1.0f;
+
+    auto toModel = [&] (const VrVector3& world) {
+      return modelRotation * (world - modelOrigin) * inverseScale;
+    };
+
+    std::vector<VrScopeShape> shapes;
+    size_t vertices = 0;
+
+    forEachObject(weapon, MaxModelDepth, [&] (uint8_t* object) {
+      uint8_t* geometry = (field<uint32_t>(object, VrGame::ObjectFlags) & VrGame::ObjectFlagAppCulled)
+        ? nullptr : asGeometry(object);
+      uint8_t* data = geometry ? field<uint8_t*>(geometry, VrGame::GeometryModelData) : nullptr;
+
+      if (!data)
+        return;
+
+      auto     points = field<const VrVector3*>(data, VrGame::GeometryDataVertices);
+      uint32_t count  = field<uint16_t>(data, VrGame::GeometryDataVertexCount);
+
+      if (!points || !count)
+        return;
+
+      VrGameRotation rotate    = readRotation(geometry, VrGame::ObjectWorldRotation);
+      VrVector3      translate = readVector(geometry, VrGame::ObjectWorldTranslation);
+      float          scale     = field<float>(geometry, VrGame::ObjectWorldScale);
+
+      VrScopeShape shape;
+      shape.namedScope = vrIsScopeName(field<const char*>(geometry, VrGame::ObjectName));
+      shape.points.reserve(count);
+
+      for (uint32_t i = 0; i < count; i++)
+        shape.points.push_back(toModel(translate + (rotate * points[i]) * scale));
+
+      vertices += count;
+      shapes.push_back(std::move(shape));
+    });
+
+    // The projectile node's x, y and z are the barrel's right, forward and up
+    VrGameRotation node = modelRotation * readRotation(muzzle, VrGame::ObjectWorldRotation);
+
+    VrScopeBarrel barrel;
+    barrel.muzzle  = toModel(readVector(muzzle, VrGame::ObjectWorldTranslation));
+    barrel.right   = { node.m[0][0], node.m[1][0], node.m[2][0] };
+    barrel.forward = { node.m[0][1], node.m[1][1], node.m[2][1] };
+    barrel.up      = { node.m[0][2], node.m[1][2], node.m[2][2] };
+
+    FoundScope result;
+    VrScopeFinding finding;
+    result.found = vrFindScope(shapes, barrel, result.placement, finding);
+
+    if (result.found) {
+      Logger::info(str::format("VR: Scope of the model '", key, "' found in its geometry (", shapes.size(), " parts, ",
+        vertices, " vertices): axis ", finding.above, " above the barrel and ", finding.right, " to its right, ",
+        finding.rings, " rings, ", finding.hasGlass
+          ? str::format("eyepiece glass ", finding.glassDepth, " in front of the lens")
+          : std::string("no eyepiece glass found")));
+    }
+
+    placement = result.placement;
+    m_foundScopes.emplace(std::move(key), result);
+    return result.found;
   }
 
 

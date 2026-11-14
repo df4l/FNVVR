@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Scopes
+
+- **Scopes of modded weapons found on the model**: for a weapon the mod does not know, the lens is now placed on the eyepiece of the scope found in the weapon's own 3D model, instead of a fixed guess that could end up inside the gun, hidden by the scope (issue #14). Checked on the vanilla weapons and on The Frontier's scoped weapons. `fnvvr\scopes.ini` still overrides it.
+
 ## v0.18.0 (2026-11-14, since v0.17.0 `c301f6d`)
 
 ### Performance

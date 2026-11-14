@@ -3,6 +3,8 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "vr_game_nodes.h"
@@ -794,6 +796,13 @@ namespace dxvk {
     VrScopeTable     m_scopeTable;
     const uint8_t*   m_loggedScopeForm = nullptr;
 
+    struct FoundScope {
+      bool             found = false;
+      VrScopePlacement placement;
+    };
+
+    std::unordered_map<std::string, FoundScope> m_foundScopes;
+
     VrVector3        m_muzzleOffset;
     VrGameRotation   m_muzzleRotation;
     VrVector3        m_aimDirection;
@@ -1189,6 +1198,24 @@ namespace dxvk {
       const VrGameCameraPose& hand,
             bool              pointedByBothHands,
       const VrVector3&        supportInHand);
+
+    /**
+     * \brief The scope of a model the table does not know, read from its geometry
+     *
+     * Searched once per model (findings/optics.md §16), when its scope is
+     * first looked for: the model's parts are then attached.
+     *
+     * \param [in] weapon The weapon's node
+     * \param [in] muzzle Its projectile node
+     * \param [in] model The model's path, the key of the search's result
+     * \param [out] placement The scope's eyepiece
+     * \returns \c false if the model shows no scope
+     */
+    bool findModelScope(
+            uint8_t*          weapon,
+            uint8_t*          muzzle,
+      const char*             model,
+            VrScopePlacement& placement);
 
     void placePipBoyArm(uint8_t* root, const VrVector3& shift, void* updateData);
 
