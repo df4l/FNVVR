@@ -1,0 +1,45 @@
+#pragma once
+
+namespace dxvk {
+
+  /**
+   * \brief Lays the game's interface out at 4:3 at least
+   *
+   * The game sizes its interface from the window: 960 units high and as wide
+   * as the window's aspect makes it, but 1280 units wide on a portrait
+   * window. Its interface camera, though, always shows 960 units of height,
+   * so on a portrait window, such as a headset eye, it only shows the middle
+   * of the menus. The game's functions that give the interface's shape are
+   * replaced by ones that use the window's aspect, or 4:3 when the window is
+   * narrower (see VrInterfaceMinAspect): the interface is then laid out as on
+   * the former 4:3 target and stretched over the narrower window. The game
+   * scales its scissor rectangles per axis, so they follow. The points
+   * picked on rendered menus' screens (terminals, hacking), which the game
+   * turns into pixels for a 4:3 window, are turned into the window's.
+   *
+   * Where the game derives a shape from the window rather than addressing
+   * its pixels (the save game's picture, the cameras of the menus' 3D
+   * scenes, the grass and camera shot frustums, the loading and credits
+   * menus, the rendered menus' textures), it is given the 4:3 window the
+   * interface is laid out on, so these keep the shape they had on the 4:3
+   * target. The save game's picture would otherwise be read past its end.
+   *
+   * Nothing changes on a window that is 4:3 or wider.
+   */
+  class VrInterfaceShape {
+
+  public:
+
+    /**
+     * \brief Replaces the game's interface shape functions
+     *
+     * Must run before the game creates its interface manager, which builds
+     * the interface camera. Either all functions are replaced or none.
+     *
+     * \returns \c true if they were replaced
+     */
+    static bool install();
+
+  };
+
+}

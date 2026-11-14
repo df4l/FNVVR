@@ -261,6 +261,23 @@ namespace dxvk {
   }
 
 
+  bool VrGameMemory::redirectFunction(
+          uintptr_t             function,
+    const uint8_t*              expected,
+          size_t                size,
+    const void*                 replacement) {
+    if (size < CallLength || !matches(function, expected, size))
+      return false;
+
+    uint8_t jump[CallLength] = { 0xE9 };
+    int32_t displacement = static_cast<int32_t>(
+      reinterpret_cast<uintptr_t>(replacement) - (function + CallLength));
+    std::memcpy(jump + 1, &displacement, sizeof(displacement));
+
+    return replaceCode(function, expected, jump, CallLength);
+  }
+
+
   bool VrGameMemory::redirectVirtual(
           uintptr_t             slot,
           uintptr_t             expectedTarget,

@@ -118,6 +118,8 @@ namespace dxvk {
     VrGameResolution                     m_resolution;
     bool                                 m_headsetResolution;
     bool                                 m_resolutionChosen = false;
+    // The game renders at the eye's aspect instead of 4:3 at least
+    bool                                 m_eyeAspect = true;
     bool                                 m_forceGameSettings = false;
     bool                                 m_rewriteTutorials = false;
     std::unique_ptr<VrTutorials>         m_tutorials;

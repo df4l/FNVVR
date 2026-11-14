@@ -367,12 +367,16 @@ namespace dxvk {
   constexpr float VrMaxCullingAngle = 1.3962634f;
 
   /**
-   * \brief Narrowest width to height ratio the game's interface is laid out for
+   * \brief Narrowest width to height ratio of the game's interface
    *
-   * The interface is designed for 4:3 and wider screens. A headset eye is
-   * usually narrower than that.
+   * The menus are laid out for 4:3 and wider screens. The game lays them
+   * out 1280 units wide on a narrower screen, but its interface camera
+   * always shows 960 units of height, so it only shows the middle of them.
+   * When the game renders at the eye's aspect, VrInterfaceShape makes the
+   * interface as wide as this and it is stretched over the narrower target
+   * (findings/resolution.md, eye aspect).
    */
-  constexpr float VrGameMinAspect = 4.0f / 3.0f;
+  constexpr float VrInterfaceMinAspect = 4.0f / 3.0f;
 
   /**
    * \brief Computes the resolution the game renders at for a headset
@@ -383,8 +387,42 @@ namespace dxvk {
    * frame is at least as wide as \c minAspect allows. The width is even.
    *
    * \param [in] eye Recommended size of one eye's image
-   * \param [in] minAspect Narrowest width to height ratio
+   * \param [in] minAspect Narrowest width to height ratio, 0 for the eye's
    */
   VrExtent vrComputeGameResolution(const VrExtent& eye, float minAspect);
+
+  /**
+   * \brief Width to height ratio of the interface on a screen
+   *
+   * The screen's, or \ref VrInterfaceMinAspect if it is narrower.
+   *
+   * \param [in] width Width of the screen, in pixels
+   * \param [in] height Height of the screen, in pixels
+   */
+  double vrComputeInterfaceAspect(uint32_t width, uint32_t height);
+
+  /**
+   * \brief Size of the images the interface's panels are made of
+   *
+   * The game's target, widened to \ref VrInterfaceMinAspect so that the
+   * interface's pixels are square in them. The target itself when it is
+   * wide enough.
+   *
+   * \param [in] target Size of the game's render target
+   */
+  VrExtent vrComputeInterfaceExtent(const VrExtent& target);
+
+  /**
+   * \brief Width per height of the 1280 interface units on a window
+   *
+   * The game turns a point picked on a rendered menu's screen into pixels
+   * as the window's height times 4/3, the width of 1280 units on a window
+   * 4:3 or wider. On a narrower window, where the interface is stretched to
+   * 1280 units over its width, that is the window's own aspect.
+   *
+   * \param [in] width Width of the window, in pixels
+   * \param [in] height Height of the window, in pixels
+   */
+  double vrComputeRenderedMenuPickAspect(uint32_t width, uint32_t height);
 
 }

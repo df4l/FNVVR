@@ -312,15 +312,46 @@ namespace dxvk {
   }
 
 
-  VrExtent vrComputeGameResolution(const VrExtent& eye, float minAspect) {
-    // The tolerance keeps an exact ratio such as 1920 * 4/3 from being
-    // rounded up by the float error of minAspect
-    uint32_t minWidth = uint32_t(std::ceil(double(eye.height) * double(minAspect) - 0.01));
+  namespace {
 
+    uint32_t widthForAspect(uint32_t height, float aspect) {
+      // The tolerance keeps an exact ratio such as 1920 * 4/3 from being
+      // rounded up by the float error of the aspect
+      return uint32_t(std::ceil(double(height) * double(aspect) - 0.01));
+    }
+
+  }
+
+
+  VrExtent vrComputeGameResolution(const VrExtent& eye, float minAspect) {
     VrExtent result;
-    result.width  = std::max(eye.width, minWidth);
+    result.width  = std::max(eye.width, widthForAspect(eye.height, minAspect));
     result.height = eye.height;
     result.width += result.width & 1;
+    return result;
+  }
+
+
+  double vrComputeInterfaceAspect(uint32_t width, uint32_t height) {
+    if (!width || !height)
+      return VrInterfaceMinAspect;
+
+    return std::max(double(width) / double(height), double(VrInterfaceMinAspect));
+  }
+
+
+  double vrComputeRenderedMenuPickAspect(uint32_t width, uint32_t height) {
+    if (!width || !height)
+      return VrInterfaceMinAspect;
+
+    return std::min(double(width) / double(height), double(VrInterfaceMinAspect));
+  }
+
+
+  VrExtent vrComputeInterfaceExtent(const VrExtent& target) {
+    VrExtent result;
+    result.width  = std::max(target.width, widthForAspect(target.height, VrInterfaceMinAspect));
+    result.height = target.height;
     return result;
   }
 

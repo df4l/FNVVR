@@ -16,6 +16,10 @@ The output is a single 32-bit `d3d9.dll`, which the game loads in place of the s
 
 Work is tested with the emulator backend and unit tests first. Anything that needs a headset is verified by hand and is listed as confirmed or pending in the project notes.
 
+## Community
+
+Questions, bug reports, suggestions and testing happen on the [Discord server](https://discord.gg/RgRVQ98jwn).
+
 ## Architecture
 
 ```
