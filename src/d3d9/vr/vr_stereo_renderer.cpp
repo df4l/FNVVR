@@ -1577,12 +1577,17 @@ namespace dxvk {
 
     bool inGame = state == VrGameStateKind::InGame && m_hasReference && input.hasActions;
 
-    // The right hand holds objects only while the weapon is holstered, by
-    // the player or by a script that disabled fighting. A press at the
-    // holster, at the Pip-Boy or with the quick wheel open does something
-    // else, but an object held there stays held.
+    // The right hand holds objects unless it holds the weapon: holstered by
+    // the player or by a script that disabled fighting, or unarmed (no
+    // weapon, or one worn on the fist). A press at the holster, at the
+    // Pip-Boy or with the quick wheel open does something else, but an
+    // object held there stays held.
+    int32_t type = -1;
+    VrWeaponDrawn::equippedWeapon(type);
+
+    bool unarmed = type < 0 || type == VrGame::WeaponTypeHandToHand;
     bool rightBusy = m_holster.atHolster() || m_rightHandAtPipBoy || (m_quickWheel && m_quickWheel->isOpen());
-    bool rightFree = m_weaponDrawn && m_weaponDrawn->handsFree()
+    bool rightFree = m_weaponDrawn && (m_weaponDrawn->handsFree() || unarmed)
       && (m_physicsGrab->holds(VrHand::Right) || !rightBusy);
 
     // The left hand is free unless it holds the weapon, arms a grenade or
