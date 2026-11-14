@@ -13,7 +13,9 @@ namespace dxvk {
    * replaced by ones that use the window's aspect, or 4:3 when the window is
    * narrower (see VrInterfaceMinAspect): the interface is then laid out as on
    * the former 4:3 target and stretched over the narrower window. The game
-   * scales its scissor rectangles per axis, so they follow.
+   * scales its scissor rectangles per axis, so they follow. The points
+   * picked on rendered menus' screens (terminals, hacking), which the game
+   * turns into pixels for a 4:3 window, are turned into the window's.
    *
    * Nothing changes on a window that is 4:3 or wider.
    */

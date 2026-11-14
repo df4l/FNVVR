@@ -412,4 +412,17 @@ namespace dxvk {
    */
   VrExtent vrComputeInterfaceExtent(const VrExtent& target);
 
+  /**
+   * \brief Width per height of the 1280 interface units on a window
+   *
+   * The game turns a point picked on a rendered menu's screen into pixels
+   * as the window's height times 4/3, the width of 1280 units on a window
+   * 4:3 or wider. On a narrower window, where the interface is stretched to
+   * 1280 units over its width, that is the window's own aspect.
+   *
+   * \param [in] width Width of the window, in pixels
+   * \param [in] height Height of the window, in pixels
+   */
+  double vrComputeRenderedMenuPickAspect(uint32_t width, uint32_t height);
+
 }

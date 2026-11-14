@@ -340,6 +340,14 @@ namespace dxvk {
   }
 
 
+  double vrComputeRenderedMenuPickAspect(uint32_t width, uint32_t height) {
+    if (!width || !height)
+      return VrInterfaceMinAspect;
+
+    return std::min(double(width) / double(height), double(VrInterfaceMinAspect));
+  }
+
+
   VrExtent vrComputeInterfaceExtent(const VrExtent& target) {
     VrExtent result;
     result.width  = std::max(target.width, widthForAspect(target.height, VrInterfaceMinAspect));

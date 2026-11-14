@@ -1889,6 +1889,21 @@ namespace dxvk {
     constexpr uintptr_t GameScreenWidth  = 0x004DC1F0;
     constexpr uintptr_t GameScreenHeight = 0x004DC200;
 
+    /**
+     * fmul qword ptr [dbl_01078128] (4/3) in FORenderedMenu::Pick (0x007FB790)
+     * and FOPipboyManager::CheckOrangeButtonsClicked (0x007F8720): the point
+     * picked on a rendered menu's screen (terminal, hacking, Reflectron, the
+     * Pip-Boy) becomes fPipBoyMouseX = u * height * 4/3 pixels, i.e. the
+     * 1280 units of a landscape window. InterfaceManager::PickMenus
+     * (0x007126C0) casts it through the window (NiCamera::WindowPointToRay
+     * divides by the target's width) and GetPipboyMouseX (0x007697F0) turns
+     * it into units with the window's width: on a window narrower than 4:3
+     * the pick lands to the right of the pointed point. ida-gog.
+     */
+    constexpr uintptr_t RenderedMenuPickAspectSite = 0x007FB9B0;
+    constexpr uintptr_t PipBoyPickAspectSite       = 0x007F88EE;
+    constexpr uint8_t   PickAspectInstruction[]    = { 0xDC, 0x0D, 0x28, 0x81, 0x07, 0x01 };
+
     /** Menus driven by the sticks, where the pointer is off */
     constexpr uint32_t  VatsMenuId = 0x420;
 

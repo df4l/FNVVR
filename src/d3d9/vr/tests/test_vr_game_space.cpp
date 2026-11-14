@@ -223,6 +223,17 @@ TEST_CASE(interface_is_at_least_four_by_three) {
 }
 
 
+TEST_CASE(rendered_menu_pick_spans_the_interface_width) {
+  // A Quest 2 eye: 1280 units are the window's 2244 pixels
+  CHECK_NEAR(vrComputeRenderedMenuPickAspect(2244, 2352) * 2352.0, 2244.0, 1e-6);
+
+  // 4:3 and wider: the game's 4/3
+  CHECK_NEAR(vrComputeRenderedMenuPickAspect(3136, 2352), 4.0 / 3.0, 1e-6);
+  CHECK_NEAR(vrComputeRenderedMenuPickAspect(1920, 1080), 4.0 / 3.0, 1e-6);
+  CHECK_NEAR(vrComputeRenderedMenuPickAspect(0, 0), 4.0 / 3.0, 1e-6);
+}
+
+
 TEST_CASE(wide_eye_keeps_its_size_and_width_is_even) {
   VrExtent size = vrComputeGameResolution({ 2501, 1400 }, VrInterfaceMinAspect);
 

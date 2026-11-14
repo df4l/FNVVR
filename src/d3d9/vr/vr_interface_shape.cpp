@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 
 #include "../../util/log/log.h"
 
@@ -20,11 +21,17 @@ namespace dxvk {
     /// Width of the tiles that fade out, in units (retn1280.0 0x00706E80)
     constexpr double FadeOutWidth    = 1280.0;
 
-    double interfaceAspect() {
-      int32_t width  = reinterpret_cast<ScreenSizeFn>(VrGame::GameScreenWidth)();
-      int32_t height = reinterpret_cast<ScreenSizeFn>(VrGame::GameScreenHeight)();
+    /// Read by the game's picks on rendered menus in place of its 4/3
+    double g_pickAspect = VrInterfaceMinAspect;
 
-      return vrComputeInterfaceAspect(uint32_t(std::max(width, 0)), uint32_t(std::max(height, 0)));
+    double interfaceAspect() {
+      uint32_t width  = uint32_t(std::max(reinterpret_cast<ScreenSizeFn>(VrGame::GameScreenWidth)(), 0));
+      uint32_t height = uint32_t(std::max(reinterpret_cast<ScreenSizeFn>(VrGame::GameScreenHeight)(), 0));
+
+      // The interface is laid out, so asks for its size, before anything
+      // can be picked on it
+      g_pickAspect = vrComputeRenderedMenuPickAspect(width, height);
+      return vrComputeInterfaceAspect(width, height);
     }
 
     // InterfaceManager::GetScreenWidth: the game's landscape rule, 960 units
@@ -62,13 +69,22 @@ namespace dxvk {
     size_t sizeLength   = sizeof(VrGame::InterfaceSizePrologue);
     size_t scaledLength = sizeof(VrGame::InterfaceScaledHeightPrologue);
 
+    // fmul qword ptr [g_pickAspect]
+    const uint8_t* pickStart = VrGame::PickAspectInstruction;
+    size_t pickLength = sizeof(VrGame::PickAspectInstruction);
+    uint8_t pickInstruction[sizeof(VrGame::PickAspectInstruction)] = { 0xDC, 0x0D };
+    uint32_t pickOperand = uint32_t(reinterpret_cast<uintptr_t>(&g_pickAspect));
+    std::memcpy(&pickInstruction[2], &pickOperand, sizeof(pickOperand));
+
     // Everything is checked before anything is patched: half of the shape
     // would draw the interface with a camera that does not fit its layout
     bool found = VrGameMemory::matches(VrGame::InterfaceWidth, sizeStart, sizeLength)
       && VrGameMemory::matches(VrGame::InterfaceHeight, sizeStart, sizeLength)
       && VrGameMemory::matches(VrGame::InterfaceScaledHeight, scaledStart, scaledLength)
       && VrGameMemory::callsTo(VrGame::InterfaceCameraWidthCallSite, VrGame::RendererScreenWidth)
-      && VrGameMemory::callsTo(VrGame::InterfaceCameraHeightCallSite, VrGame::RendererScreenHeight);
+      && VrGameMemory::callsTo(VrGame::InterfaceCameraHeightCallSite, VrGame::RendererScreenHeight)
+      && VrGameMemory::matches(VrGame::RenderedMenuPickAspectSite, pickStart, pickLength)
+      && VrGameMemory::matches(VrGame::PipBoyPickAspectSite, pickStart, pickLength);
 
     if (!found) {
       Logger::warn("VR: The game's interface size functions were not found or are changed by another module");
@@ -82,7 +98,9 @@ namespace dxvk {
       && VrGameMemory::redirectFunction(VrGame::InterfaceScaledHeight, scaledStart, scaledLength,
         reinterpret_cast<const void*>(&scaledHeight))
       && VrGameMemory::redirectCall(VrGame::InterfaceCameraWidthCallSite, VrGame::RendererScreenWidth,
-        reinterpret_cast<const void*>(&cameraScreenWidth));
+        reinterpret_cast<const void*>(&cameraScreenWidth))
+      && VrGameMemory::replaceCode(VrGame::RenderedMenuPickAspectSite, pickStart, pickInstruction, pickLength)
+      && VrGameMemory::replaceCode(VrGame::PipBoyPickAspectSite, pickStart, pickInstruction, pickLength);
 
     if (!replaced) {
       Logger::err("VR: The game's interface size functions could not be replaced");
