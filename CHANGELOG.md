@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.19.1 (2026-11-15, since v0.19.0 `bbce83a`)
+
+### Performance
+
+- **Eye-tracked foveation no longer crashes on the Steam Frame**: turning the option on closed the game when it runs on the Frame itself (Proton for ARM64). The mod now reads the eye's projection through another SteamVR call, which works there.
+
 ## v0.19.0 (2026-11-15, since v0.18.0 `156dd53`)
 
 ### Performance
