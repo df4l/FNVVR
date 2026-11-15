@@ -45,9 +45,11 @@ namespace dxvk {
    * \c top to \c bottom (\c bottom being the upward tangent, see
    * vrFovFromProjectionRaw).
    *
-   * The tangents are used instead of IVRSystem::GetProjectionMatrix: on
-   * Proton for ARM64 (Steam Frame), that call faults in the vrclient bridge
-   * and aborts the game.
+   * The tangents are used instead of IVRSystem::GetProjectionMatrix, which
+   * returns a struct: called directly from 32-bit GCC code, it gets \c this
+   * and the return address swapped (see getEyeToHeadTransform in
+   * vr_openvr_backend.cpp) and the
+   * runtime aborts the game.
    *
    * \param [in] left Left tangent from GetProjectionRaw
    * \param [in] right Right tangent from GetProjectionRaw
