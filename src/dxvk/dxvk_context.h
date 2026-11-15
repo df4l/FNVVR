@@ -174,6 +174,17 @@ namespace dxvk {
             VkExtent2D            texelSize);
 
     /**
+     * \brief Takes the counts of render passes begun with an attachment
+     *
+     * Counts the render passes begun while a shading rate attachment was
+     * set since the previous call, and resets them.
+     * \returns Passes that took the attachment and passes that did not
+     */
+    DxvkShadingRateStats takeShadingRateStats() {
+      return std::exchange(m_shadingRateStats, DxvkShadingRateStats());
+    }
+
+    /**
      * \brief Binds indirect argument buffer
      * 
      * Sets the buffers that are going to be used
@@ -1370,6 +1381,7 @@ namespace dxvk {
 
     DxvkContextFlags        m_flags;
     DxvkContextState        m_state;
+    DxvkShadingRateStats    m_shadingRateStats;
     DxvkContextFeatures     m_features;
     DxvkDescriptorState     m_descriptorState;
 

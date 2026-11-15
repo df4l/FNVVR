@@ -170,6 +170,22 @@ namespace dxvk {
   };
 
 
+  /**
+   * \brief Render passes begun with a shading rate attachment set
+   *
+   * Counts whether passes took the attachment, so that its user can
+   * tell whether the shading rates reach the passes it meant them for.
+   */
+  struct DxvkShadingRateStats {
+    /// Render passes that took the attachment
+    uint32_t    passesTaken = 0u;
+    /// Render passes of another size, shaded at full rate
+    uint32_t    passesSkipped = 0u;
+    /// Size of the last pass of another size
+    VkExtent2D  lastSkippedSize = { };
+  };
+
+
   struct DxvkPushDataState {
     std::array<char, MaxTotalPushDataSize> constantData = { };
     std::array<char, MaxTotalPushDataSize> resourceData = { };

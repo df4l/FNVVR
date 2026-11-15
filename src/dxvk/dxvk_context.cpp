@@ -6442,6 +6442,13 @@ namespace dxvk {
 
     m_state.om.boundShadingRate = pickShadingRateAttachment(framebufferInfo);
 
+    if (m_state.om.boundShadingRate) {
+      m_shadingRateStats.passesTaken += 1u;
+    } else if (m_state.om.shadingRateView != nullptr) {
+      m_shadingRateStats.passesSkipped += 1u;
+      m_shadingRateStats.lastSkippedSize = VkExtent2D { fbSize.width, fbSize.height };
+    }
+
     acquireRenderTargets(framebufferInfo, ops);
 
     m_state.om.attachmentMask.clear();

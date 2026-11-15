@@ -234,6 +234,16 @@ namespace dxvk {
     Logger::info(str::format("VR: Eye-tracked foveation over ", m_frames, " frames: ",
       m_foveatedFrames, " drawn around the gaze, ", m_frames - m_foveatedFrames, " at full rate without a gaze"));
 
+    // The render passes are begun on the CS thread: their counts are logged there
+    m_device->EmitVrCommand([] (DxvkContext* ctx) {
+      DxvkShadingRateStats stats = ctx->takeShadingRateStats();
+
+      Logger::info(str::format("VR: Eye-tracked foveation render passes: ", stats.passesTaken,
+        " with the shading rate image, ", stats.passesSkipped, " of another size at full rate",
+        stats.passesSkipped ? str::format(" (last ", stats.lastSkippedSize.width, "x",
+          stats.lastSkippedSize.height, ")") : std::string()));
+    });
+
     m_frames         = 0;
     m_foveatedFrames = 0;
   }
