@@ -294,6 +294,12 @@ namespace dxvk {
     eye.image  = std::move(image);
     eye.view   = eye.image->createView(viewKey);
 
+    if (!eye.view->handle()) {
+      Logger::warn("VR: The shading rate image has no view, the eye is shaded at full rate");
+      eye.view = nullptr;
+      return;
+    }
+
     Logger::info(str::format("VR: Shading rate image of ", size.width, "x", size.height,
       " texels for a ", target.width, "x", target.height, " eye"));
   }
