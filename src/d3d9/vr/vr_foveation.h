@@ -6,6 +6,7 @@
 #include "../d3d9_include.h"
 
 #include "../../dxvk/dxvk_buffer.h"
+#include "../../dxvk/dxvk_gpu_query.h"
 #include "../../dxvk/dxvk_image.h"
 
 #include "vr_foveation_map.h"
@@ -102,6 +103,13 @@ namespace dxvk {
       bool                            foveated = false;
     };
 
+    /// Left eye's world measured on the current frame
+    enum class Sample : uint32_t {
+      None,
+      Rates,
+      Full,
+    };
+
     // Frames counted in each logged window
     static constexpr uint32_t WindowFrames = 900;
 
@@ -117,11 +125,24 @@ namespace dxvk {
     uint32_t                 m_frames         = 0;
     uint32_t                 m_foveatedFrames = 0;
 
+    /// Fragment shader invocations of the left eye's world, on the first
+    /// frame of a log window with the eye's rates and on the second at
+    /// full rate. Empty if the GPU has no pipeline statistics.
+    std::array<Rc<DxvkQuery>, 2> m_invocations;
+    Sample                   m_sample       = Sample::None;
+    bool                     m_queryActive  = false;
+    bool                     m_ratesSampled = false;
+    bool                     m_fullSampled  = false;
+
+    void pickSample();
+
     void createEye(Eye& eye, const VrFov& fov, VrExtent target);
 
     void logWindow();
 
     void logImageContent(Eye& eye, uint32_t index);
+
+    void logInvocations();
 
     static uint32_t pickTexelSize(const DxvkDevice& device);
 

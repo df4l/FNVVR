@@ -33,7 +33,14 @@ namespace dxvk {
 
 
   VrFoveation::VrFoveation(D3D9DeviceEx* device, uint32_t texelSize, const VrFoveationZones& zones)
-  : m_device(device), m_texelSize(texelSize), m_zones(zones) { }
+  : m_device(device), m_texelSize(texelSize), m_zones(zones) {
+    const Rc<DxvkDevice>& dxvk = m_device->GetDXVKDevice();
+
+    if (dxvk->features().core.features.pipelineStatisticsQuery) {
+      for (auto& query : m_invocations)
+        query = dxvk->createGpuQuery(VK_QUERY_TYPE_PIPELINE_STATISTICS, 0u, 0u);
+    }
+  }
 
 
   VrFoveation::~VrFoveation() {
@@ -118,6 +125,8 @@ namespace dxvk {
       });
     }
 
+    pickSample();
+
     m_frames += 1;
     m_foveatedFrames += foveated ? 1u : 0u;
 
@@ -127,7 +136,20 @@ namespace dxvk {
 
 
   void VrFoveation::beginWorld(uint32_t eye) {
-    if (eye >= VrEyeCount || !m_eyes[eye].foveated)
+    if (eye >= VrEyeCount)
+      return;
+
+    if (eye == 0u && m_sample != Sample::None && !m_queryActive) {
+      m_device->EmitVrCommand([
+        cQuery = m_invocations[m_sample == Sample::Rates ? 0u : 1u]
+      ] (DxvkContext* ctx) {
+        ctx->beginQuery(cQuery);
+      });
+
+      m_queryActive = true;
+    }
+
+    if (!m_eyes[eye].foveated)
       return;
 
     m_device->EmitVrCommand([
@@ -142,6 +164,19 @@ namespace dxvk {
 
 
   void VrFoveation::endWorld() {
+    if (m_queryActive) {
+      m_device->EmitVrCommand([
+        cQuery = m_invocations[m_sample == Sample::Rates ? 0u : 1u]
+      ] (DxvkContext* ctx) {
+        ctx->endQuery(cQuery);
+      });
+
+      m_ratesSampled |= m_sample == Sample::Rates;
+      m_fullSampled  |= m_sample == Sample::Full;
+      m_queryActive = false;
+      m_sample = Sample::None;
+    }
+
     if (!m_attached)
       return;
 
@@ -161,6 +196,28 @@ namespace dxvk {
 
     m_frames         = 0;
     m_foveatedFrames = 0;
+    m_sample         = Sample::None;
+    m_ratesSampled   = false;
+    m_fullSampled    = false;
+  }
+
+
+  void VrFoveation::pickSample() {
+    m_sample = Sample::None;
+
+    if (!m_invocations[0] || !m_eyes[0].foveated)
+      return;
+
+    // The first frame of a window is measured with the rates, the second
+    // at full rate: the scene barely changes between them
+    if (m_frames == 0u) {
+      m_sample = Sample::Rates;
+      m_ratesSampled = false;
+      m_fullSampled  = false;
+    } else if (m_frames == 1u && m_ratesSampled) {
+      m_sample = Sample::Full;
+      m_eyes[0].foveated = false;
+    }
   }
 
 
@@ -249,6 +306,8 @@ namespace dxvk {
     for (uint32_t i = 0; i < VrEyeCount; i++)
       logImageContent(m_eyes[i], i);
 
+    logInvocations();
+
     // The render passes are begun on the CS thread: their counts are logged there
     m_device->EmitVrCommand([] (DxvkContext* ctx) {
       DxvkShadingRateStats stats = ctx->takeShadingRateStats();
@@ -303,6 +362,29 @@ namespace dxvk {
     });
 
     eye.readbackWritten = true;
+  }
+
+
+  void VrFoveation::logInvocations() {
+    if (!m_ratesSampled || !m_fullSampled)
+      return;
+
+    DxvkQueryData rates = { };
+    DxvkQueryData full = { };
+
+    // Measured at the start of the window: long finished by the GPU
+    if (m_invocations[0]->getData(rates) != DxvkGpuQueryStatus::Available
+     || m_invocations[1]->getData(full) != DxvkGpuQueryStatus::Available)
+      return;
+
+    double pixels = double(m_target.width) * double(m_target.height);
+    uint64_t withRates = rates.statistic.fsInvocations;
+    uint64_t atFull = full.statistic.fsInvocations;
+
+    Logger::info(str::format("VR: Left eye's world, fragment shader invocations per pixel: ",
+      std::round(100.0 * double(withRates) / pixels) / 100.0, " with the shading rate image, ",
+      std::round(100.0 * double(atFull) / pixels) / 100.0, " at full rate on the next frame (",
+      atFull ? uint32_t(std::round(100.0 * double(withRates) / double(atFull))) : 0u, "%)"));
   }
 
 
