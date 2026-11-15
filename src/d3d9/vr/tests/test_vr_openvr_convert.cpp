@@ -76,6 +76,38 @@ TEST_CASE(projection_raw_top_is_the_downward_tangent) {
 }
 
 
+TEST_CASE(foveation_center_inverts_the_eye_projection) {
+  // IVRSystem::GetProjectionMatrix as OpenVR composes it from the raw
+  // projection, top being the downward tangent
+  const float left = -1.2f, right = 1.0f, top = -1.3f, bottom = 1.1f;
+  const float nearZ = 0.1f, farZ = 100.0f;
+
+  float m[4][4] = { };
+  m[0][0] = 2.0f / (right - left);
+  m[0][2] = (right + left) / (right - left);
+  m[1][1] = 2.0f / (bottom - top);
+  m[1][2] = (bottom + top) / (bottom - top);
+  m[2][2] = -farZ / (farZ - nearZ);
+  m[2][3] = -farZ * nearZ / (farZ - nearZ);
+  m[3][2] = -1.0f;
+
+  // The top right corner of the view
+  VrGaze corner = vrGazeFromFoveationCenter(m, 1.0f, 1.0f);
+  CHECK_NEAR(corner.tanX, right, 1e-5);
+  CHECK_NEAR(corner.tanY, bottom, 1e-5);
+
+  // The bottom left one
+  VrGaze opposite = vrGazeFromFoveationCenter(m, -1.0f, -1.0f);
+  CHECK_NEAR(opposite.tanX, left, 1e-5);
+  CHECK_NEAR(opposite.tanY, top, 1e-5);
+
+  // The centre of the image is between the edges, not straight ahead
+  VrGaze centre = vrGazeFromFoveationCenter(m, 0.0f, 0.0f);
+  CHECK_NEAR(centre.tanX, -0.1f, 1e-5);
+  CHECK_NEAR(centre.tanY, -0.1f, 1e-5);
+}
+
+
 TEST_CASE(action_paths_are_in_the_set_of_their_context) {
   for (uint32_t i = 0; i < VrActionCount; i++) {
     std::string path = vrOpenVrActionPath(VrAction(i));

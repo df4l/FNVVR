@@ -36,6 +36,21 @@ namespace dxvk {
   VrFov vrFovFromProjectionRaw(float left, float right, float top, float bottom);
 
   /**
+   * \brief Converts a foveation centre to a gaze
+   *
+   * IVRSystem::GetEyeTrackedFoveationCenter gives where an eye looks as a
+   * point in the normalised device coordinates of the eye's projection
+   * matrix (IVRSystem::GetProjectionMatrix, row major). Inverting the
+   * matrix for a direction (x, y, -1) of the view gives the gaze, whatever
+   * the matrix's conventions are.
+   *
+   * \param [in] projection The eye's projection matrix
+   * \param [in] ndcX Horizontal coordinate of the centre
+   * \param [in] ndcY Vertical coordinate of the centre
+   */
+  VrGaze vrGazeFromFoveationCenter(const float projection[4][4], float ndcX, float ndcY);
+
+  /**
    * \brief Paths of the OpenVR action sets, indexed by VrInputContext
    */
   constexpr const char* VrOpenVrActionSets[] = {
