@@ -48,8 +48,7 @@ namespace dxvk {
    * The tangents are used instead of IVRSystem::GetProjectionMatrix, which
    * returns a struct: called directly from 32-bit GCC code, it gets \c this
    * and the return address swapped (see getEyeToHeadTransform in
-   * vr_openvr_backend.cpp) and the
-   * runtime aborts the game.
+   * vr_openvr_backend.cpp) and the runtime aborts the game.
    *
    * \param [in] left Left tangent from GetProjectionRaw
    * \param [in] right Right tangent from GetProjectionRaw
