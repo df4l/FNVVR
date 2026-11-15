@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.19.0 (2026-11-15, since v0.18.0 `156dd53`)
 
 ### Performance
 
