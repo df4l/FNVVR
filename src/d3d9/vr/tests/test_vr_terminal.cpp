@@ -370,6 +370,62 @@ TEST_CASE(dds_decodes_the_dx10_extension) {
 }
 
 
+TEST_CASE(dds_decodes_d3dformat_codes) {
+  // A8R8G8B8 named by its D3DFORMAT number, no channel masks
+  std::vector<uint8_t> file = ddsHeader(1, 1);
+  put32(file, 80, 0x4);
+  put32(file, 84, 21);
+
+  for (uint8_t byte : { 0x33, 0x22, 0x11, 0x44 })
+    file.push_back(byte);
+
+  VrImage image;
+  CHECK(vrDecodeDds(file.data(), file.size(), image));
+  CHECK(image.at(0, 0) == 0x44112233u);
+
+  // A8L8 by number: the luminance in every colour channel
+  file = ddsHeader(1, 1);
+  put32(file, 80, 0x4);
+  put32(file, 84, 51);
+  file.push_back(0x40);
+  file.push_back(0xC0);
+
+  CHECK(vrDecodeDds(file.data(), file.size(), image));
+  CHECK(image.at(0, 0) == 0xC0404040u);
+}
+
+
+TEST_CASE(dds_decodes_premultiplied_and_unflagged_blocks) {
+  // DXT4: the DXT5 alpha block at half alpha, a white colour block that
+  // is grey once multiplied by alpha, back to white once divided
+  std::vector<uint8_t> block = { 0x80, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                 0x10, 0x84, 0x10, 0x84, 0x00, 0x00, 0x00, 0x00 };
+  std::vector<uint8_t> file = dxtFile("DXT4", block);
+
+  VrImage image;
+  CHECK(vrDecodeDds(file.data(), file.size(), image));
+  CHECK(image.at(0, 0) == 0x80FFFFFFu);
+
+  // DXT1 named without the four-character code's flag
+  file = dxtFile("DXT1", { 0xFF, 0xFF, 0x00, 0x00, 0x04, 0xFF, 0xFF, 0xFF });
+  put32(file, 80, 0);
+
+  CHECK(vrDecodeDds(file.data(), file.size(), image));
+  CHECK(image.at(1, 0) == 0xFF000000u);
+}
+
+
+TEST_CASE(dds_describes_its_header) {
+  std::vector<uint8_t> file = dxtFile("ATI2", std::vector<uint8_t>(16, 0));
+  std::string text = vrDescribeDds(file.data(), file.size());
+  CHECK(text.find("4x4") != std::string::npos);
+  CHECK(text.find("'ATI2'") != std::string::npos);
+
+  const uint8_t junk[] = "not a texture";
+  CHECK(vrDescribeDds(junk, sizeof(junk)).find("not a DDS") != std::string::npos);
+}
+
+
 TEST_CASE(dds_rejects_other_files) {
   std::vector<uint8_t> file = dxtFile("ATI2", std::vector<uint8_t>(16, 0));
   VrImage image;
