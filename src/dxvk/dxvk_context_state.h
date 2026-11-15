@@ -164,6 +164,9 @@ namespace dxvk {
     VkOffset2D          renderAreaLo = { };
     VkOffset2D          renderAreaHi = { };
     VkBool32            renderLayered = VK_FALSE;
+    Rc<DxvkImageView>   shadingRateView;
+    VkExtent2D          shadingRateTexelSize = { };
+    DxvkImageView*      boundShadingRate = nullptr;
   };
 
 

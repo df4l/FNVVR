@@ -321,6 +321,49 @@ namespace dxvk {
     }
 
     /**
+     * \brief Checks whether render passes can take a shading rate attachment
+     * \returns \c true if attachment shading rates are enabled
+     */
+    bool canUseShadingRateAttachment() const {
+      return m_features.khrFragmentShadingRate.attachmentFragmentShadingRate;
+    }
+
+    /**
+     * \brief Pipeline flags for shading rate attachments
+     *
+     * Every graphics pipeline gets them, so that any of them can be used
+     * in a render pass with a shading rate attachment.
+     * \returns The flags, or 0 if attachments are not used
+     */
+    VkPipelineCreateFlags2 getShadingRatePipelineFlags() const {
+      return canUseShadingRateAttachment()
+        ? VK_PIPELINE_CREATE_2_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR
+        : VkPipelineCreateFlags2(0u);
+    }
+
+    /**
+     * \brief Chains the shading rate state of graphics pipelines
+     *
+     * Pipelines take the rate of the shading rate attachment, and shade
+     * every pixel in render passes without one. Only for pipelines with
+     * pre-rasterization or fragment shader state.
+     * \param [in] info Pipeline create info to chain the state to
+     * \param [out] state Storage of the state, kept until the pipeline is created
+     */
+    void chainShadingRateState(
+            VkGraphicsPipelineCreateInfo&                     info,
+            VkPipelineFragmentShadingRateStateCreateInfoKHR&  state) const {
+      if (!canUseShadingRateAttachment())
+        return;
+
+      state = { VK_STRUCTURE_TYPE_PIPELINE_FRAGMENT_SHADING_RATE_STATE_CREATE_INFO_KHR };
+      state.fragmentSize = { 1u, 1u };
+      state.combinerOps[0] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
+      state.combinerOps[1] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR;
+      state.pNext = std::exchange(info.pNext, &state);
+    }
+
+    /**
      * \brief Checks whether CUDA interop is enabled
      *
      * Relevant for descriptor heap usage since CUDA interop still
