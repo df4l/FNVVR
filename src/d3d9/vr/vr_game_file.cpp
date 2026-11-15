@@ -1,3 +1,6 @@
+#include "../../util/log/log.h"
+#include "../../util/util_string.h"
+
 #include "vr_game_addresses.h"
 #include "vr_game_file.h"
 #include "vr_game_memory.h"
@@ -52,6 +55,9 @@ namespace dxvk {
     uint32_t size = method<SizeFn>(file, VrGame::FileGetSize)(file, nullptr);
 
     if (!size || size > MaxFileSize) {
+      if (size)
+        Logger::warn(str::format("VR: '", path, "' is ", size >> 20, " MB, over the ", MaxFileSize >> 20, " MB the VR layer reads"));
+
       destroy(file);
       return false;
     }
