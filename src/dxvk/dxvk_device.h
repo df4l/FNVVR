@@ -356,10 +356,14 @@ namespace dxvk {
       if (!canUseShadingRateAttachment())
         return;
 
+      bool test = m_options.testPipelineShadingRate;
+
       state = { VK_STRUCTURE_TYPE_PIPELINE_FRAGMENT_SHADING_RATE_STATE_CREATE_INFO_KHR };
-      state.fragmentSize = { 1u, 1u };
+      state.fragmentSize = test ? VkExtent2D { 2u, 2u } : VkExtent2D { 1u, 1u };
       state.combinerOps[0] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
-      state.combinerOps[1] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR;
+      state.combinerOps[1] = test
+        ? VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR
+        : VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR;
       state.pNext = std::exchange(info.pNext, &state);
     }
 

@@ -76,6 +76,11 @@ namespace dxvk {
     /// Whether to use custom sin/cos approximation
     Tristate lowerSinCos = Tristate::Auto;
 
+    /// Shades every draw once per 2x2 pixels through the pipelines'
+    /// own shading rate, ignoring shading rate attachments. Diagnostic
+    /// of shading rates that the GPU does not apply.
+    bool testPipelineShadingRate = false;
+
     /// Enables implicit resolves that are used to
     /// deal with MSAA-related undefined behaviour.
     bool enableImplicitResolves = true;
