@@ -1113,9 +1113,9 @@ namespace dxvk {
     for (uint32_t i = 0; i < VrEyeCount; i++) {
       vr::EVREye eye = i == uint32_t(VrEye::Left) ? vr::Eye_Left : vr::Eye_Right;
 
-      // The depth range does not change the centre's direction
-      vr::HmdMatrix44_t projection = m_runtime->system->GetProjectionMatrix(eye, 0.1f, 100.0f);
-      gaze[i] = vrGazeFromFoveationCenter(projection.m, centres[i].v[0], centres[i].v[1]);
+      float left = 0.0f, right = 0.0f, top = 0.0f, bottom = 0.0f;
+      m_runtime->system->GetProjectionRaw(eye, &left, &right, &top, &bottom);
+      gaze[i] = vrGazeFromFoveationCenter(left, right, top, bottom, centres[i].v[0], centres[i].v[1]);
     }
 
     if (!m_gazeSeen) {

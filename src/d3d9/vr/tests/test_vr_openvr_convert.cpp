@@ -92,19 +92,26 @@ TEST_CASE(foveation_center_inverts_the_eye_projection) {
   m[3][2] = -1.0f;
 
   // The top right corner of the view
-  VrGaze corner = vrGazeFromFoveationCenter(m, 1.0f, 1.0f);
+  VrGaze corner = vrGazeFromFoveationCenter(left, right, top, bottom, 1.0f, 1.0f);
   CHECK_NEAR(corner.tanX, right, 1e-5);
   CHECK_NEAR(corner.tanY, bottom, 1e-5);
 
   // The bottom left one
-  VrGaze opposite = vrGazeFromFoveationCenter(m, -1.0f, -1.0f);
+  VrGaze opposite = vrGazeFromFoveationCenter(left, right, top, bottom, -1.0f, -1.0f);
   CHECK_NEAR(opposite.tanX, left, 1e-5);
   CHECK_NEAR(opposite.tanY, top, 1e-5);
 
   // The centre of the image is between the edges, not straight ahead
-  VrGaze centre = vrGazeFromFoveationCenter(m, 0.0f, 0.0f);
+  VrGaze centre = vrGazeFromFoveationCenter(left, right, top, bottom, 0.0f, 0.0f);
   CHECK_NEAR(centre.tanX, -0.1f, 1e-5);
   CHECK_NEAR(centre.tanY, -0.1f, 1e-5);
+
+  // Any gaze projects back to its centre through the matrix
+  const float ndcX = 0.37f, ndcY = -0.62f;
+  VrGaze gaze = vrGazeFromFoveationCenter(left, right, top, bottom, ndcX, ndcY);
+  float w = -m[3][2];
+  CHECK_NEAR((m[0][0] * gaze.tanX - m[0][2]) / w, ndcX, 1e-5);
+  CHECK_NEAR((m[1][1] * gaze.tanY - m[1][2]) / w, ndcY, 1e-5);
 }
 
 
