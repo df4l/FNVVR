@@ -152,6 +152,8 @@ namespace dxvk {
     if (m_eye == NoEye)
       return;
 
+    endWorld();
+
     auto ms = std::chrono::duration<double, std::milli>(high_resolution_clock::now() - m_eyeStart).count();
     m_profile.add(m_eye, VrRenderPass::Eye, ms);
     m_eye = NoEye;
@@ -240,6 +242,28 @@ namespace dxvk {
   }
 
 
+  void VrRenderPasses::beginWorld() {
+    if (m_eye == NoEye || m_inWorld)
+      return;
+
+    m_inWorld = true;
+
+    if (m_beginWorld)
+      m_beginWorld(m_eye);
+  }
+
+
+  void VrRenderPasses::endWorld() {
+    if (!m_inWorld)
+      return;
+
+    m_inWorld = false;
+
+    if (m_endWorld)
+      m_endWorld();
+  }
+
+
   bool VrRenderPasses::sharesShadows() const {
     return m_config.shareShadows && !multiThreadedRendering();
   }
@@ -293,6 +317,8 @@ namespace dxvk {
     if (!g_renderPasses)
       return original(main, nullptr, a, b, c, d);
 
+    g_renderPasses->beginWorld();
+
     uintptr_t result = g_renderPasses->runScene(
       [&] { return original(main, nullptr, a, b, c, d); });
 
@@ -331,6 +357,8 @@ namespace dxvk {
 
     if (!g_renderPasses)
       return original(main, nullptr, a, b, c, d);
+
+    g_renderPasses->endWorld();
 
     return g_renderPasses->runPass(VrRenderPass::ImageSpace,
       [&] { return original(main, nullptr, a, b, c, d); });

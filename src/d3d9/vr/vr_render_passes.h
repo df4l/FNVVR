@@ -5,6 +5,7 @@
 
 #include "../../util/util_time.h"
 
+#include "vr_foveation_map.h"
 #include "vr_game_camera.h"
 #include "vr_render_profile.h"
 #include "vr_scope_lens.h"
@@ -23,6 +24,11 @@ namespace dxvk {
     bool handsDepthTest = true;
     /// Side in pixels of the square the scope's view is drawn in
     uint32_t scopeResolution = 768;
+    /// Zones of the eye-tracked foveation around the gaze
+    VrFoveationZones foveationZones;
+    /// Without an eye tracker, foveation takes the centre of each view as
+    /// the gaze, to check its look (d3d9.vrFoveationTestGaze)
+    bool foveationTestGaze = false;
   };
 
   /**
@@ -110,6 +116,18 @@ namespace dxvk {
     }
 
     /**
+     * \brief Sets what starts and ends the world's passes of an eye
+     *
+     * \c begin is called with the eye before its scene pass, \c end before
+     * its image space pass, or when the eye ends without one. The scope's
+     * view, drawn outside the eyes, does not count.
+     */
+    void setWorldCallbacks(std::function<void(uint32_t)> begin, std::function<void()> end) {
+      m_beginWorld = std::move(begin);
+      m_endWorld   = std::move(end);
+    }
+
+    /**
      * \brief Sets what is drawn right before the first-person model of an eye
      *
      * The game's render group is active, so what clears the depth buffer
@@ -137,6 +155,9 @@ namespace dxvk {
     const VrScopeArea* m_sceneScissor = nullptr;
     std::function<void()> m_afterFirstPerson;
     std::function<void()> m_beforeFirstPerson;
+    std::function<void(uint32_t)> m_beginWorld;
+    std::function<void()> m_endWorld;
+    bool     m_inWorld             = false;
     bool     m_scissorFound        = false;
 
     bool     m_shadowsDrawnForLeft = false;
@@ -150,6 +171,10 @@ namespace dxvk {
 
     template<typename Fn>
     uintptr_t runScene(Fn&& fn);
+
+    void beginWorld();
+
+    void endWorld();
 
     bool sharesShadows() const;
 
