@@ -38,9 +38,6 @@ namespace dxvk {
 
     determineShaderOptions();
 
-    if (m_options.testPipelineShadingRate && canUseShadingRateAttachment())
-      Logger::warn("Shading every draw once per 2x2 pixels (dxvk.testPipelineShadingRate)");
-
     if (env::getEnvVar("DXVK_SHADER_CACHE") != "0" && DxvkShader::getShaderDumpPath().empty())
       m_shaderCache = DxvkShaderCache::getInstance();
 
