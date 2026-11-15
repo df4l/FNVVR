@@ -48,10 +48,14 @@ namespace dxvk {
     using ListInitFn = void* (__thiscall*)(void* list, void* tile, const char* itemTemplate);
     using IsForModesFn = bool (__thiscall*)(void* option, uint32_t modes);
     using IsInStartMenuFn = bool (__cdecl*)();
+    using DisplayOptionFn = void (__thiscall*)(void* menu, void* option, void* tile);
+    using MessageBoxFn = bool (__cdecl*)(const char* text, const char* icon, const char* title,
+      void (__cdecl* callback)(), uint32_t firstButton, uint32_t type, float alpha, float width, ...);
 
     VrOptions                    g_options;
     VrOptionsMenu::ChangedFn     g_onChanged;
     VrOptionsMenu::ConsoleFn     g_onConsole;
+    VrOptionsMenu::FoveationCheckFn g_checkFoveation;
     void*                        g_consoleOption = nullptr;
 
     uint8_t* startMenu() {
@@ -246,6 +250,63 @@ namespace dxvk {
     }
 
 
+    // A toggle the player may not turn on goes back to Off in its row, and
+    // a message box says why. The game showed the new value before calling
+    // the option's callback, which runs this.
+    void refuseOption(void* option, const char* message) {
+      optionValue(option) = 0u;
+
+      uint8_t* menu = startMenu();
+
+      if (menu && VrGameMemory::matches(VrGame::DisplayOption,
+          VrGame::DisplayOptionPrologue, sizeof(VrGame::DisplayOptionPrologue)))
+        reinterpret_cast<DisplayOptionFn>(VrGame::DisplayOption)(menu, option, nullptr);
+
+      if (VrGameMemory::matches(VrGame::ShowMessageBox,
+          VrGame::ShowMessageBoxPrologue, sizeof(VrGame::ShowMessageBoxPrologue))) {
+        reinterpret_cast<MessageBoxFn>(VrGame::ShowMessageBox)(message, nullptr, nullptr, nullptr,
+          1u, VrGame::MessageBoxStartMenuType, 0.0f, 0.0f, g_texts.text("option.ok", "OK"), nullptr);
+      }
+    }
+
+
+    void __cdecl onFoveationChanged(void* option) {
+      if (!optionsInitialised()) {
+        optionValue(option)   = g_options.foveation ? 1u : 0u;
+        optionDefault(option) = 0u;
+        return;
+      }
+
+      bool foveation = optionValue(option) != 0;
+
+      if (foveation == g_options.foveation)
+        return;
+
+      if (foveation) {
+        VrFoveationSupport support = g_checkFoveation
+          ? g_checkFoveation()
+          : VrFoveationSupport::NoGpuSupport;
+
+        if (support == VrFoveationSupport::NoGpuSupport) {
+          Logger::info("VR: Eye-tracked foveation stays off: the GPU cannot draw it");
+          refuseOption(option, g_texts.text("option.foveation.nogpu",
+            "Your graphics card or its driver cannot draw eye-tracked foveated rendering. It stays off."));
+          return;
+        }
+
+        if (support == VrFoveationSupport::NoEyeTracking) {
+          Logger::info("VR: Eye-tracked foveation stays off: the headset gives no gaze");
+          refuseOption(option, g_texts.text("option.foveation.noeyes",
+            "Your headset does not tell where your eyes look, which eye-tracked foveated rendering needs. It stays off."));
+          return;
+        }
+      }
+
+      g_options.foveation = foveation;
+      notifyChanged();
+    }
+
+
     // Creates a user option and adds it to the game's list
     template<typename... Names>
     void* appendUserOption(const char* text, UserOptionCallback callback, int32_t type,
@@ -307,6 +368,8 @@ namespace dxvk {
       appendUserOption(g_texts.text("option.scope", "Scope lens"), &onScopeChanged,
         ToggleType, ToggleValues, ArrowSpacing, off, on);
       appendUserOption(g_texts.text("option.roomscale", "Room-scale walking"), &onRoomscaleChanged,
+        ToggleType, ToggleValues, ArrowSpacing, off, on);
+      appendUserOption(g_texts.text("option.foveation", "Eye-tracked foveation"), &onFoveationChanged,
         ToggleType, ToggleValues, ArrowSpacing, off, on);
     }
 
@@ -411,7 +474,8 @@ namespace dxvk {
   }
 
 
-  bool VrOptionsMenu::install(const VrOptions& options, const VrTexts& texts, ChangedFn onChanged, ConsoleFn onConsole) {
+  bool VrOptionsMenu::install(const VrOptions& options, const VrTexts& texts, ChangedFn onChanged, ConsoleFn onConsole,
+      FoveationCheckFn checkFoveation) {
     if (!supported()) {
       Logger::warn("VR: The options page is not available, the executable is not the supported version");
       return false;
@@ -421,6 +485,7 @@ namespace dxvk {
     g_texts     = texts;
     g_onChanged = std::move(onChanged);
     g_onConsole = std::move(onConsole);
+    g_checkFoveation = std::move(checkFoveation);
 
     if (!VrGameMemory::redirectCall(VrGame::ControlsOptionAppendCallSite,
         VrGame::OptionArrayAppend, reinterpret_cast<const void*>(&appendControlsEntry))) {

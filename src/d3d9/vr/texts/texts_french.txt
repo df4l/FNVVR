@@ -144,6 +144,19 @@ Lentille de lunette
 [text option.roomscale]
 Marche réelle
 
+[text option.foveation]
+Rendu fovéal (regard)
+
+# Message quand le rendu fovéal ne peut pas être activé. Pas de & ni de ;.
+[text option.foveation.nogpu]
+Votre carte graphique ou son pilote ne peut pas faire le rendu fovéal suivant le regard. Il reste désactivé.
+
+[text option.foveation.noeyes]
+Votre casque n'indique pas où regardent vos yeux, ce dont le rendu fovéal suivant le regard a besoin. Il reste désactivé.
+
+[text option.ok]
+OK
+
 # Le patch 4 Go, au menu principal. Pas de & ni de ; : le jeu les interprète dans les boutons.
 [text largeaddress.prompt]
 Fallout: New Vegas ne peut utiliser que 2 Go de mémoire. La VR et les mods la remplissent vite, puis le jeu plante. FNVVR peut lui en donner 4 Go, comme le fait FNV 4GB Patcher : FalloutNV.exe est modifié et l'original est conservé sous le nom FalloutNV_backup.exe. La modification prend effet au prochain lancement du jeu.
