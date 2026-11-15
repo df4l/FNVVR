@@ -94,6 +94,9 @@ namespace dxvk {
       Rc<DxvkBuffer>                  rates;
       Rc<DxvkImage>                   image;
       Rc<DxvkImageView>               view;
+      /// The image read back by the GPU at the previous log window
+      Rc<DxvkBuffer>                  readback;
+      bool                            readbackWritten = false;
       /// Map index of the window the image holds, none at first
       size_t                          window   = ~size_t(0u);
       bool                            foveated = false;
@@ -117,6 +120,8 @@ namespace dxvk {
     void createEye(Eye& eye, const VrFov& fov, VrExtent target);
 
     void logWindow();
+
+    void logImageContent(Eye& eye, uint32_t index);
 
     static uint32_t pickTexelSize(const DxvkDevice& device);
 

@@ -201,9 +201,11 @@ namespace dxvk {
     imageInfo.extent      = VkExtent3D { size.width, size.height, 1u };
     imageInfo.numLayers   = 1u;
     imageInfo.mipLevels   = 1u;
-    imageInfo.usage       = VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    imageInfo.usage       = VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR
+                          | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     imageInfo.stages      = VK_PIPELINE_STAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR | VK_PIPELINE_STAGE_TRANSFER_BIT;
-    imageInfo.access      = VK_ACCESS_FRAGMENT_SHADING_RATE_ATTACHMENT_READ_BIT_KHR | VK_ACCESS_TRANSFER_WRITE_BIT;
+    imageInfo.access      = VK_ACCESS_FRAGMENT_SHADING_RATE_ATTACHMENT_READ_BIT_KHR
+                          | VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
     imageInfo.tiling      = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.layout      = RateLayout;
     imageInfo.debugName   = "VR shading rate image";
@@ -221,6 +223,16 @@ namespace dxvk {
     viewKey.layerIndex = 0u;
     viewKey.layerCount = 1u;
 
+    DxvkBufferCreateInfo readbackInfo;
+    readbackInfo.size      = VkDeviceSize(size.width) * size.height;
+    readbackInfo.usage     = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    readbackInfo.stages    = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    readbackInfo.access    = VK_ACCESS_TRANSFER_WRITE_BIT;
+    readbackInfo.debugName = "VR shading rate readback";
+
+    eye.readback = dxvk->createBuffer(readbackInfo,
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
+
     eye.rates  = std::move(rates);
     eye.image  = std::move(image);
     eye.view   = eye.image->createView(viewKey);
@@ -234,6 +246,9 @@ namespace dxvk {
     Logger::info(str::format("VR: Eye-tracked foveation over ", m_frames, " frames: ",
       m_foveatedFrames, " drawn around the gaze, ", m_frames - m_foveatedFrames, " at full rate without a gaze"));
 
+    for (uint32_t i = 0; i < VrEyeCount; i++)
+      logImageContent(m_eyes[i], i);
+
     // The render passes are begun on the CS thread: their counts are logged there
     m_device->EmitVrCommand([] (DxvkContext* ctx) {
       DxvkShadingRateStats stats = ctx->takeShadingRateStats();
@@ -246,6 +261,48 @@ namespace dxvk {
 
     m_frames         = 0;
     m_foveatedFrames = 0;
+  }
+
+
+  void VrFoveation::logImageContent(Eye& eye, uint32_t index) {
+    if (!eye.image || !eye.readback || !eye.readback->mapPtr(0))
+      return;
+
+    VrExtent size = eye.map->imageSize();
+
+    // Read the copy made at the previous window, long finished by the GPU
+    if (eye.readbackWritten) {
+      const auto* texels = static_cast<const uint8_t*>(eye.readback->mapPtr(0));
+      std::array<uint32_t, 4> counts = { };
+
+      for (size_t i = 0; i < size_t(size.width) * size.height; i++) {
+        switch (VrShadingRate(texels[i])) {
+          case VrShadingRate::Full:    counts[0] += 1u; break;
+          case VrShadingRate::Half:    counts[1] += 1u; break;
+          case VrShadingRate::Quarter: counts[2] += 1u; break;
+          default:                     counts[3] += 1u; break;
+        }
+      }
+
+      size_t centre = size_t(size.height / 2u) * size.width + size.width / 2u;
+
+      Logger::info(str::format("VR: ", index ? "Right" : "Left", " eye's shading rate image read back from the GPU: ",
+        counts[0], " texels at full rate, ", counts[1], " at 2x2, ", counts[2], " at 4x4, ", counts[3],
+        " other; centre ", uint32_t(texels[centre]), ", corner ", uint32_t(texels[0])));
+    }
+
+    m_device->EmitVrCommand([
+      cBuffer = eye.readback,
+      cImage  = eye.image,
+      cExtent = VkExtent3D { size.width, size.height, 1u }
+    ] (DxvkContext* ctx) {
+      VkImageSubresourceLayers layers = { VK_IMAGE_ASPECT_COLOR_BIT, 0u, 0u, 1u };
+
+      ctx->copyImageToBuffer(cBuffer, 0u, 0u, 0u, RateFormat,
+        cImage, layers, VkOffset3D { 0, 0, 0 }, cExtent);
+    });
+
+    eye.readbackWritten = true;
   }
 
 
