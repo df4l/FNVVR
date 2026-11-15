@@ -294,6 +294,32 @@ namespace dxvk {
     }
 
     /**
+     * \brief Forearm bone carrying a hand bone
+     *
+     * The hand is a child of the forearm in the game's skeleton, but a
+     * plugin can insert nodes of its own between them, such as the "SC Hand"
+     * node of Titans of the New West that scales the left hand: the closest
+     * ancestor named as the forearm, else the hand's parent.
+     */
+    uint8_t* forearmBone(uint8_t* hand, const char* forearmName) {
+      constexpr uint32_t MaxInsertedNodes = 4;
+
+      uint8_t* parent = field<uint8_t*>(hand, VrGame::ObjectParent);
+      uint8_t* bone   = parent;
+
+      for (uint32_t i = 0; bone && i <= MaxInsertedNodes; i++) {
+        auto name = field<const char*>(bone, VrGame::ObjectName);
+
+        if (name && !std::strcmp(name, forearmName))
+          return bone;
+
+        bone = field<uint8_t*>(bone, VrGame::ObjectParent);
+      }
+
+      return parent;
+    }
+
+    /**
      * \brief Bones of one arm above the forearm
      *
      * The hand's meshes are skinned to the hand, the fingers and the
@@ -1454,7 +1480,7 @@ namespace dxvk {
     // Where the game animates the weapon and the other hand, before the
     // model is moved
     uint8_t* otherHand = findObject(root, VrGame::LeftHandNodeName);
-    uint8_t* forearm   = otherHand ? field<uint8_t*>(otherHand, VrGame::ObjectParent) : nullptr;
+    uint8_t* forearm   = otherHand ? forearmBone(otherHand, VrGame::LeftForearmNodeName) : nullptr;
 
     VrVector3 drawnWeapon = readVector(weapon, VrGame::ObjectWorldTranslation);
     VrVector3 drawnHand   = forearm ? readVector(otherHand, VrGame::ObjectWorldTranslation) : drawnWeapon;
@@ -1748,7 +1774,7 @@ namespace dxvk {
           void*                 updateData) {
     uint8_t* rightHand = findObject(root, VrGame::RightHandNodeName);
     uint8_t* otherHand = findObject(root, VrGame::LeftHandNodeName);
-    uint8_t* forearm   = otherHand ? field<uint8_t*>(otherHand, VrGame::ObjectParent) : nullptr;
+    uint8_t* forearm   = otherHand ? forearmBone(otherHand, VrGame::LeftForearmNodeName) : nullptr;
 
     if (!rightHand) {
       showArms(root);
@@ -1769,7 +1795,7 @@ namespace dxvk {
     // mirrored, as the right forearm is drawn too: the game's holstered
     // animation can leave them twisted after a weapon was put away. The
     // model is moved so that the forearm carries the hand onto its target.
-    uint8_t* rightForearm = field<uint8_t*>(rightHand, VrGame::ObjectParent);
+    uint8_t* rightForearm = forearmBone(rightHand, VrGame::RightForearmNodeName);
     uint8_t* rightTwist   = rightForearm ? findObject(rightForearm, VrGame::RightForeTwistNodeName) : nullptr;
 
     VrGameTransform rig;
@@ -1922,7 +1948,7 @@ namespace dxvk {
   VrWeaponHand::PipBoyNodes VrWeaponHand::findPipBoy(uint8_t* root) {
     PipBoyNodes nodes;
     nodes.hand    = findObject(root, VrGame::LeftHandNodeName);
-    nodes.forearm = nodes.hand ? field<uint8_t*>(nodes.hand, VrGame::ObjectParent) : nullptr;
+    nodes.forearm = nodes.hand ? forearmBone(nodes.hand, VrGame::LeftForearmNodeName) : nullptr;
     nodes.twist   = nodes.forearm ? findObject(nodes.forearm, VrGame::LeftForeTwistNodeName) : nullptr;
     nodes.screen  = nodes.twist ? findObject(nodes.twist, VrGame::PipBoyScreenNodeName) : nullptr;
 
@@ -2122,7 +2148,7 @@ namespace dxvk {
     // The game animates the free hand anywhere, so its pose is not kept:
     // it takes a fixed pose around its controller. The forearm carries the
     // hand, and the hand's meshes only use bones below the forearm.
-    uint8_t* forearm = field<uint8_t*>(otherHand, VrGame::ObjectParent);
+    uint8_t* forearm = forearmBone(otherHand, VrGame::LeftForearmNodeName);
 
     VrGameRotation forearmRotation = readRotation(forearm, VrGame::ObjectWorldRotation);
     VrVector3 forearmPosition      = readVector(forearm, VrGame::ObjectWorldTranslation);
@@ -3091,11 +3117,12 @@ namespace dxvk {
 
     m_hidesRightHand = rightHand;
 
+    const char* forearmNames[2] = { VrGame::LeftForearmNodeName, VrGame::RightForearmNodeName };
     UpperArm arms[2];
 
     for (uint32_t i = 0; i < 2; i++) {
       arms[i].top     = armBone(hands[i], hands[1 - i]);
-      arms[i].forearm = arms[i].top != hands[i] ? field<uint8_t*>(hands[i], VrGame::ObjectParent) : hands[i];
+      arms[i].forearm = arms[i].top != hands[i] ? forearmBone(hands[i], forearmNames[i]) : hands[i];
 
       if (!m_loggedArms) {
         auto top     = field<const char*>(arms[i].top, VrGame::ObjectName);
