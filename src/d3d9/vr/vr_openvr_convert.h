@@ -40,15 +40,23 @@ namespace dxvk {
    *
    * IVRSystem::GetEyeTrackedFoveationCenter gives where an eye looks as a
    * point in the normalised device coordinates of the eye's projection
-   * matrix (IVRSystem::GetProjectionMatrix, row major). Inverting the
-   * matrix for a direction (x, y, -1) of the view gives the gaze, whatever
-   * the matrix's conventions are.
+   * matrix, which OpenVR composes from the tangents of
+   * IVRSystem::GetProjectionRaw: -1 to 1 maps \c left to \c right and
+   * \c top to \c bottom (\c bottom being the upward tangent, see
+   * vrFovFromProjectionRaw).
    *
-   * \param [in] projection The eye's projection matrix
+   * The tangents are used instead of IVRSystem::GetProjectionMatrix: on
+   * Proton for ARM64 (Steam Frame), that call faults in the vrclient bridge
+   * and aborts the game.
+   *
+   * \param [in] left Left tangent from GetProjectionRaw
+   * \param [in] right Right tangent from GetProjectionRaw
+   * \param [in] top Top tangent from GetProjectionRaw
+   * \param [in] bottom Bottom tangent from GetProjectionRaw
    * \param [in] ndcX Horizontal coordinate of the centre
    * \param [in] ndcY Vertical coordinate of the centre
    */
-  VrGaze vrGazeFromFoveationCenter(const float projection[4][4], float ndcX, float ndcY);
+  VrGaze vrGazeFromFoveationCenter(float left, float right, float top, float bottom, float ndcX, float ndcY);
 
   /**
    * \brief Paths of the OpenVR action sets, indexed by VrInputContext
