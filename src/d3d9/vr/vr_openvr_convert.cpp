@@ -105,6 +105,20 @@ namespace dxvk {
   }
 
 
+  VrGaze vrGazeFromFoveationCenter(const float projection[4][4], float ndcX, float ndcY) {
+    const auto& m = projection;
+
+    // Projection of a direction (x, y, -1): its w does not depend on x or
+    // y, and the vertical coordinate does not depend on x
+    float w = m[3][3] - m[3][2];
+
+    VrGaze gaze;
+    gaze.tanY = (ndcY * w - m[1][3] + m[1][2]) / m[1][1];
+    gaze.tanX = (ndcX * w - m[0][3] + m[0][2] - m[0][1] * gaze.tanY) / m[0][0];
+    return gaze;
+  }
+
+
   const char* vrOpenVrActionPath(VrAction action) {
     return ActionPaths[uint32_t(action)];
   }

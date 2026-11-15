@@ -30,6 +30,8 @@ namespace dxvk {
     bool  scopeLens       = true;
     /// The capsule follows the player walking in the room, see findings/roomscale.md
     bool  roomscale       = false;
+    /// Shade the world at full rate only where the eyes look, see vr_foveation.h
+    bool  foveation       = false;
   };
 
   /// Slowest smooth turning speed of the options page, in degrees per second

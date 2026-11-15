@@ -99,6 +99,16 @@ namespace dxvk {
      */
     static void registerExtensionProvider(
             DxvkExtensionProvider*  provider);
+
+    /**
+     * \brief Checks whether an additional extension provider is registered
+     *
+     * Only VR registers one, so this tells whether VR is running.
+     * \returns \c true if registerExtensionProvider was called
+     */
+    static bool hasRegisteredProviders() {
+      return !s_registeredProviders.empty();
+    }
     
     /**
      * \brief Vulkan instance functions

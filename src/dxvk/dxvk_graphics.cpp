@@ -242,6 +242,8 @@ namespace dxvk {
     if (m_device->canUseDescriptorBuffer())
       flags.flags |= VK_PIPELINE_CREATE_2_DESCRIPTOR_BUFFER_BIT_EXT;
 
+    flags.flags |= m_device->getShadingRatePipelineFlags();
+
     VkGraphicsPipelineLibraryCreateInfoEXT libInfo = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT, &flags };
     libInfo.flags             = VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT;
 
@@ -539,6 +541,8 @@ namespace dxvk {
 
     if (m_device->canUseDescriptorBuffer())
       flags.flags |= VK_PIPELINE_CREATE_2_DESCRIPTOR_BUFFER_BIT_EXT;
+
+    flags.flags |= m_device->getShadingRatePipelineFlags();
 
     VkGraphicsPipelineLibraryCreateInfoEXT libInfo = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT, &flags };
     libInfo.flags             = VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT;
@@ -1388,7 +1392,7 @@ namespace dxvk {
     }};
 
     VkPipelineCreateFlags2CreateInfo flags = { VK_STRUCTURE_TYPE_PIPELINE_CREATE_FLAGS_2_CREATE_INFO };
-    flags.flags = vs.linkFlags | fs.linkFlags;
+    flags.flags = vs.linkFlags | fs.linkFlags | m_device->getShadingRatePipelineFlags();
 
     if (m_device->canUseDescriptorHeap())
       flags.flags |= VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT;
@@ -1403,6 +1407,9 @@ namespace dxvk {
     VkGraphicsPipelineCreateInfo info = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, &libInfo };
     info.layout             = m_layout.getLayout(DxvkPipelineLayoutType::Independent)->getPipelineLayout();
     info.basePipelineIndex  = -1;
+
+    VkPipelineFragmentShadingRateStateCreateInfoKHR srInfo;
+    m_device->chainShadingRateState(info, srInfo);
 
     if (flags.flags)
       flags.pNext = std::exchange(info.pNext, &flags);
@@ -1475,6 +1482,7 @@ namespace dxvk {
       stageInfo.addStage(VK_SHADER_STAGE_FRAGMENT_BIT, getShaderCode(*m_shaders.fs, key.shState.fsInfo), &key.scState.scInfo);
 
     VkPipelineCreateFlags2CreateInfo flags = { VK_STRUCTURE_TYPE_PIPELINE_CREATE_FLAGS_2_CREATE_INFO };
+    flags.flags = m_device->getShadingRatePipelineFlags();
 
     if (!m_flags.test(DxvkGraphicsPipelineFlag::HasRasterizerDiscard)) {
       if (key.foState.feedbackLoop & VK_IMAGE_ASPECT_COLOR_BIT)
@@ -1510,6 +1518,9 @@ namespace dxvk {
       info.pDepthStencilState     = &key.fsState.dsInfo;
       info.pColorBlendState       = &key.foState.cbInfo;
     }
+
+    VkPipelineFragmentShadingRateStateCreateInfoKHR srInfo;
+    m_device->chainShadingRateState(info, srInfo);
 
     if (flags.flags)
       flags.pNext = std::exchange(info.pNext, &flags);

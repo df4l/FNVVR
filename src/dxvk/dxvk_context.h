@@ -160,6 +160,31 @@ namespace dxvk {
     }
 
     /**
+     * \brief Sets the shading rate attachment of render passes
+     *
+     * Render passes whose size is the attachment's, at one texel per
+     * \c texelSize pixels, take their shading rates from it. The others
+     * shade every pixel. Only valid if the device can use shading rate
+     * attachments, see DxvkDevice::canUseShadingRateAttachment.
+     * \param [in] view Shading rate image, or \c nullptr for none
+     * \param [in] texelSize Pixels covered by one texel of the image
+     */
+    void setShadingRateAttachment(
+      const Rc<DxvkImageView>&    view,
+            VkExtent2D            texelSize);
+
+    /**
+     * \brief Takes the counts of render passes begun with an attachment
+     *
+     * Counts the render passes begun while a shading rate attachment was
+     * set since the previous call, and resets them.
+     * \returns Passes that took the attachment and passes that did not
+     */
+    DxvkShadingRateStats takeShadingRateStats() {
+      return std::exchange(m_shadingRateStats, DxvkShadingRateStats());
+    }
+
+    /**
      * \brief Binds indirect argument buffer
      * 
      * Sets the buffers that are going to be used
@@ -1356,6 +1381,7 @@ namespace dxvk {
 
     DxvkContextFlags        m_flags;
     DxvkContextState        m_state;
+    DxvkShadingRateStats    m_shadingRateStats;
     DxvkContextFeatures     m_features;
     DxvkDescriptorState     m_descriptorState;
 
@@ -1697,6 +1723,9 @@ namespace dxvk {
     void releaseRenderTargets();
 
     bool renderPassStartUnsynchronized();
+
+    DxvkImageView* pickShadingRateAttachment(
+      const DxvkFramebufferInfo&  framebufferInfo) const;
 
     void renderPassBindFramebuffer(
       const DxvkFramebufferInfo&  framebufferInfo,

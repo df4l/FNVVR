@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Performance
+
+- **Eye-tracked foveated rendering** (Settings > VR, off by default): on a headset that tracks your eyes, such as the Steam Frame, the world keeps every pixel's detail where you look and is shaded more coarsely further away, which you do not see, for less work for the graphics card. Edges stay sharp. When the headset or the graphics card cannot do it, the option goes back to Off and a message tells why. `d3d9.vrFoveationFullAngle` and `d3d9.vrFoveationHalfAngle` (20 and 35 degrees) set the zones.
+
 ### Scopes
 
 - **Scopes of modded weapons found on the model**: for a weapon the mod does not know, the lens is now placed on the eyepiece of the scope found in the weapon's own 3D model, instead of a fixed guess that could end up inside the gun, hidden by the scope (issue #14). Checked on the vanilla weapons and on The Frontier's scoped weapons. `fnvvr\scopes.ini` still overrides it.

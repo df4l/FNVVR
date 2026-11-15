@@ -185,6 +185,7 @@ namespace dxvk {
     options.physicalSneak   = config.getOption<bool>("d3d9.vrPhysicalSneak", options.physicalSneak);
     options.scopeLens       = config.getOption<bool>("d3d9.vrScopes", options.scopeLens);
     options.roomscale       = config.getOption<bool>("d3d9.vrRoomscale", options.roomscale);
+    options.foveation       = config.getOption<bool>("d3d9.vrFoveation", options.foveation);
     VrOptionsFile::load(options);
     turn.smooth      = options.smoothTurn;
     turn.smoothSpeed = options.smoothTurnSpeed;
@@ -228,6 +229,11 @@ namespace dxvk {
     passes.handsDepthTest = config.getOption<bool>("d3d9.vrHandsDepthTest", passes.handsDepthTest);
     passes.scopeResolution = uint32_t(std::max<int32_t>(0,
       config.getOption<int32_t>("d3d9.vrScopeResolution", int32_t(passes.scopeResolution))));
+    passes.foveationZones.fullDegrees = std::min(std::max(config.getOption<float>("d3d9.vrFoveationFullAngle",
+      passes.foveationZones.fullDegrees), 1.0f), 89.0f);
+    passes.foveationZones.halfDegrees = std::min(std::max(config.getOption<float>("d3d9.vrFoveationHalfAngle",
+      passes.foveationZones.halfDegrees), passes.foveationZones.fullDegrees), 89.0f);
+    passes.foveationTestGaze = config.getOption<bool>("d3d9.vrFoveationTestGaze", passes.foveationTestGaze);
 
     VrDeveloperConfig developer;
     developer.enabled = config.getOption<bool>("d3d9.vrDeveloperMode", developer.enabled);
@@ -263,6 +269,7 @@ namespace dxvk {
     g_vrSystem->m_asyncHandOff = config.getOption<bool>("d3d9.vrAsyncHandOff", true);
     g_vrSystem->m_scopes = options.scopeLens;
     g_vrSystem->m_roomscale = options.roomscale;
+    g_vrSystem->m_foveation = options.foveation;
     g_vrSystem->m_immersiveMinigames = config.getOption<bool>("d3d9.vrImmersiveMinigames", true);
     g_vrSystem->m_sneakConfig.physical = options.physicalSneak;
     g_vrSystem->m_sneakConfig.crouch   = crouch;
@@ -277,6 +284,10 @@ namespace dxvk {
         g_vrSystem->applyOptions(changed);
     }, [] {
       VrGameConsole::requestOpen();
+    }, [] {
+      return g_vrSystem && g_vrSystem->m_stereoRenderer
+        ? g_vrSystem->m_stereoRenderer->foveationSupport()
+        : VrFoveationSupport::NoGpuSupport;
     });
 
     VrLargeAddress::install(g_vrSystem->m_texts);
@@ -361,10 +372,12 @@ namespace dxvk {
     m_sneakConfig.physical = options.physicalSneak;
     m_scopes = options.scopeLens;
     m_roomscale = options.roomscale;
+    m_foveation = options.foveation;
 
     if (m_stereoRenderer) {
       m_stereoRenderer->setScopesEnabled(m_scopes);
       m_stereoRenderer->setRoomscale(m_roomscale);
+      m_stereoRenderer->setFoveationEnabled(m_foveation);
       m_stereoRenderer->setTurnConfig(m_turnConfig);
       m_stereoRenderer->setPipBoyScale(m_pipBoyScale);
       m_stereoRenderer->setManualReload(m_manualReload);
@@ -436,6 +449,7 @@ namespace dxvk {
       m_stereoRenderer->setScopesEnabled(m_scopes);
       m_stereoRenderer->setManualReload(m_manualReload);
       m_stereoRenderer->setRoomscale(m_roomscale);
+      m_stereoRenderer->setFoveationEnabled(m_foveation);
       m_stereoRenderer->setHandPush(m_handPush);
       m_stereoRenderer->setSneakConfig(m_sneakConfig);
     }

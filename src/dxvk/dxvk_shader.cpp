@@ -437,6 +437,8 @@ namespace dxvk {
     if (m_device->canUseDescriptorBuffer())
       flagsInfo.flags |= VK_PIPELINE_CREATE_2_DESCRIPTOR_BUFFER_BIT_EXT;
 
+    flagsInfo.flags |= m_device->getShadingRatePipelineFlags();
+
     VkGraphicsPipelineLibraryCreateInfoEXT libInfo = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT, &flagsInfo };
     libInfo.flags             = VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT;
 
@@ -449,6 +451,9 @@ namespace dxvk {
     info.pDynamicState        = &dyInfo;
     info.layout               = getPipelineLibraryLayout()->getPipelineLayout();
     info.basePipelineIndex    = -1;
+
+    VkPipelineFragmentShadingRateStateCreateInfoKHR srInfo;
+    m_device->chainShadingRateState(info, srInfo);
 
     VkPipeline pipeline = VK_NULL_HANDLE;
     vk->lowerPipelineFlags(info);
@@ -542,6 +547,8 @@ namespace dxvk {
     if (m_device->canUseDescriptorBuffer())
       flagsInfo.flags |= VK_PIPELINE_CREATE_2_DESCRIPTOR_BUFFER_BIT_EXT;
 
+    flagsInfo.flags |= m_device->getShadingRatePipelineFlags();
+
     VkGraphicsPipelineLibraryCreateInfoEXT libInfo = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT, &flagsInfo };
     libInfo.flags             = VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT;
 
@@ -555,6 +562,9 @@ namespace dxvk {
 
     if (hasSampleRateShading)
       info.pMultisampleState  = &msInfo;
+
+    VkPipelineFragmentShadingRateStateCreateInfoKHR srInfo;
+    m_device->chainShadingRateState(info, srInfo);
 
     VkPipeline pipeline = VK_NULL_HANDLE;
     vk->lowerPipelineFlags(info);

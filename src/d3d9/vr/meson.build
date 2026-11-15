@@ -60,6 +60,7 @@ vr_src = files([
   'vr_npc_limb.cpp',
   'vr_text_entry.cpp',
   'vr_block_heap.cpp',
+  'vr_foveation_map.cpp',
 ])
 
 # Parts that depend on DXVK and Vulkan, only built into d3d9.dll
@@ -162,6 +163,7 @@ vr_dxvk_src = files([
   'vr_large_address.cpp',
   'vr_npc_reaction.cpp',
   'vr_melee_object_hit.cpp',
+  'vr_foveation.cpp',
 ])
 
 # Unit tests for the VR layer. They are built with the host compiler so they
@@ -225,6 +227,7 @@ if add_languages('cpp', native: true, required: false)
     'tests/test_vr_npc_limb.cpp',
     'tests/test_vr_text_entry.cpp',
     'tests/test_vr_block_heap.cpp',
+    'tests/test_vr_foveation.cpp',
   ])
 
   vr_test = executable('vr_tests', vr_test_sources, vr_src,

@@ -808,6 +808,18 @@ namespace dxvk {
 
     HWND GetWindow();
 
+    /**
+     * \brief Records a command of the VR layer
+     *
+     * The command runs on the CS thread with the DXVK context, in order
+     * with the device's own commands.
+     */
+    template<typename Cmd>
+    void EmitVrCommand(Cmd&& command) {
+      D3D9DeviceLock lock = LockDevice();
+      EmitCs(std::forward<Cmd>(command));
+    }
+
     const Rc<DxvkDevice>& GetDXVKDevice() {
       return m_dxvkDevice;
     }

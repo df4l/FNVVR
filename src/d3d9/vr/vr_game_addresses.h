@@ -2183,7 +2183,13 @@ namespace dxvk {
      * - StartMenu::_Create sets the menu's in-game flag, then sorts the
      *   options into its lists with Option::IsForModes (__thiscall on the
      *   option with the modes, returns a bool in AL); the Settings list's
-     *   call is at SettingsEntryModesCallSite (findings/options-menu.md §5).
+     *   call is at SettingsEntryModesCallSite (findings/options-menu.md §5);
+     * - StartMenu::DisplayOption (__thiscall on the menu with the user
+     *   option and its tile, null to look it up in the options list) writes
+     *   the option's value into its row. StartMenu::DoIdle calls it after a
+     *   click changes the value and before the option's callback, so the
+     *   callback can set the value back and show it again
+     *   (findings/options-menu.md §6).
      */
     constexpr uintptr_t StartMenuGlobal              = 0x011DAAC0;
     constexpr uintptr_t OptionArray                  = 0x011DAB88;
@@ -2194,6 +2200,7 @@ namespace dxvk {
     constexpr uintptr_t UserOptionConstruct          = 0x007D6350;
     constexpr uintptr_t HeapAllocate                 = 0x00401000;
     constexpr uintptr_t PopulateOptions              = 0x007D42B0;
+    constexpr uintptr_t DisplayOption                = 0x007D4CE0;
     constexpr uintptr_t SetListEnabled               = 0x007D74F0;
     constexpr uintptr_t TileGetFloat                 = 0x00A011B0;
     constexpr uintptr_t TileSetFloat                 = 0x00A012D0;
@@ -2222,6 +2229,7 @@ namespace dxvk {
     constexpr uint8_t   OptionConstructPrologue[]     = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B };
     constexpr uint8_t   UserOptionConstructPrologue[] = { 0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x18, 0xEA };
     constexpr uint8_t   PopulateOptionsPrologue[]     = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x44, 0x89, 0x4D };
+    constexpr uint8_t   DisplayOptionPrologue[]       = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0x89, 0x4D, 0xF8, 0x83, 0x7D, 0x08, 0x00 };
     constexpr uint8_t   OptionArrayAppendPrologue[]   = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0x89, 0x4D };
     constexpr uint8_t   TileGetFloatPrologue[]        = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C, 0x89, 0x4D };
     constexpr uint8_t   TileSetFloatPrologue[]        = { 0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x62, 0xCD };

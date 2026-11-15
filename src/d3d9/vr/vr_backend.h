@@ -286,6 +286,25 @@ namespace dxvk {
     virtual std::array<VrEyeView, VrEyeCount> locateViews(int64_t displayTime) = 0;
 
     /**
+     * \brief Tells whether the headset gives where the eyes look
+     *
+     * May only become true once the eye tracker has seen the eyes.
+     */
+    virtual bool supportsEyeTracking() = 0;
+
+    /**
+     * \brief Where the eyes look for the frame being drawn
+     *
+     * Valid after locateViews, for the views it returned. Fails without an
+     * eye tracker and while the tracker does not see the eyes, for example
+     * during a blink.
+     *
+     * \param [out] gaze Where each eye looks, in its own view
+     * \returns \c true if the gaze of both eyes is known
+     */
+    virtual bool locateGaze(std::array<VrGaze, VrEyeCount>& gaze) = 0;
+
+    /**
      * \brief Presents a rendered stereo frame
      *
      * Only valid for frames where waitFrame returned shouldRender.

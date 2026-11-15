@@ -174,3 +174,19 @@ TEST_CASE(options_round_trip_the_roomscale) {
   vrParseOptions("roomscale=0", read);
   CHECK(!read.roomscale);
 }
+
+
+TEST_CASE(options_round_trip_the_eye_tracked_foveation) {
+  VrOptions options;
+  CHECK(!options.foveation);
+
+  VrOptions written;
+  written.foveation = true;
+
+  VrOptions read;
+  vrParseOptions(vrFormatOptions(written), read);
+  CHECK(read.foveation);
+
+  vrParseOptions("EyeTrackedFoveation=0", read);
+  CHECK(!read.foveation);
+}
