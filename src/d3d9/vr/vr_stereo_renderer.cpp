@@ -17,6 +17,7 @@
 #include "vr_head_hud.h"
 #include "vr_options_file.h"
 #include "vr_math.h"
+#include "vr_menu_cursor.h"
 #include "vr_stereo_renderer.h"
 #include "vr_tree_leaves.h"
 #include "vr_weapon_types.h"
@@ -942,6 +943,7 @@ namespace dxvk {
     }
 
     m_controls.setDialogueShown(stereo && m_dialogueSpeaker);
+    m_controls.setCompanionWheelShown(stereo && VrMenuCursor::companionWheelShown());
     m_controls.setTerminalPanel(m_terminal ? m_terminal->placement() : nullptr);
     m_controls.update(input, state, m_hasReference ? &m_reference : nullptr, menuPanel(), dt);
 

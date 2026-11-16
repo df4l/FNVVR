@@ -962,6 +962,13 @@ namespace dxvk {
     constexpr uint32_t  LockPickMenuId    = 0x3F6;
 
     /**
+     * CompanionWheelMenu, the companion's orders. Its id is the class that
+     * CompanionWheelMenu::Create (0x00754DE0) checks the menu against
+     * (return_1075, 0x00755260).
+     */
+    constexpr uint32_t  CompanionWheelMenuId = 0x433;
+
+    /**
      * The mini-games' scenes shown in the eye images, see
      * findings/minigames.md: each menu's instance, its camera (NiCamera*,
      * from the model of the casino tables) and the state field of each.

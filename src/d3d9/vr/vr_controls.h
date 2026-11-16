@@ -163,6 +163,17 @@ namespace dxvk {
     }
 
     /**
+     * \brief Makes A and X click with the right and left lasers
+     *
+     * \param [in] shown Whether the companion wheel is shown, where A
+     *    clicks under the right laser and X under the left one, as their
+     *    triggers do. Away from the wheel's options A stays the gamepad's.
+     */
+    void setCompanionWheelShown(bool shown) {
+      m_companionWheelShown = shown;
+    }
+
+    /**
      * \brief Makes the right grip holster or draw the weapon
      *
      * \param [in] atHolster Whether the right hand is at the holster of the
@@ -350,6 +361,7 @@ namespace dxvk {
     VrPointerSurfaceState       m_pointerSurfaceState;
     bool                        m_hotKeyWheelShown = false;
     bool                        m_dialogueShown = false;
+    bool                        m_companionWheelShown = false;
     bool                        m_menuBack = false;
     bool                        m_menuBackDown = false;
 
