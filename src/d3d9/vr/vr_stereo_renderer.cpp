@@ -455,6 +455,7 @@ namespace dxvk {
       Logger::info("VR: The world render's passes were not found, they are drawn for each eye and not timed");
 
     renderer->m_spikeLogWanted = passes.spikeLog && renderer->m_renderPasses;
+    renderer->m_cpuSamplesWanted = passes.cpuSamples;
 
     if (passes.gpuTimings) {
       renderer->m_gpuTimer = VrGpuTimer::create(device);
@@ -614,6 +615,16 @@ namespace dxvk {
 
   void VrStereoRenderer::renderFrame(void* main) {
     m_mainThread   = GetCurrentThreadId();
+
+    if (m_cpuSamplesWanted) {
+      m_cpuSamplesWanted = false;
+      m_cpuSampler = VrCpuSampler::start(m_mainThread);
+
+      if (m_cpuSampler && m_renderPasses)
+        m_renderPasses->setCpuSampler(m_cpuSampler.get());
+    }
+
+    VrCpuPhaseScope framePhase(m_cpuSampler.get(), uint8_t(VrCpuPhase::Frame));
     m_swapped      = true;
     m_paced        = false;
     m_blockedInput = false;
@@ -669,7 +680,7 @@ namespace dxvk {
       return;
     }
 
-    VrFrameTiming timing = m_backend.waitFrame();
+    VrFrameTiming timing = waitFrame();
     VrD3D9Bridge::beginFrame(m_device, m_backend);
     m_paced = timing.paced;
     countFrame(timing);
@@ -906,7 +917,7 @@ namespace dxvk {
     // The runtime draws the panel. The game draws one frame, which
     // onPresent copies to the panel. Waiting still paces the game to the
     // headset and provides the head pose the panel is placed with.
-    VrFrameTiming timing = m_backend.waitFrame();
+    VrFrameTiming timing = waitFrame();
     VrD3D9Bridge::beginFrame(m_device, m_backend);
     m_paced = timing.paced;
     countFrame(timing);
@@ -2437,11 +2448,20 @@ namespace dxvk {
   }
 
 
+  VrFrameTiming VrStereoRenderer::waitFrame() {
+    VrCpuPhaseScope phase(m_cpuSampler.get(), uint8_t(VrCpuPhase::Wait));
+    return m_backend.waitFrame();
+  }
+
+
   void VrStereoRenderer::countFrame(const VrFrameTiming& timing) {
     if (m_spikeLog && timing.hasPreviousCycle)
       m_spikeLog->setCycle(m_frameId, timing.previousCycle, timing.previousCycleEnd);
 
     m_frameId += 1;
+
+    if (m_cpuSampler)
+      m_cpuSampler->setFrame(m_frameId);
 
     double periodMs = double(timing.predictedPeriod) * 1e-6;
 
@@ -2456,6 +2476,11 @@ namespace dxvk {
       m_gpuTimer->setFrameCallback([this] (uint64_t frameId, const VrGpuFrameTimes& times) {
         m_spikeLog->setGpu(frameId, times);
       });
+    }
+
+    if (m_cpuSampler) {
+      VrCpuSampler* sampler = m_cpuSampler.get();
+      m_spikeLog->setSpikeCallback([sampler] (uint64_t frameId) { sampler->markSpike(frameId); });
     }
 
     Logger::info(str::format("VR: Frames longer than the period of ", periodMs, " ms are logged one by one"));

@@ -68,6 +68,18 @@ TEST_CASE(spikeLogWritesAGpuOnlySpike) {
   CHECK(contains(lines[0], "(GPU)"));
 }
 
+TEST_CASE(spikeLogTellsTheFramesItWrites) {
+  std::vector<uint64_t> frames;
+  VrSpikeLog log(8.33, false, [] (const std::string&) { });
+  log.setSpikeCallback([&] (uint64_t frameId) { frames.push_back(frameId); });
+
+  log.setCpuPasses(4, { });
+  log.setCycle(4, cycle(8.33, 4.0), 1.0);
+  log.setCpuPasses(5, { });
+  log.setCycle(5, cycle(16.7, 2.0), 2.0);
+  CHECK(frames.size() == 1 && frames[0] == 5);
+}
+
 TEST_CASE(spikeLogGivesUpOnMissingGpuTimes) {
   std::vector<std::string> lines;
   VrSpikeLog log(8.33, true, [&] (const std::string& line) { lines.push_back(line); });

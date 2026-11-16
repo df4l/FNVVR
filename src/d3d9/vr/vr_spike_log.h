@@ -32,6 +32,9 @@ namespace dxvk {
 
     using LineFn = std::function<void (const std::string& line)>;
 
+    /// Told the id of each frame whose line is written
+    using SpikeFn = std::function<void (uint64_t frameId)>;
+
     /// Frames over which the number of lines is limited
     static constexpr uint32_t WindowFrames = 1200;
 
@@ -59,6 +62,10 @@ namespace dxvk {
 
     void setGpu(uint64_t frameId, const VrGpuFrameTimes& times);
 
+    void setSpikeCallback(SpikeFn callback) {
+      m_spikeCallback = std::move(callback);
+    }
+
   private:
 
     static constexpr uint32_t RecordCount = 64;
@@ -77,6 +84,7 @@ namespace dxvk {
     double   m_periodMs;
     bool     m_gpuTimed;
     LineFn   m_sink;
+    SpikeFn  m_spikeCallback;
 
     std::array<Record, RecordCount> m_records;
 

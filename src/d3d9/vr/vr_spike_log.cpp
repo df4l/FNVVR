@@ -96,6 +96,10 @@ namespace dxvk {
     if (!reasons.empty()) {
       if (m_lines < MaxLines) {
         m_sink(describe(record, reasons));
+
+        if (m_spikeCallback)
+          m_spikeCallback(record.frameId);
+
         m_lines += 1;
       } else {
         m_suppressed += 1;
