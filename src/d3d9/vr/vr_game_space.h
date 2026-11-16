@@ -425,4 +425,18 @@ namespace dxvk {
    */
   double vrComputeRenderedMenuPickAspect(uint32_t width, uint32_t height);
 
+  /**
+   * \brief Factor on a cursor height for the game's radial tile test
+   *
+   * The companion wheel's slices (RadialTile) turn the cursor's pixels into
+   * interface units with the width's ratio for both axes, which only holds
+   * while the interface has the window's shape. On a window narrower than
+   * 4:3 the interface is stretched to it, and a cursor height multiplied by
+   * this factor gives the right height once the game scales it.
+   *
+   * \param [in] width Width of the window, in pixels
+   * \param [in] height Height of the window, in pixels
+   */
+  double vrComputeRadialPickScaleY(uint32_t width, uint32_t height);
+
 }

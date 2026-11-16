@@ -1954,6 +1954,18 @@ namespace dxvk {
     constexpr uintptr_t LoadingMenuScreenWidthCallSite = 0x0078965F;
 
     /**
+     * RadialTile's hit test (vtable 0x01095750, slot 5 = Tile::Unk_05,
+     * __thiscall (float x, float y) in window pixels, returns bool, retn 8),
+     * called by InterfaceManager::PickMenus (0x007126C0) for the tile under
+     * the cursor. It scales both coordinates by the menus root's width over
+     * Interface::GetRealScreenWidth, then tests the angle and distance from
+     * the centre in user0..user5. Only the companion wheel's slices are
+     * radial tiles. ida-gog.
+     */
+    constexpr uintptr_t RadialTileContainsSlot = 0x01095764;
+    constexpr uintptr_t RadialTileContains     = 0x00A216B0;
+
+    /**
      * BSTextureManager::LookupTextureParameters (0x00B6C2C0), cases
      * TEX_INTERFACE_FIRST / TEX_INTERFACE_TEMP and TEX_INTERFACE_RACESEXMENU:
      * the rendered menus' textures (terminal and Pip-Boy screens, the

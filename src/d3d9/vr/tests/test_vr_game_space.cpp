@@ -234,6 +234,19 @@ TEST_CASE(rendered_menu_pick_spans_the_interface_width) {
 }
 
 
+TEST_CASE(radial_pick_height_lands_in_interface_units) {
+  // A Quest 2 eye, interface 1280x960: the game scales by 1280 / 2244 on
+  // both axes, the bottom of the window must reach 960 units
+  double scale = vrComputeRadialPickScaleY(2244, 2352);
+  CHECK_NEAR(2352.0 * scale * (1280.0 / 2244.0), 960.0, 1e-3);
+
+  // 4:3 and wider: unchanged
+  CHECK_NEAR(vrComputeRadialPickScaleY(3136, 2352), 1.0, 1e-6);
+  CHECK_NEAR(vrComputeRadialPickScaleY(1920, 1080), 1.0, 1e-6);
+  CHECK_NEAR(vrComputeRadialPickScaleY(0, 0), 1.0, 1e-6);
+}
+
+
 TEST_CASE(wide_eye_keeps_its_size_and_width_is_even) {
   VrExtent size = vrComputeGameResolution({ 2501, 1400 }, VrInterfaceMinAspect);
 
