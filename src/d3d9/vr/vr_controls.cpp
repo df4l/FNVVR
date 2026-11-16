@@ -127,15 +127,26 @@ namespace dxvk {
     if (m_context == VrInputContext::Menu && input.hasActions && VrMenuCursor::pointerAllowed())
       panel = menuPanel;
 
-    // In a dialogue X is the left laser's trigger. It only reaches the
-    // game as that trigger while the left laser points at the panel.
-    bool leftTrigger = actions.isPressed(VrAction::MenuLeftTrigger);
-    bool xClicks = m_context == VrInputContext::Menu && m_dialogueShown
+    // In a dialogue and on the companion wheel X is the left laser's
+    // trigger, and on the wheel A is the right one's. X only reaches the
+    // game as that trigger while the left laser points at the panel; A
+    // stays the gamepad's A away from the wheel's options.
+    bool menu = m_context == VrInputContext::Menu;
+    bool leftTrigger  = actions.isPressed(VrAction::MenuLeftTrigger);
+    bool rightTrigger = actions.isPressed(VrAction::MenuRightTrigger);
+    bool xClicks = menu && (m_dialogueShown || m_companionWheelShown)
       && actions.isPressed(VrAction::MenuAlternate);
+    bool aClicks = menu && m_companionWheelShown
+      && actions.isPressed(VrAction::MenuSelect);
 
     if (xClicks) {
       actions.setPressed(VrAction::MenuAlternate,   false);
       actions.setPressed(VrAction::MenuLeftTrigger, true);
+    }
+
+    if (aClicks) {
+      actions.setPressed(VrAction::MenuSelect,       false);
+      actions.setPressed(VrAction::MenuRightTrigger, true);
     }
 
     bool minigame = m_context == VrInputContext::Menu && m_minigamePad.active;
@@ -170,6 +181,12 @@ namespace dxvk {
 
     if (xClicks && !leftTrigger && !pointer.triggersTaken)
       actions.setPressed(VrAction::MenuLeftTrigger, false);
+
+    if (aClicks && !rightTrigger && !pointer.triggersTaken) {
+      actions.setPressed(VrAction::MenuRightTrigger, false);
+      actions.setPressed(VrAction::MenuSelect,       true);
+    }
+
     VrGamepadHook::setCursorMode(pointer.cursorActive);
     VrMenuCursor::update(pointer);
 

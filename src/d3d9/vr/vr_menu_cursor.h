@@ -46,6 +46,14 @@ namespace dxvk {
     static bool overTarget();
 
     /**
+     * \brief Whether the companion wheel is shown
+     *
+     * Its options are clicked with a laser, A and X as well as the
+     * triggers, as in a dialogue.
+     */
+    static bool companionWheelShown();
+
+    /**
      * \brief Sets the pointer's state for the next game frame
      *
      * Called once per frame, on the game's thread.
