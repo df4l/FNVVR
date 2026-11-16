@@ -1517,17 +1517,19 @@ namespace dxvk {
     constexpr uintptr_t PlayerTempThirdPerson     = 0x64D;
 
     /**
-     * The package an actor's AI runs: BaseProcess::currentPackage (a
-     * PackageInfo at +0x04) starts with the TESPackage, whose type byte is
-     * at +0x20 (37 Sandman, 38 Cannibal). InitiateCannibalPackage gives it
-     * to the player with the temporary third person. Layout from JIP LN NVSE
-     * (GameProcess.h, GameForms.h), which targets this executable; not read
-     * in the GOG database (unreachable on 2026-11-16), the log of the
-     * player's package type checks it at run time. findings/camera.md §8.8.
+     * PlayerCharacter::GetCannibal (__thiscall, bool, vtable slot read by
+     * the GetIsInCannibalAction console command): the player is under AI
+     * control and its process's current package (BaseProcess vtable +0x22C)
+     * is of type 38, PACKAGE_TYPE_CANNIBAL (TESPackage::GetPackType, movsx
+     * [+0x20]). PlayerCharacter::InitiateCannibalPackage (0x009694D0) sets
+     * that control and the temporary third person; HighProcess::
+     * ProcessCannibal (0x00904DA0) clears the control once the idle is done.
+     * GOG database, findings/camera.md §8.8.
      */
-    constexpr uintptr_t ProcessCurrentPackage     = 0x04;
-    constexpr uintptr_t PackageType               = 0x20;
-    constexpr uint8_t   PackageTypeCannibal       = 38;
+    constexpr uintptr_t PlayerGetCannibal         = 0x00969760;
+    constexpr uint8_t   PlayerGetCannibalPrologue[] = {
+      0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C, 0x89, 0x4D, 0xF8, 0x8B, 0x4D, 0xF8,
+    };
 
     /**
      * PlayerCharacter::Show1stPerson (__thiscall, bool first), which culls

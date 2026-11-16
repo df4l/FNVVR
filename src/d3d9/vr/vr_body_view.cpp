@@ -18,6 +18,7 @@ namespace dxvk {
     using StateFn       = int32_t   (__thiscall*)(uintptr_t object);
     using ObjectUpdateFn = void     (__thiscall*)(uintptr_t object, void* updateData);
     using IdlePlayingFn  = bool     (__thiscall*)(uintptr_t animation);
+    using GetCannibalFn  = bool     (__thiscall*)(uintptr_t player);
 
     // The idle stays followed this long after it stops, so that the gap
     // between two idles of a scene does not give the view back for a moment
@@ -25,9 +26,6 @@ namespace dxvk {
 
     // Enough changes of the idle's state for a wake-up and a few scenes
     constexpr uint32_t MaxIdleStateLogs = 24;
-
-    // The player has no package most of the time: a few kills and seats
-    constexpr uint32_t MaxPackageTypeLogs = 24;
 
     // The head bone is about ten levels below a character's root
     constexpr uint32_t MaxSkeletonDepth = 16;
@@ -84,13 +82,6 @@ namespace dxvk {
       return idle ? readField<int32_t>(idle, VrGame::AnimIdleState) : -1;
     }
 
-    // -1 without a package
-    int32_t packageType(uintptr_t player) {
-      auto process = readField<uintptr_t>(player, VrGame::ActorProcess);
-      auto package = process ? readField<uintptr_t>(process, VrGame::ProcessCurrentPackage) : 0;
-      return package ? readField<uint8_t>(package, VrGame::PackageType) : -1;
-    }
-
     bool shouldFollowHead(uintptr_t player) {
       if (*reinterpret_cast<const uint32_t*>(VrGame::VatsCameraState))
         return false;
@@ -131,6 +122,12 @@ namespace dxvk {
     if (!view->m_findsIdles)
       Logger::warn("VR: The player's idles were not found, the view is levelled while waking up");
 
+    view->m_findsCannibal = VrGameMemory::matchesUnlessRewritten(VrGame::PlayerGetCannibal,
+      VrGame::PlayerGetCannibalPrologue, sizeof(VrGame::PlayerGetCannibalPrologue));
+
+    if (!view->m_findsCannibal)
+      Logger::warn("VR: The Cannibal check was not found, eating a corpse follows the body's head");
+
     return view;
   }
 
@@ -138,10 +135,9 @@ namespace dxvk {
   void VrBodyView::updateMoveHold() {
     auto player = *reinterpret_cast<const uintptr_t*>(VrGame::Player);
 
-    int32_t package = player ? packageType(player) : -1;
-    bool cannibal = package == VrGame::PackageTypeCannibal && isTempThirdPerson(player);
-
-    logPackageType(package);
+    bool cannibal = m_findsCannibal && player
+      && reinterpret_cast<GetCannibalFn>(VrGame::PlayerGetCannibal)(player)
+      && isTempThirdPerson(player);
 
     if (cannibal != m_holdsMove) {
       Logger::info(cannibal
@@ -256,19 +252,6 @@ namespace dxvk {
 
     m_changed = placed != wasPlaced || (placed && view != m_view);
     m_view    = view;
-  }
-
-
-  void VrBodyView::logPackageType(int32_t type) {
-    if (type == m_packageType)
-      return;
-
-    if (m_packageTypeLogs < MaxPackageTypeLogs) {
-      Logger::info(str::format("VR: The player's package type is now ", type));
-      m_packageTypeLogs++;
-    }
-
-    m_packageType = type;
   }
 
 

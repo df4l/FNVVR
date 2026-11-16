@@ -103,13 +103,6 @@ namespace dxvk {
      */
     void logIdleState(uintptr_t animation);
 
-    /**
-     * \brief Logs the changes of the player's package type
-     *
-     * A few of them: they tell whether the Cannibal package is seen.
-     */
-    void logPackageType(int32_t type);
-
     enum class View { Game, Body, Seat, Idle };
 
     VrCameraBlend m_blend;
@@ -119,10 +112,9 @@ namespace dxvk {
     float         m_pitch       = 0.0f;
     float         m_idleLeft    = 0.0f;
     bool          m_findsIdles  = false;
+    bool          m_findsCannibal = false;
     int32_t       m_idleState   = -1;
     uint32_t      m_idleStateLogs = 0;
-    int32_t       m_packageType = -1;
-    uint32_t      m_packageTypeLogs = 0;
     bool          m_holdsMove   = false;
     bool          m_hasView     = false;
     bool          m_headTurns   = false;
