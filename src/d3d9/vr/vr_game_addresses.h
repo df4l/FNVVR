@@ -1517,6 +1517,22 @@ namespace dxvk {
     constexpr uintptr_t PlayerTempThirdPerson     = 0x64D;
 
     /**
+     * PlayerCharacter::Show1stPerson (__thiscall, bool first), which culls
+     * one of the player's two roots and shows the other, and stores which
+     * one is shown in bActually3rdPerson (PlayerThirdPerson, +0x64B). It
+     * refuses the first person while bTemp3rdPerson is set, and the camera
+     * update (UpdateFirstPersonZoom 0x00950290) calls it only once, when
+     * b3rdPerson goes back to 0: see findings/camera.md §8.7. The vanity
+     * camera flag (PlayerCharacter::bIsVanityMode) holds that call back too.
+     */
+    constexpr uintptr_t Show1stPerson         = 0x00951A10;
+    constexpr uint8_t   Show1stPersonPrologue[] = {
+      0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x0B, 0x82, 0xF1, 0x00,
+      0x64, 0xA1, 0x00, 0x00, 0x00, 0x00, 0x50, 0x81, 0xEC, 0xB8, 0x00, 0x00, 0x00,
+    };
+    constexpr uintptr_t VanityModeActive      = 0x011E07B8;
+
+    /**
      * PlayerCharacter::p1stPersonAnimation, the first-person skeleton's
      * animation data, which PlayerCharacter::GetAnimation (0x00950A10, the
      * Actor vtable slot +0x1E4) gives in first person: scripts play their

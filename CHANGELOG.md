@@ -5,6 +5,7 @@
 ### Mini-games
 
 - **Hands at the slot machines with a stool**: sitting down at a slot machine (the Tops' among others) hid both hands, so the lever could not be seen in the hand. They are drawn again while seated.
+- **Hands back after getting up from a seat**: getting up from a stool or a chair right after using it could leave the hands hidden until the next time you sat down. The game's first-person model is now put back.
 
 ## v0.19.1 (2026-11-15, since v0.19.0 `bbce83a`)
 

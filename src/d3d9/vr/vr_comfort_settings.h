@@ -28,7 +28,10 @@ namespace dxvk {
    *   V.A.T.S. camera, not dead), the game's own
    *   PlayerCharacter::SetFirstPerson puts the first person back. The
    *   game's temporary third person, used to sit down and get up, is left
-   *   alone: the game ends it by itself.
+   *   alone: the game ends it by itself. When it ends it while the view
+   *   is already back in first person, the game keeps the third-person
+   *   model shown and the hands culled: PlayerCharacter::Show1stPerson
+   *   then shows the first-person model again.
    *
    * The cameras of V.A.T.S. itself are not changed here. See
    * findings/camera.md §7.
@@ -66,8 +69,11 @@ namespace dxvk {
     bool m_loggedKillCam = false;
     bool m_loggedView    = false;
     bool m_loggedTemp    = false;
+    bool m_loggedModel   = false;
 
     void keepFirstPerson(uintptr_t player);
+
+    void showFirstPersonModel(uintptr_t player);
 
   };
 
