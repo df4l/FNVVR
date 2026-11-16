@@ -118,6 +118,15 @@ namespace dxvk {
     }
 
     /**
+     * \brief Keeps the left stick from moving the player in the game
+     *
+     * \param [in] held Whether an animation the move would end is playing
+     */
+    void setMoveHeld(bool held) {
+      m_moveHeld = held;
+    }
+
+    /**
      * \brief Adds a mini-game's physical controls to the virtual gamepad
      *
      * Applied in menus from the next update on.
@@ -356,6 +365,7 @@ namespace dxvk {
     bool                        m_swingsWithHand = false;
     bool                        m_handsFree      = false;
     bool                        m_rightStickTaken = false;
+    bool                        m_moveHeld        = false;
     VrMinigamePad               m_minigamePad;
     const VrPanelPlacement*     m_pointerSurface = nullptr;
     VrPointerSurfaceState       m_pointerSurfaceState;

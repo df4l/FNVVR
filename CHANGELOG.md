@@ -20,6 +20,10 @@
 
 - **Titans of the New West**: the left arm's pose, the twist bone and the Pip-Boy are found again, the mod's extra "SC Hand" node no longer being taken for the forearm.
 
+### Gameplay
+
+- **Cannibal in third person**: eating a corpse is seen again from behind your character, the view from the body's head being too rough. Moving no longer skips the animation: the stick and room-scale walking are held until it ends.
+
 ### Mini-games
 
 - **Hands at the slot machines with a stool**: sitting down at a slot machine (the Tops' among others) hid both hands, so the lever could not be seen in the hand. They are drawn again while seated.

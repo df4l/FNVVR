@@ -725,6 +725,12 @@ namespace dxvk {
 
     float dt = float(timing.predictedPeriod) * 1e-9f;
 
+    // Eating a corpse holds the stick from this frame's controls on
+    if (m_bodyView)
+      m_bodyView->updateMoveHold();
+
+    m_controls.setMoveHeld(m_bodyView && m_bodyView->holdsMove());
+
     updateControls(input, state, true, dt);
 
     if (m_controls.switchesPipBoyLight() && !m_loggedPipBoyLight) {
@@ -764,6 +770,8 @@ namespace dxvk {
       m_heldLook = holdsLook;
     }
 
+    bool moveHeld = m_bodyView && m_bodyView->holdsMove();
+
     m_viewMoved = m_bodyView && m_bodyView->movesView();
 
     // A mini-game on an object of the world has brought the player to it. It
@@ -777,7 +785,7 @@ namespace dxvk {
 
     if (m_roomscale && m_hasReference) {
       m_roomscale->update(m_reference, m_gameCameraPose, m_hasHeadPose ? &m_headPose : nullptr,
-        state == VrGameStateKind::InGame && m_controls.cameraFollowsHead() && !m_viewMoved);
+        state == VrGameStateKind::InGame && m_controls.cameraFollowsHead() && !m_viewMoved && !moveHeld);
     }
 
     updateNpcGaze();

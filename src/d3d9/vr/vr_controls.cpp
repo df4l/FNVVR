@@ -116,6 +116,9 @@ namespace dxvk {
     if ((m_swingsWithHand || m_handsFree) && m_context == VrInputContext::Game)
       actions.setPressed(VrAction::Attack, false);
 
+    if (m_moveHeld && m_context == VrInputContext::Game)
+      actions.move = VrVector2();
+
     // The crouch sneaks instead of the button
     bool crouchSneaks = m_sneak && m_sneak->physical() && m_context == VrInputContext::Game;
 

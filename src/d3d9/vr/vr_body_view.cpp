@@ -26,6 +26,9 @@ namespace dxvk {
     // Enough changes of the idle's state for a wake-up and a few scenes
     constexpr uint32_t MaxIdleStateLogs = 24;
 
+    // The player has no package most of the time: a few kills and seats
+    constexpr uint32_t MaxPackageTypeLogs = 24;
+
     // The head bone is about ten levels below a character's root
     constexpr uint32_t MaxSkeletonDepth = 16;
 
@@ -81,6 +84,13 @@ namespace dxvk {
       return idle ? readField<int32_t>(idle, VrGame::AnimIdleState) : -1;
     }
 
+    // -1 without a package
+    int32_t packageType(uintptr_t player) {
+      auto process = readField<uintptr_t>(player, VrGame::ActorProcess);
+      auto package = process ? readField<uintptr_t>(process, VrGame::ProcessCurrentPackage) : 0;
+      return package ? readField<uint8_t>(package, VrGame::PackageType) : -1;
+    }
+
     bool shouldFollowHead(uintptr_t player) {
       if (*reinterpret_cast<const uint32_t*>(VrGame::VatsCameraState))
         return false;
@@ -125,6 +135,23 @@ namespace dxvk {
   }
 
 
+  void VrBodyView::updateMoveHold() {
+    auto player = *reinterpret_cast<const uintptr_t*>(VrGame::Player);
+
+    int32_t package = player ? packageType(player) : -1;
+    bool cannibal = package == VrGame::PackageTypeCannibal && isTempThirdPerson(player);
+
+    logPackageType(package);
+
+    if (cannibal != m_holdsMove) {
+      Logger::info(cannibal
+        ? "VR: The player eats a corpse, the view stays behind the player and the player does not move"
+        : "VR: The player has finished eating, the view and the moves are given back");
+      m_holdsMove = cannibal;
+    }
+  }
+
+
   void VrBodyView::placeCamera(VrGameCameraPose& camera, float dt) {
     // The head's small movements are not the body turning
     constexpr float BodySoftness = 0.1f;
@@ -145,7 +172,10 @@ namespace dxvk {
       m_idleLeft = std::max(m_idleLeft - dt, 0.0f);
 
     bool idle = !vats && m_idleLeft > 0.0f && inFirstPerson(player);
-    bool follow = !idle && shouldFollowHead(player);
+
+    // Eating a corpse is seen from the game's camera behind the player: from
+    // the body's head it is too rough
+    bool follow = !idle && !m_holdsMove && shouldFollowHead(player);
     bool wasOnBody = m_view == View::Body;
 
     // Looked for only when needed: this runs every frame
@@ -226,6 +256,19 @@ namespace dxvk {
 
     m_changed = placed != wasPlaced || (placed && view != m_view);
     m_view    = view;
+  }
+
+
+  void VrBodyView::logPackageType(int32_t type) {
+    if (type == m_packageType)
+      return;
+
+    if (m_packageTypeLogs < MaxPackageTypeLogs) {
+      Logger::info(str::format("VR: The player's package type is now ", type));
+      m_packageTypeLogs++;
+    }
+
+    m_packageType = type;
   }
 
 

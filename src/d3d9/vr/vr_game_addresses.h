@@ -1517,6 +1517,19 @@ namespace dxvk {
     constexpr uintptr_t PlayerTempThirdPerson     = 0x64D;
 
     /**
+     * The package an actor's AI runs: BaseProcess::currentPackage (a
+     * PackageInfo at +0x04) starts with the TESPackage, whose type byte is
+     * at +0x20 (37 Sandman, 38 Cannibal). InitiateCannibalPackage gives it
+     * to the player with the temporary third person. Layout from JIP LN NVSE
+     * (GameProcess.h, GameForms.h), which targets this executable; not read
+     * in the GOG database (unreachable on 2026-11-16), the log of the
+     * player's package type checks it at run time. findings/camera.md §8.8.
+     */
+    constexpr uintptr_t ProcessCurrentPackage     = 0x04;
+    constexpr uintptr_t PackageType               = 0x20;
+    constexpr uint8_t   PackageTypeCannibal       = 38;
+
+    /**
      * PlayerCharacter::Show1stPerson (__thiscall, bool first), which culls
      * one of the player's two roots and shows the other, and stores which
      * one is shown in bActually3rdPerson (PlayerThirdPerson, +0x64B). It
