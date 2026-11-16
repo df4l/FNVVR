@@ -97,6 +97,10 @@ namespace dxvk {
 
     std::array<VrEyeView, VrEyeCount> locateViews(int64_t displayTime) override;
 
+    bool supportsEyeTracking() override;
+
+    bool locateGaze(std::array<VrGaze, VrEyeCount>& gaze) override;
+
     bool submitFrame(const VrFrameSubmission& frame) override;
 
     void submitEmptyFrame(int64_t displayTime) override;
@@ -337,6 +341,8 @@ namespace dxvk {
     // inside the runtime can be located from the log
     bool                              m_loggedWait   = false;
     bool                              m_loggedSubmit = false;
+    // The eye tracker has given a gaze once
+    bool                              m_gazeSeen     = false;
     bool                              m_loggedTiming = false;
 
   };

@@ -1,6 +1,22 @@
 # Changelog
 
-## Unreleased
+## v0.19.1 (2026-11-15, since v0.19.0 `bbce83a`)
+
+### Performance
+
+- **Eye-tracked foveation no longer crashes on the Steam Frame**: turning the option on closed the game as soon as the headset gave the gaze. The mod called one SteamVR function with the wrong calling convention, which crashes on any headset with eye tracking; the Frame was the first one to try it. The mod no longer makes that call. Thanks to JaminaPanAm for going to the trouble of getting the Proton log that led to the cause.
+
+## v0.19.0 (2026-11-15, since v0.18.0 `156dd53`)
+
+### Performance
+
+- **Eye-tracked foveated rendering** (Settings > VR, off by default): on a headset that tracks your eyes, such as the Steam Frame, the world keeps every pixel's detail where you look and is shaded more coarsely further away, which you do not see, for less work for the graphics card. Edges stay sharp. When the headset or the graphics card cannot do it, the option goes back to Off and a message tells why. `d3d9.vrFoveationFullAngle` and `d3d9.vrFoveationHalfAngle` (20 and 35 degrees) set the zones.
+
+### Scopes
+
+- **Scopes of modded weapons found on the model**: for a weapon the mod does not know, the lens is now placed on the eyepiece of the scope found in the weapon's own 3D model, instead of a fixed guess that could end up inside the gun, hidden by the scope (issue #14). Checked on the vanilla weapons and on The Frontier's scoped weapons. `fnvvr\scopes.ini` still overrides it.
+
+## v0.18.0 (2026-11-14, since v0.17.0 `c301f6d`)
 
 ### Performance
 
@@ -10,6 +26,10 @@
 ### Mini-games
 
 - **Slot machine lever with the whole hand**: grabbing the lever with grip and trigger together no longer changes the bet or clicks the button under the laser. Away from the lever, the triggers still change the bet.
+
+### Hands and controls
+
+- **Unarmed right hand grabs**: with no weapon or a hand-to-hand weapon drawn, the right grip now takes objects, as the left one does.
 
 ## v0.17.0 (2026-11-13, since v0.16.0 `277231a`)
 

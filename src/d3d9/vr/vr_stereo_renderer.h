@@ -39,6 +39,7 @@
 #include "vr_menu_scenes.h"
 #include "vr_minigames.h"
 #include "vr_manual_reload.h"
+#include "vr_foveation.h"
 #include "vr_part_highlight.h"
 #include "vr_npc_gaze.h"
 #include "vr_painter.h"
@@ -273,6 +274,18 @@ namespace dxvk {
      * \param [in] enabled Whether scopes show the world on a lens
      */
     void setScopesEnabled(bool enabled);
+
+    /**
+     * \brief Tells whether eye-tracked foveation can be turned on
+     */
+    VrFoveationSupport foveationSupport();
+
+    /**
+     * \brief Turns eye-tracked foveation on or off
+     *
+     * Called from the game's options page, on the game's thread.
+     */
+    void setFoveationEnabled(bool enabled);
 
   private:
 
@@ -519,6 +532,12 @@ namespace dxvk {
     double   m_spikeLogPeriodMs = 0.0;
     std::unique_ptr<VrRenderPasses> m_renderPasses;
 
+    // Shading at full rate only where the eyes look, see vr_foveation.h
+    std::unique_ptr<VrFoveation> m_foveation;
+    VrGazeHold m_gazeHold;
+    bool m_foveationEnabled  = false;
+    bool m_foveationTestGaze = false;
+
     // The game's flat scope is off with a headset, findings/optics.md §10
     std::unique_ptr<VrScopeGame> m_scopeGame;
     // The world seen through the scope, on its lens
@@ -725,6 +744,11 @@ namespace dxvk {
     /**
      * \brief Logs the frustum the game set for its camera when it changes
      */
+    /**
+     * \brief Sets the frame's shading rates from where the eyes look
+     */
+    void updateFoveation(const std::array<VrEyeView, VrEyeCount>& views, float dt);
+
     void logGameFrustum();
 
     /**

@@ -465,6 +465,18 @@ namespace dxvk {
         renderer->m_renderPasses->setGpuTimer(renderer->m_gpuTimer.get());
     }
 
+    if (renderer->m_renderPasses) {
+      renderer->m_foveation = VrFoveation::create(device, passes.foveationZones);
+      renderer->m_foveationTestGaze = passes.foveationTestGaze;
+
+      if (renderer->m_foveation) {
+        VrFoveation* foveation = renderer->m_foveation.get();
+        renderer->m_renderPasses->setWorldCallbacks(
+          [foveation] (uint32_t eye) { foveation->beginWorld(eye); },
+          [foveation] { foveation->endWorld(); });
+      }
+    }
+
     renderer->m_scopeGame = VrScopeGame::install();
 
     if (renderer->m_weaponHand && renderer->m_renderPasses) {
@@ -729,6 +741,7 @@ namespace dxvk {
     }
 
     auto views = m_backend.locateViews(timing.predictedDisplayTime);
+    updateFoveation(views, dt);
 
     m_cullingFov    = vrComputeCullingFov(views[0].fov, views[1].fov, CullingMargin);
     m_hasCullingFov = true;
@@ -1142,6 +1155,54 @@ namespace dxvk {
 
     m_eye     = NoEye;
     m_eyeView = nullptr;
+  }
+
+
+  VrFoveationSupport VrStereoRenderer::foveationSupport() {
+    if (!m_foveation)
+      return VrFoveationSupport::NoGpuSupport;
+
+    if (!m_foveationTestGaze && !m_backend.supportsEyeTracking())
+      return VrFoveationSupport::NoEyeTracking;
+
+    return VrFoveationSupport::Available;
+  }
+
+
+  void VrStereoRenderer::setFoveationEnabled(bool enabled) {
+    if (enabled == m_foveationEnabled)
+      return;
+
+    m_foveationEnabled = enabled;
+    m_gazeHold.reset();
+
+    if (m_foveation && !enabled)
+      m_foveation->stop();
+
+    Logger::info(str::format("VR: Eye-tracked foveation is ", enabled ? "on" : "off",
+      enabled && !m_foveation ? ", but the GPU cannot draw it" : ""));
+  }
+
+
+  void VrStereoRenderer::updateFoveation(const std::array<VrEyeView, VrEyeCount>& views, float dt) {
+    if (!m_foveation || !m_foveationEnabled)
+      return;
+
+    std::array<VrGaze, VrEyeCount> tracked;
+    const std::array<VrGaze, VrEyeCount>* gaze = nullptr;
+
+    if (m_backend.locateGaze(tracked))
+      gaze = m_gazeHold.update(&tracked, dt);
+    else if (m_foveationTestGaze)
+      gaze = m_gazeHold.update(&(tracked = { }), dt);
+    else
+      gaze = m_gazeHold.update(nullptr, dt);
+
+    // The world is drawn into targets of the game's resolution
+    D3DSURFACE_DESC target = { };
+    m_gameTarget->GetDesc(&target);
+
+    m_foveation->prepareFrame(views, gaze, VrExtent { target.Width, target.Height });
   }
 
 

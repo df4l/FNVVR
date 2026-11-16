@@ -2841,6 +2841,23 @@ namespace dxvk {
   }
 
 
+  void DxvkContext::setShadingRateAttachment(
+    const Rc<DxvkImageView>&    view,
+          VkExtent2D            texelSize) {
+    if (m_state.om.shadingRateView == view)
+      return;
+
+    m_state.om.shadingRateView = view;
+    m_state.om.shadingRateTexelSize = texelSize;
+
+    // The attachment is chosen when a render pass begins: end the current
+    // one at the next draw if it would take another
+    if (m_flags.test(DxvkContextFlag::GpRenderPassActive)
+     && pickShadingRateAttachment(m_state.om.framebufferInfo) != m_state.om.boundShadingRate)
+      m_flags.set(DxvkContextFlag::GpRenderPassNeedsFlush);
+  }
+
+
   void DxvkContext::setDepthBounds(
           DxvkDepthBounds     depthBounds) {
     if (m_state.dyn.depthBounds != depthBounds) {
@@ -6349,6 +6366,15 @@ namespace dxvk {
       }
     }
 
+    if (DxvkImageView* shadingRate = m_state.om.boundShadingRate) {
+      m_rtAccess.emplace_back(*shadingRate,
+        VK_PIPELINE_STAGE_2_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR,
+        VK_ACCESS_2_FRAGMENT_SHADING_RATE_ATTACHMENT_READ_BIT_KHR, false);
+
+      if (!prepareOutOfOrderTransition(*shadingRate->image()))
+        cmdBuffer = DxvkCmdBuffer::ExecBuffer;
+    }
+
     // For regularly synchronized render passes, emit barriers here. We need to do this
     // even if there are no layout transitions, since we don't track resource usage during
     // render passes.
@@ -6387,10 +6413,41 @@ namespace dxvk {
   }
 
 
+  DxvkImageView* DxvkContext::pickShadingRateAttachment(
+    const DxvkFramebufferInfo&  framebufferInfo) const {
+    const auto& view = m_state.om.shadingRateView;
+
+    if (!view || !framebufferInfo.numAttachments())
+      return nullptr;
+
+    // Only render passes of the attachment's own size: the image is made
+    // for one render target, and other targets may cover another view
+    DxvkFramebufferSize fbSize = framebufferInfo.size();
+    VkExtent3D extent = view->mipLevelExtent(0u);
+    VkExtent2D texel = m_state.om.shadingRateTexelSize;
+
+    if (fbSize.layers != 1u
+     || extent.width  != (fbSize.width  + texel.width  - 1u) / texel.width
+     || extent.height != (fbSize.height + texel.height - 1u) / texel.height)
+      return nullptr;
+
+    return view.ptr();
+  }
+
+
   void DxvkContext::renderPassBindFramebuffer(
     const DxvkFramebufferInfo&  framebufferInfo,
           DxvkRenderPassOps&    ops) {
     const DxvkFramebufferSize fbSize = framebufferInfo.size();
+
+    m_state.om.boundShadingRate = pickShadingRateAttachment(framebufferInfo);
+
+    if (m_state.om.boundShadingRate) {
+      m_shadingRateStats.passesTaken += 1u;
+    } else if (m_state.om.shadingRateView != nullptr) {
+      m_shadingRateStats.passesSkipped += 1u;
+      m_shadingRateStats.lastSkippedSize = VkExtent2D { fbSize.width, fbSize.height };
+    }
 
     acquireRenderTargets(framebufferInfo, ops);
 
@@ -6535,6 +6592,16 @@ namespace dxvk {
     if (depthStencilAspects & VK_IMAGE_ASPECT_STENCIL_BIT) {
       renderingInfo.pStencilAttachment = &stencilInfo;
       renderingInheritance.stencilAttachmentFormat = depthStencilFormat;
+    }
+
+    if (DxvkImageView* shadingRate = m_state.om.boundShadingRate) {
+      auto& shadingRateInfo = m_state.om.renderingInfo.shadingRate;
+      shadingRateInfo = { VK_STRUCTURE_TYPE_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR };
+      shadingRateInfo.imageView = shadingRate->handle();
+      shadingRateInfo.imageLayout = shadingRate->getLayout();
+      shadingRateInfo.shadingRateAttachmentTexelSize = m_state.om.shadingRateTexelSize;
+
+      renderingInfo.pNext = &shadingRateInfo;
     }
 
     // Make sure we get compression with input attachments whenever possible

@@ -166,6 +166,17 @@ namespace dxvk {
   }
 
 
+  bool VrEmulatorBackend::supportsEyeTracking() {
+    return true;
+  }
+
+
+  bool VrEmulatorBackend::locateGaze(std::array<VrGaze, VrEyeCount>& gaze) {
+    gaze = { };
+    return true;
+  }
+
+
   bool VrEmulatorBackend::submitFrame(const VrFrameSubmission& frame) {
     if (m_state != VrSessionState::Running)
       return false;

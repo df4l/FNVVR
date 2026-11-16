@@ -20,6 +20,7 @@ vr_src = files([
   'vr_scope_lens.cpp',
   'vr_scope_reticle.cpp',
   'vr_scope_table.cpp',
+  'vr_scope_finder.cpp',
   'vr_hand_fingers.cpp',
   'vr_melee.cpp',
   'vr_pipboy_gaze.cpp',
@@ -61,6 +62,7 @@ vr_src = files([
   'vr_npc_limb.cpp',
   'vr_text_entry.cpp',
   'vr_block_heap.cpp',
+  'vr_foveation_map.cpp',
 ])
 
 # Parts that depend on DXVK and Vulkan, only built into d3d9.dll
@@ -164,6 +166,7 @@ vr_dxvk_src = files([
   'vr_npc_reaction.cpp',
   'vr_melee_object_hit.cpp',
   'vr_gpu_timer.cpp',
+  'vr_foveation.cpp',
 ])
 
 # Unit tests for the VR layer. They are built with the host compiler so they
@@ -194,6 +197,7 @@ if add_languages('cpp', native: true, required: false)
     'tests/test_vr_scope_lens.cpp',
     'tests/test_vr_scope_reticle.cpp',
     'tests/test_vr_scope_table.cpp',
+    'tests/test_vr_scope_finder.cpp',
     'tests/test_vr_hand_fingers.cpp',
     'tests/test_vr_melee.cpp',
     'tests/test_vr_pipboy_gaze.cpp',
@@ -228,6 +232,7 @@ if add_languages('cpp', native: true, required: false)
     'tests/test_vr_npc_limb.cpp',
     'tests/test_vr_text_entry.cpp',
     'tests/test_vr_block_heap.cpp',
+    'tests/test_vr_foveation.cpp',
   ])
 
   vr_test = executable('vr_tests', vr_test_sources, vr_src,

@@ -91,6 +91,17 @@ namespace dxvk {
   };
 
   /**
+   * \brief Where an eye looks, in its own view
+   *
+   * Tangents of the direction's angles: \c tanX to the right and \c tanY
+   * up from the view's forward axis, so that (0, 0) looks straight ahead.
+   */
+  struct VrGaze {
+    float tanX = 0.0f;
+    float tanY = 0.0f;
+  };
+
+  /**
    * \brief Pixel size of one eye's render target
    */
   struct VrExtent {

@@ -351,6 +351,10 @@ namespace dxvk {
         yaw * DegreesPerRadian, " pitch ", pitch * DegreesPerRadian,
         " roll ", roll * DegreesPerRadian, " degrees"));
     }
+
+    Logger::info(str::format("VR: The headset ", m_runtime->system->GetBoolTrackedDeviceProperty(
+        vr::k_unTrackedDeviceIndex_Hmd, vr::Prop_SupportsXrEyeGazeInteraction_Bool) ? "reports" : "does not report",
+      " an eye tracker"));
   }
 
 
@@ -1108,6 +1112,39 @@ namespace dxvk {
     }
 
     return views;
+  }
+
+
+  bool VrOpenVrBackend::supportsEyeTracking() {
+    std::array<VrGaze, VrEyeCount> gaze;
+    return m_gazeSeen || locateGaze(gaze);
+  }
+
+
+  bool VrOpenVrBackend::locateGaze(std::array<VrGaze, VrEyeCount>& gaze) {
+    if (!m_runtime || !m_runtime->system)
+      return false;
+
+    vr::HmdVector2_t centres[VrEyeCount] = { };
+
+    if (!m_runtime->system->GetEyeTrackedFoveationCenter(&centres[0], &centres[1]))
+      return false;
+
+    for (uint32_t i = 0; i < VrEyeCount; i++) {
+      vr::EVREye eye = i == uint32_t(VrEye::Left) ? vr::Eye_Left : vr::Eye_Right;
+
+      float left = 0.0f, right = 0.0f, top = 0.0f, bottom = 0.0f;
+      m_runtime->system->GetProjectionRaw(eye, &left, &right, &top, &bottom);
+      gaze[i] = vrGazeFromFoveationCenter(left, right, top, bottom, centres[i].v[0], centres[i].v[1]);
+    }
+
+    if (!m_gazeSeen) {
+      m_gazeSeen = true;
+      Logger::info(str::format("VR: The headset gives the gaze: left eye ", gaze[0].tanX, ", ", gaze[0].tanY,
+        ", right eye ", gaze[1].tanX, ", ", gaze[1].tanY, " (tangents right and up)"));
+    }
+
+    return true;
   }
 
 

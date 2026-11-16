@@ -107,6 +107,7 @@ namespace dxvk {
     bool                                 m_manualReload = true;
     bool                                 m_scopes = true;
     bool                                 m_roomscale = false;
+    bool                                 m_foveation = false;
     bool                                 m_handPush = true;
     bool                                 m_asyncHandOff = true;
     VrSneakConfig                        m_sneakConfig;

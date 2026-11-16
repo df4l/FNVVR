@@ -105,6 +105,16 @@ namespace dxvk {
   }
 
 
+  VrGaze vrGazeFromFoveationCenter(float left, float right, float top, float bottom, float ndcX, float ndcY) {
+    // Inverse of the projection of a direction (x, y, -1): the device
+    // coordinates are linear in the tangents
+    VrGaze gaze;
+    gaze.tanX = 0.5f * (ndcX * (right - left) + right + left);
+    gaze.tanY = 0.5f * (ndcY * (bottom - top) + bottom + top);
+    return gaze;
+  }
+
+
   const char* vrOpenVrActionPath(VrAction action) {
     return ActionPaths[uint32_t(action)];
   }
