@@ -522,6 +522,16 @@ namespace dxvk {
     constexpr uint8_t   FaderHalfExtentCode[] = { 0xDC, 0x0D, 0x88, 0x15, 0x01, 0x01 };
 
     /**
+     * BSUtilities::ReflectCameraAboutArbitraryPlane (__cdecl: camera, plane,
+     * reflected camera) mirrors a camera about a water plane for the water
+     * reflections. It negates the up axis and copies the camera's frustum.
+     * Called by TESWaterSystem::MTSetupSelectiveReflectionTexture,
+     * MTSetupWorldReflectionTexture and MTSetupSkyReflectionTexture.
+     */
+    constexpr uintptr_t ReflectCameraAboutPlane = 0x00C4BF40;
+    constexpr uintptr_t ReflectCameraCallSites[] = { 0x004E9E2D, 0x004EAB27, 0x004EB098 };
+
+    /**
      * FaderManager::kFaders: three entries of 0x1C bytes, the black fader
      * below the menus, the black one above them and the white one. An entry
      * is shown while its root node (+0x10) is set; the alpha (float) is at

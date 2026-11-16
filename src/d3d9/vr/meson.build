@@ -75,6 +75,7 @@ vr_dxvk_src = files([
   'vr_sound_focus.cpp',
   'vr_fader_overlay.cpp',
   'vr_fader_size.cpp',
+  'vr_water_reflection.cpp',
   'vr_fast_math.cpp',
   'vr_engine_patches.cpp',
   'vr_game_heap.cpp',

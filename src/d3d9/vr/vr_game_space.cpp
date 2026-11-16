@@ -262,6 +262,14 @@ namespace dxvk {
   }
 
 
+  VrGameFrustum vrComputeReflectionFrustum(const VrGameFrustum& frustum) {
+    VrGameFrustum mirrored = frustum;
+    mirrored.top    = -frustum.bottom;
+    mirrored.bottom = -frustum.top;
+    return mirrored;
+  }
+
+
   VrGameCameraPose vrComputeMenuSceneCameraPose(
     const VrPose&           anchor,
     const VrPose&           eye,

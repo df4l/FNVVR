@@ -20,6 +20,7 @@
 #include "vr_menu_cursor.h"
 #include "vr_stereo_renderer.h"
 #include "vr_tree_leaves.h"
+#include "vr_water_reflection.h"
 #include "vr_weapon_types.h"
 
 namespace dxvk {
@@ -371,6 +372,8 @@ namespace dxvk {
       Logger::info("VR: The idle and kill camera settings were not found, the game may leave the first person");
 
     renderer->m_fadersOverlaid = renderer->m_faderOverlay.initialize() && VrFaderSize::install();
+
+    VrWaterReflection::install();
 
     renderer->m_roomscale = VrRoomscale::install();
 

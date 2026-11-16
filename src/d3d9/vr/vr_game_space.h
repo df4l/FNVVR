@@ -298,6 +298,20 @@ namespace dxvk {
   VrGameFrustum vrComputeGameFrustum(const VrFov& fov);
 
   /**
+   * \brief Frustum of a camera mirrored about a water plane
+   *
+   * The game's mirrored camera negates the up axis and keeps the frustum
+   * of the camera it mirrors, while the water shader reads the reflection
+   * at the pixel's own screen position, flipped vertically. That only lines
+   * up when the frustum is symmetric vertically: with an eye's frustum the
+   * reflection is read several degrees too high. The mirrored camera needs
+   * the top and bottom of the original frustum swapped and negated.
+   *
+   * \param [in] frustum Frustum of the camera that was mirrored
+   */
+  VrGameFrustum vrComputeReflectionFrustum(const VrGameFrustum& frustum);
+
+  /**
    * \brief Places the camera of a menu's own scene for a VR eye
    *
    * Rendered menus, such as the game's terminals, draw a model with a
