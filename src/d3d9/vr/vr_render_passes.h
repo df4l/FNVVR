@@ -45,6 +45,9 @@ namespace dxvk {
    * - water reflections are not shared: the water shader reads them at the
    *   pixel's position on the eye's screen, so each eye needs its own.
    *
+   * What the passes after the left eye's must not do again (time steps,
+   * work that does not depend on the view) is VrRepeatedPasses's.
+   *
    * The main loop's calls to the shadow and water passes, the scene, the
    * first-person model and the image space effects are redirected and
    * timed; a summary per eye is logged every few hundred frames.

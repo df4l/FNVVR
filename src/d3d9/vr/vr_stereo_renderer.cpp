@@ -20,6 +20,7 @@
 #include "vr_menu_cursor.h"
 #include "vr_stereo_renderer.h"
 #include "vr_tree_leaves.h"
+#include "vr_water_reflection.h"
 #include "vr_weapon_types.h"
 
 namespace dxvk {
@@ -372,6 +373,8 @@ namespace dxvk {
 
     renderer->m_fadersOverlaid = renderer->m_faderOverlay.initialize() && VrFaderSize::install();
 
+    VrWaterReflection::install();
+
     renderer->m_roomscale = VrRoomscale::install();
 
     if (!renderer->m_roomscale)
@@ -454,6 +457,11 @@ namespace dxvk {
 
     if (!renderer->m_renderPasses)
       Logger::info("VR: The world render's passes were not found, they are drawn for each eye and not timed");
+
+    renderer->m_repeatedPasses = VrRepeatedPasses::install();
+
+    if (!renderer->m_repeatedPasses)
+      Logger::info("VR: The game's timers were not found, time moves on in every eye's world pass");
 
     if (renderer->m_renderPasses) {
       renderer->m_foveation = VrFoveation::create(device, passes.foveationZones);
@@ -599,6 +607,9 @@ namespace dxvk {
     m_swapped      = true;
     m_paced        = false;
     m_blockedInput = false;
+
+    if (m_repeatedPasses)
+      m_repeatedPasses->beginFrame();
 
     disableStaticMenuBackground();
 
@@ -1105,7 +1116,16 @@ namespace dxvk {
     if (m_renderPasses)
       m_renderPasses->beginEye(eye);
 
+    // The left eye's pass moves time on for the frame
+    bool repeat = eye != 0 && m_repeatedPasses;
+
+    if (repeat)
+      m_repeatedPasses->beginRepeat();
+
     g_originalSwap(main, nullptr);
+
+    if (repeat)
+      m_repeatedPasses->endRepeat();
 
     if (m_renderPasses)
       m_renderPasses->endEye();
@@ -1271,7 +1291,14 @@ namespace dxvk {
     if (m_renderPasses)
       m_renderPasses->setSceneScissor(&m_scopeRender->area());
 
+    // Drawn before the eyes, but the left eye's pass moves time on
+    if (m_repeatedPasses)
+      m_repeatedPasses->beginRepeat();
+
     m_scopeRender->render(main);
+
+    if (m_repeatedPasses)
+      m_repeatedPasses->endRepeat();
 
     if (m_renderPasses)
       m_renderPasses->setSceneScissor(nullptr);

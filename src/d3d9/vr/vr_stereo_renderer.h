@@ -52,6 +52,7 @@
 #include "vr_preview_window.h"
 #include "vr_prompt_icon.h"
 #include "vr_render_passes.h"
+#include "vr_repeated_passes.h"
 #include "vr_scope_game.h"
 #include "vr_scope_render.h"
 #include "vr_sky_anchor.h"
@@ -531,6 +532,10 @@ namespace dxvk {
     // The game's frame timer, measured against real time
     std::unique_ptr<VrGameTimer> m_gameTimer;
     std::unique_ptr<VrRenderPasses> m_renderPasses;
+
+    // The world passes after the left eye's (right eye, scope lens) do not
+    // move time on or repeat work that does not depend on the view
+    std::unique_ptr<VrRepeatedPasses> m_repeatedPasses;
 
     // Shading at full rate only where the eyes look, see vr_foveation.h
     std::unique_ptr<VrFoveation> m_foveation;
