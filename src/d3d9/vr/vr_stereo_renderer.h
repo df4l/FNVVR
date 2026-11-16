@@ -219,6 +219,17 @@ namespace dxvk {
     }
 
     /**
+     * \brief Changes how far the Pip-Boy is turned about the forearm
+     *
+     * Called from the game's options page, on the game's thread.
+     *
+     * \param [in] degrees Turn towards the thumb, 0 for the game's placement
+     */
+    void setPipBoyAngle(float degrees) {
+      m_pipBoyAngle = degrees;
+    }
+
+    /**
      * \brief Turns the mini-games' scenes in the eye images on or off
      *
      * Off, they stay on the menu panel. See VrMinigames.
@@ -565,6 +576,9 @@ namespace dxvk {
     // read it at the game's size
     VrPipBoyGrowth      m_pipBoyGrowth;
     float               m_pipBoyScale = 1.0f;
+    // Turn of the Pip-Boy about the forearm, so that its screen faces the
+    // eyes with less wrist roll (controllers lose tracking when rolled)
+    float               m_pipBoyAngle = 0.0f;
     bool                m_loggedPipBoyLight = false;
 
     // Thread that runs the game's main loop, and whether Main::Swap ran

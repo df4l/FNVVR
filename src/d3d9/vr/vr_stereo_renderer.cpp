@@ -2129,6 +2129,7 @@ namespace dxvk {
       || (gaze.state == VrPipBoyState::Changing && m_pipBoyGaze.isLooking());
 
     m_weaponHand->setPipBoyScale(m_pipBoyGrowth.update(grown, m_pipBoyScale, dt));
+    m_weaponHand->setPipBoyAngle(m_pipBoyAngle);
   }
 
 

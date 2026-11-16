@@ -181,6 +181,8 @@ namespace dxvk {
     options.smoothTurnSpeed = turn.smoothSpeed;
     options.pipBoyScale     = std::min(std::max(config.getOption<float>("d3d9.vrPipBoyScale", options.pipBoyScale),
       VrPipBoyScaleMin), vrPipBoyStepToScale(VrPipBoyScaleSteps - 1));
+    options.pipBoyAngle     = std::min(std::max(config.getOption<float>("d3d9.vrPipBoyAngle", options.pipBoyAngle),
+      0.0f), vrPipBoyStepToAngle(VrPipBoyAngleSteps - 1));
     options.manualReload    = config.getOption<bool>("d3d9.vrManualReload", options.manualReload);
     options.physicalSneak   = config.getOption<bool>("d3d9.vrPhysicalSneak", options.physicalSneak);
     options.scopeLens       = config.getOption<bool>("d3d9.vrScopes", options.scopeLens);
@@ -263,6 +265,7 @@ namespace dxvk {
       timer, passes, developer, swing));
     g_vrSystem->m_texts = vrReadTexts();
     g_vrSystem->m_pipBoyScale = options.pipBoyScale;
+    g_vrSystem->m_pipBoyAngle = options.pipBoyAngle;
     g_vrSystem->m_manualReload = options.manualReload;
     g_vrSystem->m_handPush = config.getOption<bool>("d3d9.vrHandPush", true);
     g_vrSystem->m_eyeAspect = config.getOption<bool>("d3d9.vrEyeAspect", true);
@@ -368,6 +371,7 @@ namespace dxvk {
     m_turnConfig.smoothSpeed = options.smoothTurnSpeed;
 
     m_pipBoyScale = options.pipBoyScale;
+    m_pipBoyAngle = options.pipBoyAngle;
     m_manualReload = options.manualReload;
     m_sneakConfig.physical = options.physicalSneak;
     m_scopes = options.scopeLens;
@@ -380,6 +384,7 @@ namespace dxvk {
       m_stereoRenderer->setFoveationEnabled(m_foveation);
       m_stereoRenderer->setTurnConfig(m_turnConfig);
       m_stereoRenderer->setPipBoyScale(m_pipBoyScale);
+      m_stereoRenderer->setPipBoyAngle(m_pipBoyAngle);
       m_stereoRenderer->setManualReload(m_manualReload);
       m_stereoRenderer->setSneakConfig(m_sneakConfig);
     }
@@ -445,6 +450,7 @@ namespace dxvk {
 
     if (m_stereoRenderer) {
       m_stereoRenderer->setPipBoyScale(m_pipBoyScale);
+      m_stereoRenderer->setPipBoyAngle(m_pipBoyAngle);
       m_stereoRenderer->setMinigamesEnabled(m_immersiveMinigames);
       m_stereoRenderer->setScopesEnabled(m_scopes);
       m_stereoRenderer->setManualReload(m_manualReload);

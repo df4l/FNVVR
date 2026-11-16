@@ -1405,10 +1405,11 @@ namespace dxvk {
       m_loggedFrame = true;
     }
 
-    // The size is written after the game's update, the next update shows it
+    // The size and turn are written after the game's update, the next
+    // update shows them
     PipBoyNodes pipBoy = findPipBoy(root);
     measurePipBoyScreen(pipBoy);
-    scalePipBoy(pipBoy);
+    placePipBoy(pipBoy);
 
     // The game places its camera at its own eye
     if (uint8_t* camera = field<uint8_t*>(main, VrGame::MainFirstPersonCamera))
@@ -2031,17 +2032,18 @@ namespace dxvk {
   }
 
 
-  void VrWeaponHand::scalePipBoy(const PipBoyNodes& nodes) {
+  void VrWeaponHand::placePipBoy(const PipBoyNodes& nodes) {
     uint8_t* device = nodes.device;
 
     if (!device)
       return;
 
-    VrNodeScale current = {
-      readVector(device, VrGame::ObjectLocalTranslation),
-      field<float>(device, VrGame::ObjectLocalScale) };
+    VrNodePlacement current;
+    current.rotate    = readRotation(device, VrGame::ObjectLocalRotation);
+    current.translate = readVector(device, VrGame::ObjectLocalTranslation);
+    current.scale     = field<float>(device, VrGame::ObjectLocalScale);
 
-    // A model the game attached or placed again is at its own size
+    // A model the game attached or placed again is at its own placement
     bool replaced = device != m_pipBoyDevice
       || std::memcmp(&current, &m_pipBoyWrittenPlacement, sizeof(current));
 
@@ -2050,14 +2052,15 @@ namespace dxvk {
       m_pipBoyOwnPlacement     = current;
       m_pipBoyWrittenPlacement = current;
       m_pipBoyAppliedScale     = 1.0f;
+      m_pipBoyAppliedAngle     = 0.0f;
     }
 
-    if (m_pipBoyScale == m_pipBoyAppliedScale)
+    if (m_pipBoyScale == m_pipBoyAppliedScale && m_pipBoyAngle == m_pipBoyAppliedAngle)
       return;
 
-    VrNodeScale placement = m_pipBoyOwnPlacement;
+    VrNodePlacement placement = m_pipBoyOwnPlacement;
 
-    if (m_pipBoyScale != 1.0f) {
+    if (m_pipBoyScale != 1.0f || m_pipBoyAngle != 0.0f) {
       // The screen's centre in the twist bone's frame at the model's own
       // placement, and the forearm's axis there: the line from the forearm
       // bone to the wrist
@@ -2073,26 +2076,36 @@ namespace dxvk {
       if (auto bound = field<const uint8_t*>(nodes.screen, VrGame::ObjectWorldBound))
         centre = readVector(bound, 0);
 
-      VrVector3 screen = readRotation(device, VrGame::ObjectLocalRotation)
+      VrVector3 screen = m_pipBoyOwnPlacement.rotate
         * (model.toLocal(centre) * m_pipBoyOwnPlacement.scale) + m_pipBoyOwnPlacement.translate;
 
-      VrVector3 pivot = vrClosestPointOnLine(
-        twist.toLocal(readVector(nodes.forearm, VrGame::ObjectWorldTranslation)),
-        twist.toLocal(readVector(nodes.hand, VrGame::ObjectWorldTranslation)),
-        screen);
+      VrVector3 elbow = twist.toLocal(readVector(nodes.forearm, VrGame::ObjectWorldTranslation));
+      VrVector3 wrist = twist.toLocal(readVector(nodes.hand, VrGame::ObjectWorldTranslation));
 
-      placement = vrScaleAboutPoint(m_pipBoyOwnPlacement, pivot, m_pipBoyScale);
+      // The twist bone is a rotation of the game's right-handed frame, so a
+      // positive turn about the axis towards the hand takes the screen on
+      // the back of the left wrist towards the thumb
+      placement = vrPlaceAboutAxis(m_pipBoyOwnPlacement,
+        vrClosestPointOnLine(elbow, wrist, screen), wrist - elbow,
+        m_pipBoyAngle * (3.14159265f / 180.0f), m_pipBoyScale);
     }
 
+    writeRotation(device, VrGame::ObjectLocalRotation, placement.rotate);
     writeVector(device, VrGame::ObjectLocalTranslation, placement.translate);
     field<float>(device, VrGame::ObjectLocalScale) = placement.scale;
 
     m_pipBoyWrittenPlacement = placement;
     m_pipBoyAppliedScale     = m_pipBoyScale;
+    m_pipBoyAppliedAngle     = m_pipBoyAngle;
 
     if (!m_loggedPipBoyScale && m_pipBoyScale != 1.0f) {
       Logger::info(str::format("VR: The Pip-Boy grows while it is open, up to ", m_pipBoyScale, " times its size"));
       m_loggedPipBoyScale = true;
+    }
+
+    if (!m_loggedPipBoyAngle && m_pipBoyAngle != 0.0f) {
+      Logger::info(str::format("VR: The Pip-Boy is turned ", m_pipBoyAngle, " degrees about the forearm"));
+      m_loggedPipBoyAngle = true;
     }
   }
 

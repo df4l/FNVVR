@@ -339,6 +339,19 @@ namespace dxvk {
     }
 
     /**
+     * \brief Turns the Pip-Boy about the forearm
+     *
+     * The Pip-Boy turns about the forearm's axis, its screen from the back
+     * of the wrist towards the thumb, so that it faces the eyes with less
+     * roll of the wrist. Applied when the model is next drawn.
+     *
+     * \param [in] degrees Angle, 0 for the game's placement
+     */
+    void setPipBoyAngle(float degrees) {
+      m_pipBoyAngle = degrees;
+    }
+
+    /**
      * \brief Blade of the melee weapon in the right hand
      *
      * Measured from the weapon's bound once the game has settled the weapon
@@ -765,15 +778,17 @@ namespace dxvk {
     VrVector3        m_pipBoyScreenNormal;
     bool             m_hasPipBoyScreen = false;
 
-    // Size asked for the Pip-Boy, and the model it was applied to with the
-    // model's own placement, compared but only dereferenced once found in
-    // the model again. The written placement tells whether the game has
-    // placed the model again since.
+    // Size and turn asked for the Pip-Boy, and the model they were applied
+    // to with the model's own placement, compared but only dereferenced once
+    // found in the model again. The written placement tells whether the game
+    // has placed the model again since.
     float            m_pipBoyScale = 1.0f;
+    float            m_pipBoyAngle = 0.0f;
     uint8_t*         m_pipBoyDevice = nullptr;
-    VrNodeScale      m_pipBoyOwnPlacement;
-    VrNodeScale      m_pipBoyWrittenPlacement;
+    VrNodePlacement  m_pipBoyOwnPlacement;
+    VrNodePlacement  m_pipBoyWrittenPlacement;
     float            m_pipBoyAppliedScale = 1.0f;
+    float            m_pipBoyAppliedAngle = 0.0f;
 
     // Muzzle relative to the first-person root, its rotation, and the
     // direction the hand pointed, when the weapon was last drawn in the hand
@@ -1091,6 +1106,7 @@ namespace dxvk {
     bool             m_loggedFist = false;
     bool             m_loggedScreen = false;
     bool             m_loggedPipBoyScale = false;
+    bool             m_loggedPipBoyAngle = false;
     bool             m_loggedAutoAim = false;
 
     // Objects culled by the VR layer, compared but not dereferenced until
@@ -1227,7 +1243,7 @@ namespace dxvk {
 
     void measurePipBoyScreen(const PipBoyNodes& nodes);
 
-    void scalePipBoy(const PipBoyNodes& nodes);
+    void placePipBoy(const PipBoyNodes& nodes);
 
     void updateGrip(GripKind kind, bool canHold, const VrVector3& support);
 

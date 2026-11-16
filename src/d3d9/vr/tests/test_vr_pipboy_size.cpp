@@ -39,14 +39,17 @@ TEST_CASE(closest_point_on_line_projects_onto_the_axis) {
 
 
 TEST_CASE(scaling_about_a_point_keeps_the_point) {
-  VrNodeScale node = { { 2.0f, -1.0f, 0.5f }, 1.5f };
+  VrNodePlacement node;
+  node.translate = { 2.0f, -1.0f, 0.5f };
+  node.scale     = 1.5f;
   VrVector3 pivot  = { 3.0f, 0.0f, 0.0f };
+  VrVector3 axis   = { 1.0f, 0.0f, 0.0f };
 
-  VrNodeScale scaled = vrScaleAboutPoint(node, pivot, 2.0f);
+  VrNodePlacement scaled = vrPlaceAboutAxis(node, pivot, axis, 0.0f, 2.0f);
   CHECK_NEAR(scaled.scale, 3.0f, 1e-6);
 
-  // A node point x (rotation left out, identity) lands at s * x + t: the
-  // node point at the pivot stays there, others move away by the factor
+  // A node point x (rotation identity) lands at s * x + t: the node point
+  // at the pivot stays there, others move away by the factor
   VrVector3 atPivot = { (pivot.x - node.translate.x) / node.scale,
                         (pivot.y - node.translate.y) / node.scale,
                         (pivot.z - node.translate.z) / node.scale };
@@ -58,10 +61,40 @@ TEST_CASE(scaling_about_a_point_keeps_the_point) {
   CHECK_NEAR(scaled.translate.x, 1.0f, 1e-6);
   CHECK_NEAR(scaled.translate.y, -2.0f, 1e-6);
 
-  // The factor 1 leaves the node alone
-  VrNodeScale same = vrScaleAboutPoint(node, pivot, 1.0f);
+  // No turn and the factor 1 leave the node alone
+  VrNodePlacement same = vrPlaceAboutAxis(node, pivot, axis, 0.0f, 1.0f);
   CHECK_NEAR(same.translate.x, node.translate.x, 1e-6);
+  CHECK_NEAR(same.translate.y, node.translate.y, 1e-6);
   CHECK_NEAR(same.scale, node.scale, 1e-6);
+  CHECK_NEAR(same.rotate.m[0][0], 1.0f, 1e-6);
+}
+
+
+TEST_CASE(turning_about_an_axis_keeps_the_distance_to_it) {
+  // A node 2 units to the left (-x) of an axis along -z through (0, 1, 0)
+  VrNodePlacement node;
+  node.translate = { -2.0f, 1.0f, 5.0f };
+  VrVector3 pivot = { 0.0f, 1.0f, 0.0f };
+  VrVector3 axis  = { 0.0f, 0.0f, -3.0f };
+
+  // A quarter turn about -z by the right-hand rule takes the left side up
+  VrNodePlacement turned = vrPlaceAboutAxis(node, pivot, axis, 3.14159265f * 0.5f, 1.0f);
+  CHECK_NEAR(turned.translate.x, 0.0f, 1e-5);
+  CHECK_NEAR(turned.translate.y, 3.0f, 1e-5);
+  CHECK_NEAR(turned.translate.z, 5.0f, 1e-5);
+  CHECK_NEAR(turned.scale, 1.0f, 1e-6);
+
+  // The node turns with it: its -x axis now points up
+  VrVector3 left = turned.rotate * VrVector3 { -1.0f, 0.0f, 0.0f };
+  CHECK_NEAR(left.x, 0.0f, 1e-5);
+  CHECK_NEAR(left.y, 1.0f, 1e-5);
+  CHECK_NEAR(left.z, 0.0f, 1e-5);
+
+  // Turned and grown: twice as far from the axis
+  VrNodePlacement grown = vrPlaceAboutAxis(node, pivot, axis, 3.14159265f * 0.5f, 2.0f);
+  CHECK_NEAR(grown.translate.y, 5.0f, 1e-5);
+  CHECK_NEAR(grown.translate.z, 10.0f, 1e-5);
+  CHECK_NEAR(grown.scale, 2.0f, 1e-6);
 }
 
 

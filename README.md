@@ -77,6 +77,7 @@ Settings are read from `dxvk.conf` next to the executable. The main VR options a
 | `d3d9.vrSnapTurnAngle` | 30 | Snap turn step, in degrees. |
 | `d3d9.vrSmoothTurnSpeed` | 120 | Smooth turn speed, in degrees per second. Can be changed in the game, in Settings > VR (30 to 360 in steps of 30); saved in `fnvvr/vr_options.ini`, which overrides this option. |
 | `d3d9.vrPipBoyScale` | 1 | Size the Pip-Boy grows to while it is open (1 to 2), for players who cannot read it at the game's size; it goes back to its size when it closes. Can be changed in the game, in Settings > VR > Pip-Boy size (Normal, 125% to 200%); saved in `fnvvr/vr_options.ini`, which overrides this option. |
+| `d3d9.vrPipBoyAngle` | 0 | Turns the Pip-Boy about the forearm, its screen from the back of the wrist towards the thumb, in degrees (0 to 90), so that it faces the eyes with less wrist roll: controllers without tracking rings (Quest 3) lose tracking when rolled. Can be changed in the game, in Settings > VR > Pip-Boy angle (Normal, 15 to 90); saved in `fnvvr/vr_options.ini`, which overrides this option. |
 | `d3d9.vrWeaponInHand` | on | Draws the first-person weapon in the right hand and shoots along it. |
 | `d3d9.vrHeadsetResolution` | on | Renders at the headset's eye height and at least 4:3 width. |
 | `d3d9.vrHideGamepad` | on | Hides real gamepads from the game while a headset backend is used. |
