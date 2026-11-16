@@ -1263,6 +1263,9 @@ namespace dxvk {
     if (m_seated) {
       hidePlayerBody();
 
+      if (m_kind == Kind::SlotMachine)
+        showSeatedHands();
+
       // The world runs behind the casino's games, and people walk
       if (!m_actorsWait) {
         m_actorsWait = ActorsCheckFrames;
@@ -1486,6 +1489,32 @@ namespace dxvk {
   }
 
 
+  void VrMinigames::showSeatedHands() {
+    // The seated player is in third person, whose first-person model the
+    // game culls: it then skips the first-person pass (bRenderHands), and
+    // the hands that pull the lever would not be drawn. Show1stPerson
+    // rewrites the flag on every view switch, so it is cleared every frame.
+    auto player = global<uint8_t*>(VrGame::Player);
+    auto root   = player ? field<uint8_t*>(player, VrGame::PlayerFirstPersonRoot) : nullptr;
+
+    if (!root)
+      return;
+
+    auto flags = reinterpret_cast<uint32_t*>(root + VrGame::ObjectFlags);
+
+    if (!(*flags & VrGame::ObjectFlagAppCulled))
+      return;
+
+    *flags &= ~VrGame::ObjectFlagAppCulled;
+
+    if (!m_handsShown) {
+      m_handsShown = flags;
+      keep(root);
+      Logger::info("VR: The first-person hands are drawn while the player is seated at the slot machine");
+    }
+  }
+
+
   void VrMinigames::updateActorsInTheWay(bool logActors) {
     auto actors = global<const uintptr_t*>(VrGame::ProcessActors);
     auto end    = global<uint32_t>(VrGame::ProcessHighEnd);
@@ -1570,6 +1599,12 @@ namespace dxvk {
       *m_bodyHidden &= ~VrGame::ObjectFlagAppCulled;
 
     m_bodyHidden = nullptr;
+
+    // Culled again only if the view is still the game's third person
+    if (m_handsShown && player && field<uint8_t>(player, VrGame::PlayerCurrentThirdPerson))
+      *m_handsShown |= VrGame::ObjectFlagAppCulled;
+
+    m_handsShown = nullptr;
 
     for (void*& object : m_kept)
       game<AssignFn>(VrGame::NiPointerAssign)(&object, nullptr);

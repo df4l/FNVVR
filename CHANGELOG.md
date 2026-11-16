@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Mini-games
+
+- **Hands at the slot machines with a stool**: sitting down at a slot machine (the Tops' among others) hid both hands, so the lever could not be seen in the hand. They are drawn again while seated.
+
 ## v0.19.1 (2026-11-15, since v0.19.0 `bbce83a`)
 
 ### Performance
