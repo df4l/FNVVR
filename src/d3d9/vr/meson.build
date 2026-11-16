@@ -143,6 +143,7 @@ vr_dxvk_src = files([
   'vr_hand_throw.cpp',
   'vr_preview_window.cpp',
   'vr_render_passes.cpp',
+  'vr_repeated_passes.cpp',
   'vr_sky_anchor.cpp',
   'vr_tree_leaves.cpp',
   'vr_stereo_renderer.cpp',

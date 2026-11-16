@@ -545,6 +545,53 @@ namespace dxvk {
       0xF7, 0xD8, 0xD9, 0x04, 0x85, 0x0C, 0x94, 0x1F, 0x01, 0x5D, 0xC3 };
 
     /**
+     * Work of the world render that follows the frame's time or does not
+     * depend on the view, see findings/stereo-passes.md. The world is drawn
+     * for each eye and for a scope's lens; the passes after the left eye's
+     * see no time passing and skip that work:
+     * - BSFadeNode::OnVisible (0x00B4E490) fades a node in or out by the game
+     *   timer's step (float at AppTimer + TimerStepAfterMultiplier), read by
+     *   the 6-byte fld instructions at FadeStepReadSites;
+     * - Main::Swap adds BSTimer::GetRealTimeSeconds (__thiscall on the timer,
+     *   returns a float) to the time the black loading fader has been shown,
+     *   at SwapFaderTimeCallSite, and takes a screenshot when its key is
+     *   pressed (ScreenShot::TakeScreenShot, __cdecl: name) at
+     *   SwapScreenshotCallSite;
+     * - TESWaterSystem::UpdateWaterSystem (0x004E1BC0) calls
+     *   UpdateActorsInWater, which keeps each wading actor's last position,
+     *   and UpdateWaterSounds (both __thiscall on the water system);
+     * - TESWaterSystem::UpdateWaterDisplacementSimulation (0x004E8EC0) draws
+     *   the wading stencil (RenderDisplacementWaterStencil, __thiscall), adds
+     *   each wading actor's offsets to two arrays (BSSimpleArray::Add,
+     *   __thiscall: item) and runs the displacement effect, which applies
+     *   the wading force and empties the arrays (ImageSpaceManager::
+     *   RenderEffect, __thiscall: effect, renderer, two textures, parameter,
+     *   flag);
+     * - TESWaterSystem::UpdateWaterNoise (0x004E3D60) draws each water type's
+     *   noise normal map with ImageSpaceManager::RenderEffect_2 (same
+     *   arguments).
+     */
+    constexpr uintptr_t TimerStepAfterMultiplier      = 0x0C;
+    constexpr uintptr_t FadeStepReadSites[]           = { 0x00B4E4DB, 0x00B4E85E, 0x00B4E945 };
+    constexpr uint8_t   FadeStepRead[]                = { 0xD9, 0x05, 0xA0, 0x63, 0x1F, 0x01 };
+    constexpr uintptr_t SwapFaderTimeCallSite         = 0x008700D2;
+    constexpr uintptr_t TimerRealTimeSeconds          = 0x007013E0;
+    constexpr uintptr_t SwapScreenshotCallSite        = 0x00870545;
+    constexpr uintptr_t TakeScreenshot                = 0x00878860;
+    constexpr uintptr_t WaterActorsCallSite           = 0x004E1FEC;
+    constexpr uintptr_t WaterUpdateActors             = 0x004E8A00;
+    constexpr uintptr_t WaterSoundsCallSite           = 0x004E1FFC;
+    constexpr uintptr_t WaterUpdateSounds             = 0x004E6A80;
+    constexpr uintptr_t WaterDisplaceStencilCallSite  = 0x004E8F49;
+    constexpr uintptr_t WaterDisplaceStencil          = 0x004E9550;
+    constexpr uintptr_t WaterDisplaceAddCallSites[]   = { 0x004E93AC, 0x004E93BD };
+    constexpr uintptr_t SimpleArrayAdd                = 0x006DB840;
+    constexpr uintptr_t WaterDisplaceRenderCallSite   = 0x004E9424;
+    constexpr uintptr_t ImageSpaceRenderEffect        = 0x00B97550;
+    constexpr uintptr_t WaterNoiseRenderCallSite      = 0x004E43FD;
+    constexpr uintptr_t ImageSpaceRenderEffect2       = 0x00B975F0;
+
+    /**
      * FaderManager::kFaders: three entries of 0x1C bytes, the black fader
      * below the menus, the black one above them and the white one. An entry
      * is shown while its root node (+0x10) is set; the alpha (float) is at

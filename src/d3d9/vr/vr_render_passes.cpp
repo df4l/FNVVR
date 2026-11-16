@@ -132,12 +132,6 @@ namespace dxvk {
       Logger::info("VR: Shadow maps are drawn once per frame for both eyes");
 
     std::unique_ptr<VrRenderPasses> passes(new VrRenderPasses(used, std::move(view)));
-    passes->m_waterTimeStepFound = VrGameMemory::matches(VrGame::ShaderGetTimer,
-      VrGame::ShaderGetTimerCode, sizeof(VrGame::ShaderGetTimerCode));
-
-    if (!passes->m_waterTimeStepFound)
-      Logger::info("VR: The shader timers were not found, the water moves once per eye");
-
     passes->m_scissorFound = VrGameMemory::callsTo(VrGame::EnableScissorCallSite, VrGame::EnableFullScreenScissor)
                           && VrGameMemory::callsTo(VrGame::DisableScissorCallSite, VrGame::DisableFullScreenScissor);
     g_renderPasses = passes.get();
@@ -149,10 +143,8 @@ namespace dxvk {
     m_eye      = eye;
     m_eyeStart = high_resolution_clock::now();
 
-    if (eye == 0) {
+    if (eye == 0)
       m_shadowsDrawnForLeft = false;
-      m_waterDrawnForLeft   = false;
-    }
   }
 
 
@@ -250,32 +242,6 @@ namespace dxvk {
   }
 
 
-  template<typename Fn>
-  uintptr_t VrRenderPasses::runWater(Fn&& fn) {
-    // The water pass adds the frame's time step to the water's noise scroll,
-    // its displacement simulation and its ripple timer each time it runs.
-    // The right eye repeats the pass with no time passing, or the water
-    // would move twice as fast and differ between the eyes.
-    bool repeat = m_eye == 1 && m_waterDrawnForLeft && m_waterTimeStepFound;
-
-    auto& timeStep = *reinterpret_cast<float*>(VrGame::ShaderTimeStep);
-    float frameStep = timeStep;
-
-    if (repeat)
-      timeStep = 0.0f;
-
-    uintptr_t result = runPass(VrRenderPass::Water, std::forward<Fn>(fn));
-
-    if (repeat)
-      timeStep = frameStep;
-
-    if (m_eye == 0)
-      m_waterDrawnForLeft = true;
-
-    return result;
-  }
-
-
   void VrRenderPasses::beginWorld() {
     if (m_eye == NoEye || m_inWorld)
       return;
@@ -328,7 +294,7 @@ namespace dxvk {
     if (!g_renderPasses)
       return original(main, nullptr);
 
-    return g_renderPasses->runWater(
+    return g_renderPasses->runPass(VrRenderPass::Water,
       [&] { return original(main, nullptr); });
   }
 
