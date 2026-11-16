@@ -532,6 +532,19 @@ namespace dxvk {
     constexpr uintptr_t ReflectCameraCallSites[] = { 0x004E9E2D, 0x004EAB27, 0x004EB098 };
 
     /**
+     * BSShaderManager::fTimers: the shader timers, set once per frame by
+     * BSShaderManager::UpdateTimers (0x0086F330, from OnIdle). Entry 1 is
+     * the frame's time step, which BSShaderManager::GetTimer(true) returns:
+     * the water noise scroll, the water displacement simulation and the
+     * ripple timer of the water pass add it each time they run.
+     */
+    constexpr uintptr_t ShaderTimeStep    = 0x011F9410;
+    constexpr uintptr_t ShaderGetTimer    = 0x00452E70;
+    constexpr uint8_t   ShaderGetTimerCode[] = {
+      0x55, 0x8B, 0xEC, 0x0F, 0xB6, 0x45, 0x08, 0xF7, 0xD8, 0x1B, 0xC0,
+      0xF7, 0xD8, 0xD9, 0x04, 0x85, 0x0C, 0x94, 0x1F, 0x01, 0x5D, 0xC3 };
+
+    /**
      * FaderManager::kFaders: three entries of 0x1C bytes, the black fader
      * below the menus, the black one above them and the white one. An entry
      * is shown while its root node (+0x10) is set; the alpha (float) is at

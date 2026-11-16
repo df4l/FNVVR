@@ -163,6 +163,9 @@ namespace dxvk {
     bool     m_shadowsDrawnForLeft = false;
     uint32_t m_shadowsReused       = 0;
 
+    bool     m_waterTimeStepFound  = false;
+    bool     m_waterDrawnForLeft   = false;
+
     template<typename Fn>
     uintptr_t runPass(VrRenderPass pass, Fn&& fn);
 
@@ -171,6 +174,9 @@ namespace dxvk {
 
     template<typename Fn>
     uintptr_t runScene(Fn&& fn);
+
+    template<typename Fn>
+    uintptr_t runWater(Fn&& fn);
 
     void beginWorld();
 
