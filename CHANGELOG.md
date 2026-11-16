@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Water and performance
+
+- **Water reflections lined up with the headset**: the reflections were read about 4.5 degrees too high with the eye's asymmetric view, so distant water reflected the hazy sky instead of the shore, turned grey beyond a fixed distance and moved with the head. They now match what is above the water.
+- **Water animated once per frame**: the water moved twice as fast as on a flat screen, and each eye saw a different step of it. It now advances once per frame.
+- **Work no longer repeated in the right eye and in scopes**: object fades, light and shadow fades, the eyes' adaptation to light, the loading screen's fader and the water's time-based work ran two or three times per frame (right eye, scope lens). They run once. The right eye also skips work that does not depend on the view (wading actors, the wading stencil effect, water sounds, the water noise map).
+
+### Hands and controls
+
+- **Settings > VR > Pip-Boy angle**: turns the Pip-Boy about your forearm (Normal, 15 to 90 degrees, `d3d9.vrPipBoyAngle`), so the screen faces your eyes with less wrist roll. Meant for controllers without tracking rings (Quest 3), which lose tracking when the wrist is rolled. The gaze and the light reach follow the drawn screen.
+
+### Menus
+
+- **Companion wheel with the lasers**: the laser now hovers the slice it points at, and the triggers, A and X pick an order (X under the left laser, A under the right one, as in dialogues). A press the pointer does not take stays the gamepad's A, so the stick still works.
+
+### Other mods
+
+- **Titans of the New West**: the left arm's pose, the twist bone and the Pip-Boy are found again, the mod's extra "SC Hand" node no longer being taken for the forearm.
+
 ### Mini-games
 
 - **Hands at the slot machines with a stool**: sitting down at a slot machine (the Tops' among others) hid both hands, so the lever could not be seen in the hand. They are drawn again while seated.
