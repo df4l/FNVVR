@@ -22,6 +22,7 @@
 #include "vr_game_settings.h"
 #include "vr_game_space.h"
 #include "vr_gamepad_head.h"
+#include "vr_game_hotkeys.h"
 #include "vr_gamepad_hook.h"
 #include "vr_large_address.h"
 #include "vr_live_casino.h"
@@ -216,8 +217,10 @@ namespace dxvk {
       gamepad.controllers = config.getOption<bool>("d3d9.vrControllers", true);
 
       // The controllers point at the menu panel with the game's cursor
-      if ((gamepad.hidePad || gamepad.controllers) && VrGamepadHook::install(gamepad) && gamepad.controllers)
+      if ((gamepad.hidePad || gamepad.controllers) && VrGamepadHook::install(gamepad) && gamepad.controllers) {
         VrMenuCursor::install();
+        VrGameHotKeys::muteHudGamepadWheel();
+      }
     }
 
     bool weaponInHand = config.getOption<bool>("d3d9.vrWeaponInHand", true);
