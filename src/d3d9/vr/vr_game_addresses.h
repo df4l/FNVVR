@@ -3320,6 +3320,15 @@ namespace dxvk {
     constexpr uintptr_t HudHotKeyWheel             = 0x1C8;
 
     /**
+     * HUDMainMenu::UpdateHotkeysWheel (0x0077DA60) reads the D-pad in
+     * gamepad mode through HotKeyWheel::HandleHotkeyInput(-1) (__thiscall,
+     * slot, ret 4): a direction held arms the wheel, its release equips or
+     * unequips the slot's item. See findings/quick-menu.md §2.
+     */
+    constexpr uintptr_t HotKeyWheelHandleInput     = 0x00701BD0;
+    constexpr uintptr_t HudHotKeyInputCallSite     = 0x0077DAE9;
+
+    /**
      * The Pip-Boy's inventory, see findings/quick-menu.md §3: whether a menu
      * is the top one (__cdecl, menu id), the InventoryMenu and its hotkey
      * wheel, shown while the gamepad's hotkey button (RB) is held.

@@ -54,6 +54,13 @@ namespace dxvk {
       return { address, prologue, N };
     }
 
+    // Replaces HotKeyWheel::HandleHotkeyInput(-1) in the HUD's update: what
+    // the game does with the D-pad at rest
+    int32_t __fastcall restingHudWheelInput(uint8_t* wheel, void*, int32_t) {
+      reinterpret_cast<WheelSelectFn>(VrGame::HotKeyWheelSelect)(wheel, nullptr, -1);
+      return -1;
+    }
+
   }
 
 
@@ -170,6 +177,21 @@ namespace dxvk {
 
     return menu && (reinterpret_cast<WheelVisibleFn>(VrGame::HotKeyWheelVisible)(
       menu + VrGame::InventoryMenuHotKeyWheel, nullptr) & 0xFF);
+  }
+
+
+
+  bool VrGameHotKeys::muteHudGamepadWheel() {
+    if (!VrGameMemory::matches(VrGame::HotKeyWheelSelect,
+        VrGame::HotKeyWheelSelectPrologue, sizeof(VrGame::HotKeyWheelSelectPrologue))
+     || !VrGameMemory::redirectCall(VrGame::HudHotKeyInputCallSite, VrGame::HotKeyWheelHandleInput,
+        reinterpret_cast<const void*>(&restingHudWheelInput))) {
+      Logger::warn("VR: The HUD's hotkey wheel call was not found, a D-pad press left over from a menu can change the equipped item");
+      return false;
+    }
+
+    Logger::info("VR: The HUD's hotkey wheel no longer reads the D-pad, the quick wheel uses the hotkeys");
+    return true;
   }
 
 }
