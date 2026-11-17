@@ -2557,6 +2557,28 @@ namespace dxvk {
     constexpr uint8_t   FileFinderGetFilePrologue[] = { 0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x95, 0x37, 0xF2, 0x00 };
 
     /**
+     * The archive lookup of the game's texture loader (QueuedFileEntry::
+     * LookupFileEntry 0x00C3CF60 then QueuedFileEntry::GetFile 0x00C3CFF0),
+     * see findings/optics.md §15. FileFinder::GetFile skips an archive entry
+     * whose offset has bit 31 set (Archive::CheckValidFile 0x00AFB2A0 with
+     * abSkipSecondaryArchiveCheck 0), this lookup does not.
+     * BsHashMakeDirAndFile: __cdecl (path, directory hash, file hash), each
+     * hash BsHashSize bytes. ArchiveEntryForFile: __cdecl (archive type
+     * index, directory hash, file hash, path), tests the archives whose
+     * type has bit (1 << index), returns a BSFileEntry* or null.
+     * ArchiveFileForEntry: __cdecl (archive type index, entry, buffer size,
+     * name null), returns an ArchiveFile*, a BSFile like FileFinderGetFile's.
+     */
+    constexpr uintptr_t BsHashMakeDirAndFile = 0x00AFD270;
+    constexpr uintptr_t ArchiveEntryForFile  = 0x00AF6540;
+    constexpr uintptr_t ArchiveFileForEntry  = 0x00AF6340;
+    constexpr uint32_t  BsHashSize           = 8;
+    constexpr uint32_t  ArchiveDefaultBuffer = 0xFFFFFFFF;
+    constexpr uint8_t   BsHashMakeDirAndFilePrologue[] = { 0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x40, 0x02, 0x00, 0x00 };
+    constexpr uint8_t   ArchiveEntryForFilePrologue[]  = { 0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x91, 0x33, 0xF2, 0x00 };
+    constexpr uint8_t   ArchiveFileForEntryPrologue[]  = { 0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x4B, 0x33, 0xF2, 0x00 };
+
+    /**
      * Menu tile internals (VrTileTextureRetry), see findings/pipboy.md §3.7.
      * Tile: vtable slot 3 (+0x0C) is GetType (__thiscall, 0x386 = image),
      * children list head at +0x04 (node: next at +0, Tile* at +8), name

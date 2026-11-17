@@ -1,3 +1,6 @@
+#include <cstring>
+#include <string>
+
 #include "../../util/log/log.h"
 #include "../../util/util_string.h"
 
@@ -13,6 +16,9 @@ namespace dxvk {
     using SizeFn    = uint32_t (__fastcall*)(void* file, void* unused);
     using ReadFn    = uint32_t (__cdecl*)(void* file, void* buffer, uint32_t bytes, uint32_t* sizes, uint32_t count);
     using DestroyFn = void (__fastcall*)(void* file, void* unused, uint32_t free);
+    using HashFn    = void (__cdecl*)(char* path, void* directoryHash, void* fileHash);
+    using EntryFn   = void* (__cdecl*)(uint32_t typeIndex, void* directoryHash, void* fileHash, char* path);
+    using EntryFileFn = void* (__cdecl*)(uint32_t typeIndex, void* entry, uint32_t bufferSize, const char* name);
 
     // Larger files are not among the ones the VR layer reads
     constexpr uint32_t MaxFileSize = 64u << 20;
@@ -31,6 +37,47 @@ namespace dxvk {
       method<DestroyFn>(file, 0)(file, nullptr, 1);
     }
 
+    bool hasArchiveLookup() {
+      return VrGameMemory::matches(VrGame::BsHashMakeDirAndFile,
+          VrGame::BsHashMakeDirAndFilePrologue, sizeof(VrGame::BsHashMakeDirAndFilePrologue))
+        && VrGameMemory::matches(VrGame::ArchiveEntryForFile,
+          VrGame::ArchiveEntryForFilePrologue, sizeof(VrGame::ArchiveEntryForFilePrologue))
+        && VrGameMemory::matches(VrGame::ArchiveFileForEntry,
+          VrGame::ArchiveFileForEntryPrologue, sizeof(VrGame::ArchiveFileForEntryPrologue));
+    }
+
+    // The texture loader's lookup: the first archive of the type holding
+    // the file, as FileFinder::GetFile, but without its test of bit 31 of
+    // the entry's offset, which can hide a file the game itself shows
+    void* openFromArchives(const char* path, uint32_t archiveType) {
+      if (!archiveType || (archiveType & (archiveType - 1u)) || !hasArchiveLookup())
+        return nullptr;
+
+      uint32_t typeIndex = 0;
+
+      while (!(archiveType & (1u << typeIndex)))
+        typeIndex += 1;
+
+      // Archive paths start below the Data folder
+      std::string name = path;
+
+      if (name.size() > 5 && !_strnicmp(name.c_str(), "Data\\", 5))
+        name.erase(0, 5);
+
+      uint8_t directoryHash[VrGame::BsHashSize];
+      uint8_t fileHash[VrGame::BsHashSize];
+      reinterpret_cast<HashFn>(VrGame::BsHashMakeDirAndFile)(&name[0], directoryHash, fileHash);
+
+      void* entry = reinterpret_cast<EntryFn>(VrGame::ArchiveEntryForFile)(
+        typeIndex, directoryHash, fileHash, &name[0]);
+
+      if (!entry)
+        return nullptr;
+
+      return reinterpret_cast<EntryFileFn>(VrGame::ArchiveFileForEntry)(
+        typeIndex, entry, VrGame::ArchiveDefaultBuffer, nullptr);
+    }
+
   }
 
 
@@ -41,8 +88,12 @@ namespace dxvk {
         VrGame::FileFinderGetFilePrologue, sizeof(VrGame::FileFinderGetFilePrologue)))
       return false;
 
-    void* file = reinterpret_cast<GetFileFn>(VrGame::FileFinderGetFile)(
-      path, VrGame::FileReadOnly, VrGame::FileBufferSize, archiveType);
+    void* file = openFromArchives(path, archiveType);
+
+    if (!file) {
+      file = reinterpret_cast<GetFileFn>(VrGame::FileFinderGetFile)(
+        path, VrGame::FileReadOnly, VrGame::FileBufferSize, archiveType);
+    }
 
     if (!file)
       return false;

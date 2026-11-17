@@ -8,8 +8,9 @@ namespace dxvk {
   /**
    * \brief Reads the game's data files
    *
-   * Files are looked up as the game looks them up: loose in the Data
-   * folder, then in the loaded archives, which the game decompresses.
+   * Files are looked up as the game's texture loader looks them up: in
+   * the loaded archives, which the game decompresses, then loose in the
+   * Data folder.
    * Paths are relative to the game's folder, such as
    * "Data\\Textures\\Terminals\\terminal01.dds". See findings/console.md §7.
    *
