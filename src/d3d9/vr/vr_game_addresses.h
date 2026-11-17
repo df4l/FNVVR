@@ -4095,6 +4095,27 @@ namespace dxvk {
     constexpr uint32_t  WeaponFlag2ModScope          = 0x2000;
     constexpr uintptr_t SettingDefaultWorldFov       = 0x0120315C;
 
+    /**
+     * The model loader's delayed reference queue, see findings/performance.md
+     * (B4). Found in the GOG database, code identical to the Steam build.
+     *
+     * - ModelLoaderUpdateReferences: ModelLoader::UpdateReferencesToQueue,
+     *   __thiscall, walks every bucket of pDelayedQueue (5039) and returns
+     *   true once the walk is finished. Called by the IO manager's secondary
+     *   queue callback (ModelLoader::UpdateSecondaryQueueCallback 0x00446E40)
+     *   at ModelLoaderUpdateReferencesCallSite.
+     * - ModelLoaderDelayedQueue: ModelLoader + 0x0C, a
+     *   LockFreeMap<TESObjectREFR*, NiPointer<QueuedReference>>.
+     * - LockFreeMapCount: uiCount (+0x18), incremented by every insertion
+     *   once the node is linked (SetAt 0x0044D070) and decremented by every
+     *   removal once it is unlinked (RemoveAt 0x00528CE0), reset by RemoveAll.
+     */
+    constexpr uintptr_t ModelLoaderUpdateReferences         = 0x00448CC0;
+    constexpr uintptr_t ModelLoaderUpdateReferencesCallSite = 0x00446E62;
+    constexpr uintptr_t ModelLoaderDelayedQueue             = 0x0C;
+    constexpr uintptr_t LockFreeMapCount                    = 0x18;
+    constexpr uint8_t   ModelLoaderUpdateReferencesPrologue[] = { 0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x40, 0xCD, 0xEE, 0x00 };
+
   }
 
 }
