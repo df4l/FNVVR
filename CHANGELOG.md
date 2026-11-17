@@ -11,6 +11,7 @@
 
 ### Hands and controls
 
+- **No more weapon changes after menus**: closing a dialogue, the inventory or a container with the left stick still pushed could unequip the weapon or equip another hotkey item, because the game's own hotkey wheel read the menu's list navigation as a D-pad press. That wheel no longer reads the D-pad with the VR controllers; the quick wheel is unchanged.
 - **Settings > VR > Pip-Boy angle**: turns the Pip-Boy about your forearm (Normal, 15 to 90 degrees, `d3d9.vrPipBoyAngle`), so the screen faces your eyes with less wrist roll. Meant for controllers without tracking rings (Quest 3), which lose tracking when the wrist is rolled. The gaze and the light reach follow the drawn screen.
 
 ### Menus
