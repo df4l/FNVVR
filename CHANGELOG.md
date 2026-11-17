@@ -7,6 +7,7 @@
 - **Water reflections lined up with the headset**: the reflections were read about 4.5 degrees too high with the eye's asymmetric view, so distant water reflected the hazy sky instead of the shore, turned grey beyond a fixed distance and moved with the head. They now match what is above the water.
 - **Water animated once per frame**: the water moved twice as fast as on a flat screen, and each eye saw a different step of it. It now advances once per frame.
 - **Work no longer repeated in the right eye and in scopes**: object fades, light and shadow fades, the eyes' adaptation to light, the loading screen's fader and the water's time-based work ran two or three times per frame (right eye, scope lens). They run once. The right eye also skips work that does not depend on the view (wading actors, the wading stencil effect, water sounds, the water noise map).
+- **Model loader idle cost**: every frame the game walked its 5039-slot queue of delayed models even when it was empty. The walk is now skipped when the queue holds nothing (same result, a little less time on the game thread).
 
 ### Hands and controls
 
