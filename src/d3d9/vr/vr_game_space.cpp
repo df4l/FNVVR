@@ -262,6 +262,14 @@ namespace dxvk {
   }
 
 
+  VrGameFrustum vrComputeReflectionFrustum(const VrGameFrustum& frustum) {
+    VrGameFrustum mirrored = frustum;
+    mirrored.top    = -frustum.bottom;
+    mirrored.bottom = -frustum.top;
+    return mirrored;
+  }
+
+
   VrGameCameraPose vrComputeMenuSceneCameraPose(
     const VrPose&           anchor,
     const VrPose&           eye,
@@ -345,6 +353,12 @@ namespace dxvk {
       return VrInterfaceMinAspect;
 
     return std::min(double(width) / double(height), double(VrInterfaceMinAspect));
+  }
+
+
+  double vrComputeRadialPickScaleY(uint32_t width, uint32_t height) {
+    // Window aspect over interface aspect: 1 on a window 4:3 or wider
+    return vrComputeRenderedMenuPickAspect(width, height) / double(VrInterfaceMinAspect);
   }
 
 

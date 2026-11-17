@@ -118,6 +118,15 @@ namespace dxvk {
     }
 
     /**
+     * \brief Keeps the left stick from moving the player in the game
+     *
+     * \param [in] held Whether an animation the move would end is playing
+     */
+    void setMoveHeld(bool held) {
+      m_moveHeld = held;
+    }
+
+    /**
      * \brief Adds a mini-game's physical controls to the virtual gamepad
      *
      * Applied in menus from the next update on.
@@ -160,6 +169,17 @@ namespace dxvk {
      */
     void setDialogueShown(bool shown) {
       m_dialogueShown = shown;
+    }
+
+    /**
+     * \brief Makes A and X click with the right and left lasers
+     *
+     * \param [in] shown Whether the companion wheel is shown, where A
+     *    clicks under the right laser and X under the left one, as their
+     *    triggers do. Away from the wheel's options A stays the gamepad's.
+     */
+    void setCompanionWheelShown(bool shown) {
+      m_companionWheelShown = shown;
     }
 
     /**
@@ -345,11 +365,13 @@ namespace dxvk {
     bool                        m_swingsWithHand = false;
     bool                        m_handsFree      = false;
     bool                        m_rightStickTaken = false;
+    bool                        m_moveHeld        = false;
     VrMinigamePad               m_minigamePad;
     const VrPanelPlacement*     m_pointerSurface = nullptr;
     VrPointerSurfaceState       m_pointerSurfaceState;
     bool                        m_hotKeyWheelShown = false;
     bool                        m_dialogueShown = false;
+    bool                        m_companionWheelShown = false;
     bool                        m_menuBack = false;
     bool                        m_menuBackDown = false;
 

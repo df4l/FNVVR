@@ -20,14 +20,20 @@ namespace dxvk {
   }
 
 
-  VrNodeScale vrScaleAboutPoint(
-    const VrNodeScale&          node,
+  VrNodePlacement vrPlaceAboutAxis(
+    const VrNodePlacement&      node,
     const VrVector3&            pivot,
+    const VrVector3&            axis,
+          float                 radians,
           float                 factor) {
-    // A point x of the node is at R * s * x + t in the parent. Scaled
-    // about the pivot it goes to pivot + factor * (R * s * x + t - pivot).
-    VrNodeScale result;
-    result.translate = node.translate * factor + pivot * (1.0f - factor);
+    // A point x of the node is at R * s * x + t in the parent. Turned by Q
+    // and scaled about the pivot it goes to
+    // pivot + factor * Q * (R * s * x + t - pivot).
+    VrGameRotation turn = vrGameRotationFromQuaternion(vrQuaternionFromAxisAngle(axis, radians));
+
+    VrNodePlacement result;
+    result.rotate    = turn * node.rotate;
+    result.translate = pivot + (turn * (node.translate - pivot)) * factor;
     result.scale     = node.scale * factor;
     return result;
   }

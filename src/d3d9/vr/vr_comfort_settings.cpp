@@ -13,6 +13,8 @@ namespace dxvk {
 
     using SetFirstPersonFn = void (__thiscall*)(uintptr_t player, uint8_t first);
 
+    using Show1stPersonFn = void (__thiscall*)(uintptr_t player, uint8_t first);
+
     // Actor::IsDead, __thiscall with a bool, returns a bool in AL
     using IsDeadFn = uint32_t (__thiscall*)(uintptr_t actor, uint32_t notEssential);
 
@@ -29,6 +31,9 @@ namespace dxvk {
         VrGame::SetKillCamModeCallbackPrologue, sizeof(VrGame::SetKillCamModeCallbackPrologue))
       && VrGameMemory::matches(VrGame::SetFirstPerson,
         VrGame::SetFirstPersonPrologue, sizeof(VrGame::SetFirstPersonPrologue))
+      && VrGameMemory::matches(VrGame::Show1stPerson,
+        VrGame::Show1stPersonPrologue, sizeof(VrGame::Show1stPersonPrologue))
+      && VrGameMemory::readable(VrGame::VanityModeActive, sizeof(uint8_t))
       && VrGameMemory::matches(VrGame::TempThirdPersonReadSite,
         VrGame::TempThirdPersonRead, sizeof(VrGame::TempThirdPersonRead))
       && VrGameMemory::readable(VrGame::VatsCameraState, sizeof(uint32_t))
@@ -71,8 +76,10 @@ namespace dxvk {
 
 
   void VrComfortSettings::keepFirstPerson(uintptr_t player) {
-    if (!*reinterpret_cast<const uint8_t*>(player + VrGame::PlayerWantsThirdPerson))
+    if (!*reinterpret_cast<const uint8_t*>(player + VrGame::PlayerWantsThirdPerson)) {
+      showFirstPersonModel(player);
       return;
+    }
 
     // V.A.T.S. plays some of its shots in third person, and the game shows
     // the dead player in third person
@@ -101,6 +108,39 @@ namespace dxvk {
     if (!m_loggedView) {
       Logger::info("VR: The game asked for the third-person view, the first person is put back");
       m_loggedView = true;
+    }
+  }
+
+
+  void VrComfortSettings::showFirstPersonModel(uintptr_t player) {
+    // The camera update shows the first-person model once, when the view
+    // goes back to first person. If the temporary third person of a seat
+    // is set at that moment (a seat used again while the camera was still
+    // coming back), it refuses and leaves the hands culled until the next
+    // view switch.
+    // The game only tries again under AI control.
+    auto byte = [player] (uintptr_t offset) {
+      return *reinterpret_cast<const uint8_t*>(player + offset);
+    };
+
+    if (byte(VrGame::PlayerCurrentThirdPerson)
+     || !byte(VrGame::PlayerThirdPerson)
+     || byte(VrGame::PlayerTempThirdPerson)
+     || *reinterpret_cast<const uint8_t*>(VrGame::VanityModeActive)
+     || *reinterpret_cast<const uint32_t*>(VrGame::VatsCameraState))
+      return;
+
+    auto vtable = *reinterpret_cast<const uintptr_t*>(player);
+    auto isDead = *reinterpret_cast<const IsDeadFn*>(vtable + VrGame::ActorIsDeadSlot);
+
+    if (isDead(player, 0) & 0xFF)
+      return;
+
+    reinterpret_cast<Show1stPersonFn>(VrGame::Show1stPerson)(player, 1);
+
+    if (!m_loggedModel) {
+      Logger::info("VR: The game went back to first person with the third-person model shown, the first-person one is put back");
+      m_loggedModel = true;
     }
   }
 

@@ -22,9 +22,11 @@ namespace dxvk {
    * furniture the view stays level: an animation tilting it without the head
    * is not bearable in a headset, and the headset's own rotation is added to it.
    *
-   * The same goes for the Sandman and Cannibal kills, on the same temporary
-   * third person. A knocked down player stays on the game's camera: the head
-   * of a ragdoll cannot be followed.
+   * The same goes for the Sandman kill, on the same temporary third person.
+   * Eating a corpse (Cannibal) stays on the game's camera behind the player,
+   * and the player's moves are held meanwhile: they would end it early. A
+   * knocked down player stays on the game's camera: the head of a ragdoll
+   * cannot be followed.
    *
    * In first person, scripts play their idles on the first-person skeleton,
    * such as waking up and getting out of bed at a new game, and the game's
@@ -44,6 +46,14 @@ namespace dxvk {
      * \returns \c nullptr if the executable is not the supported version
      */
     static std::unique_ptr<VrBodyView> install();
+
+    /**
+     * \brief Tells whether the player eats a corpse
+     *
+     * Called once per frame, before the controls are sent to the game: a
+     * move in the frame the eating starts would already end it.
+     */
+    void updateMoveHold();
 
     /**
      * \brief Replaces the game's camera while the body is shown
@@ -77,6 +87,10 @@ namespace dxvk {
     /// write the player's look
     bool holdsLook() const { return m_view == View::Idle; }
 
+    /// Whether the player must not move: the stick and the room would end
+    /// the eating of a corpse
+    bool holdsMove() const { return m_holdsMove; }
+
   private:
 
     VrBodyView() = default;
@@ -98,8 +112,10 @@ namespace dxvk {
     float         m_pitch       = 0.0f;
     float         m_idleLeft    = 0.0f;
     bool          m_findsIdles  = false;
+    bool          m_findsCannibal = false;
     int32_t       m_idleState   = -1;
     uint32_t      m_idleStateLogs = 0;
+    bool          m_holdsMove   = false;
     bool          m_hasView     = false;
     bool          m_headTurns   = false;
     bool          m_changed     = false;

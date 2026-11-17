@@ -55,6 +55,7 @@
 #include "vr_preview_window.h"
 #include "vr_prompt_icon.h"
 #include "vr_render_passes.h"
+#include "vr_repeated_passes.h"
 #include "vr_scope_game.h"
 #include "vr_scope_render.h"
 #include "vr_sky_anchor.h"
@@ -219,6 +220,17 @@ namespace dxvk {
      */
     void setPipBoyScale(float scale) {
       m_pipBoyScale = scale;
+    }
+
+    /**
+     * \brief Changes how far the Pip-Boy is turned about the forearm
+     *
+     * Called from the game's options page, on the game's thread.
+     *
+     * \param [in] degrees Turn towards the thumb, 0 for the game's placement
+     */
+    void setPipBoyAngle(float degrees) {
+      m_pipBoyAngle = degrees;
     }
 
     /**
@@ -537,6 +549,10 @@ namespace dxvk {
     double   m_spikeLogPeriodMs = 0.0;
     std::unique_ptr<VrRenderPasses> m_renderPasses;
 
+    // The world passes after the left eye's (right eye, scope lens) do not
+    // move time on or repeat work that does not depend on the view
+    std::unique_ptr<VrRepeatedPasses> m_repeatedPasses;
+
     // Shading at full rate only where the eyes look, see vr_foveation.h
     std::unique_ptr<VrFoveation> m_foveation;
     VrGazeHold m_gazeHold;
@@ -581,6 +597,9 @@ namespace dxvk {
     // read it at the game's size
     VrPipBoyGrowth      m_pipBoyGrowth;
     float               m_pipBoyScale = 1.0f;
+    // Turn of the Pip-Boy about the forearm, so that its screen faces the
+    // eyes with less wrist roll (controllers lose tracking when rolled)
+    float               m_pipBoyAngle = 0.0f;
     bool                m_loggedPipBoyLight = false;
 
     // Thread that runs the game's main loop, and whether Main::Swap ran

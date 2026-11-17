@@ -17,8 +17,10 @@
 #include "vr_head_hud.h"
 #include "vr_options_file.h"
 #include "vr_math.h"
+#include "vr_menu_cursor.h"
 #include "vr_stereo_renderer.h"
 #include "vr_tree_leaves.h"
+#include "vr_water_reflection.h"
 #include "vr_weapon_types.h"
 
 namespace dxvk {
@@ -371,6 +373,8 @@ namespace dxvk {
 
     renderer->m_fadersOverlaid = renderer->m_faderOverlay.initialize() && VrFaderSize::install();
 
+    VrWaterReflection::install();
+
     renderer->m_roomscale = VrRoomscale::install();
 
     if (!renderer->m_roomscale)
@@ -465,6 +469,11 @@ namespace dxvk {
       else if (renderer->m_renderPasses)
         renderer->m_renderPasses->setGpuTimer(renderer->m_gpuTimer.get());
     }
+
+    renderer->m_repeatedPasses = VrRepeatedPasses::install();
+
+    if (!renderer->m_repeatedPasses)
+      Logger::info("VR: The game's timers were not found, time moves on in every eye's world pass");
 
     if (renderer->m_renderPasses) {
       renderer->m_foveation = VrFoveation::create(device, passes.foveationZones);
@@ -629,6 +638,9 @@ namespace dxvk {
     m_paced        = false;
     m_blockedInput = false;
 
+    if (m_repeatedPasses)
+      m_repeatedPasses->beginFrame();
+
     disableStaticMenuBackground();
 
     m_tileTextureRetry.update();
@@ -744,6 +756,12 @@ namespace dxvk {
 
     float dt = float(timing.predictedPeriod) * 1e-9f;
 
+    // Eating a corpse holds the stick from this frame's controls on
+    if (m_bodyView)
+      m_bodyView->updateMoveHold();
+
+    m_controls.setMoveHeld(m_bodyView && m_bodyView->holdsMove());
+
     updateControls(input, state, true, dt);
 
     if (m_controls.switchesPipBoyLight() && !m_loggedPipBoyLight) {
@@ -783,6 +801,8 @@ namespace dxvk {
       m_heldLook = holdsLook;
     }
 
+    bool moveHeld = m_bodyView && m_bodyView->holdsMove();
+
     m_viewMoved = m_bodyView && m_bodyView->movesView();
 
     // A mini-game on an object of the world has brought the player to it. It
@@ -796,7 +816,7 @@ namespace dxvk {
 
     if (m_roomscale && m_hasReference) {
       m_roomscale->update(m_reference, m_gameCameraPose, m_hasHeadPose ? &m_headPose : nullptr,
-        state == VrGameStateKind::InGame && m_controls.cameraFollowsHead() && !m_viewMoved);
+        state == VrGameStateKind::InGame && m_controls.cameraFollowsHead() && !m_viewMoved && !moveHeld);
     }
 
     updateNpcGaze();
@@ -992,6 +1012,7 @@ namespace dxvk {
     }
 
     m_controls.setDialogueShown(stereo && m_dialogueSpeaker);
+    m_controls.setCompanionWheelShown(stereo && VrMenuCursor::companionWheelShown());
     m_controls.setTerminalPanel(m_terminal ? m_terminal->placement() : nullptr);
     m_controls.update(input, state, m_hasReference ? &m_reference : nullptr, menuPanel(), dt);
 
@@ -1153,7 +1174,16 @@ namespace dxvk {
     if (m_renderPasses)
       m_renderPasses->beginEye(eye);
 
+    // The left eye's pass moves time on for the frame
+    bool repeat = eye != 0 && m_repeatedPasses;
+
+    if (repeat)
+      m_repeatedPasses->beginRepeat();
+
     g_originalSwap(main, nullptr);
+
+    if (repeat)
+      m_repeatedPasses->endRepeat();
 
     if (m_renderPasses)
       m_renderPasses->endEye();
@@ -1319,7 +1349,14 @@ namespace dxvk {
     if (m_renderPasses)
       m_renderPasses->setSceneScissor(&m_scopeRender->area());
 
+    // Drawn before the eyes, but the left eye's pass moves time on
+    if (m_repeatedPasses)
+      m_repeatedPasses->beginRepeat();
+
     m_scopeRender->render(main);
+
+    if (m_repeatedPasses)
+      m_repeatedPasses->endRepeat();
 
     if (m_renderPasses)
       m_renderPasses->setSceneScissor(nullptr);
@@ -2177,6 +2214,7 @@ namespace dxvk {
       || (gaze.state == VrPipBoyState::Changing && m_pipBoyGaze.isLooking());
 
     m_weaponHand->setPipBoyScale(m_pipBoyGrowth.update(grown, m_pipBoyScale, dt));
+    m_weaponHand->setPipBoyAngle(m_pipBoyAngle);
   }
 
 

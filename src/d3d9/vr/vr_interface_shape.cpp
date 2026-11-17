@@ -17,6 +17,7 @@ namespace dxvk {
     using ScreenSizeFn   = int32_t  (__cdecl*)();
     using RendererSizeFn = uint32_t (__fastcall*)(void* renderer, void* unused);
     using GroupSizeFn    = uint32_t (__fastcall*)(void* group, void* unused, uint32_t index);
+    using RadialTestFn   = bool     (__fastcall*)(void* tile, void* unused, float x, float y);
 
     /// Bytes of a relative call and of the code a texture size site keeps
     constexpr uint8_t CallOpcode       = 0xE8;
@@ -31,6 +32,9 @@ namespace dxvk {
 
     /// Read by the game's picks on rendered menus in place of its 4/3
     double g_pickAspect = VrInterfaceMinAspect;
+
+    /// What the radial tiles' hit test reached before us
+    uintptr_t g_radialContains = VrGame::RadialTileContains;
 
     double interfaceAspect() {
       uint32_t width  = uint32_t(std::max(reinterpret_cast<ScreenSizeFn>(VrGame::GameScreenWidth)(), 0));
@@ -83,6 +87,17 @@ namespace dxvk {
     // Interface::GetRealScreenWidth for the loading menu's aspect
     double __cdecl layoutRealScreenWidth() {
       return double(layoutScreenWidth());
+    }
+
+    // RadialTile's hit test (the companion wheel's slices): the game scales
+    // the cursor's height by the widths' ratio, so it is given a height
+    // that lands at the right interface unit on a stretched interface
+    bool __fastcall radialContains(void* tile, void* unused, float x, float y) {
+      uint32_t width  = uint32_t(std::max(reinterpret_cast<ScreenSizeFn>(VrGame::GameScreenWidth)(), 0));
+      uint32_t height = uint32_t(std::max(reinterpret_cast<ScreenSizeFn>(VrGame::GameScreenHeight)(), 0));
+
+      float scaledY = float(double(y) * vrComputeRadialPickScaleY(width, height));
+      return reinterpret_cast<RadialTestFn>(g_radialContains)(tile, unused, x, scaledY);
     }
 
     // NiRenderTargetGroup::GetWidth (__thiscall, index) for the size of the
@@ -212,6 +227,11 @@ namespace dxvk {
     }
 
     Logger::info("VR: The interface is laid out at 4:3 at least and stretched over a narrower window");
+
+    if (!VrGameMemory::chainVirtual(VrGame::RadialTileContainsSlot, VrGame::RadialTileContains,
+        reinterpret_cast<const void*>(&radialContains), &g_radialContains))
+      Logger::warn("VR: The companion wheel's hit test was not found, its slices may not follow the pointer");
+
     return true;
   }
 

@@ -22,6 +22,8 @@ namespace dxvk {
     float smoothTurnSpeed = DefaultSmoothTurnSpeed;
     /// Size of the Pip-Boy while it is open, as a factor of the game's size
     float pipBoyScale     = 1.0f;
+    /// Turn of the Pip-Boy about the forearm towards the thumb, in degrees
+    float pipBoyAngle     = 0.0f;
     /// Reload the weapons with the hands, see findings/reload.md
     bool  manualReload    = true;
     /// Sneak by crouching instead of with the sneak button, see findings/sneak.md
@@ -77,6 +79,25 @@ namespace dxvk {
    * \param [in] step Size, at most \c VrPipBoyScaleSteps - 1
    */
   float vrPipBoyStepToScale(uint32_t step);
+
+  /// Difference between two Pip-Boy angles of the options page, in degrees
+  constexpr float    VrPipBoyAngleStep  = 15.0f;
+  /// Number of Pip-Boy angles of the options page, from the game's up to 90 degrees
+  constexpr uint32_t VrPipBoyAngleSteps = 7;
+
+  /**
+   * \brief Returns the Pip-Boy angle of the options page closest to an angle
+   *
+   * \param [in] degrees Angle, which does not have to be one of the page's
+   */
+  uint32_t vrPipBoyAngleToStep(float degrees);
+
+  /**
+   * \brief Returns the angle of a Pip-Boy angle of the options page, in degrees
+   *
+   * \param [in] step Angle, at most \c VrPipBoyAngleSteps - 1
+   */
+  float vrPipBoyStepToAngle(uint32_t step);
 
   /**
    * \brief Reads the options from the content of an options file

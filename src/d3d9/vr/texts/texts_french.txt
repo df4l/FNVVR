@@ -126,6 +126,12 @@ Taille du Pip-Boy
 [text option.pipboy.normal]
 Normale
 
+[text option.pipboy.angle]
+Angle du Pip-Boy
+
+[text option.pipboy.angle.normal]
+Normal
+
 [text option.reload]
 Rechargement manuel
 

@@ -18,6 +18,7 @@ namespace dxvk {
     using StateFn       = int32_t   (__thiscall*)(uintptr_t object);
     using ObjectUpdateFn = void     (__thiscall*)(uintptr_t object, void* updateData);
     using IdlePlayingFn  = bool     (__thiscall*)(uintptr_t animation);
+    using GetCannibalFn  = bool     (__thiscall*)(uintptr_t player);
 
     // The idle stays followed this long after it stops, so that the gap
     // between two idles of a scene does not give the view back for a moment
@@ -121,7 +122,29 @@ namespace dxvk {
     if (!view->m_findsIdles)
       Logger::warn("VR: The player's idles were not found, the view is levelled while waking up");
 
+    view->m_findsCannibal = VrGameMemory::matchesUnlessRewritten(VrGame::PlayerGetCannibal,
+      VrGame::PlayerGetCannibalPrologue, sizeof(VrGame::PlayerGetCannibalPrologue));
+
+    if (!view->m_findsCannibal)
+      Logger::warn("VR: The Cannibal check was not found, eating a corpse follows the body's head");
+
     return view;
+  }
+
+
+  void VrBodyView::updateMoveHold() {
+    auto player = *reinterpret_cast<const uintptr_t*>(VrGame::Player);
+
+    bool cannibal = m_findsCannibal && player
+      && reinterpret_cast<GetCannibalFn>(VrGame::PlayerGetCannibal)(player)
+      && isTempThirdPerson(player);
+
+    if (cannibal != m_holdsMove) {
+      Logger::info(cannibal
+        ? "VR: The player eats a corpse, the view stays behind the player and the player does not move"
+        : "VR: The player has finished eating, the view and the moves are given back");
+      m_holdsMove = cannibal;
+    }
   }
 
 
@@ -145,7 +168,10 @@ namespace dxvk {
       m_idleLeft = std::max(m_idleLeft - dt, 0.0f);
 
     bool idle = !vats && m_idleLeft > 0.0f && inFirstPerson(player);
-    bool follow = !idle && shouldFollowHead(player);
+
+    // Eating a corpse is seen from the game's camera behind the player: from
+    // the body's head it is too rough
+    bool follow = !idle && !m_holdsMove && shouldFollowHead(player);
     bool wasOnBody = m_view == View::Body;
 
     // Looked for only when needed: this runs every frame

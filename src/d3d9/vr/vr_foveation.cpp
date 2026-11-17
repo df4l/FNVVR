@@ -20,15 +20,6 @@ namespace dxvk {
 
     constexpr VkImageLayout RateLayout = VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR;
 
-    bool sameFov(const VrFov& a, const VrFov& b) {
-      constexpr float Tolerance = 1e-6f;
-
-      return std::abs(a.angleLeft  - b.angleLeft)  <= Tolerance
-          && std::abs(a.angleRight - b.angleRight) <= Tolerance
-          && std::abs(a.angleUp    - b.angleUp)    <= Tolerance
-          && std::abs(a.angleDown  - b.angleDown)  <= Tolerance;
-    }
-
   }
 
 
@@ -90,12 +81,12 @@ namespace dxvk {
 
       // An eye whose image could not be made is not tried again until
       // the view or the target changes
-      if (resized || !eye.map || !sameFov(eye.fov, views[i].fov))
+      if (resized || !eye.map || !vrFoveationMapFits(eye.fov, views[i].fov, target, m_texelSize))
         createEye(eye, views[i].fov, target);
 
       VrGazeTexel texel;
 
-      if (!eye.view || !gaze || !vrLocateGazeTexel(eye.fov, (*gaze)[i], target, m_texelSize, texel))
+      if (!eye.view || !gaze || !vrLocateGazeTexel(views[i].fov, (*gaze)[i], target, m_texelSize, texel))
         continue;
 
       size_t offset = eye.map->windowOffset(texel);
