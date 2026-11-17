@@ -30,6 +30,11 @@ namespace dxvk {
     constexpr const char* PipBoySizeNames[VrPipBoyScaleSteps] = {
       "Normal", "125%", "150%", "175%", "200%" };
 
+    // One name per angle of VrPipBoyAngleSteps, in degrees, from the game's
+    // placement up
+    constexpr const char* PipBoyAngleNames[VrPipBoyAngleSteps] = {
+      "Normal", "15", "30", "45", "60", "75", "90" };
+
     // The game keeps the pointers to the texts and never frees them
     VrTexts                      g_texts;
 
@@ -178,6 +183,22 @@ namespace dxvk {
         return;
 
       g_options.pipBoyScale = vrPipBoyStepToScale(optionValue(option));
+      notifyChanged();
+    }
+
+
+    void __cdecl onPipBoyAngleChanged(void* option) {
+      if (!optionsInitialised()) {
+        optionValue(option)   = vrPipBoyAngleToStep(g_options.pipBoyAngle);
+        optionDefault(option) = 0u;
+        return;
+      }
+
+      // As with the size, an angle between two names stays until changed
+      if (vrPipBoyAngleToStep(g_options.pipBoyAngle) == optionValue(option))
+        return;
+
+      g_options.pipBoyAngle = vrPipBoyStepToAngle(optionValue(option));
       notifyChanged();
     }
 
@@ -361,6 +382,11 @@ namespace dxvk {
         ToggleType, VrPipBoyScaleSteps, ArrowSpacing,
         g_texts.text("option.pipboy.normal", PipBoySizeNames[0]),
         PipBoySizeNames[1], PipBoySizeNames[2], PipBoySizeNames[3], PipBoySizeNames[4]);
+      appendUserOption(g_texts.text("option.pipboy.angle", "Pip-Boy angle"), &onPipBoyAngleChanged,
+        ToggleType, VrPipBoyAngleSteps, ArrowSpacing,
+        g_texts.text("option.pipboy.angle.normal", PipBoyAngleNames[0]),
+        PipBoyAngleNames[1], PipBoyAngleNames[2], PipBoyAngleNames[3],
+        PipBoyAngleNames[4], PipBoyAngleNames[5], PipBoyAngleNames[6]);
       appendUserOption(g_texts.text("option.reload", "Manual reload"), &onReloadChanged,
         ToggleType, ToggleValues, ArrowSpacing, off, on);
       appendUserOption(g_texts.text("option.sneak", "Sneak"), &onSneakChanged, ToggleType, ToggleValues, ArrowSpacing,

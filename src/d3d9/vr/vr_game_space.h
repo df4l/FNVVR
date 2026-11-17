@@ -298,6 +298,20 @@ namespace dxvk {
   VrGameFrustum vrComputeGameFrustum(const VrFov& fov);
 
   /**
+   * \brief Frustum of a camera mirrored about a water plane
+   *
+   * The game's mirrored camera negates the up axis and keeps the frustum
+   * of the camera it mirrors, while the water shader reads the reflection
+   * at the pixel's own screen position, flipped vertically. That only lines
+   * up when the frustum is symmetric vertically: with an eye's frustum the
+   * reflection is read several degrees too high. The mirrored camera needs
+   * the top and bottom of the original frustum swapped and negated.
+   *
+   * \param [in] frustum Frustum of the camera that was mirrored
+   */
+  VrGameFrustum vrComputeReflectionFrustum(const VrGameFrustum& frustum);
+
+  /**
    * \brief Places the camera of a menu's own scene for a VR eye
    *
    * Rendered menus, such as the game's terminals, draw a model with a
@@ -424,5 +438,19 @@ namespace dxvk {
    * \param [in] height Height of the window, in pixels
    */
   double vrComputeRenderedMenuPickAspect(uint32_t width, uint32_t height);
+
+  /**
+   * \brief Factor on a cursor height for the game's radial tile test
+   *
+   * The companion wheel's slices (RadialTile) turn the cursor's pixels into
+   * interface units with the width's ratio for both axes, which only holds
+   * while the interface has the window's shape. On a window narrower than
+   * 4:3 the interface is stretched to it, and a cursor height multiplied by
+   * this factor gives the right height once the game scales it.
+   *
+   * \param [in] width Width of the window, in pixels
+   * \param [in] height Height of the window, in pixels
+   */
+  double vrComputeRadialPickScaleY(uint32_t width, uint32_t height);
 
 }

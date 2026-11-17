@@ -246,6 +246,7 @@ namespace dxvk {
     std::vector<uint32_t*> m_actorsHidden;
     uint32_t          m_actorsWait = 0;
     uint32_t*         m_bodyHidden = nullptr;
+    uint32_t*         m_handsShown = nullptr;
 
     // The button or trigger a gesture presses, held for a few frames
     uint16_t          m_pulse       = 0;
@@ -401,6 +402,8 @@ namespace dxvk {
     void hideRoot(uint8_t* root);
 
     void hidePlayerBody();
+
+    void showSeatedHands();
 
     void updateActorsInTheWay(bool logActors);
 

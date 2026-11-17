@@ -1,15 +1,18 @@
 #pragma once
 
-#include "vr_types.h"
+#include "vr_weapon_aim.h"
 
 namespace dxvk {
 
   /**
-   * \brief Local placement of a node in its parent: translation and scale
+   * \brief Local placement of a node in its parent
+   *
+   * A point x of the node is at rotate * scale * x + translate in the parent.
    */
-  struct VrNodeScale {
-    VrVector3 translate;
-    float     scale = 1.0f;
+  struct VrNodePlacement {
+    VrGameRotation rotate;
+    VrVector3      translate;
+    float          scale = 1.0f;
   };
 
   /**
@@ -26,19 +29,23 @@ namespace dxvk {
     const VrVector3&            point);
 
   /**
-   * \brief Scales a node about a point of its parent's frame
+   * \brief Turns a node about an axis of its parent's frame and scales it
    *
-   * The node's rotation is left as it is. The point keeps its place in the
-   * parent, and everything else in the node moves away from it by the
-   * factor.
+   * The node turns about the line through the pivot along the axis, by the
+   * right-hand rule, then grows away from the pivot by the factor: the
+   * pivot keeps its place in the parent.
    *
-   * \param [in] node The node's own placement, at the factor 1
-   * \param [in] pivot Point in the parent's frame
+   * \param [in] node The node's own placement
+   * \param [in] pivot Point of the axis, in the parent's frame
+   * \param [in] axis Direction of the axis in the parent's frame, any length
+   * \param [in] radians Angle to turn by, 0 to only scale
    * \param [in] factor Scale applied on top of the node's own
    */
-  VrNodeScale vrScaleAboutPoint(
-    const VrNodeScale&          node,
+  VrNodePlacement vrPlaceAboutAxis(
+    const VrNodePlacement&      node,
     const VrVector3&            pivot,
+    const VrVector3&            axis,
+          float                 radians,
           float                 factor);
 
   /**

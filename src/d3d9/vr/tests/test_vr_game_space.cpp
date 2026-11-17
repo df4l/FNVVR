@@ -188,6 +188,41 @@ TEST_CASE(frustum_uses_tangents_of_the_field_of_view) {
 }
 
 
+TEST_CASE(reflection_frustum_keeps_a_symmetric_frustum) {
+  VrGameFrustum flat = { -0.549f, 0.549f, 0.575f, -0.575f };
+  VrGameFrustum mirrored = vrComputeReflectionFrustum(flat);
+
+  CHECK_NEAR(mirrored.left,   flat.left,   1e-6);
+  CHECK_NEAR(mirrored.right,  flat.right,  1e-6);
+  CHECK_NEAR(mirrored.top,    flat.top,    1e-6);
+  CHECK_NEAR(mirrored.bottom, flat.bottom, 1e-6);
+}
+
+
+TEST_CASE(reflection_lines_up_with_the_water_shader_lookup) {
+  // Quest 2 left eye
+  VrGameFrustum eye = { -1.15037f, 1.0f, 1.19175f, -1.11061f };
+  VrGameFrustum mirrored = vrComputeReflectionFrustum(eye);
+
+  auto ndcY = [] (const VrGameFrustum& f, float tangent) {
+    return (2.0f * tangent - (f.top + f.bottom)) / (f.top - f.bottom);
+  };
+
+  for (float tangent : { -0.9f, -0.2f, 0.0f, 0.4f, 1.1f }) {
+    // The shader reads the reflection at v = (1 + y) / 2 of the eye's own
+    // projection; the mirrored camera sees the point at the negated tangent
+    // and stores it at v = (1 - y) / 2 of its projection
+    float lookup = 0.5f * (1.0f + ndcY(eye, tangent));
+    float stored = 0.5f * (1.0f - ndcY(mirrored, -tangent));
+    CHECK_NEAR(lookup, stored, 1e-5);
+
+    // The game's own copy of the frustum misses it by 3.5 % of the height
+    float copied = 0.5f * (1.0f - ndcY(eye, -tangent));
+    CHECK(std::abs(lookup - copied) > 0.03f);
+  }
+}
+
+
 TEST_CASE(narrow_eye_is_widened_to_the_interface_aspect) {
   VrExtent size = vrComputeGameResolution({ 1832, 1920 }, VrInterfaceMinAspect);
 
@@ -231,6 +266,19 @@ TEST_CASE(rendered_menu_pick_spans_the_interface_width) {
   CHECK_NEAR(vrComputeRenderedMenuPickAspect(3136, 2352), 4.0 / 3.0, 1e-6);
   CHECK_NEAR(vrComputeRenderedMenuPickAspect(1920, 1080), 4.0 / 3.0, 1e-6);
   CHECK_NEAR(vrComputeRenderedMenuPickAspect(0, 0), 4.0 / 3.0, 1e-6);
+}
+
+
+TEST_CASE(radial_pick_height_lands_in_interface_units) {
+  // A Quest 2 eye, interface 1280x960: the game scales by 1280 / 2244 on
+  // both axes, the bottom of the window must reach 960 units
+  double scale = vrComputeRadialPickScaleY(2244, 2352);
+  CHECK_NEAR(2352.0 * scale * (1280.0 / 2244.0), 960.0, 1e-3);
+
+  // 4:3 and wider: unchanged
+  CHECK_NEAR(vrComputeRadialPickScaleY(3136, 2352), 1.0, 1e-6);
+  CHECK_NEAR(vrComputeRadialPickScaleY(1920, 1080), 1.0, 1e-6);
+  CHECK_NEAR(vrComputeRadialPickScaleY(0, 0), 1.0, 1e-6);
 }
 
 

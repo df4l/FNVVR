@@ -126,6 +126,11 @@ namespace dxvk {
   }
 
 
+  bool VrMenuCursor::companionWheelShown() {
+    return g_installed && isMenuActive(VrGame::CompanionWheelMenuId);
+  }
+
+
   void VrMenuCursor::update(const VrPointerState& state) {
     g_state = state;
   }
