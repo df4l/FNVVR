@@ -1786,6 +1786,18 @@ namespace dxvk {
     constexpr uint8_t   HudSneakMeterStore[]   = { 0x8B, 0x0D, 0xC0, 0x96, 0x1D, 0x01, 0x89, 0x81, 0x30, 0x01, 0x00, 0x00 };
 
     /**
+     * BreathMeter group: a 64 x 64 model tile (Interface\HUD\AirTimer01.NIF)
+     * that HUDMainMenu::UpdateBreathMeter (0x0077E4F0) fades in while the
+     * player's head is under water and winds down with the breath left.
+     * HUDMainMenu::Create stores it at the given site and puts it 80 units
+     * below the sneak meter, in the middle of the screen; nothing else
+     * moves it. See findings/hud.md §18.
+     */
+    constexpr uintptr_t HudBreathMeter = 0x148;
+    constexpr uintptr_t HudBreathMeterStoreSite = 0x0076E485;
+    constexpr uint8_t   HudBreathMeterStore[]   = { 0x8B, 0x15, 0xC0, 0x96, 0x1D, 0x01, 0x89, 0x82, 0x48, 0x01, 0x00, 0x00 };
+
+    /**
      * HUDMainMenu fields holding the HUD groups shown on the hands: HitPoints
      * (health bar and compass), ActionPoints (action points, ammunition and
      * weapon condition), with AmmoTypeLabel and CNDArrows, which are placed

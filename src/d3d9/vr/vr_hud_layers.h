@@ -81,6 +81,18 @@ namespace dxvk {
     bool groupRect(uintptr_t group, VrInterfaceRect& rect) const;
 
     /**
+     * \brief Reads where a HUD group is laid out, if it is shown
+     *
+     * For groups that groupContent cannot measure, such as a model: the
+     * group must be visible and not faded out.
+     *
+     * \param [in] group HUDMainMenu field of the group
+     * \param [out] rect The group's rectangle, in interface units
+     * \returns \c false if the group does not exist, is hidden or cannot be checked
+     */
+    bool groupShownRect(uintptr_t group, VrInterfaceRect& rect) const;
+
+    /**
      * \brief Measures what a HUD group draws
      *
      * Covers the group's visible texts and images, as the game laid them

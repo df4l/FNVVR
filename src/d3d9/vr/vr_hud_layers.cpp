@@ -161,6 +161,17 @@ namespace dxvk {
   }
 
 
+  bool VrHudLayers::groupShownRect(uintptr_t group, VrInterfaceRect& rect) const {
+    if (!m_contentFound || !groupRect(group, rect))
+      return false;
+
+    uintptr_t tile = readField<uintptr_t>(readField<uintptr_t>(VrGame::HudMainMenu, 0), group);
+
+    return traitIsSet(tile, VrGame::TileTraitVisible, true)
+        && traitIsSet(tile, VrGame::TileTraitAlpha, true);
+  }
+
+
   bool VrHudLayers::groupContent(uintptr_t group, VrInterfaceRect& rect) const {
     if (!m_contentFound)
       return false;

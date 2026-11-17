@@ -66,7 +66,8 @@ namespace dxvk {
     // HUD groups shown on the panel in front of the head
     constexpr uintptr_t HeadHudGroups[] = {
       VrGame::HudMessages, VrGame::HudQuestReminder, VrGame::HudSubtitles,
-      VrGame::HudRadiationMeter, VrGame::HudXpMeter, VrGame::HudSneakMeter };
+      VrGame::HudRadiationMeter, VrGame::HudXpMeter, VrGame::HudSneakMeter,
+      VrGame::HudBreathMeter };
 
     // HUD groups shown on the hands
     constexpr uintptr_t HandHudGroups[] = {
@@ -2810,6 +2811,15 @@ namespace dxvk {
     VrInterfaceRect subtitles;
     bool hasSneak     = m_hudLayers.groupContent(VrGame::HudSneakMeter, sneak);
     bool hasSubtitles = m_hudLayers.groupContent(VrGame::HudSubtitles, subtitles);
+
+    // The breath meter shares the sneak meter's place: a model, which
+    // groupContent does not measure, so its group's rectangle is used
+    VrInterfaceRect breath;
+
+    if (m_hudMetersPlaced.breath && m_hudLayers.groupShownRect(VrGame::HudBreathMeter, breath)) {
+      sneak    = hasSneak ? vrUniteRects(sneak, breath) : breath;
+      hasSneak = true;
+    }
 
     float split = vrComputeHeadHudSplit(size.y, cornerBottom,
       hasSneak ? &sneak : nullptr, hasSubtitles ? &subtitles : nullptr);
