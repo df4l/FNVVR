@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdint>
+#include <string>
+
 namespace dxvk {
 
   /**
@@ -24,6 +27,15 @@ namespace dxvk {
      * \brief Installs the handler, once
      */
     static void install();
+
+    /**
+     * \brief Where another thread is: its instruction with its module, and
+     *    the return addresses on its stack, for a log line
+     *
+     * Meant for a thread that stopped making progress: its stack is read
+     * after it is resumed.
+     */
+    static std::string describeThread(uint32_t threadId);
 
   };
 

@@ -133,6 +133,14 @@ namespace dxvk {
       return list;
     }
 
+    /**
+     * \brief An address with its module and offset, when it has one
+     */
+    std::string location(uintptr_t address) {
+      std::string where = moduleOffset(address);
+      return where.empty() ? hex(address) : str::format(hex(address), " (", where, ")");
+    }
+
     LONG CALLBACK handler(EXCEPTION_POINTERS* info) {
       const EXCEPTION_RECORD* record = info->ExceptionRecord;
 
@@ -140,8 +148,6 @@ namespace dxvk {
         return EXCEPTION_CONTINUE_SEARCH;
 
       auto address = reinterpret_cast<uintptr_t>(record->ExceptionAddress);
-      std::string where = moduleOffset(address);
-
       std::string access;
 
       if (record->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && record->NumberParameters >= 2) {
@@ -150,8 +156,7 @@ namespace dxvk {
           hex(record->ExceptionInformation[1]));
       }
 
-      Logger::err(str::format("VR: Exception ", hex(record->ExceptionCode), " at ", hex(address),
-        where.empty() ? std::string() : str::format(" (", where, ")"), access,
+      Logger::err(str::format("VR: Exception ", hex(record->ExceptionCode), " at ", location(address), access,
         ", thread ", GetCurrentThreadId()));
 
       // d3d9.dll is only built for 32-bit x86
@@ -175,6 +180,33 @@ namespace dxvk {
 
     if (AddVectoredExceptionHandler(0, &handler))
       Logger::info("VR: Fatal exceptions are written to this log");
+  }
+
+
+
+  std::string VrCrashLog::describeThread(uint32_t threadId) {
+    HANDLE thread = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT, FALSE, threadId);
+
+    if (!thread)
+      return "not readable";
+
+    CONTEXT context = { };
+    context.ContextFlags = CONTEXT_CONTROL;
+    bool read = false;
+
+    // Only the registers are read while the thread is suspended: it may
+    // hold a lock that reading its stack would take
+    if (SuspendThread(thread) != DWORD(-1)) {
+      read = GetThreadContext(thread, &context);
+      ResumeThread(thread);
+    }
+
+    CloseHandle(thread);
+
+    if (!read)
+      return "not readable";
+
+    return str::format("at ", location(context.Eip), ", return addresses on the stack: ", returnAddresses(context.Esp));
   }
 
 }

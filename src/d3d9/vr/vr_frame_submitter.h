@@ -1,6 +1,8 @@
 #pragma once
 
 #include <array>
+#include <atomic>
+#include <cstdint>
 #include <vector>
 
 #include "../d3d9_include.h"
@@ -8,6 +10,7 @@
 
 #include "../../util/com/com_pointer.h"
 #include "../../util/thread.h"
+#include "../../util/util_time.h"
 
 #include "vr_backend.h"
 
@@ -33,6 +36,11 @@ namespace dxvk {
    *
    * Without the thread, the same work runs on the game thread in
    * submitFrame, with one flush for the panels and eyes together.
+   *
+   * A frame that has not reached the backend after a few seconds is
+   * reported once in the log by a watchdog thread, with the step the
+   * submission thread is at and where it and the game thread are, since a
+   * hang in the runtime otherwise leaves no trace.
    */
   class VrFrameSubmitter {
 
@@ -107,6 +115,10 @@ namespace dxvk {
       VrPanelSubmission       panel;
     };
 
+    enum class Step : uint32_t {
+      Flush, Queue, Panels, Eyes, Unlock,
+    };
+
     struct Job {
       uint64_t                flushSeq    = 0;
       std::vector<PanelOp>    panels;
@@ -120,11 +132,12 @@ namespace dxvk {
     D3D9DeviceEx*             m_deviceEx;
     IVRBackend&               m_backend;
 
-    bool                      m_threaded   = true;
+    bool                      m_threaded   = false;
     bool                      m_collecting = false;
     Job                       m_next;
 
     dxvk::thread              m_thread;
+    dxvk::thread              m_watchdog;
     dxvk::mutex               m_mutex;
     dxvk::condition_variable  m_cond;
     Job                       m_job;
@@ -132,9 +145,19 @@ namespace dxvk {
     bool                      m_stop    = false;
     bool                      m_logged  = false;
 
+    high_resolution_clock::time_point m_handedAt;
+    uint32_t                  m_gameThread   = 0;
+    uint32_t                  m_submitThread = 0;
+    bool                      m_hangReported = false;
+    std::atomic<uint32_t>     m_step = { 0u };
+
     void run(Job& job);
 
     void runThread();
+
+    void runWatchdog();
+
+    void reportHang(double seconds);
 
     void startThread();
 
