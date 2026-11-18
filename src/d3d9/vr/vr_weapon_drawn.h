@@ -72,10 +72,19 @@ namespace dxvk {
      *
      * The player holstered it, or a script disabled the fighting controls
      * and the game put the weapon or the fists away (Doc Mitchell's house
-     * at the start of the game). The free hands still grab objects as the
-     * game's grab key does, but must not fight, see fightingDisabled.
+     * at the start of the game), or the player swims and the game put the
+     * weapon away. The free hands still grab objects as the game's grab key
+     * does, but must not fight, see fightingDisabled and swimming.
      */
     bool handsFree() const;
+
+    /**
+     * \brief Whether the player swims
+     *
+     * The game puts the weapon away and refuses every attack meanwhile.
+     * Always \c false if Actor::IsSwimming was not found.
+     */
+    bool swimming() const;
 
     /**
      * \brief Whether a script disabled the player's fighting controls
@@ -100,6 +109,7 @@ namespace dxvk {
     bool m_loggedFurniture = false;
 
     bool m_playerHolstered = false;
+    bool m_readsSwimming   = false;
 
     void playSound(bool pickUp) const;
 

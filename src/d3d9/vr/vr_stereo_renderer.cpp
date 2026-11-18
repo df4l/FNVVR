@@ -1995,9 +1995,10 @@ namespace dxvk {
     int32_t type = -1;
     bool equipped = VrWeaponDrawn::equippedWeapon(type) != nullptr;
 
-    // No fist strikes while a script disabled fighting
+    // No fist strikes while a script disabled fighting, nor while swimming:
+    // the game refuses every attack in the water
     bool inGame = state == VrGameStateKind::InGame && m_hasReference && input.hasActions && m_weaponDrawn
-      && !VrWeaponDrawn::fightingDisabled();
+      && !VrWeaponDrawn::fightingDisabled() && !m_weaponDrawn->swimming();
     bool holstered = m_weaponDrawn && m_weaponDrawn->playerHolstered();
     bool wornOnFist = type == VrGame::WeaponTypeHandToHand;
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Hands while swimming**: the game puts the weapon away in the water and animated the arms out of sight, so the hands vanished. Both hands now follow the controllers while swimming, as with a holstered weapon; they still grab objects, but cannot punch or attack, as in the game.
+
 ## v0.20.0 (2026-11-18, since v0.19.1 `90dd1b8`)
 
 ### Water and performance
