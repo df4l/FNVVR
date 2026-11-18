@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.20.0 (2026-11-18, since v0.19.1 `90dd1b8`)
 
 ### Water and performance
 
@@ -23,7 +23,7 @@
 
 ### Other mods
 
-- **Titans of the New West**: the left arm's pose, the twist bone and the Pip-Boy are found again, the mod's extra "SC Hand" node no longer being taken for the forearm.
+- **Titans of the New West**: the left arm's pose, the twist bone and the Pip-Boy are found again, the mod's extra "SC Hand" node no longer being taken for the forearm. Not checked in power armour yet.
 
 ### Gameplay
 
