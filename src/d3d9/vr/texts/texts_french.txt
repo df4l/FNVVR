@@ -153,6 +153,9 @@ Marche réelle
 [text option.foveation]
 Rendu fovéal (regard)
 
+[text option.performance]
+Mode performance
+
 # Message quand le rendu fovéal ne peut pas être activé. Pas de & ni de ;.
 [text option.foveation.nogpu]
 Votre carte graphique ou son pilote ne peut pas faire le rendu fovéal suivant le regard. Il reste désactivé.

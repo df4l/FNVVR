@@ -271,6 +271,23 @@ namespace dxvk {
     }
 
 
+    void __cdecl onPerformanceModeChanged(void* option) {
+      if (!optionsInitialised()) {
+        optionValue(option)   = g_options.performanceMode ? 1u : 0u;
+        optionDefault(option) = 0u;
+        return;
+      }
+
+      bool performanceMode = optionValue(option) != 0;
+
+      if (performanceMode == g_options.performanceMode)
+        return;
+
+      g_options.performanceMode = performanceMode;
+      notifyChanged();
+    }
+
+
     // A toggle the player may not turn on goes back to Off in its row, and
     // a message box says why. The game showed the new value before calling
     // the option's callback, which runs this.
@@ -396,6 +413,8 @@ namespace dxvk {
       appendUserOption(g_texts.text("option.roomscale", "Room-scale walking"), &onRoomscaleChanged,
         ToggleType, ToggleValues, ArrowSpacing, off, on);
       appendUserOption(g_texts.text("option.foveation", "Eye-tracked foveation"), &onFoveationChanged,
+        ToggleType, ToggleValues, ArrowSpacing, off, on);
+      appendUserOption(g_texts.text("option.performance", "Performance mode"), &onPerformanceModeChanged,
         ToggleType, ToggleValues, ArrowSpacing, off, on);
     }
 

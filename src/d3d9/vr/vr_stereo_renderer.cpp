@@ -193,7 +193,7 @@ namespace dxvk {
   VrStereoRenderer::VrStereoRenderer(IVRBackend& backend, IDirect3DDevice9* device,
     bool showPreview, const VrPanelConfig& panel)
   : m_backend(backend), m_device(device), m_showPreview(showPreview), m_panelConfig(panel),
-    m_submitter(device, backend), m_controls(backend) { }
+    m_submitter(device, backend), m_performance(backend), m_controls(backend) { }
 
 
   VrStereoRenderer::~VrStereoRenderer() {
@@ -698,6 +698,7 @@ namespace dxvk {
     VrD3D9Bridge::beginFrame(m_device, m_backend);
     m_paced = timing.paced;
     countFrame(timing);
+    m_performance.update(state == VrGameStateKind::InGame || state == VrGameStateKind::PipBoy, timing);
 
     if (!timing.shouldRender) {
       VrD3D9Bridge::submitEmptyFrame(m_device, m_backend, timing.predictedDisplayTime);
@@ -943,6 +944,7 @@ namespace dxvk {
     VrD3D9Bridge::beginFrame(m_device, m_backend);
     m_paced = timing.paced;
     countFrame(timing);
+    m_performance.update(false, timing);
     VrInputState input = m_backend.pollInput(timing.predictedDisplayTime);
     trackHead(input);
 

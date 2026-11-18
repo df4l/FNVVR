@@ -4137,6 +4137,46 @@ namespace dxvk {
     constexpr uintptr_t LockFreeMapCount                    = 0x18;
     constexpr uint8_t   ModelLoaderUpdateReferencesPrologue[] = { 0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x40, 0xCD, 0xEE, 0x00 };
 
+    /**
+     * Distances the performance mode lowers, read by the game every frame
+     * (findings/performance.md §14.1). Only these run-time copies are
+     * written, never the settings, so the player's saved values stay.
+     *
+     * - FadeOutMultipliers: BSFadeNode::fFadeOutMultipliers, a float per
+     *   ENUM_LOD_MULT, read by BSFadeNode::OnVisible. Indices from
+     *   TES::InitFadeOutMultipliers: items, actors, and the six taking the
+     *   objects' multiplier. Checked through the whole of
+     *   BSFadeNode::SetFadeOutMultiplier (0x004504F0) and
+     *   GetFadeOutMultiplier (0x007D1D00), which hold its address.
+     * - LightLodStartFade/End, ShadowLod..., SpecularLod...: the
+     *   BSShaderManager copies of the Display settings, read by
+     *   ShadowSceneLight::TestFrustumCull for lights. Checked through the
+     *   settings menu's stores to them (fstp dword ptr [address]).
+     */
+    constexpr uintptr_t FadeOutMultipliers            = 0x011AD7B8;
+    constexpr uint32_t  FadeOutMultiplierItems        = 2;
+    constexpr uint32_t  FadeOutMultiplierActors       = 3;
+    constexpr uint32_t  FadeOutMultiplierObjects[]    = { 0, 1, 4, 5, 8, 10 };
+    constexpr uintptr_t SetFadeOutMultiplier          = 0x004504F0;
+    constexpr uint8_t   SetFadeOutMultiplierCode[]    = { 0x55, 0x8B, 0xEC, 0x8B, 0x45, 0x08, 0xD9, 0x45, 0x0C,
+      0xD9, 0x1C, 0x85, 0xB8, 0xD7, 0x1A, 0x01, 0x5D, 0xC3 };
+    constexpr uintptr_t GetFadeOutMultiplier          = 0x007D1D00;
+    constexpr uint8_t   GetFadeOutMultiplierCode[]    = { 0x55, 0x8B, 0xEC, 0x8B, 0x45, 0x08, 0xD9, 0x04, 0x85,
+      0xB8, 0xD7, 0x1A, 0x01, 0x5D, 0xC3 };
+
+    constexpr uintptr_t LightLodStartFade             = 0x011F9444;
+    constexpr uintptr_t LightLodEnd                   = 0x011F9448;
+    constexpr uintptr_t ShadowLodStartFade            = 0x011F944C;
+    constexpr uintptr_t ShadowLodEnd                  = 0x011F9450;
+    constexpr uintptr_t SpecularLodStartFade          = 0x011F9454;
+    constexpr uintptr_t SpecularLodEnd                = 0x011F9458;
+    constexpr uintptr_t LightLodStartFadeStore        = 0x007D22D3;
+    constexpr uintptr_t LightLodEndStore              = 0x007D22E8;
+    constexpr uintptr_t ShadowLodStartFadeStore       = 0x007D2173;
+    constexpr uintptr_t ShadowLodEndStore             = 0x007D2188;
+    constexpr uintptr_t SpecularLodStartFadeStore     = 0x007D2433;
+    constexpr uintptr_t SpecularLodEndStore           = 0x007D2448;
+
   }
 
 }

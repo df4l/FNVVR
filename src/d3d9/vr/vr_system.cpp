@@ -190,6 +190,7 @@ namespace dxvk {
     options.scopeLens       = config.getOption<bool>("d3d9.vrScopes", options.scopeLens);
     options.roomscale       = config.getOption<bool>("d3d9.vrRoomscale", options.roomscale);
     options.foveation       = config.getOption<bool>("d3d9.vrFoveation", options.foveation);
+    options.performanceMode = config.getOption<bool>("d3d9.vrPerformanceMode", options.performanceMode);
     VrOptionsFile::load(options);
     turn.smooth      = options.smoothTurn;
     turn.smoothSpeed = options.smoothTurnSpeed;
@@ -281,6 +282,7 @@ namespace dxvk {
     g_vrSystem->m_scopes = options.scopeLens;
     g_vrSystem->m_roomscale = options.roomscale;
     g_vrSystem->m_foveation = options.foveation;
+    g_vrSystem->m_performanceMode = options.performanceMode;
     g_vrSystem->m_immersiveMinigames = config.getOption<bool>("d3d9.vrImmersiveMinigames", true);
     g_vrSystem->m_sneakConfig.physical = options.physicalSneak;
     g_vrSystem->m_sneakConfig.crouch   = crouch;
@@ -387,11 +389,13 @@ namespace dxvk {
     m_scopes = options.scopeLens;
     m_roomscale = options.roomscale;
     m_foveation = options.foveation;
+    m_performanceMode = options.performanceMode;
 
     if (m_stereoRenderer) {
       m_stereoRenderer->setScopesEnabled(m_scopes);
       m_stereoRenderer->setRoomscale(m_roomscale);
       m_stereoRenderer->setFoveationEnabled(m_foveation);
+      m_stereoRenderer->setPerformanceMode(m_performanceMode);
       m_stereoRenderer->setTurnConfig(m_turnConfig);
       m_stereoRenderer->setPipBoyScale(m_pipBoyScale);
       m_stereoRenderer->setPipBoyAngle(m_pipBoyAngle);
@@ -467,6 +471,7 @@ namespace dxvk {
       m_stereoRenderer->setManualReload(m_manualReload);
       m_stereoRenderer->setRoomscale(m_roomscale);
       m_stereoRenderer->setFoveationEnabled(m_foveation);
+      m_stereoRenderer->setPerformanceMode(m_performanceMode);
       m_stereoRenderer->setHandPush(m_handPush);
       m_stereoRenderer->setSneakConfig(m_sneakConfig);
       m_stereoRenderer->setAsyncSubmit(m_asyncSubmit);
