@@ -1148,6 +1148,26 @@ namespace dxvk {
   }
 
 
+  bool VrOpenVrBackend::readFrameLoad(VrFrameLoad& load) {
+    load = VrFrameLoad();
+
+    if (m_state != VrSessionState::Running)
+      return false;
+
+    vr::Compositor_FrameTiming timing = { };
+    timing.m_nSize = sizeof(timing);
+
+    if (!m_runtime->compositor->GetFrameTiming(&timing, 0))
+      return false;
+
+    load.frameIndex     = timing.m_nFrameIndex;
+    load.gpuMs          = timing.m_flTotalRenderGpuMs;
+    load.cpuReprojected = (timing.m_nReprojectionFlags & vr::VRCompositor_ReprojectionReason_Cpu) != 0;
+    load.gpuReprojected = (timing.m_nReprojectionFlags & vr::VRCompositor_ReprojectionReason_Gpu) != 0;
+    return true;
+  }
+
+
   bool VrOpenVrBackend::submitFrame(const VrFrameSubmission& frame) {
     if (m_state != VrSessionState::Running || !m_transition)
       return false;

@@ -101,6 +101,8 @@ namespace dxvk {
 
     bool locateGaze(std::array<VrGaze, VrEyeCount>& gaze) override;
 
+    bool readFrameLoad(VrFrameLoad& load) override;
+
     bool submitFrame(const VrFrameSubmission& frame) override;
 
     void submitEmptyFrame(int64_t displayTime) override;
