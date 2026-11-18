@@ -32,6 +32,9 @@ vr_src = files([
   'vr_game_timer_stats.cpp',
   'vr_game_timer_step.cpp',
   'vr_render_profile.cpp',
+  'vr_gpu_profile.cpp',
+  'vr_spike_log.cpp',
+  'vr_cpu_samples.cpp',
   'vr_weapon_types.cpp',
   'vr_power_attack.cpp',
   'vr_magazine.cpp',
@@ -166,6 +169,8 @@ vr_dxvk_src = files([
   'vr_large_address.cpp',
   'vr_npc_reaction.cpp',
   'vr_melee_object_hit.cpp',
+  'vr_gpu_timer.cpp',
+  'vr_cpu_sampler.cpp',
   'vr_foveation.cpp',
 ])
 
@@ -209,6 +214,9 @@ if add_languages('cpp', native: true, required: false)
     'tests/test_vr_game_timer_stats.cpp',
     'tests/test_vr_game_timer_step.cpp',
     'tests/test_vr_render_profile.cpp',
+    'tests/test_vr_gpu_profile.cpp',
+    'tests/test_vr_spike_log.cpp',
+    'tests/test_vr_cpu_samples.cpp',
     'tests/test_vr_weapon_types.cpp',
     'tests/test_vr_power_attack.cpp',
     'tests/test_vr_magazine.cpp',

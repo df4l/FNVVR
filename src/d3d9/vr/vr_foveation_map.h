@@ -74,6 +74,25 @@ namespace dxvk {
           VrGazeTexel&        texel);
 
   /**
+   * \brief Whether a map made for a field of view still fits another one
+   *
+   * Some headsets (the Steam Frame) give a slightly different projection
+   * nearly every frame. A map is kept while every edge of the view stays
+   * within a quarter of a texel of the one it was made for: the zones then
+   * move by less than that, which nobody sees.
+   *
+   * \param [in] built The field of view the map was made for
+   * \param [in] current The eye's field of view now
+   * \param [in] target Size of the eye's render target, in pixels
+   * \param [in] texelSize Pixels covered by a texel, per side
+   */
+  bool vrFoveationMapFits(
+    const VrFov&              built,
+    const VrFov&              current,
+          VrExtent            target,
+          uint32_t            texelSize);
+
+  /**
    * \brief Shading rates around a gaze, for one eye
    *
    * Holds an image twice the size of the eye's shading rate image in each

@@ -235,6 +235,9 @@ namespace dxvk {
     passes.handsDepthTest = config.getOption<bool>("d3d9.vrHandsDepthTest", passes.handsDepthTest);
     passes.scopeResolution = uint32_t(std::max<int32_t>(0,
       config.getOption<int32_t>("d3d9.vrScopeResolution", int32_t(passes.scopeResolution))));
+    passes.gpuTimings = config.getOption<bool>("d3d9.vrGpuTimings", passes.gpuTimings);
+    passes.spikeLog   = config.getOption<bool>("d3d9.vrSpikeLog", passes.spikeLog);
+    passes.cpuSamples = config.getOption<bool>("d3d9.vrCpuSamples", passes.cpuSamples);
     passes.foveationZones.fullDegrees = std::min(std::max(config.getOption<float>("d3d9.vrFoveationFullAngle",
       passes.foveationZones.fullDegrees), 1.0f), 89.0f);
     passes.foveationZones.halfDegrees = std::min(std::max(config.getOption<float>("d3d9.vrFoveationHalfAngle",

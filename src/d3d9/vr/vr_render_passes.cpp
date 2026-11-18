@@ -143,6 +143,12 @@ namespace dxvk {
     m_eye      = eye;
     m_eyeStart = high_resolution_clock::now();
 
+    if (m_gpuTimer)
+      m_eyeGpuToken = m_gpuTimer->begin(VrGpuSection::pass(eye, VrRenderPass::Eye));
+
+    if (m_cpuSampler)
+      m_phaseBeforeEye = m_cpuSampler->setPhase(vrCpuEyePhase(eye, VrRenderPass::Eye));
+
     if (eye == 0)
       m_shadowsDrawnForLeft = false;
   }
@@ -154,6 +160,12 @@ namespace dxvk {
 
     endWorld();
 
+    if (m_gpuTimer)
+      m_gpuTimer->end(m_eyeGpuToken);
+
+    if (m_cpuSampler)
+      m_cpuSampler->setPhase(m_phaseBeforeEye);
+
     auto ms = std::chrono::duration<double, std::milli>(high_resolution_clock::now() - m_eyeStart).count();
     m_profile.add(m_eye, VrRenderPass::Eye, ms);
     m_eye = NoEye;
@@ -161,7 +173,10 @@ namespace dxvk {
 
 
   void VrRenderPasses::endFrame() {
-    if (m_profile.endFrame()) {
+    bool full = m_profile.endFrame();
+    m_lastFrame = m_profile.lastFrame();
+
+    if (full) {
       logWindow();
       m_profile.reset();
       m_shadowsReused = 0;
@@ -180,8 +195,19 @@ namespace dxvk {
       return fn();
 
     uint32_t eye = m_eye;
+    uint32_t gpuToken = m_gpuTimer
+      ? m_gpuTimer->begin(VrGpuSection::pass(eye, pass))
+      : VrGpuTimer::NoToken;
+
     auto start = high_resolution_clock::now();
-    uintptr_t result = fn();
+    uintptr_t result;
+
+    { VrCpuPhaseScope phase(m_cpuSampler, vrCpuEyePhase(eye, pass));
+      result = fn();
+    }
+
+    if (m_gpuTimer)
+      m_gpuTimer->end(gpuToken);
 
     m_profile.add(eye, pass,
       std::chrono::duration<double, std::milli>(high_resolution_clock::now() - start).count());

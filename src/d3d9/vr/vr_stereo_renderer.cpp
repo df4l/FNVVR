@@ -459,6 +459,18 @@ namespace dxvk {
     if (!renderer->m_renderPasses)
       Logger::info("VR: The world render's passes were not found, they are drawn for each eye and not timed");
 
+    renderer->m_spikeLogWanted = passes.spikeLog && renderer->m_renderPasses;
+    renderer->m_cpuSamplesWanted = passes.cpuSamples;
+
+    if (passes.gpuTimings) {
+      renderer->m_gpuTimer = VrGpuTimer::create(device);
+
+      if (!renderer->m_gpuTimer)
+        Logger::warn("VR: The device has no timestamp queries, GPU timings are off");
+      else if (renderer->m_renderPasses)
+        renderer->m_renderPasses->setGpuTimer(renderer->m_gpuTimer.get());
+    }
+
     renderer->m_repeatedPasses = VrRepeatedPasses::install();
 
     if (!renderer->m_repeatedPasses)
@@ -521,7 +533,15 @@ namespace dxvk {
     if (g_stereoRenderer) {
       g_stereoRenderer->captureEye();
 
-      if (g_stereoRenderer->renderLayer(interfaceManager, arg0, arg1))
+      uint32_t eye = g_stereoRenderer->m_eye;
+      uint32_t token = eye != NoEye
+        ? g_stereoRenderer->gpuBegin(VrGpuSection::pass(eye, VrRenderPass::Interface))
+        : VrGpuTimer::NoToken;
+
+      bool drawn = g_stereoRenderer->renderLayer(interfaceManager, arg0, arg1);
+      g_stereoRenderer->gpuEnd(token);
+
+      if (drawn)
         return;
     }
 
@@ -605,6 +625,16 @@ namespace dxvk {
 
   void VrStereoRenderer::renderFrame(void* main) {
     m_mainThread   = GetCurrentThreadId();
+
+    if (m_cpuSamplesWanted) {
+      m_cpuSamplesWanted = false;
+      m_cpuSampler = VrCpuSampler::start(m_mainThread);
+
+      if (m_cpuSampler && m_renderPasses)
+        m_renderPasses->setCpuSampler(m_cpuSampler.get());
+    }
+
+    VrCpuPhaseScope framePhase(m_cpuSampler.get(), uint8_t(VrCpuPhase::Frame));
     m_swapped      = true;
     m_paced        = false;
     m_blockedInput = false;
@@ -663,9 +693,10 @@ namespace dxvk {
       return;
     }
 
-    VrFrameTiming timing = m_backend.waitFrame();
+    VrFrameTiming timing = waitFrame();
     VrD3D9Bridge::beginFrame(m_device, m_backend);
     m_paced = timing.paced;
+    countFrame(timing);
 
     if (!timing.shouldRender) {
       VrD3D9Bridge::submitEmptyFrame(m_device, m_backend, timing.predictedDisplayTime);
@@ -812,7 +843,12 @@ namespace dxvk {
       ? m_hudMeters.place(vrComputeInterfaceSize(interfaceSize.width, interfaceSize.height).y)
       : VrHudMetersPlaced();
 
+    if (m_gpuTimer)
+      m_gpuTimer->beginFrame(m_frameId);
+
+    uint32_t scopeGpu = gpuBegin(VrGpuSection::part(VrGpuFramePart::Scope));
     renderScope(state, main, views);
+    gpuEnd(scopeGpu);
 
     m_minigameDrawn = { };
 
@@ -831,6 +867,9 @@ namespace dxvk {
     if (m_renderPasses)
       m_renderPasses->endFrame();
 
+    if (m_spikeLog && m_renderPasses)
+      m_spikeLog->setCpuPasses(m_frameId, m_renderPasses->lastFrame());
+
     m_renderCamera.restore(m_gameCamera);
     m_gameTarget = nullptr;
 
@@ -840,11 +879,16 @@ namespace dxvk {
         m_loggedFailure = true;
       }
 
+      if (m_gpuTimer)
+        m_gpuTimer->cancelFrame();
+
       VrD3D9Bridge::submitEmptyFrame(m_device, m_backend, timing.predictedDisplayTime);
       return;
     }
 
     IDirect3DTexture9* eyes[VrEyeCount] = { m_eyeTextures[0].ptr(), m_eyeTextures[1].ptr() };
+
+    uint32_t panelsGpu = gpuBegin(VrGpuSection::part(VrGpuFramePart::Panels));
 
     drawFaders(eyes);
 
@@ -872,6 +916,11 @@ namespace dxvk {
     else if (m_overPipBoy)
       hidePanel();
 
+    gpuEnd(panelsGpu);
+
+    if (m_gpuTimer)
+      m_gpuTimer->endFrame();
+
     if (!VrD3D9Bridge::submitStereoFrame(m_device, m_backend, eyes, views,
         timing.predictedDisplayTime) && !m_loggedFailure) {
       Logger::err("VR: The backend rejected a stereo frame");
@@ -889,9 +938,10 @@ namespace dxvk {
     // The runtime draws the panel. The game draws one frame, which
     // onPresent copies to the panel. Waiting still paces the game to the
     // headset and provides the head pose the panel is placed with.
-    VrFrameTiming timing = m_backend.waitFrame();
+    VrFrameTiming timing = waitFrame();
     VrD3D9Bridge::beginFrame(m_device, m_backend);
     m_paced = timing.paced;
+    countFrame(timing);
     VrInputState input = m_backend.pollInput(timing.predictedDisplayTime);
     trackHead(input);
 
@@ -2300,7 +2350,9 @@ namespace dxvk {
 
     logEyeCapture();
 
+    uint32_t copyGpu = gpuBegin(VrGpuSection::pass(m_eye, VrRenderPass::EyeCopy));
     m_eyeCopied[m_eye] = copyRenderTarget(m_eye);
+    gpuEnd(copyGpu);
 
     if (m_eyeCopied[m_eye] && m_scopeVisible) {
       Com<IDirect3DSurface9> eyeSurface;
@@ -2432,6 +2484,56 @@ namespace dxvk {
       Logger::info("VR: The eye is drawn with the headset's frustum");
       m_loggedEyeFrustum = true;
     }
+  }
+
+
+  VrFrameTiming VrStereoRenderer::waitFrame() {
+    VrCpuPhaseScope phase(m_cpuSampler.get(), uint8_t(VrCpuPhase::Wait));
+    return m_backend.waitFrame();
+  }
+
+
+  void VrStereoRenderer::countFrame(const VrFrameTiming& timing) {
+    if (m_spikeLog && timing.hasPreviousCycle)
+      m_spikeLog->setCycle(m_frameId, timing.previousCycle, timing.previousCycleEnd);
+
+    m_frameId += 1;
+
+    if (m_cpuSampler)
+      m_cpuSampler->setFrame(m_frameId);
+
+    double periodMs = double(timing.predictedPeriod) * 1e-6;
+
+    if (!m_spikeLogWanted || periodMs <= 0.0 || (m_spikeLog && m_spikeLogPeriodMs == periodMs))
+      return;
+
+    m_spikeLogPeriodMs = periodMs;
+    m_spikeLog = std::make_unique<VrSpikeLog>(periodMs, m_gpuTimer != nullptr,
+      [] (const std::string& line) { Logger::info(line); });
+
+    if (m_gpuTimer) {
+      m_gpuTimer->setFrameCallback([this] (uint64_t frameId, const VrGpuFrameTimes& times) {
+        m_spikeLog->setGpu(frameId, times);
+      });
+    }
+
+    if (m_cpuSampler) {
+      VrCpuSampler* sampler = m_cpuSampler.get();
+      m_spikeLog->setSpikeCallback([sampler] (uint64_t frameId) { sampler->markSpike(frameId); });
+    }
+
+    Logger::info(str::format("VR: Frames longer than the period of ", periodMs, " ms are logged one by one"));
+  }
+
+
+  uint32_t VrStereoRenderer::gpuBegin(VrGpuSection section) {
+    return m_gpuTimer ? m_gpuTimer->begin(section) : VrGpuTimer::NoToken;
+  }
+
+
+  void VrStereoRenderer::gpuEnd(uint32_t token) {
+    if (m_gpuTimer)
+      m_gpuTimer->end(token);
   }
 
 

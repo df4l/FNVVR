@@ -58,6 +58,27 @@ namespace dxvk {
   }
 
 
+  bool vrFoveationMapFits(
+    const VrFov&              built,
+    const VrFov&              current,
+          VrExtent            target,
+          uint32_t            texelSize) {
+    if (!target.width || !target.height || !texelSize)
+      return false;
+
+    ViewTangents a = tangents(built);
+    ViewTangents b = tangents(current);
+
+    float toleranceX = 0.25f * (a.right - a.left) * float(texelSize) / float(target.width);
+    float toleranceY = 0.25f * (a.up - a.down)    * float(texelSize) / float(target.height);
+
+    return std::abs(a.left - b.left) <= toleranceX
+        && std::abs(a.right - b.right) <= toleranceX
+        && std::abs(a.up - b.up) <= toleranceY
+        && std::abs(a.down - b.down) <= toleranceY;
+  }
+
+
   VrFoveationMap::VrFoveationMap(
     const VrFov&              fov,
           VrExtent            target,

@@ -47,6 +47,28 @@ TEST_CASE(foveation_gaze_outside_the_view_is_refused) {
 }
 
 
+TEST_CASE(foveation_map_is_kept_through_a_small_view_drift) {
+  // A texel covers a tangent of 0.02 here: a quarter of it is 0.005
+  VrFov drifted = squareFov();
+  drifted.angleLeft  += 0.001f;
+  drifted.angleUp    -= 0.001f;
+  CHECK(vrFoveationMapFits(squareFov(), drifted, Target, TexelSize));
+}
+
+
+TEST_CASE(foveation_map_is_made_again_for_a_larger_view_change) {
+  VrFov narrower = squareFov();
+  narrower.angleRight -= 0.01f;
+  CHECK(!vrFoveationMapFits(squareFov(), narrower, Target, TexelSize));
+
+  VrFov lower = squareFov();
+  lower.angleDown -= 0.01f;
+  CHECK(!vrFoveationMapFits(squareFov(), lower, Target, TexelSize));
+
+  CHECK(!vrFoveationMapFits(squareFov(), squareFov(), VrExtent { 0u, 0u }, TexelSize));
+}
+
+
 TEST_CASE(foveation_map_is_twice_the_eye_image) {
   VrFoveationMap map(squareFov(), Target, TexelSize, VrFoveationZones());
   CHECK(map.imageSize().width == 100u);

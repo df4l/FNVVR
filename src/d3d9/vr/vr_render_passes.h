@@ -5,8 +5,10 @@
 
 #include "../../util/util_time.h"
 
+#include "vr_cpu_sampler.h"
 #include "vr_foveation_map.h"
 #include "vr_game_camera.h"
+#include "vr_gpu_timer.h"
 #include "vr_render_profile.h"
 #include "vr_scope_lens.h"
 
@@ -24,6 +26,12 @@ namespace dxvk {
     bool handsDepthTest = true;
     /// Side in pixels of the square the scope's view is drawn in
     uint32_t scopeResolution = 768;
+    /// The GPU time of the passes is measured and logged
+    bool gpuTimings = false;
+    /// Frames that miss their display period are logged one by one
+    bool spikeLog = false;
+    /// The game thread is sampled every two milliseconds (d3d9.vrCpuSamples)
+    bool cpuSamples = false;
     /// Zones of the eye-tracked foveation around the gaze
     VrFoveationZones foveationZones;
     /// Without an eye tracker, foveation takes the centre of each view as
@@ -98,6 +106,13 @@ namespace dxvk {
     void endFrame();
 
     /**
+     * \brief CPU time of each pass of the frame ended last
+     */
+    const VrRenderProfile::EyePasses& lastFrame() const {
+      return m_lastFrame;
+    }
+
+    /**
      * \brief Limits the scene pass to a part of its target
      *
      * Only the scene pass: the game's scissor applies to what is drawn before
@@ -143,6 +158,24 @@ namespace dxvk {
       m_beforeFirstPerson = std::move(callback);
     }
 
+    /**
+     * \brief Sets what times the eyes and their passes on the GPU
+     *
+     * \param [in] timer Outlives this object, or \c nullptr
+     */
+    void setGpuTimer(VrGpuTimer* timer) {
+      m_gpuTimer = timer;
+    }
+
+    /**
+     * \brief Sets what is told the eye and pass the game thread is in
+     *
+     * \param [in] sampler Outlives this object, or \c nullptr
+     */
+    void setCpuSampler(VrCpuSampler* sampler) {
+      m_cpuSampler = sampler;
+    }
+
   private:
 
     VrRenderPasses(const VrRenderPassConfig& config, ViewFn view);
@@ -151,9 +184,16 @@ namespace dxvk {
     ViewFn             m_view;
     VrGameCamera       m_camera;
     VrRenderProfile    m_profile;
+    VrRenderProfile::EyePasses m_lastFrame = { };
 
     uint32_t m_eye = NoEye;
     high_resolution_clock::time_point m_eyeStart;
+
+    VrGpuTimer* m_gpuTimer = nullptr;
+    uint32_t    m_eyeGpuToken = VrGpuTimer::NoToken;
+
+    VrCpuSampler* m_cpuSampler = nullptr;
+    uint8_t       m_phaseBeforeEye = 0;
 
     const VrScopeArea* m_sceneScissor = nullptr;
     std::function<void()> m_afterFirstPerson;
