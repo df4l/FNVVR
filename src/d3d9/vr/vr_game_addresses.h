@@ -2699,6 +2699,36 @@ namespace dxvk {
     constexpr uint8_t   ArchiveFileForEntryPrologue[]  = { 0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x4B, 0x33, 0xF2, 0x00 };
 
     /**
+     * The loaded archives, only read to explain a file the lookups miss
+     * (VrGameFile::explainMissing, findings/optics.md §15).
+     * ArchiveList: ArchiveManager::pArchiveList, pointer to the first node
+     * of a BSSimpleList (item ArchiveListItem, next ArchiveListNext).
+     * ArchiveInvalidateOlder: ArchiveManager::bInvalidateOlderFiles (bool).
+     * Archive (a BSFile): its path (ArchiveName, char[260]), its header's
+     * flags, directory count and type bits (UInt16), its directory array,
+     * its flags (UInt8, bit 1 refuses every lookup, bit 8 secondary).
+     * BSDirectoryEntry and BSFileEntry are ArchiveEntrySize bytes, both
+     * start with their BSHash; a directory has its file count and file
+     * array, a file its size and offset (bit 31 of either is a flag).
+     */
+    constexpr uintptr_t ArchiveList            = 0x011F8160;
+    constexpr uintptr_t ArchiveInvalidateOlder = 0x011ACDF9;
+    constexpr uintptr_t ArchiveListItem        = 0x00;
+    constexpr uintptr_t ArchiveListNext        = 0x04;
+    constexpr uintptr_t ArchiveName            = 0x44;
+    constexpr uint32_t  ArchiveNameSize        = 260;
+    constexpr uintptr_t ArchiveHeaderFlags     = 0x16C;
+    constexpr uintptr_t ArchiveDirectoryCount  = 0x170;
+    constexpr uintptr_t ArchiveTypeBits        = 0x180;
+    constexpr uintptr_t ArchiveDirectories     = 0x184;
+    constexpr uintptr_t ArchiveFlags           = 0x1B4;
+    constexpr uint32_t  ArchiveEntrySize       = 16;
+    constexpr uintptr_t ArchiveDirectoryFiles  = 0x08;
+    constexpr uintptr_t ArchiveDirectoryArray  = 0x0C;
+    constexpr uintptr_t ArchiveFileEntrySize   = 0x08;
+    constexpr uintptr_t ArchiveFileEntryOffset = 0x0C;
+
+    /**
      * Menu tile internals (VrTileTextureRetry), see findings/pipboy.md §3.7.
      * Tile: vtable slot 3 (+0x0C) is GetType (__thiscall, 0x386 = image),
      * children list head at +0x04 (node: next at +0, Tile* at +8), name

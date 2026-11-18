@@ -32,6 +32,18 @@ namespace dxvk {
      */
     static bool read(const char* path, uint32_t archiveType, std::vector<uint8_t>& data);
 
+    /**
+     * \brief Logs why a file \ref read did not find may be missing
+     *
+     * What each of the game's lookups found, whether a plugin replaced
+     * them, and every loaded archive with the file's folder and the
+     * file's raw entry there. See findings/optics.md §15.
+     *
+     * \param [in] path Path of the file, as given to \ref read
+     * \param [in] archiveType The game's archive type looked in
+     */
+    static void explainMissing(const char* path, uint32_t archiveType);
+
   };
 
 }
