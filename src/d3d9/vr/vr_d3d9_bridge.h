@@ -58,30 +58,12 @@ namespace dxvk {
             int64_t               displayTime);
 
     /**
-     * \brief Hands two rendered eye textures to the backend
-     *
-     * Flushes all pending rendering, waits until it has been submitted to the
-     * GPU queue and then calls IVRBackend::submitFrame with the queue locked,
-     * so the backend may use the device queue without racing DXVK.
-     *
-     * \param [in] device D3D9 device that owns the textures
-     * \param [in] backend Backend to submit to
-     * \param [in] eyes Eye textures, indexed by VrEye
-     * \param [in] views Eye poses and field of view used for rendering
-     * \param [in] displayTime Predicted display time from IVRBackend::waitFrame
-     * \returns \c true if the backend accepted the frame
-     */
-    static bool submitStereoFrame(
-            IDirect3DDevice9*     device,
-            IVRBackend&           backend,
-            IDirect3DTexture9*    eyes[VrEyeCount],
-      const std::array<VrEyeView, VrEyeCount>& views,
-            int64_t               displayTime);
-
-    /**
      * \brief Shows a rendered texture on one of the backend's panels
      *
-     * Same synchronisation as submitStereoFrame, with IVRBackend::submitPanel.
+     * Flushes all pending rendering, waits until it has been submitted to the
+     * GPU queue and then calls IVRBackend::submitPanel with the queue locked,
+     * so the backend may use the device queue without racing DXVK. A stereo
+     * frame's panels go through VrFrameSubmitter instead.
      *
      * \param [in] device D3D9 device that owns the texture
      * \param [in] backend Backend to submit to
@@ -104,12 +86,20 @@ namespace dxvk {
             VrPanelAnchor         anchor,
             bool                  premultiplied = false);
 
-  private:
-
+    /**
+     * \brief Gets the Vulkan image of a texture
+     *
+     * \param [in] texture Texture of the device
+     * \param [out] interop Keeps the texture alive while the image is used
+     * \param [out] image The texture's image and its current layout
+     * \returns \c false if the texture has no image
+     */
     static bool queryImage(
             IDirect3DTexture9*    texture,
             Com<ID3D9VkInteropTexture>& interop,
             VrEyeImage&           image);
+
+  private:
 
     /**
      * \brief Gets all rendering so far to the queue and locks it

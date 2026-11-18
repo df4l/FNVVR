@@ -111,6 +111,7 @@ namespace dxvk {
     bool                                 m_foveation = false;
     bool                                 m_handPush = true;
     bool                                 m_asyncHandOff = true;
+    bool                                 m_asyncSubmit  = true;
     VrSneakConfig                        m_sneakConfig;
     bool                                 m_weaponInHand;
     VrGameTimerConfig                    m_timerConfig;

@@ -68,41 +68,6 @@ namespace dxvk {
   }
 
 
-  bool VrD3D9Bridge::submitStereoFrame(
-          IDirect3DDevice9*     device,
-          IVRBackend&           backend,
-          IDirect3DTexture9*    eyes[VrEyeCount],
-    const std::array<VrEyeView, VrEyeCount>& views,
-          int64_t               displayTime) {
-    Com<ID3D9VkInteropDevice> interop;
-
-    if (FAILED(device->QueryInterface(__uuidof(ID3D9VkInteropDevice),
-        reinterpret_cast<void**>(&interop))))
-      return false;
-
-    VrFrameSubmission frame;
-    frame.views       = views;
-    frame.displayTime = displayTime;
-
-    // The textures must outlive the submission, hold references to
-    // their interop interfaces until the backend is done.
-    Com<ID3D9VkInteropTexture> textures[VrEyeCount];
-
-    for (uint32_t i = 0; i < VrEyeCount; i++) {
-      if (!queryImage(eyes[i], textures[i], frame.images[i]))
-        return false;
-    }
-
-    // Rendering has to reach the queue before the backend reads the images.
-    // Locking the submission queue waits for DXVK's submission thread to
-    // drain, so everything issued so far is already queued ahead of us.
-    frame.syncMs = flushAndLock(interop.ptr());
-    bool result = backend.submitFrame(frame);
-    interop->ReleaseSubmissionQueue();
-    return result;
-  }
-
-
   bool VrD3D9Bridge::submitPanel(
           IDirect3DDevice9*     device,
           IVRBackend&           backend,
@@ -129,7 +94,9 @@ namespace dxvk {
     if (!queryImage(texture, textureInterop, panel.image))
       return false;
 
-    // See submitStereoFrame
+    // Rendering has to reach the queue before the backend reads the image.
+    // Locking the submission queue waits for DXVK's submission thread to
+    // drain, so everything issued so far is already queued ahead of us.
     panel.syncMs = flushAndLock(interop.ptr());
     bool result = backend.submitPanel(id, panel);
     interop->ReleaseSubmissionQueue();

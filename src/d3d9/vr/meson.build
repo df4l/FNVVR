@@ -99,6 +99,7 @@ vr_dxvk_src = files([
   'vr_launcher_windows.cpp',
   'vr_head_look.cpp',
   'vr_d3d9_bridge.cpp',
+  'vr_frame_submitter.cpp',
   'vr_emulator_keyboard.cpp',
   'vr_game_camera.cpp',
   'vr_depth_resolve.cpp',

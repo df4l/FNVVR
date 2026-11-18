@@ -277,6 +277,7 @@ namespace dxvk {
     g_vrSystem->m_handPush = config.getOption<bool>("d3d9.vrHandPush", true);
     g_vrSystem->m_eyeAspect = config.getOption<bool>("d3d9.vrEyeAspect", true);
     g_vrSystem->m_asyncHandOff = config.getOption<bool>("d3d9.vrAsyncHandOff", true);
+    g_vrSystem->m_asyncSubmit = config.getOption<bool>("d3d9.vrAsyncSubmit", true);
     g_vrSystem->m_scopes = options.scopeLens;
     g_vrSystem->m_roomscale = options.roomscale;
     g_vrSystem->m_foveation = options.foveation;
@@ -396,6 +397,7 @@ namespace dxvk {
       m_stereoRenderer->setPipBoyAngle(m_pipBoyAngle);
       m_stereoRenderer->setManualReload(m_manualReload);
       m_stereoRenderer->setSneakConfig(m_sneakConfig);
+      m_stereoRenderer->setAsyncSubmit(m_asyncSubmit);
     }
 
     VrOptionsFile::save(options);
@@ -467,6 +469,7 @@ namespace dxvk {
       m_stereoRenderer->setFoveationEnabled(m_foveation);
       m_stereoRenderer->setHandPush(m_handPush);
       m_stereoRenderer->setSneakConfig(m_sneakConfig);
+      m_stereoRenderer->setAsyncSubmit(m_asyncSubmit);
     }
 
     return true;

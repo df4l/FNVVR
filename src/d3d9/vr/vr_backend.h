@@ -186,7 +186,11 @@ namespace dxvk {
    * beginFrame, submitFrame, submitEmptyFrame and submitPanel are called with
    * the device queue locked, so they may use it.
    *
-   * Methods are called from the render/game thread only.
+   * Methods are called from the render/game thread, except a stereo
+   * frame's submitFrame and the submitPanel and hidePanel calls of its
+   * panels, which may come from the renderer's submission thread (see
+   * VrFrameSubmitter) while the game thread runs the game's update. Those
+   * calls are made with the device queue locked, like any submitPanel.
    */
   class IVRBackend {
 

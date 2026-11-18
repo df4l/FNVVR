@@ -41,6 +41,7 @@
 #include "vr_minigames.h"
 #include "vr_manual_reload.h"
 #include "vr_foveation.h"
+#include "vr_frame_submitter.h"
 #include "vr_part_highlight.h"
 #include "vr_npc_gaze.h"
 #include "vr_painter.h"
@@ -300,6 +301,15 @@ namespace dxvk {
      */
     void setFoveationEnabled(bool enabled);
 
+    /**
+     * \brief Hands frames to the runtime from a thread of their own
+     *
+     * See VrFrameSubmitter (d3d9.vrAsyncSubmit).
+     */
+    void setAsyncSubmit(bool enabled) {
+      m_submitter.setThreaded(enabled);
+    }
+
   private:
 
     static constexpr uint32_t NoEye = ~0u;
@@ -327,6 +337,9 @@ namespace dxvk {
 
     Com<IDirect3DTexture9> m_eyeTextures[VrEyeCount];
     std::unique_ptr<VrPreviewWindow> m_preview;
+
+    // Every panel and frame of the renderer goes to the backend through it
+    VrFrameSubmitter   m_submitter;
 
     // The game composes its final 3D image into the backbuffer
     Com<IDirect3DSurface9> m_gameTarget;

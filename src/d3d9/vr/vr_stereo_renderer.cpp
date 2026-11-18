@@ -193,7 +193,7 @@ namespace dxvk {
   VrStereoRenderer::VrStereoRenderer(IVRBackend& backend, IDirect3DDevice9* device,
     bool showPreview, const VrPanelConfig& panel)
   : m_backend(backend), m_device(device), m_showPreview(showPreview), m_panelConfig(panel),
-    m_controls(backend) { }
+    m_submitter(device, backend), m_controls(backend) { }
 
 
   VrStereoRenderer::~VrStereoRenderer() {
@@ -202,6 +202,7 @@ namespace dxvk {
     hidePanel();
     hideHud();
     hideHandHud();
+    m_submitter.finish();
   }
 
 
@@ -892,8 +893,9 @@ namespace dxvk {
 
     drawFaders(eyes);
 
-    // The panels go first: the eye submission starts the hand-off, which
-    // holds DXVK's queue on its thread, and each panel waits for that queue
+    // The panels go to the runtime with the eyes, before them
+    m_submitter.beginFrame();
+
     if (m_hudRendered)
       submitHud();
     else
@@ -921,9 +923,8 @@ namespace dxvk {
     if (m_gpuTimer)
       m_gpuTimer->endFrame();
 
-    if (!VrD3D9Bridge::submitStereoFrame(m_device, m_backend, eyes, views,
-        timing.predictedDisplayTime) && !m_loggedFailure) {
-      Logger::err("VR: The backend rejected a stereo frame");
+    if (!m_submitter.submitFrame(eyes, views, timing.predictedDisplayTime) && !m_loggedFailure) {
+      Logger::err("VR: The eye images could not be handed to the backend");
       m_loggedFailure = true;
     }
 
@@ -2489,6 +2490,9 @@ namespace dxvk {
 
 
   VrFrameTiming VrStereoRenderer::waitFrame() {
+    // The last frame reaches the runtime before it is asked for the next
+    m_submitter.finish();
+
     VrCpuPhaseScope phase(m_cpuSampler.get(), uint8_t(VrCpuPhase::Wait));
     return m_backend.waitFrame();
   }
@@ -2995,7 +2999,7 @@ namespace dxvk {
     pose.position.y = m_panelConfig.hudHeight;
     pose.position.z = -m_panelConfig.hudDistance;
 
-    m_hudShown = VrD3D9Bridge::submitPanel(m_device, m_backend, VrPanelId::HudHead,
+    m_hudShown = m_submitter.submitPanel(VrPanelId::HudHead,
       m_hudPanelTexture.ptr(), pose, m_panelConfig.hudWidth, VrPanelAnchor::Head);
 
     if (!m_hudShown && !m_loggedHudFailure) {
@@ -3021,7 +3025,7 @@ namespace dxvk {
 
     float panelWidth = minigamePanel ? minigamePanel->width : m_panelConfig.hudWidth;
 
-    m_panelShown = VrD3D9Bridge::submitPanel(m_device, m_backend, VrPanelId::Menu,
+    m_panelShown = m_submitter.submitPanel(VrPanelId::Menu,
       m_menuTexture.ptr(), m_panelPose, panelWidth, VrPanelAnchor::Room);
     m_panelWidth = panelWidth;
 
@@ -3036,7 +3040,7 @@ namespace dxvk {
     if (!m_hudShown)
       return;
 
-    m_backend.hidePanel(VrPanelId::HudHead);
+    m_submitter.hidePanel(VrPanelId::HudHead);
     m_hudShown = false;
   }
 
@@ -3262,7 +3266,7 @@ namespace dxvk {
         panelSurface.ptr(), &part.target, D3DTEXF_NONE));
     }
 
-    bool shown = copied && VrD3D9Bridge::submitPanel(m_device, m_backend, id,
+    bool shown = copied && m_submitter.submitPanel(id,
       texture.ptr(), pose, float(width) * metresPerPixel, VrPanelAnchor::Room);
 
     if (!shown && !m_loggedHandHudFailure) {
@@ -3278,7 +3282,7 @@ namespace dxvk {
     if (!shown)
       return;
 
-    m_backend.hidePanel(id);
+    m_submitter.hidePanel(id);
     shown = false;
   }
 
@@ -3319,7 +3323,7 @@ namespace dxvk {
     if (!m_panelShown || (!m_panelPlacedWithHead && m_hasHeadPose))
       placePanel(m_panelConfig.distance);
 
-    m_panelShown = VrD3D9Bridge::submitPanel(m_device, m_backend, VrPanelId::Menu,
+    m_panelShown = m_submitter.submitPanel(VrPanelId::Menu,
       m_panelTexture.ptr(), m_panelPose, m_panelConfig.width, VrPanelAnchor::Room);
     m_panelWidth = m_panelConfig.width;
 
@@ -3401,7 +3405,7 @@ namespace dxvk {
     if (!m_panelShown)
       return;
 
-    m_backend.hidePanel(VrPanelId::Menu);
+    m_submitter.hidePanel(VrPanelId::Menu);
     m_panelShown = false;
   }
 

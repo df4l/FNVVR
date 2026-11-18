@@ -820,6 +820,28 @@ namespace dxvk {
       EmitCs(std::forward<Cmd>(command));
     }
 
+    /**
+     * \brief Flushes the VR layer's rendering so far
+     *
+     * \returns Sequence number of the CS chunk holding the flush,
+     *    for WaitForVrFlush
+     */
+    uint64_t FlushForVr() {
+      D3D9DeviceLock lock = LockDevice();
+      ExecuteFlush(false);
+      return m_csSeqNum;
+    }
+
+    /**
+     * \brief Waits until the CS thread has run a flush of FlushForVr
+     *
+     * May be called from any thread: it neither takes the device
+     * lock nor touches the device's state.
+     */
+    void WaitForVrFlush(uint64_t SequenceNumber) {
+      m_csThread.synchronize(SequenceNumber);
+    }
+
     const Rc<DxvkDevice>& GetDXVKDevice() {
       return m_dxvkDevice;
     }
