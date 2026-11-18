@@ -7,6 +7,8 @@
 - **Water reflections lined up with the headset**: the reflections were read about 4.5 degrees too high with the eye's asymmetric view, so distant water reflected the hazy sky instead of the shore, turned grey beyond a fixed distance and moved with the head. They now match what is above the water.
 - **Water animated once per frame**: the water moved twice as fast as on a flat screen, and each eye saw a different step of it. It now advances once per frame.
 - **Work no longer repeated in the right eye and in scopes**: object fades, light and shadow fades, the eyes' adaptation to light, the loading screen's fader and the water's time-based work ran two or three times per frame (right eye, scope lens). They run once. The right eye also skips work that does not depend on the view (wading actors, the wading stencil effect, water sounds, the water noise map).
+- **Foveation keeps its shading rate map**: the map of the eye-tracked foveation was rebuilt whenever the eye's view moved even slightly (43772 times in a 20-minute session on the Steam Frame). It is now kept through small view drifts and rebuilt only when the view really changes (2 times in the same session), which makes the option clearly smoother.
+- **Profiling options for testers** (off by default): `d3d9.vrGpuTimings` logs the GPU time of each render pass, `d3d9.vrSpikeLog` logs the breakdown of each frame that misses its display period, and `d3d9.vrCpuSamples` samples where the game thread spends its time into `fnvvr\cpu_samples.txt`.
 - **Model loader idle cost**: every frame the game walked its 5039-slot queue of delayed models even when it was empty. The walk is now skipped when the queue holds nothing (same result, a little less time on the game thread).
 
 ### Hands and controls
@@ -16,6 +18,7 @@
 
 ### Menus
 
+- **Breath meter under water**: the oxygen gauge was never shown, so the air left while swimming could not be seen. It now fades in in front of your head, a little below the line of sight, when your head is under water.
 - **Companion wheel with the lasers**: the laser now hovers the slice it points at, and the triggers, A and X pick an order (X under the left laser, A under the right one, as in dialogues). A press the pointer does not take stays the gamepad's A, so the stick still works.
 
 ### Other mods
