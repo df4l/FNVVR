@@ -13,8 +13,16 @@ namespace dxvk {
   namespace {
 
     /// A frame this long with the backend is reported as a hang
-    constexpr auto HangTime    = std::chrono::seconds(3);
-    constexpr auto WatchPeriod = std::chrono::seconds(1);
+    constexpr int64_t HangTimeUs    = 3000000;
+    constexpr DWORD   WatchPeriodMs = 1000;
+
+    /// Threaded jobs whose steps are logged, to see where a first frame stops
+    constexpr uint32_t TracedJobCount = 3;
+
+    int64_t nowUs() {
+      return std::chrono::duration_cast<std::chrono::microseconds>(
+        high_resolution_clock::now().time_since_epoch()).count();
+    }
 
     const char* stepName(uint32_t step) {
       static const char* names[] = {
@@ -146,8 +154,9 @@ namespace dxvk {
     m_cond.wait(lock, [this] { return !m_pending; });
     m_job      = std::move(job);
     m_pending  = true;
-    m_handedAt = high_resolution_clock::now();
+    m_handedAtUs = nowUs();
     m_gameThread = GetCurrentThreadId();
+    m_busy       = true;
     m_cond.notify_all();
     return hasEyes;
   }
@@ -159,14 +168,14 @@ namespace dxvk {
     // Rendering has to reach the queue before the backend reads the images.
     // Locking the submission queue waits for DXVK's submission thread to
     // drain, so everything recorded up to the flush is queued ahead of us.
-    m_step = uint32_t(Step::Flush);
+    setStep(Step::Flush);
     m_deviceEx->WaitForVrFlush(job.flushSeq);
-    m_step = uint32_t(Step::Queue);
+    setStep(Step::Queue);
     m_deviceEx->GetDXVKDevice()->lockSubmission();
 
     double syncMs = std::chrono::duration<double, std::milli>(high_resolution_clock::now() - start).count();
 
-    m_step = uint32_t(Step::Panels);
+    setStep(Step::Panels);
 
     for (const PanelOp& op : job.panels) {
       if (op.hide)
@@ -175,7 +184,7 @@ namespace dxvk {
         m_backend.submitPanel(op.id, op.panel);
     }
 
-    m_step = uint32_t(Step::Eyes);
+    setStep(Step::Eyes);
 
     if (job.hasEyes) {
       job.frame.syncMs = syncMs;
@@ -188,7 +197,7 @@ namespace dxvk {
       m_backend.submitEmptyFrame(job.displayTime);
     }
 
-    m_step = uint32_t(Step::Unlock);
+    setStep(Step::Unlock);
     m_deviceEx->GetDXVKDevice()->unlockSubmission();
   }
 
@@ -210,12 +219,15 @@ namespace dxvk {
       run(m_job);
       lock.lock();
 
-      if (m_hangReported) {
-        double seconds = std::chrono::duration<double>(high_resolution_clock::now() - m_handedAt).count();
+      if (m_hangReported.exchange(false)) {
+        double seconds = double(nowUs() - m_handedAtUs) / 1.0e6;
         Logger::warn(str::format("VR: The frame reached the runtime after ", seconds, " s"));
-        m_hangReported = false;
       }
 
+      if (m_tracedJobs < TracedJobCount && ++m_tracedJobs == TracedJobCount)
+        Logger::info("VR: The submission thread's first frames went through");
+
+      m_busy    = false;
       m_pending = false;
       m_cond.notify_all();
     }
@@ -224,24 +236,32 @@ namespace dxvk {
 
   void VrFrameSubmitter::runWatchdog() {
     env::setThreadName("vr-submit-watchdog");
+    Logger::info("VR: The submission watchdog is running");
 
-    std::unique_lock<dxvk::mutex> lock(m_mutex);
+    // No lock here: a hang may sit on anything the other threads hold
+    while (!m_watchStop) {
+      Sleep(WatchPeriodMs);
 
-    while (!m_stop) {
-      m_cond.wait_for(lock, WatchPeriod, [this] { return m_stop; });
-
-      if (!m_pending || m_hangReported)
+      if (!m_busy || m_hangReported)
         continue;
 
-      auto late = high_resolution_clock::now() - m_handedAt;
+      int64_t lateUs = nowUs() - m_handedAtUs;
 
-      if (late < HangTime)
+      if (lateUs < HangTimeUs)
         continue;
 
       m_hangReported = true;
-      lock.unlock();
-      reportHang(std::chrono::duration<double>(late).count());
-      lock.lock();
+      reportHang(double(lateUs) / 1.0e6);
+    }
+  }
+
+
+  void VrFrameSubmitter::setStep(Step step) {
+    m_step = uint32_t(step);
+
+    if (m_tracedJobs < TracedJobCount && m_threaded) {
+      Logger::info(str::format("VR: Submission thread ", GetCurrentThreadId(), ", frame ", m_tracedJobs,
+        ", ", double(nowUs() - m_handedAtUs) / 1000.0, " ms after the hand-off: ", stepName(uint32_t(step))));
     }
   }
 
@@ -249,16 +269,18 @@ namespace dxvk {
   void VrFrameSubmitter::reportHang(double seconds) {
     Logger::err(str::format("VR: A frame has been with the submission thread for ", seconds,
       " s, ", stepName(m_step.load())));
-    Logger::err(str::format("VR: Submission thread ", m_submitThread, ": ",
-      VrCrashLog::describeThread(m_submitThread)));
-    Logger::err(str::format("VR: Game thread ", m_gameThread, ": ",
-      VrCrashLog::describeThread(m_gameThread)));
+    Logger::err(str::format("VR: Submission thread ", m_submitThread.load(), ": ",
+      VrCrashLog::describeThread(m_submitThread.load())));
+    Logger::err(str::format("VR: Game thread ", m_gameThread.load(), ": ",
+      VrCrashLog::describeThread(m_gameThread.load())));
   }
 
 
   void VrFrameSubmitter::startThread() {
-    m_stop    = false;
-    m_pending = false;
+    m_stop      = false;
+    m_pending   = false;
+    m_busy      = false;
+    m_watchStop = false;
     m_thread  = dxvk::thread([this] { runThread(); });
     m_watchdog = dxvk::thread([this] { runWatchdog(); });
     Logger::info("VR: Frames and panels are handed to the runtime on a thread of their own");
@@ -275,6 +297,7 @@ namespace dxvk {
     }
 
     m_thread.join();
+    m_watchStop = true;
     m_watchdog.join();
     m_job = Job();
   }

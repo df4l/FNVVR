@@ -145,11 +145,17 @@ namespace dxvk {
     bool                      m_stop    = false;
     bool                      m_logged  = false;
 
-    high_resolution_clock::time_point m_handedAt;
-    uint32_t                  m_gameThread   = 0;
-    uint32_t                  m_submitThread = 0;
-    bool                      m_hangReported = false;
-    std::atomic<uint32_t>     m_step = { 0u };
+    // Read by the watchdog without the mutex, which a hang may hold
+    std::atomic<bool>         m_busy         = { false };
+    std::atomic<bool>         m_watchStop    = { false };
+    std::atomic<int64_t>      m_handedAtUs   = { 0 };
+    std::atomic<uint32_t>     m_gameThread   = { 0u };
+    std::atomic<uint32_t>     m_submitThread = { 0u };
+    std::atomic<uint32_t>     m_step         = { 0u };
+    std::atomic<bool>         m_hangReported = { false };
+    uint32_t                  m_tracedJobs   = 0;
+
+    void setStep(Step step);
 
     void run(Job& job);
 
