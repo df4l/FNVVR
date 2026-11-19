@@ -128,6 +128,10 @@ namespace dxvk {
       int64_t                 displayTime = 0;
     };
 
+    void pinImage(IDirect3DTexture9* texture);
+
+    void refreshImage(ID3D9VkInteropTexture* interop, VrEyeImage& image);
+
     IDirect3DDevice9*         m_device;
     D3D9DeviceEx*             m_deviceEx;
     IVRBackend&               m_backend;
@@ -144,6 +148,7 @@ namespace dxvk {
     bool                      m_pending = false;
     bool                      m_stop    = false;
     bool                      m_logged  = false;
+    bool                      m_loggedMove = false;
 
     // Read by the watchdog without the mutex, which a hang may hold
     std::atomic<bool>         m_busy         = { false };

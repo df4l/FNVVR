@@ -1,4 +1,5 @@
 #include "../d3d9_device.h"
+#include "../d3d9_texture.h"
 
 #include "../../util/log/log.h"
 #include "../../util/util_env.h"
@@ -101,6 +102,8 @@ namespace dxvk {
     if (!VrD3D9Bridge::queryImage(texture, op.texture, op.panel.image))
       return false;
 
+    pinImage(texture);
+
     m_next.panels.push_back(std::move(op));
     return true;
   }
@@ -133,8 +136,12 @@ namespace dxvk {
     job.frame.views = views;
     job.frame.displayTime = displayTime;
 
-    for (uint32_t i = 0; i < VrEyeCount; i++)
+    for (uint32_t i = 0; i < VrEyeCount; i++) {
       job.hasEyes &= VrD3D9Bridge::queryImage(eyes[i], job.eyes[i], job.frame.images[i]);
+
+      if (job.hasEyes)
+        pinImage(eyes[i]);
+    }
 
     // One flush gets the panels and eyes to the CS thread, the wait for
     // it is the submission thread's
@@ -173,6 +180,18 @@ namespace dxvk {
     setStep(Step::Queue);
     m_deviceEx->GetDXVKDevice()->lockSubmission();
 
+    // The images' handles are read again now that the CS thread has pinned
+    // them: the ones read on the game thread may have been relocated since
+    for (PanelOp& op : job.panels) {
+      if (!op.hide)
+        refreshImage(op.texture.ptr(), op.panel.image);
+    }
+
+    if (job.hasEyes) {
+      for (uint32_t i = 0; i < VrEyeCount; i++)
+        refreshImage(job.eyes[i].ptr(), job.frame.images[i]);
+    }
+
     double syncMs = std::chrono::duration<double, std::milli>(high_resolution_clock::now() - start).count();
 
     setStep(Step::Panels);
@@ -199,6 +218,38 @@ namespace dxvk {
 
     setStep(Step::Unlock);
     m_deviceEx->GetDXVKDevice()->unlockSubmission();
+  }
+
+
+  void VrFrameSubmitter::pinImage(IDirect3DTexture9* texture) {
+    // DXVK's defragmentation may move an image to new memory at any flush
+    // and destroy the old image once the GPU is done with it. The runtime
+    // copies from the handle it is given, outside DXVK's tracking, so the
+    // images it reads are kept where they are.
+    m_deviceEx->EmitVrCommand([
+      cImage = GetCommonTexture(texture)->GetImage()
+    ] (DxvkContext* ctx) {
+      DxvkImageUsageInfo usage = { };
+      usage.stableGpuAddress = VK_TRUE;
+      ctx->ensureImageCompatibility(cImage, usage);
+    });
+  }
+
+
+  void VrFrameSubmitter::refreshImage(ID3D9VkInteropTexture* interop, VrEyeImage& image) {
+    VkImage handle = VK_NULL_HANDLE;
+    VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    if (FAILED(interop->GetVulkanImageInfo(&handle, &layout, nullptr)) || !handle)
+      return;
+
+    if (handle != image.image && !m_loggedMove) {
+      Logger::warn("VR: An image moved in memory between the hand-off and its submission, its new handle is used");
+      m_loggedMove = true;
+    }
+
+    image.image  = handle;
+    image.layout = layout;
   }
 
 
