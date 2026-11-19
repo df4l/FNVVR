@@ -1,3 +1,6 @@
+#include "../../util/log/log.h"
+#include "../../util/util_string.h"
+
 #include "vr_game_addresses.h"
 #include "vr_game_file.h"
 #include "vr_game_memory.h"
@@ -52,11 +55,17 @@ namespace dxvk {
     uint32_t size = method<SizeFn>(file, VrGame::FileGetSize)(file, nullptr);
 
     if (!size || size > MaxFileSize) {
+      if (size)
+        Logger::warn(str::format("VR: '", path, "' is ", size >> 20, " MB, over the ", MaxFileSize >> 20, " MB the VR layer reads"));
+
       destroy(file);
       return false;
     }
 
-    // One component of one byte: nothing to swap
+    // One component of one byte: nothing to swap. The size can be larger
+    // than the content: an uncompressed archive with embedded file names
+    // counts the name in front of the data, which the game skips on open
+    // and then never reads past the entry (ArchiveFile::ReadF)
     data.resize(size);
     uint32_t componentSize = 1;
     uint32_t read = field<ReadFn>(file, VrGame::FileRead)(file, data.data(), size, &componentSize, 1);
@@ -64,12 +73,8 @@ namespace dxvk {
 
     destroy(file);
 
-    if (read != size) {
-      data.clear();
-      return false;
-    }
-
-    return true;
+    data.resize(read);
+    return read != 0;
   }
 
 }

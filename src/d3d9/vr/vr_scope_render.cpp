@@ -113,10 +113,8 @@ namespace dxvk {
 
     VrImage image;
 
-    if (!texture.empty() && !readReticleTexture(texture, image)) {
-      Logger::warn(str::format("VR: The reticle '", texture, "' could not be read"));
+    if (!texture.empty() && !readReticleTexture(texture, image))
       texture.clear();
-    }
 
     // A crosshair made of geometry (scope01.nif), or a model or texture a mod
     // replaced in a form not read here: one of the game's reticles stands in,
@@ -125,7 +123,7 @@ namespace dxvk {
       texture = ReplacementReticle;
 
       if (!readReticleTexture(texture, image)) {
-        Logger::warn(str::format("VR: The reticle '", texture, "' could not be read, the lens has none"));
+        Logger::warn(str::format("VR: Scope model '", model, "' has no reticle that could be read, the lens has none"));
         return VrImage();
       }
     }
@@ -139,9 +137,16 @@ namespace dxvk {
   bool VrScopeRender::readReticleTexture(const std::string& texture, VrImage& image) {
     std::vector<uint8_t> data;
 
-    if (!VrGameFile::read(("Data\\" + texture).c_str(), VrGame::ArchiveTextures, data)
-     || !vrDecodeDds(data.data(), data.size(), image))
+    if (!VrGameFile::read(("Data\\" + texture).c_str(), VrGame::ArchiveTextures, data)) {
+      Logger::warn(str::format("VR: The reticle '", texture, "' was not found in the loose files or the archives"));
       return false;
+    }
+
+    if (!vrDecodeDds(data.data(), data.size(), image)) {
+      Logger::warn(str::format("VR: The reticle '", texture, "' is in a format not read: ",
+        vrDescribeDds(data.data(), data.size())));
+      return false;
+    }
 
     if (vrIsReticleSheet(texture))
       image = vrComposeReticleSheet(image);
