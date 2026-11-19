@@ -63,6 +63,14 @@ namespace dxvk {
       Count
     };
 
+    /**
+     * Clip-space matrix every vertex shader applies to its position: the
+     * identity, or the right eye's matrix while the VR layer replays the
+     * left eye's commands (D3D9DeviceEx::ReplayVrStereoCapture). Bound by
+     * the device itself, so it is not one of the constant buffers above.
+     */
+    static constexpr uint32_t VSStereoTransform = Count;
+
     static constexpr uint32_t computeTextureBinding(D3D9ShaderType shaderType, uint32_t index) {
       auto base = (shaderType == D3D9ShaderType::VertexShader) ? FirstVSSamplerSlot : 0u;
       return base + index;

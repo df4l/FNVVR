@@ -44,7 +44,7 @@ namespace dxvk {
         cCpuSlice   = m_cpuSlice,
         cSize       = size
       ] (DxvkContext* ctx) mutable {
-        ctx->invalidateBuffer(cCpuBuffer, std::move(cCpuSlice));
+        ctx->invalidateBuffer(cCpuBuffer, decltype(cCpuSlice)(cCpuSlice));
         ctx->bindUniformBufferRange(cStages, cBinding, 0u, cSize);
       });
 
@@ -113,7 +113,7 @@ namespace dxvk {
       cStages   = m_stages,
       cSlice    = DxvkBufferSlice(m_gpuBuffer)
     ] (DxvkContext* ctx) mutable {
-      ctx->bindUniformBuffer(cStages, cBinding, std::move(cSlice));
+      ctx->bindUniformBuffer(cStages, cBinding, decltype(cSlice)(cSlice));
     });
 
     return m_cpuBuffer->storage();
