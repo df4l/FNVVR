@@ -31,7 +31,9 @@ namespace dxvk {
    *   alone: the game ends it by itself. When it ends it while the view
    *   is already back in first person, the game keeps the third-person
    *   model shown and the hands culled: PlayerCharacter::Show1stPerson
-   *   then shows the first-person model again.
+   *   then shows the first-person model again. It does so as well when
+   *   the first-person root is culled while the game counts it as shown
+   *   (a seat left after the game stood the player up).
    *
    * The cameras of V.A.T.S. itself are not changed here. See
    * findings/camera.md §7.
