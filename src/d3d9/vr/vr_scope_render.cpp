@@ -137,11 +137,8 @@ namespace dxvk {
   bool VrScopeRender::readReticleTexture(const std::string& texture, VrImage& image) {
     std::vector<uint8_t> data;
 
-    std::string path = "Data\\" + texture;
-
-    if (!VrGameFile::read(path.c_str(), VrGame::ArchiveTextures, data)) {
+    if (!VrGameFile::read(("Data\\" + texture).c_str(), VrGame::ArchiveTextures, data)) {
       Logger::warn(str::format("VR: The reticle '", texture, "' was not found in the loose files or the archives"));
-      VrGameFile::explainMissing(path.c_str(), VrGame::ArchiveTextures);
       return false;
     }
 

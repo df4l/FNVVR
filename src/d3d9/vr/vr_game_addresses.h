@@ -1786,6 +1786,18 @@ namespace dxvk {
     constexpr uint8_t   HudSneakMeterStore[]   = { 0x8B, 0x0D, 0xC0, 0x96, 0x1D, 0x01, 0x89, 0x81, 0x30, 0x01, 0x00, 0x00 };
 
     /**
+     * BreathMeter group: a 64 x 64 model tile (Interface\HUD\AirTimer01.NIF)
+     * that HUDMainMenu::UpdateBreathMeter (0x0077E4F0) fades in while the
+     * player's head is under water and winds down with the breath left.
+     * HUDMainMenu::Create stores it at the given site and puts it 80 units
+     * below the sneak meter, in the middle of the screen; nothing else
+     * moves it. See findings/hud.md §18.
+     */
+    constexpr uintptr_t HudBreathMeter = 0x148;
+    constexpr uintptr_t HudBreathMeterStoreSite = 0x0076E485;
+    constexpr uint8_t   HudBreathMeterStore[]   = { 0x8B, 0x15, 0xC0, 0x96, 0x1D, 0x01, 0x89, 0x82, 0x48, 0x01, 0x00, 0x00 };
+
+    /**
      * HUDMainMenu fields holding the HUD groups shown on the hands: HitPoints
      * (health bar and compass), ActionPoints (action points, ammunition and
      * weapon condition), with AmmoTypeLabel and CNDArrows, which are placed
@@ -2677,58 +2689,6 @@ namespace dxvk {
     constexpr uint8_t   FileFinderGetFilePrologue[] = { 0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x95, 0x37, 0xF2, 0x00 };
 
     /**
-     * The archive lookup of the game's texture loader (QueuedFileEntry::
-     * LookupFileEntry 0x00C3CF60 then QueuedFileEntry::GetFile 0x00C3CFF0),
-     * see findings/optics.md §15. FileFinder::GetFile skips an archive entry
-     * whose offset has bit 31 set (Archive::CheckValidFile 0x00AFB2A0 with
-     * abSkipSecondaryArchiveCheck 0), this lookup does not.
-     * BsHashMakeDirAndFile: __cdecl (path, directory hash, file hash), each
-     * hash BsHashSize bytes. ArchiveEntryForFile: __cdecl (archive type
-     * index, directory hash, file hash, path), tests the archives whose
-     * type has bit (1 << index), returns a BSFileEntry* or null.
-     * ArchiveFileForEntry: __cdecl (archive type index, entry, buffer size,
-     * name null), returns an ArchiveFile*, a BSFile like FileFinderGetFile's.
-     */
-    constexpr uintptr_t BsHashMakeDirAndFile = 0x00AFD270;
-    constexpr uintptr_t ArchiveEntryForFile  = 0x00AF6540;
-    constexpr uintptr_t ArchiveFileForEntry  = 0x00AF6340;
-    constexpr uint32_t  BsHashSize           = 8;
-    constexpr uint32_t  ArchiveDefaultBuffer = 0xFFFFFFFF;
-    constexpr uint8_t   BsHashMakeDirAndFilePrologue[] = { 0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x40, 0x02, 0x00, 0x00 };
-    constexpr uint8_t   ArchiveEntryForFilePrologue[]  = { 0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x91, 0x33, 0xF2, 0x00 };
-    constexpr uint8_t   ArchiveFileForEntryPrologue[]  = { 0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x4B, 0x33, 0xF2, 0x00 };
-
-    /**
-     * The loaded archives, only read to explain a file the lookups miss
-     * (VrGameFile::explainMissing, findings/optics.md §15).
-     * ArchiveList: ArchiveManager::pArchiveList, pointer to the first node
-     * of a BSSimpleList (item ArchiveListItem, next ArchiveListNext).
-     * ArchiveInvalidateOlder: ArchiveManager::bInvalidateOlderFiles (bool).
-     * Archive (a BSFile): its path (ArchiveName, char[260]), its header's
-     * flags, directory count and type bits (UInt16), its directory array,
-     * its flags (UInt8, bit 1 refuses every lookup, bit 8 secondary).
-     * BSDirectoryEntry and BSFileEntry are ArchiveEntrySize bytes, both
-     * start with their BSHash; a directory has its file count and file
-     * array, a file its size and offset (bit 31 of either is a flag).
-     */
-    constexpr uintptr_t ArchiveList            = 0x011F8160;
-    constexpr uintptr_t ArchiveInvalidateOlder = 0x011ACDF9;
-    constexpr uintptr_t ArchiveListItem        = 0x00;
-    constexpr uintptr_t ArchiveListNext        = 0x04;
-    constexpr uintptr_t ArchiveName            = 0x44;
-    constexpr uint32_t  ArchiveNameSize        = 260;
-    constexpr uintptr_t ArchiveHeaderFlags     = 0x16C;
-    constexpr uintptr_t ArchiveDirectoryCount  = 0x170;
-    constexpr uintptr_t ArchiveTypeBits        = 0x180;
-    constexpr uintptr_t ArchiveDirectories     = 0x184;
-    constexpr uintptr_t ArchiveFlags           = 0x1B4;
-    constexpr uint32_t  ArchiveEntrySize       = 16;
-    constexpr uintptr_t ArchiveDirectoryFiles  = 0x08;
-    constexpr uintptr_t ArchiveDirectoryArray  = 0x0C;
-    constexpr uintptr_t ArchiveFileEntrySize   = 0x08;
-    constexpr uintptr_t ArchiveFileEntryOffset = 0x0C;
-
-    /**
      * Menu tile internals (VrTileTextureRetry), see findings/pipboy.md §3.7.
      * Tile: vtable slot 3 (+0x0C) is GetType (__thiscall, 0x386 = image),
      * children list head at +0x04 (node: next at +0, Tile* at +8), name
@@ -3370,6 +3330,15 @@ namespace dxvk {
     constexpr uintptr_t HotKeyWheelVisible         = 0x00701740;
     constexpr uint8_t   HotKeyWheelVisiblePrologue[] = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x68, 0xA3, 0x0F, 0x00, 0x00 };
     constexpr uintptr_t HudHotKeyWheel             = 0x1C8;
+
+    /**
+     * HUDMainMenu::UpdateHotkeysWheel (0x0077DA60) reads the D-pad in
+     * gamepad mode through HotKeyWheel::HandleHotkeyInput(-1) (__thiscall,
+     * slot, ret 4): a direction held arms the wheel, its release equips or
+     * unequips the slot's item. See findings/quick-menu.md §2.
+     */
+    constexpr uintptr_t HotKeyWheelHandleInput     = 0x00701BD0;
+    constexpr uintptr_t HudHotKeyInputCallSite     = 0x0077DAE9;
 
     /**
      * The Pip-Boy's inventory, see findings/quick-menu.md §3: whether a menu
