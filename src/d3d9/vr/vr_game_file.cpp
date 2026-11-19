@@ -287,7 +287,10 @@ namespace dxvk {
       return false;
     }
 
-    // One component of one byte: nothing to swap
+    // One component of one byte: nothing to swap. The size can be larger
+    // than the content: an uncompressed archive with embedded file names
+    // counts the name in front of the data, which the game skips on open
+    // and then never reads past the entry (ArchiveFile::ReadF)
     data.resize(size);
     uint32_t componentSize = 1;
     uint32_t read = field<ReadFn>(file, VrGame::FileRead)(file, data.data(), size, &componentSize, 1);
@@ -295,12 +298,8 @@ namespace dxvk {
 
     destroy(file);
 
-    if (read != size) {
-      data.clear();
-      return false;
-    }
-
-    return true;
+    data.resize(read);
+    return read != 0;
   }
 
 
