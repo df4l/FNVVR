@@ -224,10 +224,17 @@ namespace dxvk {
         results[r] = sum;
       }
 
-      for (uint32_t r = 0u; r < results.size(); r++)
-        m_builder.add(ir::Op::OutputStore(position, m_builder.makeConstant(r), results[r]));
+      ir::SsaDef lastStore = { };
 
-      m_builder.setCursor(cursor);
+      for (uint32_t r = 0u; r < results.size(); r++)
+        lastStore = m_builder.add(ir::Op::OutputStore(position, m_builder.makeConstant(r), results[r]));
+
+      // The position is written once, transformed
+      for (auto store : stores)
+        m_builder.remove(store);
+
+      bool cursorRemoved = std::find(stores.begin(), stores.end(), cursor) != stores.end();
+      m_builder.setCursor(cursorRemoved ? lastStore : cursor);
     }
 
     std::pair<dxbc_spv::ir::SsaDef, dxbc_spv::ir::ShaderStage> findEntryPoint() {
