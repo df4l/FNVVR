@@ -29,6 +29,16 @@ namespace dxvk {
     static void install();
 
     /**
+     * \brief Also logs every exception raised on one thread, the first
+     *    few, whatever its kind
+     *
+     * C++ exceptions, runtime assertions and the like end a thread
+     * without an access violation; this shows them for a thread under
+     * investigation. Only one thread is watched at a time.
+     */
+    static void watchThread(uint32_t threadId);
+
+    /**
      * \brief Where another thread is: its instruction with its module, and
      *    the return addresses on its stack, for a log line
      *

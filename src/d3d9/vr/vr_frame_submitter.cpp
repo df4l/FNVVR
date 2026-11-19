@@ -207,6 +207,7 @@ namespace dxvk {
 
     std::unique_lock<dxvk::mutex> lock(m_mutex);
     m_submitThread = GetCurrentThreadId();
+    VrCrashLog::watchThread(m_submitThread);
 
     while (true) {
       m_cond.wait(lock, [this] { return m_pending || m_stop; });
