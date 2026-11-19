@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **Hands while swimming**: the game puts the weapon away in the water and animated the arms out of sight, so the hands vanished. Both hands now follow the controllers while swimming, as with a holstered weapon; they still grab objects, but cannot punch or attack, as in the game.
+- **Scope reticles in mod lists with decompressed archives**: lists whose vanilla archives were decompressed by a tool (TTW lists such as The Best of Times) showed no crosshair in the scope lens, because the file read came up a few bytes short and was refused. Such files are now read as the game reads them, which also covers the fonts, terminal pictures and interface images the mod reads. More DDS layouts are decoded, and the log tells a missing reticle from one in a format not read.
 
 ## v0.20.0 (2026-11-18, since v0.19.1 `90dd1b8`)
 
