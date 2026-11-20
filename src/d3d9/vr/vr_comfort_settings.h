@@ -61,8 +61,9 @@ namespace dxvk {
      * is put back.
      *
      * \param [in] inGame The game is played, with no menu open
+     * \param [in] handsHidden The VR layer culls the first-person model
      */
-    void update(bool inGame);
+    void update(bool inGame, bool handsHidden);
 
   private:
 
@@ -73,9 +74,9 @@ namespace dxvk {
     bool m_loggedTemp    = false;
     bool m_loggedModel   = false;
 
-    void keepFirstPerson(uintptr_t player);
+    void keepFirstPerson(uintptr_t player, bool handsHidden);
 
-    void showFirstPersonModel(uintptr_t player);
+    void showFirstPersonModel(uintptr_t player, bool handsHidden);
 
   };
 
