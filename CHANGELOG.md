@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Hands after the casino sends you away**: running out of chips at a slot machine made the game stand you up by itself, and the hands stayed hidden afterwards. The first-person model is now put back in that case too.
 - **Hands while swimming**: the game puts the weapon away in the water and animated the arms out of sight, so the hands vanished. Both hands now follow the controllers while swimming, as with a holstered weapon; they still grab objects, but cannot punch or attack, as in the game.
 - **Scope reticles in mod lists with decompressed archives**: lists whose vanilla archives were decompressed by a tool (TTW lists such as The Best of Times) showed no crosshair in the scope lens, because the file read came up a few bytes short and was refused. Such files are now read as the game reads them, which also covers the fonts, terminal pictures and interface images the mod reads. More DDS layouts are decoded, and the log tells a missing reticle from one in a format not read.
 

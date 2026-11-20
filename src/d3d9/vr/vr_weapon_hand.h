@@ -297,6 +297,16 @@ namespace dxvk {
     }
 
     /**
+     * \brief Whether the first-person model is culled by the VR layer
+     *
+     * True while the hands are hidden (menus, a script holding the player
+     * still). Decided when the model was last placed, in the previous frame.
+     */
+    bool hidesModel() const {
+      return m_hidesModel;
+    }
+
+    /**
      * \brief Where the Pip-Boy's screen is relative to the left controller
      *
      * The centre of the screen when the left forearm takes its free pose

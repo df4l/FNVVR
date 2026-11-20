@@ -1592,16 +1592,27 @@ namespace dxvk {
     m_actorsHidden.clear();
     m_actorsWait = 0;
 
-    // The game may have gone back to first person since, and wants it hidden
+    // Put back as the model the game believes it shows. While seated the
+    // body is culled and the hands are not, which Show1stPerson takes for
+    // the first person already there: getting up (the world runs behind the
+    // casino, so the game can stand the player up before the menu closes)
+    // only clears bActually3rdPerson, and b3rdPerson can still be set.
     auto player = global<uint8_t*>(VrGame::Player);
+    bool thirdPersonModel = player && field<uint8_t>(player, VrGame::PlayerThirdPerson);
 
-    if (m_bodyHidden && player && field<uint8_t>(player, VrGame::PlayerCurrentThirdPerson))
+    if (m_bodyHidden || m_handsShown) {
+      Logger::info(str::format("VR: The seat is left with the game's ",
+        thirdPersonModel ? "third" : "first", "-person model shown (view flags ",
+        player ? uint32_t(field<uint8_t>(player, VrGame::PlayerCurrentThirdPerson)) : 0u, " ",
+        player ? uint32_t(field<uint8_t>(player, VrGame::PlayerTempThirdPerson)) : 0u, ")"));
+    }
+
+    if (m_bodyHidden && thirdPersonModel)
       *m_bodyHidden &= ~VrGame::ObjectFlagAppCulled;
 
     m_bodyHidden = nullptr;
 
-    // Culled again only if the view is still the game's third person
-    if (m_handsShown && player && field<uint8_t>(player, VrGame::PlayerCurrentThirdPerson))
+    if (m_handsShown && thirdPersonModel)
       *m_handsShown |= VrGame::ObjectFlagAppCulled;
 
     m_handsShown = nullptr;

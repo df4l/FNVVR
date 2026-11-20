@@ -649,7 +649,7 @@ namespace dxvk {
     VrGameStateKind state = readGameState();
 
     if (m_comfortSettings)
-      m_comfortSettings->update(state == VrGameStateKind::InGame);
+      m_comfortSettings->update(state == VrGameStateKind::InGame, m_weaponHand && m_weaponHand->hidesModel());
 
     if (m_developerMode)
       m_developerMode->update(state);
