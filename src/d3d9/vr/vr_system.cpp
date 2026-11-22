@@ -244,6 +244,8 @@ namespace dxvk {
     passes.foveationZones.halfDegrees = std::min(std::max(config.getOption<float>("d3d9.vrFoveationHalfAngle",
       passes.foveationZones.halfDegrees), passes.foveationZones.fullDegrees), 89.0f);
     passes.foveationTestGaze = config.getOption<bool>("d3d9.vrFoveationTestGaze", passes.foveationTestGaze);
+    passes.worldScaleTest = std::min(std::max(config.getOption<float>("d3d9.vrWorldScaleTest",
+      passes.worldScaleTest), 0.0f), 1.0f);
 
     VrDeveloperConfig developer;
     developer.enabled = config.getOption<bool>("d3d9.vrDeveloperMode", developer.enabled);

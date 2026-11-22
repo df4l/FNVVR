@@ -604,6 +604,8 @@ namespace dxvk {
     VrGazeHold m_gazeHold;
     bool m_foveationEnabled  = false;
     bool m_foveationTestGaze = false;
+    // World resolution forced while the performance mode is on, 0 for none
+    float m_worldScaleTest = 0.0f;
 
     // The game's flat scope is off with a headset, findings/optics.md §10
     std::unique_ptr<VrScopeGame> m_scopeGame;

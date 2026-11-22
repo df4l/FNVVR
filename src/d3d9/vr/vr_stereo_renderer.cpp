@@ -486,6 +486,7 @@ namespace dxvk {
     if (renderer->m_renderPasses) {
       renderer->m_foveation = VrFoveation::create(device, passes.foveationZones);
       renderer->m_foveationTestGaze = passes.foveationTestGaze;
+      renderer->m_worldScaleTest = passes.worldScaleTest;
 
       renderer->m_renderPasses->setWorldCallbacks(
         [self] (uint32_t eye) {
@@ -715,8 +716,10 @@ namespace dxvk {
     countFrame(timing);
     m_performance.update(state == VrGameStateKind::InGame || state == VrGameStateKind::PipBoy, timing);
 
-    if (m_renderScale)
-      m_renderScale->setScale(m_performance.renderScale());
+    if (m_renderScale) {
+      bool forced = m_performanceOn && m_worldScaleTest > 0.0f;
+      m_renderScale->setScale(forced ? m_worldScaleTest : m_performance.renderScale());
+    }
 
     showOcclusionPluginNotice(state);
 

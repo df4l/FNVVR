@@ -39,6 +39,10 @@ namespace dxvk {
     /// Without an eye tracker, foveation takes the centre of each view as
     /// the gaze, to check its look (d3d9.vrFoveationTestGaze)
     bool foveationTestGaze = false;
+    /// While the performance mode is on, the eyes' world is drawn at this
+    /// share of each side whatever the governor chooses, 0 to leave it to
+    /// the governor; to check the scaled world (d3d9.vrWorldScaleTest)
+    float worldScaleTest = 0.0f;
   };
 
   /**
