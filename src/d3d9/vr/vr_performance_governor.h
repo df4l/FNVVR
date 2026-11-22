@@ -76,6 +76,13 @@ namespace dxvk {
      */
     void reset();
 
+    /**
+     * \brief Starts from given levels, as after a reset
+     *
+     * Levels past the last step are clamped.
+     */
+    void start(const VrPerformanceLevels& levels);
+
     const VrPerformanceLevels& levels() const {
       return m_levels;
     }
@@ -91,6 +98,8 @@ namespace dxvk {
       bool step(bool over, bool calm, double periodMs);
 
       void reset();
+
+      void start(uint32_t level);
 
       uint32_t level() const {
         return m_level;

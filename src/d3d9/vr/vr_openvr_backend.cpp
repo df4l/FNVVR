@@ -1148,6 +1148,13 @@ namespace dxvk {
   }
 
 
+  std::string VrOpenVrBackend::headsetModel() const {
+    return m_runtime && m_runtime->system
+      ? headsetString(m_runtime->system, vr::Prop_ModelNumber_String)
+      : std::string("(unknown)");
+  }
+
+
   bool VrOpenVrBackend::readFrameLoad(VrFrameLoad& load) {
     load = VrFrameLoad();
 

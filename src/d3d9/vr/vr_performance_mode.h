@@ -1,10 +1,12 @@
 #pragma once
 
 #include <array>
+#include <string>
 
 #include "vr_backend.h"
 #include "vr_performance_governor.h"
 #include "vr_performance_levers.h"
+#include "vr_performance_memory.h"
 
 namespace dxvk {
 
@@ -18,6 +20,9 @@ namespace dxvk {
    * game's settings menu shows and saves them; the levels come back with
    * the world. Every 60 seconds one log line sums up what the mode saw and
    * did, so a tester only has to send the log (findings/performance.md §14).
+   *
+   * The levels held most in each minute are remembered per headset and
+   * rate (VrPerformanceMemory), and the mode starts from them.
    */
   class VrPerformanceMode {
 
@@ -70,6 +75,10 @@ namespace dxvk {
     IVRBackend&           m_backend;
     VrPerformanceGovernor m_governor;
     VrPerformanceLevers   m_levers;
+    VrPerformanceMemory   m_memory;
+    // The headset and rate the levels are remembered for, empty until the
+    // first frame in the world after the mode is turned on
+    std::string           m_memoryKey;
 
     bool      m_initialized   = false;
     bool      m_available     = false;
@@ -80,6 +89,10 @@ namespace dxvk {
     Window    m_window;
 
     void account(const VrPerformanceSample& sample, bool hasGpu, bool changed);
+
+    void recall(double periodMs);
+
+    void remember();
 
     void logWindow();
 

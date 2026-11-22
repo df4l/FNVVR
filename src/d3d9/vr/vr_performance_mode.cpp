@@ -6,6 +6,7 @@
 #include "../../util/util_string.h"
 
 #include "vr_frame_stats.h"
+#include "vr_options_file.h"
 #include "vr_performance_mode.h"
 
 namespace dxvk {
@@ -13,6 +14,8 @@ namespace dxvk {
   namespace {
 
     constexpr double LogWindowMs = 60000.0;
+
+    constexpr wchar_t MemoryFile[] = L"performance.ini";
 
     std::string fixed(double value) {
       std::ostringstream stream;
@@ -51,6 +54,7 @@ namespace dxvk {
     m_governor.reset();
     m_applied = false;
     m_window  = Window();
+    m_memoryKey.clear();
 
     if (enabled && !m_available)
       Logger::warn("VR: The performance mode has nothing to lower, the executable is not the supported version");
@@ -80,6 +84,11 @@ namespace dxvk {
       sample.cpuMs    = timing.previousCycle[uint32_t(VrFrameStep::Interval)]
                       - timing.previousCycle[uint32_t(VrFrameStep::Wait)];
 
+      if (m_memoryKey.empty()) {
+        recall(sample.periodMs);
+        changed = true;
+      }
+
       // Each of the runtime's frames counts once
       VrFrameLoad load;
       bool hasGpu = m_backend.readFrameLoad(load)
@@ -93,8 +102,9 @@ namespace dxvk {
         sample.gpuReprojected = load.gpuReprojected;
       }
 
-      changed = m_governor.update(sample);
-      account(sample, hasGpu, changed);
+      bool stepped = m_governor.update(sample);
+      account(sample, hasGpu, stepped);
+      changed |= stepped;
     }
 
     if (changed || !m_applied) {
@@ -109,6 +119,46 @@ namespace dxvk {
       return 1.0f;
 
     return VrPerformanceLevers::renderScale(m_governor.levels().gpu);
+  }
+
+
+  void VrPerformanceMode::recall(double periodMs) {
+    m_memoryKey = VrPerformanceMemory::key(m_backend.headsetModel(), periodMs);
+
+    std::string text;
+
+    if (VrOptionsFile::readText(MemoryFile, text))
+      m_memory.parse(text);
+
+    VrPerformanceLevels levels;
+
+    if (!m_memory.find(m_memoryKey, levels)) {
+      Logger::info(str::format("VR: Performance mode on ", m_memoryKey, " for the first time, it starts from the player's settings"));
+      return;
+    }
+
+    m_governor.start(levels);
+    levels = m_governor.levels();
+
+    Logger::info(str::format("VR: Performance mode on ", m_memoryKey, " starts where it settled last time: distances x",
+      fixed(VrPerformanceLevers::distanceScale(levels.distance)), ", shadows and specular x",
+      fixed(VrPerformanceLevers::gpuScale(levels.gpu)), ", world resolution ",
+      percent(VrPerformanceLevers::renderScale(levels.gpu), 1.0), " %"));
+  }
+
+
+  void VrPerformanceMode::remember() {
+    const Window& w = m_window;
+
+    if (m_memoryKey.empty())
+      return;
+
+    VrPerformanceLevels settled;
+    settled.distance = VrPerformanceMemory::mostHeld(w.distanceMs.data(), w.distanceMs.size());
+    settled.gpu      = VrPerformanceMemory::mostHeld(w.gpuLevelMs.data(), w.gpuLevelMs.size());
+
+    if (m_memory.store(m_memoryKey, settled))
+      VrOptionsFile::writeText(MemoryFile, m_memory.format());
   }
 
 
@@ -171,6 +221,7 @@ namespace dxvk {
       ", shadows and specular x", fixed(VrPerformanceLevers::gpuScale(levels.gpu)),
       ", world resolution ", percent(VrPerformanceLevers::renderScale(levels.gpu), 1.0), " %"));
 
+    remember();
     m_window = Window();
   }
 

@@ -184,6 +184,11 @@ namespace dxvk {
   }
 
 
+  std::string VrEmulatorBackend::headsetModel() const {
+    return "Emulator";
+  }
+
+
   bool VrEmulatorBackend::submitFrame(const VrFrameSubmission& frame) {
     if (m_state != VrSessionState::Running)
       return false;

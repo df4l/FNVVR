@@ -342,6 +342,11 @@ namespace dxvk {
      */
     virtual bool readFrameLoad(VrFrameLoad& load) = 0;
 
+    /**
+     * \brief Model name of the headset, as the runtime gives it
+     */
+    virtual std::string headsetModel() const = 0;
+
     virtual void submitEmptyFrame(int64_t displayTime) = 0;
 
     /**

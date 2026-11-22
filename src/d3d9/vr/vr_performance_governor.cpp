@@ -37,6 +37,12 @@ namespace dxvk {
   }
 
 
+  void VrPerformanceGovernor::Ladder::start(uint32_t level) {
+    reset();
+    m_level = std::min(level, m_steps);
+  }
+
+
   bool VrPerformanceGovernor::Ladder::step(bool over, bool calm, double periodMs) {
     m_windowFrames += 1;
     m_overFrames   += over ? 1 : 0;
@@ -112,6 +118,14 @@ namespace dxvk {
     m_distance.reset();
     m_gpu.reset();
     m_levels = VrPerformanceLevels();
+  }
+
+
+  void VrPerformanceGovernor::start(const VrPerformanceLevels& levels) {
+    m_distance.start(levels.distance);
+    m_gpu.start(levels.gpu);
+    m_levels.distance = m_distance.level();
+    m_levels.gpu      = m_gpu.level();
   }
 
 }

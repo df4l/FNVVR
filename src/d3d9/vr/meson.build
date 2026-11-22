@@ -67,6 +67,7 @@ vr_src = files([
   'vr_performance_governor.cpp',
   'vr_render_scale_size.cpp',
   'vr_occlusion_rules.cpp',
+  'vr_performance_memory.cpp',
 ])
 
 # Parts that depend on DXVK and Vulkan, only built into d3d9.dll
@@ -250,6 +251,7 @@ if add_languages('cpp', native: true, required: false)
     'tests/test_vr_performance_governor.cpp',
     'tests/test_vr_render_scale.cpp',
     'tests/test_vr_occlusion.cpp',
+    'tests/test_vr_performance_memory.cpp',
   ])
 
   vr_test = executable('vr_tests', vr_test_sources, vr_src,

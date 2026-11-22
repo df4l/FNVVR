@@ -98,6 +98,8 @@ namespace dxvk {
 
     bool readFrameLoad(VrFrameLoad& load) override;
 
+    std::string headsetModel() const override;
+
     bool submitFrame(const VrFrameSubmission& frame) override;
 
     void submitEmptyFrame(int64_t displayTime) override;
