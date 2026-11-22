@@ -2120,6 +2120,13 @@ namespace dxvk {
      * creation opens. See findings/menu-scenes.md.
      */
     constexpr uintptr_t RaceSexBackgroundCallSite  = 0x007FD6F6;
+
+    /**
+     * TESMain::OnIdle captures the same frozen background each time an hour
+     * passes in the sleep and wait menu (SleepWaitMenu::UpdateSleeping
+     * returned true), with Main in ECX. See findings/menu-scenes.md.
+     */
+    constexpr uintptr_t SleepWaitBackgroundCallSite = 0x0086ED86;
     constexpr uintptr_t PipBoyBackground           = 0x00871DC0;
     constexpr uintptr_t WorldRenderCallSite        = 0x00870244;
     constexpr uintptr_t Render                     = 0x008706B0;
