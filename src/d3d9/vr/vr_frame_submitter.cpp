@@ -52,8 +52,10 @@ namespace dxvk {
 
     finish();
 
-    if (!threaded)
+    if (!threaded && m_thread.joinable()) {
       stopThread();
+      Logger::info("VR: Frames and panels are handed to the runtime from the game thread");
+    }
 
     m_threaded = threaded;
   }

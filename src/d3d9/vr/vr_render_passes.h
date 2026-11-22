@@ -14,6 +14,8 @@
 
 namespace dxvk {
 
+  class VrRenderScale;
+
   /**
    * \brief How the game's render passes are drawn per eye
    *
@@ -176,6 +178,18 @@ namespace dxvk {
       m_cpuSampler = sampler;
     }
 
+    /**
+     * \brief Sets what draws the eyes' world at a lower resolution
+     *
+     * Its image space pass draws into the scaled target the object gives,
+     * then the object stretches it into the screen.
+     *
+     * \param [in] scale Outlives this object, or \c nullptr
+     */
+    void setRenderScale(VrRenderScale* scale) {
+      m_renderScale = scale;
+    }
+
   private:
 
     VrRenderPasses(const VrRenderPassConfig& config, ViewFn view);
@@ -193,6 +207,8 @@ namespace dxvk {
     uint32_t    m_eyeGpuToken = VrGpuTimer::NoToken;
 
     VrCpuSampler* m_cpuSampler = nullptr;
+
+    VrRenderScale* m_renderScale = nullptr;
     uint8_t       m_phaseBeforeEye = 0;
 
     const VrScopeArea* m_sceneScissor = nullptr;

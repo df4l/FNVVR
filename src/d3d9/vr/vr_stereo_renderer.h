@@ -43,6 +43,7 @@
 #include "vr_foveation.h"
 #include "vr_frame_submitter.h"
 #include "vr_performance_mode.h"
+#include "vr_render_scale.h"
 #include "vr_part_highlight.h"
 #include "vr_npc_gaze.h"
 #include "vr_painter.h"
@@ -308,18 +309,15 @@ namespace dxvk {
      * See VrPerformanceMode. Called from the game's options page, on the
      * game's thread.
      */
-    void setPerformanceMode(bool enabled) {
-      m_performance.setEnabled(enabled);
-    }
+    void setPerformanceMode(bool enabled);
 
     /**
      * \brief Hands frames to the runtime from a thread of their own
      *
-     * See VrFrameSubmitter (d3d9.vrAsyncSubmit).
+     * See VrFrameSubmitter (d3d9.vrAsyncSubmit). The performance mode also
+     * uses the thread while it is on.
      */
-    void setAsyncSubmit(bool enabled) {
-      m_submitter.setThreaded(enabled);
-    }
+    void setAsyncSubmit(bool enabled);
 
   private:
 
@@ -353,6 +351,11 @@ namespace dxvk {
     VrFrameSubmitter   m_submitter;
 
     VrPerformanceMode  m_performance;
+    // The performance mode's world resolution, installed when it is first on
+    std::unique_ptr<VrRenderScale> m_renderScale;
+    bool               m_renderScaleTried  = false;
+    bool               m_performanceOn     = false;
+    bool               m_asyncSubmitWanted = false;
 
     // The game composes its final 3D image into the backbuffer
     Com<IDirect3DSurface9> m_gameTarget;

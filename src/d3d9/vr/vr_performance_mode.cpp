@@ -104,6 +104,14 @@ namespace dxvk {
   }
 
 
+  float VrPerformanceMode::renderScale() const {
+    if (!m_enabled || !m_applied)
+      return 1.0f;
+
+    return VrPerformanceLevers::renderScale(m_governor.levels().gpu);
+  }
+
+
   void VrPerformanceMode::account(const VrPerformanceSample& sample, bool hasGpu, bool changed) {
     const VrPerformanceLevels& levels = m_governor.levels();
     Window& w = m_window;
@@ -144,7 +152,7 @@ namespace dxvk {
     std::ostringstream gpuLevels;
     for (uint32_t i = 0; i < w.gpuLevelMs.size(); i++) {
       gpuLevels << (i ? ", " : "") << fixed(VrPerformanceLevers::gpuScale(i))
-        << " " << percent(w.gpuLevelMs[i], w.ms) << " %";
+        << "/" << percent(VrPerformanceLevers::renderScale(i), 1.0) << " % " << percent(w.gpuLevelMs[i], w.ms) << " %";
     }
 
     std::string gpu = w.gpuFrames
@@ -157,9 +165,11 @@ namespace dxvk {
       "; reprojected for the CPU ", percent(w.cpuReprojected, w.frames),
       " %, for the GPU ", percent(w.gpuReprojected, w.frames), " %; ", w.changes,
       " level changes; time at each distance scale: ", distances.str(),
-      "; at each shadow and specular scale: ", gpuLevels.str(),
+      " (water reflections off from x", fixed(VrPerformanceLevers::distanceScale(VrPerformanceLevers::WaterOffDistanceLevel)),
+      "); at each shadow and specular scale / world resolution: ", gpuLevels.str(),
       "; now distances x", fixed(VrPerformanceLevers::distanceScale(levels.distance)),
-      ", shadows and specular x", fixed(VrPerformanceLevers::gpuScale(levels.gpu))));
+      ", shadows and specular x", fixed(VrPerformanceLevers::gpuScale(levels.gpu)),
+      ", world resolution ", percent(VrPerformanceLevers::renderScale(levels.gpu), 1.0), " %"));
 
     m_window = Window();
   }

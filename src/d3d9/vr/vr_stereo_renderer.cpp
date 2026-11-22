@@ -700,6 +700,9 @@ namespace dxvk {
     countFrame(timing);
     m_performance.update(state == VrGameStateKind::InGame || state == VrGameStateKind::PipBoy, timing);
 
+    if (m_renderScale)
+      m_renderScale->setScale(m_performance.renderScale());
+
     if (!timing.shouldRender) {
       VrD3D9Bridge::submitEmptyFrame(m_device, m_backend, timing.predictedDisplayTime);
       g_originalSwap(main, nullptr);
@@ -1178,6 +1181,12 @@ namespace dxvk {
     if (m_renderPasses)
       m_renderPasses->beginEye(eye);
 
+    if (m_renderScale) {
+      D3DSURFACE_DESC screen = { };
+      m_gameTarget->GetDesc(&screen);
+      m_renderScale->beginEye(VrExtent { screen.Width, screen.Height });
+    }
+
     // The left eye's pass moves time on for the frame
     bool repeat = eye != 0 && m_repeatedPasses;
 
@@ -1188,6 +1197,9 @@ namespace dxvk {
 
     if (repeat)
       m_repeatedPasses->endRepeat();
+
+    if (m_renderScale)
+      m_renderScale->endEye();
 
     if (m_renderPasses)
       m_renderPasses->endEye();
@@ -1247,7 +1259,32 @@ namespace dxvk {
     D3DSURFACE_DESC target = { };
     m_gameTarget->GetDesc(&target);
 
-    m_foveation->prepareFrame(views, gaze, VrExtent { target.Width, target.Height });
+    VrExtent world = { target.Width, target.Height };
+
+    if (m_renderScale)
+      world = m_renderScale->worldExtent(world);
+
+    m_foveation->prepareFrame(views, gaze, world);
+  }
+
+
+  void VrStereoRenderer::setPerformanceMode(bool enabled) {
+    m_performanceOn = enabled;
+    m_performance.setEnabled(enabled);
+
+    if (enabled && !m_renderScaleTried && m_renderPasses) {
+      m_renderScaleTried = true;
+      m_renderScale = VrRenderScale::install(m_device);
+      m_renderPasses->setRenderScale(m_renderScale.get());
+    }
+
+    m_submitter.setThreaded(m_asyncSubmitWanted || m_performanceOn);
+  }
+
+
+  void VrStereoRenderer::setAsyncSubmit(bool enabled) {
+    m_asyncSubmitWanted = enabled;
+    m_submitter.setThreaded(m_asyncSubmitWanted || m_performanceOn);
   }
 
 

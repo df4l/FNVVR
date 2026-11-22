@@ -4177,6 +4177,58 @@ namespace dxvk {
     constexpr uintptr_t SpecularLodStartFadeStore     = 0x007D2433;
     constexpr uintptr_t SpecularLodEndStore           = 0x007D2448;
 
+    /**
+     * Water reflections, a lever of the performance mode:
+     * bUseWaterReflections:Water (Setting, bool at SettingValue, name at
+     * SettingName, checked before use), read every frame by
+     * TESWaterSystem::UpdatePlaceableWater and UpdateShader. Only the value
+     * in memory is written, given back in menus, so the settings menu shows
+     * and saves the player's own.
+     */
+    constexpr uintptr_t SettingUseWaterReflections    = 0x011C7B6C;
+
+    /**
+     * Grass distance, a lever of the performance mode: fGrassStartFadeDistance
+     * :Grass (Setting, float at SettingValue), read every frame by
+     * TESTerrainLODManager::UpdateGrass (0x0057D0A0), which builds grass for
+     * the cells closer than it plus fGrassFadeRange and removes it beyond.
+     * Below fGrassMinStartFadeDistance (Setting) + 0.5 the update stops
+     * altogether, so the lever never goes under that. Only the value in
+     * memory is written, given back in menus as the water's.
+     */
+    constexpr uintptr_t SettingGrassStartFade         = 0x011CA450;
+    constexpr uintptr_t SettingGrassMinStartFade      = 0x011CA4AC;
+
+    /**
+     * World render scale of the performance mode (findings/performance.md
+     * §16):
+     *
+     * - TextureLookupCallSite: BSTextureManager::BorrowRenderedTexture's
+     *   call of LookupTextureParameters (__thiscall on the texture manager:
+     *   renderer, texture type, UInt32* width, UInt32* height, D3DFORMAT*,
+     *   entry*, flags*, D3DMULTISAMPLE_TYPE*; ret 0x20). The size of every
+     *   texture borrowed after the start comes from there (the other callers
+     *   precreate textures). World targets are sized as the screen, or its
+     *   half or quarter per side.
+     * - WorldTargetCallSite: TESMain::DrawWorldStandard's call of
+     *   DrawWorld_InitRenderTexture (InitRenderTexture, __thiscall on Main:
+     *   renderer, texture, bool no image space, bool multisampled; returns
+     *   the borrowed main target; ret 0x10). The world's first borrow. The
+     *   texture passed is DrawWorldStandard's destination ([ebp+8]), null
+     *   when the world goes to the screen.
+     * - ImageSpaceSwapTarget: ImageSpaceManager::pSwapTarget, a
+     *   BSRenderedTexture* of type ImageSpaceTextureType borrowed once by
+     *   ImageSpaceManager::Initialize (the store at ImageSpaceSwapTargetStore)
+     *   and used between the effects by RenderEndOfFrameEffects.
+     */
+    constexpr uintptr_t LookupTextureParameters       = 0x00B6C2C0;
+    constexpr uintptr_t TextureLookupCallSite         = 0x00B6E3C1;
+    constexpr uintptr_t WorldTargetCallSite           = 0x00870C53;
+    constexpr uintptr_t ImageSpaceSwapTarget          = 0x318;
+    constexpr uintptr_t ImageSpaceSwapTargetStore     = 0x00B978DA;
+    constexpr uint8_t   ImageSpaceSwapTargetStoreCode[] = { 0x89, 0x86, 0x18, 0x03, 0x00, 0x00 };
+    constexpr uint32_t  ImageSpaceTextureType         = 3;
+
   }
 
 }

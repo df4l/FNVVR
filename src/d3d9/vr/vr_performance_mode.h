@@ -42,6 +42,13 @@ namespace dxvk {
      */
     void update(bool inWorld, const VrFrameTiming& timing);
 
+    /**
+     * \brief Resolution the eyes' world is drawn at this frame
+     *
+     * A share of each side: 1 while the mode is off or in menus.
+     */
+    float renderScale() const;
+
   private:
 
     struct Window {
