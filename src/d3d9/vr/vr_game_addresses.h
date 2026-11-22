@@ -4229,6 +4229,82 @@ namespace dxvk {
     constexpr uint8_t   ImageSpaceSwapTargetStoreCode[] = { 0x89, 0x86, 0x18, 0x03, 0x00, 0x00 };
     constexpr uint32_t  ImageSpaceTextureType         = 3;
 
+    /**
+     * Occlusion culling, see findings/performance.md §17 (GOG database,
+     * checked 2026-11-22; the approach follows mrfury97's FNV Occlusion
+     * Culling, whose code is not used).
+     *
+     * - SceneAccumulateCallSite: TESMain::DrawScene's call of
+     *   BSShaderUtil::AccumulateScene (__cdecl: camera, scene graph, culling
+     *   process) that gathers the main view (the bMTRendering branch before
+     *   it uses AccumulateSceneList instead);
+     * - SceneOpaqueCallSite: its call of BSShaderUtil::
+     *   RenderScenePreResolveDepth (__cdecl: camera, accumulator, 1) right
+     *   after, which draws the opaque part: the depth buffer then holds the
+     *   finished scene (the game's VATS query follows);
+     * - the OnVisible slot (53) of BSFadeNode (every placed object's root),
+     *   BSTreeNode (SpeedTree trees and shrubs) and BSMultiBoundNode (land
+     *   quadrants, terrain LOD chunks, grass groups), __thiscall: culling
+     *   process. Skipping it is what the culler does with what lies outside
+     *   the view;
+     * - NiDX9Renderer: the view (relative to RendererPosAdjust) and
+     *   projection D3D matrices of the camera last set, its inverse view
+     *   (row 4: the camera's position minus RendererPosAdjust) and
+     *   m_bDeviceLost;
+     * - BSFadeNode::pLinkedObj, the object's reference; NiAVObject flag bit
+     *   0 (APP_CULLED) hides a node;
+     * - BSMultiBoundNode::spMultiBound, BSMultiBound::spShape and the AABB
+     *   shape's centre and half extents; BSMultiBoundShape::WithinFrustum
+     *   (vtable +0x9C, __thiscall: NiFrustumPlanes*) tested against the
+     *   culling process's planes (+0x2C);
+     * - NiRTTI: name (+0x00) and base (+0x04), from GetRTTI
+     *   (ObjectGetRttiSlot).
+     */
+    constexpr uintptr_t SceneAccumulateCallSite       = 0x0087415B;
+    constexpr uintptr_t SceneOpaqueCallSite           = 0x00874180;
+    constexpr uintptr_t RenderScenePreResolveDepth    = 0x00B6BA20;
+    constexpr uintptr_t FadeNodeOnVisibleSlot         = 0x010A9064;
+    constexpr uintptr_t FadeNodeOnVisible             = 0x00B4E490;
+    constexpr uintptr_t TreeNodeOnVisibleSlot         = 0x010669B8;
+    constexpr uintptr_t TreeNodeOnVisible             = 0x0066BF50;
+    constexpr uintptr_t MultiBoundNodeOnVisibleSlot   = 0x010C1DE8;
+    constexpr uintptr_t MultiBoundNodeOnVisible       = 0x00C46F60;
+    constexpr uintptr_t RendererD3DView               = 0x980;
+    constexpr uintptr_t RendererD3DProj               = 0x9C0;
+    constexpr uintptr_t RendererInvView               = 0xA40;
+    constexpr uintptr_t RendererDeviceLost            = 0x6FC;
+    constexpr uintptr_t FadeNodeLinkedRef             = 0xCC;
+    constexpr uint32_t  ObjectAppCulled               = 0x1;
+    constexpr uintptr_t MultiBoundNodeBound           = 0xAC;
+    constexpr uintptr_t MultiBoundShape               = 0x0C;
+    constexpr uintptr_t MultiBoundAabbVtable          = 0x0101E8E4;
+    constexpr uintptr_t MultiBoundAabbCentre          = 0x0C;
+    constexpr uintptr_t MultiBoundAabbHalfExtents     = 0x18;
+    constexpr uintptr_t MultiBoundWithinFrustumSlot   = 0x9C;
+    constexpr uintptr_t CullerPlanes                  = 0x2C;
+    constexpr uintptr_t NiNodeRtti                    = 0x011F4428;
+    constexpr uintptr_t NiGeometryRtti                = 0x011F4ACC;
+    constexpr uintptr_t RttiName                      = 0x00;
+    constexpr uintptr_t RttiBase                      = 0x04;
+
+    /** Form types (TESForm +0x04) of the references occlusion culling sorts */
+    constexpr uint8_t   FormTypeTalkingActivator      = 22;
+    constexpr uint8_t   FormTypeTerminal              = 23;
+    constexpr uint8_t   FormTypeDoor                  = 28;
+    constexpr uint8_t   FormTypeLight                 = 30;
+    constexpr uint8_t   FormTypePlaceableWater        = 35;
+    constexpr uint8_t   FormTypeCharacter             = 59;
+    constexpr uint8_t   FormTypeCreature              = 60;
+    constexpr uint8_t   FormTypeMissileProjectile     = 61;
+    constexpr uint8_t   FormTypeFlameProjectile       = 64;
+    constexpr uint8_t   FormTypeContinuousBeam        = 105;
+
+    /** ENUM_LOD_MULT values of BSFadeNode::eMultType (FadeNodeLodMultType) */
+    constexpr uint32_t  LodMultActors                 = 3;
+    constexpr uint32_t  LodMultDistantLod             = 6;
+    constexpr uint32_t  LodMultActorBodyPart          = 7;
+    constexpr uint32_t  LodMultInvisible              = 9;
+
   }
 
 }

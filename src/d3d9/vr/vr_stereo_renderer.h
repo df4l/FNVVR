@@ -42,6 +42,7 @@
 #include "vr_manual_reload.h"
 #include "vr_foveation.h"
 #include "vr_frame_submitter.h"
+#include "vr_occlusion_culling.h"
 #include "vr_performance_mode.h"
 #include "vr_render_scale.h"
 #include "vr_part_highlight.h"
@@ -319,6 +320,13 @@ namespace dxvk {
      */
     void setAsyncSubmit(bool enabled);
 
+    /**
+     * \brief Sets when occlusion culling runs (d3d9.vrOcclusionCulling)
+     *
+     * See VrOcclusionCulling. Installed the first time it is wanted.
+     */
+    void setOcclusionUse(VrOcclusionUse use);
+
   private:
 
     static constexpr uint32_t NoEye = ~0u;
@@ -356,6 +364,11 @@ namespace dxvk {
     bool               m_renderScaleTried  = false;
     bool               m_performanceOn     = false;
     bool               m_asyncSubmitWanted = false;
+
+    // Occlusion culling, installed the first time it is wanted
+    std::unique_ptr<VrOcclusionCulling> m_occlusion;
+    bool               m_occlusionTried    = false;
+    VrOcclusionUse     m_occlusionUse      = VrOcclusionUse::Performance;
 
     // The game composes its final 3D image into the backbuffer
     Com<IDirect3DSurface9> m_gameTarget;
@@ -800,6 +813,8 @@ namespace dxvk {
     /**
      * \brief Sets the frame's shading rates from where the eyes look
      */
+    void updateOcclusion();
+
     void updateFoveation(const std::array<VrEyeView, VrEyeCount>& views, float dt);
 
     void logGameFrustum();

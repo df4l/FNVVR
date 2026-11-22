@@ -66,6 +66,7 @@ vr_src = files([
   'vr_foveation_map.cpp',
   'vr_performance_governor.cpp',
   'vr_render_scale_size.cpp',
+  'vr_occlusion_rules.cpp',
 ])
 
 # Parts that depend on DXVK and Vulkan, only built into d3d9.dll
@@ -105,6 +106,7 @@ vr_dxvk_src = files([
   'vr_performance_levers.cpp',
   'vr_performance_mode.cpp',
   'vr_render_scale.cpp',
+  'vr_occlusion_culling.cpp',
   'vr_emulator_keyboard.cpp',
   'vr_game_camera.cpp',
   'vr_depth_resolve.cpp',
@@ -247,6 +249,7 @@ if add_languages('cpp', native: true, required: false)
     'tests/test_vr_foveation.cpp',
     'tests/test_vr_performance_governor.cpp',
     'tests/test_vr_render_scale.cpp',
+    'tests/test_vr_occlusion.cpp',
   ])
 
   vr_test = executable('vr_tests', vr_test_sources, vr_src,
