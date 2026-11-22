@@ -17,11 +17,11 @@ namespace dxvk {
 
 
   void D3D9DeviceEx::InitStereoReplay() {
-    m_stereoCs = std::make_shared<D3D9StereoCsState>();
+    m_stereo.cs = std::make_shared<D3D9StereoCsState>();
 
     VkDeviceSize alignment = m_dxvkDevice->properties().core.properties.limits.minUniformBufferOffsetAlignment;
-    m_stereoEntrySize  = align(StereoMatrixSize, std::max<VkDeviceSize>(alignment, 16u));
-    m_stereoEntryCount = uint32_t(StereoBufferSize / m_stereoEntrySize);
+    m_stereo.entrySize  = align(StereoMatrixSize, std::max<VkDeviceSize>(alignment, 16u));
+    m_stereo.entryCount = uint32_t(StereoBufferSize / m_stereo.entrySize);
 
     DxvkBufferCreateInfo info;
     info.size   = StereoBufferSize;
@@ -30,9 +30,9 @@ namespace dxvk {
     info.stages = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
     info.debugName = "Stereo transform";
 
-    m_stereoBuffer = m_dxvkDevice->createBuffer(info,
+    m_stereo.buffer = m_dxvkDevice->createBuffer(info,
       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    m_stereoMapPtr = reinterpret_cast<uint8_t*>(m_stereoBuffer->mapPtr(0));
+    m_stereo.mapPtr = reinterpret_cast<uint8_t*>(m_stereo.buffer->mapPtr(0));
 
     // The first entry is the identity, bound unless a replay draws the world
     const float identity[16] = {
@@ -41,10 +41,10 @@ namespace dxvk {
       0.0f, 0.0f, 1.0f, 0.0f,
       0.0f, 0.0f, 0.0f, 1.0f };
 
-    std::memcpy(m_stereoMapPtr, identity, sizeof(identity));
+    std::memcpy(m_stereo.mapPtr, identity, sizeof(identity));
 
     EmitCs([
-      cSlice = DxvkBufferSlice(m_stereoBuffer, 0u, StereoMatrixSize)
+      cSlice = DxvkBufferSlice(m_stereo.buffer, 0u, StereoMatrixSize)
     ] (DxvkContext* ctx) {
       ctx->bindUniformBuffer(StereoStages,
         D3D9ShaderResourceMapping::VSStereoTransform, DxvkBufferSlice(cSlice));
@@ -60,16 +60,16 @@ namespace dxvk {
 
 
   bool D3D9DeviceEx::PauseStereoCapture() {
-    if (likely(!m_stereoCapturing))
+    if (likely(!m_stereo.capturing))
       return false;
 
     FlushCsChunk();
-    m_stereoCapturing = false;
+    m_stereo.capturing = false;
     ReplaceCsChunk();
 
     // The replay flushes at the same place, with a flush of its own
-    if (m_stereoFlushes.empty() || m_stereoFlushes.back() != m_stereoChunks.size())
-      m_stereoFlushes.push_back(m_stereoChunks.size());
+    if (m_stereo.flushes.empty() || m_stereo.flushes.back() != m_stereo.chunks.size())
+      m_stereo.flushes.push_back(m_stereo.chunks.size());
 
     return true;
   }
@@ -80,7 +80,7 @@ namespace dxvk {
       return;
 
     FlushCsChunk();
-    m_stereoCapturing = true;
+    m_stereo.capturing = true;
     ReplaceCsChunk();
   }
 
@@ -89,12 +89,12 @@ namespace dxvk {
     D3D9DeviceLock lock = LockDevice();
 
     DiscardStereoCaptureLocked();
-    m_stereoFlushes.clear();
+    m_stereo.flushes.clear();
 
     // Runs once, before the kept commands: what they may rely on
     // without setting it, and every buffer storage they may read
     EmitCs([
-      cState = m_stereoCs,
+      cState = m_stereo.cs,
       cIa    = &m_iaState
     ] (DxvkContext* ctx) {
       cState->captured = std::make_unique<DxvkStereoBindings>();
@@ -105,7 +105,7 @@ namespace dxvk {
     });
 
     FlushCsChunk();
-    m_stereoCapturing = true;
+    m_stereo.capturing = true;
     ReplaceCsChunk();
   }
 
@@ -114,7 +114,7 @@ namespace dxvk {
     D3D9DeviceLock lock = LockDevice();
 
     EmitCs([
-      cState = m_stereoCs,
+      cState = m_stereo.cs,
       cWorld = world
     ] (DxvkContext* ctx) {
       VkDeviceSize offset = cWorld && cState->eye ? cState->rightOffset : 0u;
@@ -127,42 +127,42 @@ namespace dxvk {
   void D3D9DeviceEx::EndVrStereoCapture() {
     D3D9DeviceLock lock = LockDevice();
 
-    if (!m_stereoCapturing)
+    if (!m_stereo.capturing)
       return;
 
     FlushCsChunk();
-    m_stereoCapturing = false;
+    m_stereo.capturing = false;
     ReplaceCsChunk();
 
-    m_stereoCaptured = !m_stereoChunks.empty();
+    m_stereo.captured = !m_stereo.chunks.empty();
   }
 
 
   bool D3D9DeviceEx::ReplayVrStereoCapture(const std::array<float, 16>& rows) {
     D3D9DeviceLock lock = LockDevice();
 
-    if (m_stereoCapturing || !m_stereoCaptured)
+    if (m_stereo.capturing || !m_stereo.captured)
       return false;
 
-    VkDeviceSize offset = VkDeviceSize(m_stereoNextEntry) * m_stereoEntrySize;
-    std::memcpy(m_stereoMapPtr + offset, rows.data(), StereoMatrixSize);
+    VkDeviceSize offset = VkDeviceSize(m_stereo.nextEntry) * m_stereo.entrySize;
+    std::memcpy(m_stereo.mapPtr + offset, rows.data(), StereoMatrixSize);
 
-    if (++m_stereoNextEntry >= m_stereoEntryCount)
-      m_stereoNextEntry = 1u;
+    if (++m_stereo.nextEntry >= m_stereo.entryCount)
+      m_stereo.nextEntry = 1u;
 
     FlushCsChunk();
 
-    bool first = !m_stereoReplays++;
+    bool first = !m_stereo.replays++;
 
     if (first) {
-      Logger::info(str::format("D3D9: First stereo replay: ", m_stereoChunks.size(), " chunks, ",
-        m_stereoFlushes.size(), " flushes, matrix at offset ", offset));
+      Logger::info(str::format("D3D9: First stereo replay: ", m_stereo.chunks.size(), " chunks, ",
+        m_stereo.flushes.size(), " flushes, matrix at offset ", offset));
     }
 
     // The buffers get back the storage they had when the capture started,
     // and the context the bindings it had then
     EmitCs([
-      cState  = m_stereoCs,
+      cState  = m_stereo.cs,
       cIa     = &m_iaState,
       cOffset = offset,
       cFirst  = first
@@ -196,11 +196,11 @@ namespace dxvk {
 
     FlushCsChunk();
 
-    std::vector<DxvkCsChunkRef> chunks = std::move(m_stereoChunks);
-    std::vector<size_t> flushes = std::move(m_stereoFlushes);
-    m_stereoChunks.clear();
-    m_stereoFlushes.clear();
-    m_stereoCaptured = false;
+    std::vector<DxvkCsChunkRef> chunks = std::move(m_stereo.chunks);
+    std::vector<size_t> flushes = std::move(m_stereo.flushes);
+    m_stereo.chunks.clear();
+    m_stereo.flushes.clear();
+    m_stereo.captured = false;
 
     size_t nextFlush = 0u;
 
@@ -217,7 +217,7 @@ namespace dxvk {
 
     // Everything as it was before the replay
     EmitCs([
-      cState = m_stereoCs,
+      cState = m_stereo.cs,
       cIa    = &m_iaState
     ] (DxvkContext* ctx) {
       ctx->setStereoBufferJournal(nullptr);
@@ -254,20 +254,20 @@ namespace dxvk {
 
 
   void D3D9DeviceEx::DiscardStereoCaptureLocked() {
-    if (m_stereoCapturing) {
+    if (m_stereo.capturing) {
       FlushCsChunk();
-      m_stereoCapturing = false;
+      m_stereo.capturing = false;
       ReplaceCsChunk();
-    } else if (!m_stereoCaptured && m_stereoChunks.empty()) {
+    } else if (!m_stereo.captured && m_stereo.chunks.empty()) {
       return;
     }
 
-    m_stereoChunks.clear();
-    m_stereoFlushes.clear();
-    m_stereoCaptured = false;
+    m_stereo.chunks.clear();
+    m_stereo.flushes.clear();
+    m_stereo.captured = false;
 
     EmitCs([
-      cState = m_stereoCs
+      cState = m_stereo.cs
     ] (DxvkContext* ctx) {
       ctx->setStereoBufferJournal(nullptr);
       cState->journal.clear();

@@ -2,6 +2,7 @@
 
 #include "d3d9_caps.h"
 #include "d3d9_device.h"
+#include "d3d9_shader_stereo.h"
 #include "d3d9_util.h"
 
 #include <sm3/sm3_parser.h>
@@ -72,7 +73,7 @@ namespace dxvk {
       }
 
       if (m_shaderStage == ir::ShaderStage::eVertex)
-        applyStereoTransform();
+        D3D9ApplyStereoTransform(m_builder, m_entryPoint);
     }
 
   private:
@@ -116,126 +117,6 @@ namespace dxvk {
 
     std::array<dxbc_spv::ir::SsaDef, DxvkLimits::MaxNumSpecConstants> m_specConstants = { };
     small_vector<SpecFunction, 32u>                                   m_specFunctions;
-
-    /**
-     * \brief Multiplies the position output by the stereo matrix
-     *
-     * The matrix is the identity, except while the VR layer replays the
-     * left eye's commands for the right eye (see
-     * D3D9DeviceEx::ReplayVrStereoCapture). Clip distances are computed
-     * before from the position as written, so the game's clip planes keep
-     * their meaning. The front-end stores the four components one after
-     * the other at the end of the shader; a shader written otherwise is
-     * left as it is.
-     */
-    void applyStereoTransform() {
-      using namespace dxbc_spv;
-
-      ir::SsaDef position = { };
-
-      for (auto iter = m_builder.getDeclarations().first;
-                iter != m_builder.getDeclarations().second; iter++) {
-        if (iter->getOpCode() == ir::OpCode::eDclOutputBuiltIn
-         && ir::BuiltIn(iter->getOperand(iter->getFirstLiteralOperandIndex())) == ir::BuiltIn::ePosition)
-          position = iter->getDef();
-      }
-
-      if (!position)
-        return;
-
-      std::array<ir::SsaDef, 4u> stores = { };
-      std::array<ir::SsaDef, 4u> values = { };
-
-      dxvk::small_vector<ir::SsaDef, 16u> uses;
-      m_builder.getUses(position, uses);
-
-      for (auto use : uses) {
-        const auto& useOp = m_builder.getOp(use);
-
-        if (useOp.getOpCode() != ir::OpCode::eOutputStore)
-          continue;
-
-        auto address = ir::SsaDef(useOp.getOperand(1u));
-
-        if (!address || !m_builder.getOp(address).isConstant())
-          return;
-
-        auto component = uint32_t(m_builder.getOp(address).getOperand(0u));
-
-        if (component >= stores.size() || stores[component])
-          return;
-
-        stores[component] = use;
-        values[component] = ir::SsaDef(useOp.getOperand(2u));
-      }
-
-      for (auto store : stores) {
-        if (!store)
-          return;
-      }
-
-      // The new stores go after the last of the four, which must
-      // follow the first one closely in the same block
-      constexpr uint32_t MaxDistance = 64u;
-
-      ir::SsaDef last = { };
-      uint32_t found = 0u;
-      uint32_t distance = 0u;
-
-      for (auto def = stores[0u]; def && found < stores.size() && distance < MaxDistance; def = m_builder.getNext(def), distance++) {
-        if (std::find(stores.begin(), stores.end(), def) != stores.end()) {
-          last = def;
-          found++;
-        }
-      }
-
-      if (found < stores.size())
-        return;
-
-      auto rowType = ir::Type(ir::ScalarType::eF32, 4u);
-      auto cbvType = ir::Type(ir::ScalarType::eF32, 4u).addArrayDimension(4u);
-
-      auto cbv = m_builder.add(ir::Op::DclCbv(cbvType, m_entryPoint, 0u,
-        D3D9ShaderResourceMapping::VSStereoTransform, 1u).setFlags(ir::OpFlag::eInBounds));
-      m_builder.add(ir::Op::DebugName(cbv, "stereo"));
-
-      auto cursor = m_builder.setCursor(last);
-
-      auto descriptor = m_builder.add(ir::Op::DescriptorLoad(
-        ir::ScalarType::eCbv, cbv, m_builder.makeConstant(0u)));
-
-      std::array<ir::SsaDef, 4u> results = { };
-
-      for (uint32_t r = 0u; r < results.size(); r++) {
-        auto row = m_builder.add(ir::Op::BufferLoad(rowType, descriptor,
-          m_builder.makeConstant(r), 16u).setFlags(ir::OpFlag::eInBounds));
-
-        ir::SsaDef sum = { };
-
-        for (uint32_t c = 0u; c < values.size(); c++) {
-          auto factor = m_builder.add(ir::Op::CompositeExtract(ir::ScalarType::eF32, row, m_builder.makeConstant(c)));
-          auto product = m_builder.add(ir::Op::FMul(ir::ScalarType::eF32, factor, values[c]).setFlags(ir::OpFlag::ePrecise));
-
-          sum = sum
-            ? m_builder.add(ir::Op::FAdd(ir::ScalarType::eF32, sum, product).setFlags(ir::OpFlag::ePrecise))
-            : product;
-        }
-
-        results[r] = sum;
-      }
-
-      ir::SsaDef lastStore = { };
-
-      for (uint32_t r = 0u; r < results.size(); r++)
-        lastStore = m_builder.add(ir::Op::OutputStore(position, m_builder.makeConstant(r), results[r]));
-
-      // The position is written once, transformed
-      for (auto store : stores)
-        m_builder.remove(store);
-
-      bool cursorRemoved = std::find(stores.begin(), stores.end(), cursor) != stores.end();
-      m_builder.setCursor(cursorRemoved ? lastStore : cursor);
-    }
 
     std::pair<dxbc_spv::ir::SsaDef, dxbc_spv::ir::ShaderStage> findEntryPoint() {
       using namespace dxbc_spv;

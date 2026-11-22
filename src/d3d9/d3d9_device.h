@@ -832,7 +832,7 @@ namespace dxvk {
     void EmitVrStereoCommand(Cmd&& command) {
       D3D9DeviceLock lock = LockDevice();
       EmitCs([
-        cState   = m_stereoCs,
+        cState   = m_stereo.cs,
         cCommand = std::forward<Cmd>(command)
       ] (DxvkContext* ctx) {
         cCommand(ctx, cState->eye);
@@ -867,7 +867,7 @@ namespace dxvk {
      * \brief Whether commands were kept and not replayed yet
      */
     bool HasVrStereoCapture() const {
-      return m_stereoCaptured;
+      return m_stereo.captured;
     }
 
     /**
@@ -1304,7 +1304,7 @@ namespace dxvk {
 
     DxvkCsChunkRef AllocCsChunk() {
       // Kept chunks run a second time: their commands must outlive the first run
-      DxvkCsChunk* chunk = m_csChunkPool.allocChunk(m_stereoCapturing
+      DxvkCsChunk* chunk = m_csChunkPool.allocChunk(m_stereo.capturing
         ? DxvkCsChunkFlags() : DxvkCsChunkFlags(DxvkCsChunkFlag::SingleUse));
       return DxvkCsChunkRef(chunk, &m_csChunkPool);
     }
@@ -1770,17 +1770,7 @@ namespace dxvk {
 
     DxvkCsChunkPool                 m_csChunkPool;
 
-    std::shared_ptr<D3D9StereoCsState> m_stereoCs;
-    Rc<DxvkBuffer>                  m_stereoBuffer;
-    uint8_t*                        m_stereoMapPtr = nullptr;
-    VkDeviceSize                    m_stereoEntrySize = 0u;
-    uint32_t                        m_stereoEntryCount = 0u;
-    uint32_t                        m_stereoNextEntry = 1u;
-    uint32_t                        m_stereoReplays = 0u;
-    std::vector<DxvkCsChunkRef>     m_stereoChunks;
-    std::vector<size_t>             m_stereoFlushes;
-    bool                            m_stereoCapturing = false;
-    bool                            m_stereoCaptured  = false;
+    D3D9StereoReplay                m_stereo;
 
     DxvkCsThread                    m_csThread;
     DxvkCsChunkRef                  m_csChunk;

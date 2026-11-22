@@ -3184,7 +3184,7 @@ namespace dxvk {
       draw.vertexCount = cVertexCount;
       draw.instanceCount = 1u;
 
-      ctx->bindVertexBuffer(0, decltype(cBufferSlice)(cBufferSlice), cStride);
+      ctx->bindVertexBuffer(0, std::move(cBufferSlice), cStride);
       ctx->draw(1u, &draw);
       ctx->bindVertexBuffer(0, DxvkBufferSlice(), 0);
     });
@@ -3347,7 +3347,7 @@ namespace dxvk {
       cBufferSlice    = dst->GetBufferSlice<D3D9_COMMON_BUFFER_TYPE_REAL>(dstSliceOffset, dstSliceLength)
     ](DxvkContext* ctx) mutable {
       // Create a pass-through geometry shader for vertex shader stream output
-      Rc<DxvkShader> shader = m_swvpEmulator.GetShaderModule(this, decltype(cVertexElements)(cVertexElements));
+      Rc<DxvkShader> shader = m_swvpEmulator.GetShaderModule(this, std::move(cVertexElements));
 
       auto drawInfo = GenerateDrawInfo(D3DPT_POINTLIST, cVertexCount, cInstanceCount);
 
@@ -4805,7 +4805,7 @@ namespace dxvk {
         cBuffer = m_upBuffer,
         cSlice  = std::move(slice)
       ] (DxvkContext* ctx) mutable {
-        ctx->invalidateBuffer(cBuffer, decltype(cSlice)(cSlice));
+        ctx->invalidateBuffer(cBuffer, std::move(cSlice));
       });
     }
 
@@ -5540,7 +5540,7 @@ namespace dxvk {
         cBuffer      = std::move(mappingBuffer),
         cBufferSlice = std::move(bufferSlice)
       ] (DxvkContext* ctx) mutable {
-        ctx->invalidateBuffer(cBuffer, decltype(cBufferSlice)(cBufferSlice));
+        ctx->invalidateBuffer(cBuffer, std::move(cBufferSlice));
       });
 
       pResource->SetNeedsReadback(false);
@@ -5814,7 +5814,7 @@ namespace dxvk {
           cBufferSlice = std::move(vboSlice),
           cStride      = copy.copyElementSize
         ](DxvkContext* ctx) mutable {
-          ctx->bindVertexBuffer(cStream, decltype(cBufferSlice)(cBufferSlice), cStride);
+          ctx->bindVertexBuffer(cStream, std::move(cBufferSlice), cStride);
         });
         m_dirty.set(D3D9DeviceDirtyFlag::VertexBuffers);
       }
@@ -5847,7 +5847,7 @@ namespace dxvk {
           cBufferSlice = std::move(iboSlice),
           cIndexType = indexType
         ](DxvkContext* ctx) mutable {
-          ctx->bindIndexBuffer(decltype(cBufferSlice)(cBufferSlice), cIndexType);
+          ctx->bindIndexBuffer(std::move(cBufferSlice), cIndexType);
         });
         m_dirty.set(D3D9DeviceDirtyFlag::IndexBuffer);
       }
@@ -5895,8 +5895,8 @@ namespace dxvk {
       cbv.ResetStreamCommand();
 
     // A chunk recorded for the left eye runs again for the right eye
-    if (unlikely(m_stereoCapturing))
-      m_stereoChunks.push_back(chunk);
+    if (unlikely(m_stereo.capturing))
+      m_stereo.chunks.push_back(chunk);
 
     m_csSeqNum = m_csThread.dispatchChunk(std::move(chunk));
   }
@@ -6465,7 +6465,7 @@ namespace dxvk {
           if (cLayout == VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT)
             usage.usage = VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
 
-          ctx->ensureImageCompatibility(decltype(cImage)(cImage), usage);
+          ctx->ensureImageCompatibility(std::move(cImage), usage);
         });
 
         m_dirty.set(D3D9DeviceDirtyFlag::Framebuffer);
@@ -6834,7 +6834,7 @@ namespace dxvk {
       cAttachments         = std::move(attachments),
       cFeedbackLoopAspects = feedbackLoopAspects
     ] (DxvkContext* ctx) mutable {
-      ctx->bindRenderTargets(decltype(cAttachments)(cAttachments), cFeedbackLoopAspects);
+      ctx->bindRenderTargets(std::move(cAttachments), cFeedbackLoopAspects);
     });
   }
 
@@ -7293,7 +7293,7 @@ namespace dxvk {
       cImageView  = commonTex->GetSampleView(srgb)
     ](DxvkContext* ctx) mutable {
       auto [stage, slot] = D3D9ShaderResourceMapping::getTextureSlotInfo(cSlot);
-      ctx->bindResourceImageView(stage, slot, decltype(cImageView)(cImageView));
+      ctx->bindResourceImageView(stage, slot, std::move(cImageView));
     });
   }
 
@@ -7631,7 +7631,7 @@ namespace dxvk {
       cShader = std::move(shader)
     ] (DxvkContext* ctx) mutable {
       constexpr VkShaderStageFlagBits stage = GetShaderStage(ShaderStage);
-      ctx->bindShader<stage>(decltype(cShader)(cShader));
+      ctx->bindShader<stage>(std::move(cShader));
     });
   }
 
@@ -7645,7 +7645,7 @@ namespace dxvk {
     EmitCs([
       cShader = m_ffModules.GetShader<ShaderStage>()
     ](DxvkContext* ctx) mutable {
-      ctx->bindShader<Stage>(decltype(cShader)(cShader));
+      ctx->bindShader<Stage>(std::move(cShader));
     });
   }
 
@@ -7787,7 +7787,7 @@ namespace dxvk {
         cLength       = Length - Offset,
         cStride       = Stride
       ] (DxvkContext* ctx) mutable {
-        DxvkBufferSlice slice(decltype(cBuffer)(cBuffer), cOffset, cLength);
+        DxvkBufferSlice slice(std::move(cBuffer), cOffset, cLength);
         ctx->bindVertexBuffer(cSlotId, std::move(slice), cStride);
       });
     } else {
@@ -7827,7 +7827,7 @@ namespace dxvk {
         cBufferSlice = buffer->GetBufferSlice<D3D9_COMMON_BUFFER_TYPE_REAL>(),
         cIndexType   = indexType
       ](DxvkContext* ctx) mutable {
-        ctx->bindIndexBuffer(decltype(cBufferSlice)(cBufferSlice), cIndexType);
+        ctx->bindIndexBuffer(std::move(cBufferSlice), cIndexType);
       });
     } else {
       EmitCs([] (DxvkContext* ctx) {
