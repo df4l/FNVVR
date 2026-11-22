@@ -1,4 +1,6 @@
+#include <algorithm>
 #include <cstring>
+#include <iterator>
 
 #include "../d3d9_device.h"
 
@@ -18,13 +20,16 @@ namespace dxvk {
     using AccumulateFn = void (__cdecl*)(void* camera, void* scene, void* culler);
     using StartFn      = void (__cdecl*)(uint32_t clear, void* group);
     using IsOutsideFn  = bool (__cdecl*)();
+    using ScreenEffectFn = void (__fastcall*)(void* manager, void* unused, uint32_t effect,
+      void* renderer, void* source, void* destination, void* parameters, uint32_t endFrame);
 
     VrStereoReplay* g_stereoReplay      = nullptr;
 
     // The functions the redirected calls reached: the game's, or another
     // mod's hook (or the mod's occlusion culling)
-    uintptr_t       g_previousDrawWorld  = VrGame::DrawWorldStandard;
-    uintptr_t       g_previousAccumulate = VrGame::AccumulateScene;
+    uintptr_t       g_previousDrawWorld    = VrGame::DrawWorldStandard;
+    uintptr_t       g_previousAccumulate   = VrGame::AccumulateScene;
+    uintptr_t       g_previousScreenEffect = VrGame::ImageSpaceRenderEffect;
 
     /// Seconds between two summary lines
     constexpr double WindowSeconds = 60.0;
@@ -61,6 +66,8 @@ namespace dxvk {
 
     bool found = VrGameMemory::canChainCall(VrGame::DrawWorldStandardCallSite, VrGame::DrawWorldStandard)
       && VrGameMemory::canChainCall(VrGame::SceneAccumulateCallSite, VrGame::AccumulateScene)
+      && std::all_of(std::begin(VrGame::ScreenEffectCallSites), std::end(VrGame::ScreenEffectCallSites),
+        [] (uintptr_t site) { return VrGameMemory::canChainCall(site, VrGame::ImageSpaceRenderEffect); })
       && VrGameMemory::matches(VrGame::RenderedTextureStart,
         VrGame::RenderedTextureStartCode, sizeof(VrGame::RenderedTextureStartCode))
       && VrGameMemory::matches(VrGame::RenderedTextureIsOutsideFrame,
@@ -70,7 +77,10 @@ namespace dxvk {
      || !VrGameMemory::chainCall(VrGame::DrawWorldStandardCallSite, VrGame::DrawWorldStandard,
           reinterpret_cast<const void*>(&VrStereoReplay::drawWorldHook), &g_previousDrawWorld)
      || !VrGameMemory::chainCall(VrGame::SceneAccumulateCallSite, VrGame::AccumulateScene,
-          reinterpret_cast<const void*>(&VrStereoReplay::accumulateHook), &g_previousAccumulate)) {
+          reinterpret_cast<const void*>(&VrStereoReplay::accumulateHook), &g_previousAccumulate)
+     || !VrGameMemory::chainCalls(VrGame::ScreenEffectCallSites, std::size(VrGame::ScreenEffectCallSites),
+          VrGame::ImageSpaceRenderEffect, reinterpret_cast<const void*>(&VrStereoReplay::screenEffectHook),
+          &g_previousScreenEffect)) {
       Logger::warn("VR: The game's world render calls were not found, the performance mode does not replay the left eye");
       return nullptr;
     }
@@ -122,6 +132,8 @@ namespace dxvk {
       m_captured  = false;
     }
 
+    m_worldMatrix = false;
+
     m_eye = NoEye;
   }
 
@@ -133,7 +145,8 @@ namespace dxvk {
     m_device->BeginVrStereoCapture();
     m_device->SetVrStereoWorld(true);
 
-    m_capturing = true;
+    m_capturing   = true;
+    m_worldMatrix = true;
     m_captured  = false;
     m_hasMatrix = false;
   }
@@ -164,6 +177,7 @@ namespace dxvk {
     }
 
     m_device->SetVrStereoWorld(false);
+    m_worldMatrix = false;
   }
 
 
@@ -194,8 +208,9 @@ namespace dxvk {
       return;
 
     m_device->EndVrStereoCapture();
-    m_capturing = false;
-    m_captured  = m_device->HasVrStereoCapture();
+    m_capturing   = false;
+    m_worldMatrix = false;
+    m_captured    = m_device->HasVrStereoCapture();
     m_capturedDestination = destination;
     m_capturedPipBoyMode  = pipBoyMode & 0xFFu;
   }
@@ -365,6 +380,31 @@ namespace dxvk {
 
     if (widen)
       self->m_cullingCamera.restore(saved);
+  }
+
+
+  void __fastcall VrStereoReplay::screenEffectHook(
+          void*                 manager,
+          void*                 unused,
+          uint32_t              effect,
+          void*                 renderer,
+          void*                 source,
+          void*                 destination,
+          void*                 parameters,
+          uint32_t              endFrame) {
+    VrStereoReplay* self = g_stereoReplay;
+
+    // A screen quad: the replayed eye draws it where the left eye did
+    bool world = self && self->m_worldMatrix;
+
+    if (world)
+      self->m_device->SetVrStereoWorld(false);
+
+    game<ScreenEffectFn>(g_previousScreenEffect)(manager, nullptr, effect,
+      renderer, source, destination, parameters, endFrame);
+
+    if (world)
+      self->m_device->SetVrStereoWorld(true);
   }
 
 }

@@ -4285,6 +4285,23 @@ namespace dxvk {
     constexpr uintptr_t DrawWorldStandard             = 0x00870BD0;
 
     /**
+     * - ScreenEffectCallSites: the calls of ImageSpaceManager::RenderEffect
+     *   (__thiscall on the manager: effect id, renderer, source and
+     *   destination BSRenderedTexture*, parameters, bool end frame;
+     *   ret 0x18) made inside the world render, before its image space
+     *   pass: the water's refraction copy of the screen
+     *   (BSShaderAccumulator::FinishAccumulating_Standard_PostResolveDepth,
+     *   effect Copy into a borrowed TEX_MAIN_FIRSTPERSON, drawn before the
+     *   water batches) and the volumetric fog's composite
+     *   (BSShaderAccumulator::RenderVolumetricFog, from
+     *   TESMain::DrawWorld_DoVolumetricFog). Both draw a screen quad, which
+     *   the right eye's clip matrix would move. The other callers run
+     *   outside the kept commands (water update, shadows, image space,
+     *   menus, local map). RenderEffect is ImageSpaceRenderEffect.
+     */
+    constexpr uintptr_t ScreenEffectCallSites[]       = { 0x00B65CD1, 0x00B654C1 };
+
+    /**
      * Occlusion culling, see findings/performance.md §17 (GOG database,
      * checked 2026-11-22; the approach follows mrfury97's FNV Occlusion
      * Culling, whose code is not used).

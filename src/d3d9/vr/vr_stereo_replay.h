@@ -27,7 +27,9 @@ namespace dxvk {
    * TESMain::DrawWorldStandard, and runs them again in place of the right
    * eye's world render, with every vertex shader moving its clip position to
    * the right eye (D3D9DeviceEx::ReplayVrStereoCapture). The image space
-   * passes are drawn as they are: they work in screen space. What comes
+   * passes are drawn as they are: they work in screen space, and so do the
+   * two screen effects drawn among the world's passes (the water's
+   * refraction copy and the volumetric fog's composite). What comes
    * after the world render (interface, eye copy, the VR layer's own
    * drawings) is still drawn for each eye.
    *
@@ -150,6 +152,8 @@ namespace dxvk {
 
     bool     m_capturing = false;
     bool     m_captured  = false;
+    /// The kept commands draw with the replayed eye's clip matrix
+    bool     m_worldMatrix = false;
     bool     m_hasMatrix = false;
     void*    m_capturedDestination = nullptr;
     uint32_t m_capturedPipBoyMode  = 0;
@@ -190,6 +194,9 @@ namespace dxvk {
       void* destination, uint32_t pipBoyMode);
 
     static void __cdecl accumulateHook(void* camera, void* scene, void* culler);
+
+    static void __fastcall screenEffectHook(void* manager, void* unused, uint32_t effect,
+      void* renderer, void* source, void* destination, void* parameters, uint32_t endFrame);
 
   };
 
