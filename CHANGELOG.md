@@ -1,9 +1,26 @@
 # Changelog
 
-## Unreleased
+## v0.21.0 (2026-11-22, since v0.20.0 `fee4949`)
+
+### Performance
+
+- **Performance mode** (Settings > VR, off by default): meant for headsets and rates where the game cannot keep up, such as the Steam Frame, to avoid reprojection. It watches the game thread and the runtime's GPU time and lowers what costs most until the frames fit, then raises it back when there is room: the distances at which objects, actors, lights and grass fade, water reflections, then shadow and specular fades, then the resolution the world is drawn at, in steps of 5 % down to 70 %. The scaled world is sharpened, and 4x MSAA is never touched. Where it settled is kept per headset and rate in `fnvvr\performance.ini`, so the next session starts there. The mode off changes nothing.
+- **Right eye drawn from the left eye's work** (performance mode): the first thing the mode does when the game thread is the limit, before any distance is cut. The right eye reuses the commands of the left eye instead of running the game's rendering a second time. While it runs, water reflections, water depth maps and refractions and specular highlights are off in both eyes (they cannot be reused between eyes); the game's settings are given back when it saves its INI and when the mode stops, so your own choices are kept.
+- **Occlusion culling per eye** (performance mode, `d3d9.vrOcclusionCulling`): large objects, actors, doors, trees and land behind buildings are left out of an eye's view when the eye has just been seen not to see them, with a margin while you move. Meant for towns. The Occlusion Culling plugin of flat screens gives both eyes the same answers: the mode warns once if it is installed and leaves its own culling off while it is.
+- **Frames handed to the runtime on a thread** (performance mode, `d3d9.vrAsyncSubmit`): the game thread no longer waits for the eyes and panels to be handed over; it runs the game's update meanwhile.
+- **Profiling logs**: once a minute in the world, the mode's levels, its time at each, how often the right eye was replayed and what the occlusion culling left out.
+
+### Fixes
+
+- **World kept live behind the wait menu**: waiting or sleeping for several hours froze the world into a blurred still image from the first hour on. The sky and the light now keep changing behind the menu.
+
+### Hands and controls
 
 - **Hands after the casino sends you away**: running out of chips at a slot machine made the game stand you up by itself, and the hands stayed hidden afterwards. The first-person model is now put back in that case too.
 - **Hands while swimming**: the game puts the weapon away in the water and animated the arms out of sight, so the hands vanished. Both hands now follow the controllers while swimming, as with a holstered weapon; they still grab objects, but cannot punch or attack, as in the game.
+
+### Scopes
+
 - **Scope reticles in mod lists with decompressed archives**: lists whose vanilla archives were decompressed by a tool (TTW lists such as The Best of Times) showed no crosshair in the scope lens, because the file read came up a few bytes short and was refused. Such files are now read as the game reads them, which also covers the fonts, terminal pictures and interface images the mod reads. More DDS layouts are decoded, and the log tells a missing reticle from one in a format not read.
 
 ## v0.20.0 (2026-11-18, since v0.19.1 `90dd1b8`)
