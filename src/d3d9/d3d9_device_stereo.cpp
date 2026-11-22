@@ -66,6 +66,11 @@ namespace dxvk {
     FlushCsChunk();
     m_stereoCapturing = false;
     ReplaceCsChunk();
+
+    // The replay flushes at the same place, with a flush of its own
+    if (m_stereoFlushes.empty() || m_stereoFlushes.back() != m_stereoChunks.size())
+      m_stereoFlushes.push_back(m_stereoChunks.size());
+
     return true;
   }
 
@@ -84,6 +89,7 @@ namespace dxvk {
     D3D9DeviceLock lock = LockDevice();
 
     DiscardStereoCaptureLocked();
+    m_stereoFlushes.clear();
 
     // Runs once, before the kept commands: what they may rely on
     // without setting it, and every buffer storage they may read
@@ -111,8 +117,6 @@ namespace dxvk {
       cState = m_stereoCs,
       cWorld = world
     ] (DxvkContext* ctx) {
-      cState->world = cWorld;
-
       VkDeviceSize offset = cWorld && cState->eye ? cState->rightOffset : 0u;
       ctx->bindUniformBufferRange(StereoStages,
         D3D9ShaderResourceMapping::VSStereoTransform, offset, StereoMatrixSize);
@@ -148,13 +152,26 @@ namespace dxvk {
 
     FlushCsChunk();
 
+    bool first = !m_stereoReplays++;
+
+    if (first) {
+      Logger::info(str::format("D3D9: First stereo replay: ", m_stereoChunks.size(), " chunks, ",
+        m_stereoFlushes.size(), " flushes, matrix at offset ", offset));
+    }
+
     // The buffers get back the storage they had when the capture started,
     // and the context the bindings it had then
     EmitCs([
       cState  = m_stereoCs,
       cIa     = &m_iaState,
-      cOffset = offset
+      cOffset = offset,
+      cFirst  = first
     ] (DxvkContext* ctx) {
+      if (cFirst) {
+        Logger::info(str::format("D3D9: First stereo replay: ", cState->journal.entries().size(),
+          " buffers get back their storage, bindings captured: ", cState->captured ? "yes" : "no"));
+      }
+
       ctx->setStereoBufferJournal(nullptr);
       cState->beforeReplay = std::make_unique<DxvkStereoBindings>();
       ctx->saveStereoBindings(*cState->beforeReplay);
@@ -180,11 +197,23 @@ namespace dxvk {
     FlushCsChunk();
 
     std::vector<DxvkCsChunkRef> chunks = std::move(m_stereoChunks);
+    std::vector<size_t> flushes = std::move(m_stereoFlushes);
     m_stereoChunks.clear();
+    m_stereoFlushes.clear();
     m_stereoCaptured = false;
 
-    for (const auto& chunk : chunks)
-      EmitCsChunk(DxvkCsChunkRef(chunk));
+    size_t nextFlush = 0u;
+
+    for (size_t i = 0u; i < chunks.size(); i++) {
+      EmitCsChunk(DxvkCsChunkRef(chunks[i]));
+
+      if (nextFlush < flushes.size() && flushes[nextFlush] <= i + 1u) {
+        ExecuteFlush(false);
+
+        while (nextFlush < flushes.size() && flushes[nextFlush] <= i + 1u)
+          nextFlush++;
+      }
+    }
 
     // Everything as it was before the replay
     EmitCs([
@@ -204,8 +233,7 @@ namespace dxvk {
       ctx->restoreStereoBindings(*cState->beforeReplay);
       cIa->streamsUsed = cState->streamsUsedBeforeReplay;
 
-      cState->eye   = 0u;
-      cState->world = false;
+      cState->eye = 0u;
 
       cState->journal.clear();
       cState->replayJournal.clear();
@@ -235,6 +263,7 @@ namespace dxvk {
     }
 
     m_stereoChunks.clear();
+    m_stereoFlushes.clear();
     m_stereoCaptured = false;
 
     EmitCs([

@@ -1776,7 +1776,9 @@ namespace dxvk {
     VkDeviceSize                    m_stereoEntrySize = 0u;
     uint32_t                        m_stereoEntryCount = 0u;
     uint32_t                        m_stereoNextEntry = 1u;
+    uint32_t                        m_stereoReplays = 0u;
     std::vector<DxvkCsChunkRef>     m_stereoChunks;
+    std::vector<size_t>             m_stereoFlushes;
     bool                            m_stereoCapturing = false;
     bool                            m_stereoCaptured  = false;
 

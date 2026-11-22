@@ -18,8 +18,6 @@ namespace dxvk {
     uint32_t                eye = 0u;
     /// Offset of the right eye's matrix in the device's stereo buffer
     VkDeviceSize            rightOffset = 0u;
-    /// Whether the commands that run now draw the world
-    bool                    world = false;
 
     /// Bindings when the capture started, restored before the replay
     std::unique_ptr<DxvkStereoBindings> captured;
