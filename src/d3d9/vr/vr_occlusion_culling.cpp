@@ -299,8 +299,8 @@ namespace dxvk {
     if (g_occlusion)
       return nullptr;
 
-    if (GetModuleHandleW(L"OcclusionCulling.dll")) {
-      Logger::info("VR: The Occlusion Culling plugin is loaded, the mod's own occlusion culling stays off");
+    if (pluginLoaded()) {
+      Logger::warn("VR: The Occlusion Culling plugin is loaded, the mod's own occlusion culling stays off");
       return nullptr;
     }
 
@@ -337,6 +337,11 @@ namespace dxvk {
     std::unique_ptr<VrOcclusionCulling> culling(new VrOcclusionCulling(device));
     g_occlusion = culling.get();
     return culling;
+  }
+
+
+  bool VrOcclusionCulling::pluginLoaded() {
+    return GetModuleHandleW(L"OcclusionCulling.dll") != nullptr;
   }
 
 

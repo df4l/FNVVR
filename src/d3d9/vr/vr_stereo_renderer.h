@@ -369,6 +369,10 @@ namespace dxvk {
     std::unique_ptr<VrOcclusionCulling> m_occlusion;
     bool               m_occlusionTried    = false;
     VrOcclusionUse     m_occlusionUse      = VrOcclusionUse::Performance;
+    // Shown once in the world when the Occlusion Culling plugin is loaded,
+    // after NoticeDelayFrames frames there, then cleared
+    const char*        m_occlusionPluginNotice = nullptr;
+    uint32_t           m_noticeFrames      = 0;
 
     // The game composes its final 3D image into the backbuffer
     Com<IDirect3DSurface9> m_gameTarget;
@@ -814,6 +818,8 @@ namespace dxvk {
      * \brief Sets the frame's shading rates from where the eyes look
      */
     void updateOcclusion();
+
+    void showOcclusionPluginNotice(VrGameStateKind state);
 
     void updateFoveation(const std::array<VrEyeView, VrEyeCount>& views, float dt);
 

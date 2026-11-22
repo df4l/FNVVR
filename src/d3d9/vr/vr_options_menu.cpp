@@ -5,6 +5,7 @@
 
 #include "vr_game_addresses.h"
 #include "vr_game_memory.h"
+#include "vr_occlusion_culling.h"
 #include "vr_options_menu.h"
 
 namespace dxvk {
@@ -271,6 +272,16 @@ namespace dxvk {
     }
 
 
+    // A message box with an OK button, over the settings
+    void showMessage(const char* message) {
+      if (VrGameMemory::matches(VrGame::ShowMessageBox,
+          VrGame::ShowMessageBoxPrologue, sizeof(VrGame::ShowMessageBoxPrologue))) {
+        reinterpret_cast<MessageBoxFn>(VrGame::ShowMessageBox)(message, nullptr, nullptr, nullptr,
+          1u, VrGame::MessageBoxStartMenuType, 0.0f, 0.0f, g_texts.text("option.ok", "OK"), nullptr);
+      }
+    }
+
+
     void __cdecl onPerformanceModeChanged(void* option) {
       if (!optionsInitialised()) {
         optionValue(option)   = g_options.performanceMode ? 1u : 0u;
@@ -285,6 +296,14 @@ namespace dxvk {
 
       g_options.performanceMode = performanceMode;
       notifyChanged();
+
+      // The mode's occlusion culling stays off while the plugin is there
+      if (performanceMode && VrOcclusionCulling::pluginLoaded()) {
+        showMessage(g_texts.text("option.performance.occlusionplugin",
+          "The Occlusion Culling plugin is installed. It was made for a flat screen and gives both eyes the same "
+          "answers, so objects can vanish from one eye. The performance mode has its own occlusion culling made "
+          "for VR, which stays off while the plugin is there. Uninstall the plugin to use it."));
+      }
     }
 
 
@@ -300,11 +319,7 @@ namespace dxvk {
           VrGame::DisplayOptionPrologue, sizeof(VrGame::DisplayOptionPrologue)))
         reinterpret_cast<DisplayOptionFn>(VrGame::DisplayOption)(menu, option, nullptr);
 
-      if (VrGameMemory::matches(VrGame::ShowMessageBox,
-          VrGame::ShowMessageBoxPrologue, sizeof(VrGame::ShowMessageBoxPrologue))) {
-        reinterpret_cast<MessageBoxFn>(VrGame::ShowMessageBox)(message, nullptr, nullptr, nullptr,
-          1u, VrGame::MessageBoxStartMenuType, 0.0f, 0.0f, g_texts.text("option.ok", "OK"), nullptr);
-      }
+      showMessage(message);
     }
 
 

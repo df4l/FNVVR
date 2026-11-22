@@ -68,6 +68,16 @@ namespace dxvk {
     static std::unique_ptr<VrOcclusionCulling> install(IDirect3DDevice9* device);
 
     /**
+     * \brief Whether mrfury97's FNV Occlusion Culling plugin is loaded
+     *
+     * Made for a flat screen, it runs for every eye's scene and uses one
+     * eye's answers for the other, so an object can vanish from one eye.
+     * The mod's own culling stays off while it is loaded, and the player is
+     * told to uninstall it.
+     */
+    static bool pluginLoaded();
+
+    /**
      * \brief Turns the culling on or off
      *
      * Off, every call goes through to the game and the queries are freed.

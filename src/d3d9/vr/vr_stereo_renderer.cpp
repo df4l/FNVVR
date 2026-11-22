@@ -329,6 +329,12 @@ namespace dxvk {
     if (VrGameConsole::install())
       renderer->m_terminal = std::make_unique<VrConsoleTerminal>(*renderer->m_painter, backend, texts);
 
+    if (VrOcclusionCulling::pluginLoaded()) {
+      renderer->m_occlusionPluginNotice = texts.text("occlusion.plugin",
+        "Uninstall the Occlusion Culling plugin: in VR it gives both eyes the same answers. "
+        "FNVVR's performance mode has its own occlusion culling.");
+    }
+
     if (VrGameTextEdit::install())
       renderer->m_textFieldKeyboard = std::make_unique<VrTextFieldKeyboard>(backend);
 
@@ -711,6 +717,8 @@ namespace dxvk {
 
     if (m_renderScale)
       m_renderScale->setScale(m_performance.renderScale());
+
+    showOcclusionPluginNotice(state);
 
     if (!timing.shouldRender) {
       VrD3D9Bridge::submitEmptyFrame(m_device, m_backend, timing.predictedDisplayTime);
@@ -1309,6 +1317,27 @@ namespace dxvk {
   void VrStereoRenderer::setOcclusionUse(VrOcclusionUse use) {
     m_occlusionUse = use;
     updateOcclusion();
+  }
+
+
+  void VrStereoRenderer::showOcclusionPluginNotice(VrGameStateKind state) {
+    // A few seconds into the world, past the fade from the loading screen
+    constexpr uint32_t NoticeDelayFrames = 360;
+    constexpr float    NoticeSeconds     = 10.0f;
+
+    using ShowHudMessageFn = uint32_t (__cdecl*)(const char* text, uint32_t emotion, const char* image,
+      const char* sound, float time, uint32_t instant);
+
+    if (!m_occlusionPluginNotice || state != VrGameStateKind::InGame || ++m_noticeFrames < NoticeDelayFrames)
+      return;
+
+    if (VrGameMemory::matches(VrGame::ShowHudMessage, VrGame::ShowHudMessagePrologue, sizeof(VrGame::ShowHudMessagePrologue))) {
+      reinterpret_cast<ShowHudMessageFn>(VrGame::ShowHudMessage)(m_occlusionPluginNotice,
+        VrGame::HudMessageSad, nullptr, nullptr, NoticeSeconds, 0);
+      Logger::info("VR: The player was told to uninstall the Occlusion Culling plugin");
+    }
+
+    m_occlusionPluginNotice = nullptr;
   }
 
 
