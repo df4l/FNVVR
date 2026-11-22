@@ -16,7 +16,9 @@ namespace dxvk {
    * settings, so the player's saved values stay (findings/performance.md
    * §14.1). Each value is scaled from the player's own: a value that is no
    * longer the one written last was changed by the game's settings menu and
-   * becomes the player's new value.
+   * becomes the player's new value. Water reflections and grass have no
+   * run-time copy: their game settings are written, and given back while
+   * the game saves its INI files, menus and the end of the game included.
    *
    * Distance levels scale the fade distances of objects, items, actors,
    * lights and grass, and turn water reflections off from WaterOffDistanceLevel; GPU
@@ -27,6 +29,13 @@ namespace dxvk {
   class VrPerformanceLevers {
 
   public:
+
+    VrPerformanceLevers() = default;
+
+    ~VrPerformanceLevers();
+
+    VrPerformanceLevers             (const VrPerformanceLevers&) = delete;
+    VrPerformanceLevers& operator = (const VrPerformanceLevers&) = delete;
 
     static constexpr uint32_t DistanceSteps = 4;
     static constexpr uint32_t GpuSteps      = 8;
@@ -49,6 +58,18 @@ namespace dxvk {
      * \brief Gives every value back to the player's
      */
     void restore();
+
+    /**
+     * \brief Gives the lowered game settings back while the game saves them
+     *
+     * Called by the hook on the game's INI saves, followed by retakeSettings.
+     */
+    void lendSettings();
+
+    /**
+     * \brief Lowers again what lendSettings gave back
+     */
+    void retakeSettings();
 
     /**
      * \brief Scale of a distance level, 1 for level 0
@@ -89,17 +110,25 @@ namespace dxvk {
       float  base    = 0.0f;
       float  written = 0.0f;
       bool   held    = false;
+      /// A game setting, which the game saves in its INI files
+      bool   setting = false;
+      /// Given back while the game saves its INI files
+      bool   lent    = false;
     };
 
     struct Flag {
       uint8_t* address = nullptr;
       uint8_t  base    = 0;
       bool     held    = false;
+      bool     lent    = false;
     };
 
     std::vector<Value> m_distanceValues;
     std::vector<Value> m_gpuValues;
     Flag               m_waterReflections;
+    bool               m_hooked = false;
+
+    bool hookSettingsSaves();
 
     static void scale(Value& value, float factor);
 
