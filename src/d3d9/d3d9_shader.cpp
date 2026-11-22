@@ -1130,7 +1130,15 @@ namespace dxvk {
       options.isSWVP = m_options.isSWVP && isVs;
       options.forceDynamicTextureType = m_options.forceSamplerTypeSpecConstants && !isVs;
 
-      dxbc_spv::util::ByteReader reader(m_dxbc.data(), m_dxbc.size());
+      // The stereo replay needs a projected position written directly
+      std::vector<uint8_t> rewritten;
+
+      if (isVs)
+        rewritten = D3D9ProjectPositionDirectly(m_dxbc.data(), m_dxbc.size());
+
+      const std::vector<uint8_t>& code = rewritten.empty() ? m_dxbc : rewritten;
+
+      dxbc_spv::util::ByteReader reader(code.data(), code.size());
 
       dxbc_spv::sm3::Converter converter(reader, options);
 
@@ -1138,7 +1146,7 @@ namespace dxvk {
         throw DxvkError(str::format("Failed to convert shader: ", m_key.toString()));
 
       D3D9ShaderLowerLegacyInputPass lowerLegacyPass(builder, m_options, m_analysis,
-        isVs && D3D9ProjectsWithFirstConstants(m_dxbc.data(), m_dxbc.size()));
+        isVs && D3D9ProjectsWithFirstConstants(code.data(), code.size()));
       lowerLegacyPass.run();
     }
 

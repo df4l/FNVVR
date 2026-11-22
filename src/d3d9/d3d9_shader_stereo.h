@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
+#include <vector>
 
 #include <ir/ir_builder.h>
 
@@ -24,13 +26,33 @@ namespace dxvk {
           size_t                    size);
 
   /**
+   * \brief Writes a position copied from a projected temporary directly
+   *
+   * The volumetric fog's vertex shaders project into a temporary, one
+   * dp4 of c0 to c3 per component with an input register, copy it to the
+   * position with one mov, and compute their screen lookup from the same
+   * temporary. The copy is replaced by the four dp4 themselves, written
+   * to the position: the same values, and a shader that
+   * D3D9ProjectsWithFirstConstants takes, so the lookup moves to the
+   * replayed eye with the position.
+   *
+   * \param [in] bytecode The shader's bytecode
+   * \param [in] size Size of the bytecode in bytes
+   * \returns The rewritten bytecode, empty if the shader is not written so
+   */
+  std::vector<uint8_t> D3D9ProjectPositionDirectly(
+    const void*                     bytecode,
+          size_t                    size);
+
+  /**
    * \brief Moves a projecting vertex shader's other outputs to the stereo eye
    *
    * For shaders found by D3D9ProjectsWithFirstConstants, before the
    * legacy constants are lowered: every load of c0 to c3 the position is
    * not computed from becomes the row of the stereo matrix times the four
    * constants, so that what other outputs draw from the projection (the
-   * water's refraction and depth lookups) belongs to the replayed eye. The
+   * water's refraction and depth lookups, the volumetric fog's scene depth
+   * lookup) belongs to the replayed eye. The
    * position itself is left to D3D9ApplyStereoTransform, which runs on
    * every vertex shader.
    *

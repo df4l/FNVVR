@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <unordered_set>
 #include <vector>
 
@@ -270,6 +271,198 @@ namespace dxvk {
     }
 
     return written == 0xfu;
+  }
+
+
+  std::vector<uint8_t> D3D9ProjectPositionDirectly(
+    const void*                     bytecode,
+          size_t                    size) {
+    using namespace dxbc_spv::sm3;
+
+    // Tokens of an instruction without relative addressing
+    constexpr size_t MovBytes = 3u * sizeof(uint32_t);
+    constexpr size_t Dp4Bytes = 4u * sizeof(uint32_t);
+    constexpr uint32_t WriteMaskShift = 16u;
+    constexpr uint32_t WriteMaskBits  = 0xfu << WriteMaskShift;
+
+    struct Range {
+      size_t offset = 0u;
+      size_t bytes  = 0u;
+    };
+
+    Parser parser(dxbc_spv::util::ByteReader(bytecode, size));
+
+    if (!parser)
+      return { };
+
+    ShaderInfo info = parser.getShaderInfo();
+
+    // Earlier models give no instruction lengths
+    if (info.getType() != ShaderType::eVertex || info.getVersion().first < 2u)
+      return { };
+
+    bool sm3 = info.getVersion().first >= 3u;
+    RegisterType positionType = sm3 ? RegisterType::eOutput : RegisterType::eRasterizerOut;
+    uint32_t positionIndex = sm3 ? ~0u : uint32_t(RasterizerOutIndex::eRasterOutPosition);
+
+    struct Write {
+      Range    range;
+      uint32_t temp  = 0u;
+      uint8_t  mask  = 0u;
+      bool     dp4   = false;
+    };
+
+    std::vector<Write> tempWrites;
+    std::vector<Range> positionWrites;
+    uint32_t copiedTemp = ~0u;
+
+    while (parser) {
+      size_t offset = parser.getByteOffset();
+      Instruction ins = parser.parseInstruction();
+
+      if (!ins)
+        return { };
+
+      Range range = { offset, parser.getByteOffset() - offset };
+      OpCode opCode = ins.getOpCode();
+
+      if (opCode == OpCode::eComment || opCode == OpCode::eEnd)
+        continue;
+
+      if (ins.hasDcl()) {
+        const Operand& dst = ins.getDst();
+
+        if (sm3 && dst.getRegisterType() == RegisterType::eOutput
+         && ins.getDcl().getSemanticUsage() == SemanticUsage::ePosition
+         && !ins.getDcl().getSemanticIndex())
+          positionIndex = dst.getIndex();
+        continue;
+      }
+
+      if (opCode == OpCode::eDef) {
+        const Operand& dst = ins.getDst();
+
+        if (dst.getRegisterType() == RegisterType::eConst && dst.getIndex() < ProjectionRows)
+          return { };
+        continue;
+      }
+
+      for (uint32_t i = 0u; i < ins.getSrcCount(); i++) {
+        if (ins.getSrc(i).hasRelativeAddressing())
+          return { };
+      }
+
+      if (!ins.hasDst())
+        continue;
+
+      const Operand& dst = ins.getDst();
+
+      if (dst.hasRelativeAddressing())
+        return { };
+
+      bool plain = !ins.isPredicated() && !dst.isSaturated() && !dst.getShift();
+
+      if (dst.getRegisterType() == positionType && dst.getIndex() == positionIndex) {
+        const Operand& src = ins.getSrc(0u);
+
+        // One plain copy of a whole temporary
+        if (opCode != OpCode::eMov || !plain || range.bytes != MovBytes
+         || uint8_t(dst.getWriteMask(info)) != 0xfu
+         || src.getRegisterType() != RegisterType::eTemp
+         || src.getModifier() != OperandModifier::eNone
+         || src.getSwizzle(info) != dxbc_spv::util::Swizzle::identity())
+          return { };
+
+        positionWrites.push_back(range);
+        copiedTemp = src.getIndex();
+        continue;
+      }
+
+      if (dst.getRegisterType() != RegisterType::eTemp)
+        continue;
+
+      Write write;
+      write.range = range;
+      write.temp  = dst.getIndex();
+      write.mask  = uint8_t(dst.getWriteMask(info));
+
+      // A dp4 of the component's row of the projection with an input,
+      // which keeps its value until the copy
+      if (opCode == OpCode::eDp4 && plain && range.bytes == Dp4Bytes
+       && write.mask && !(write.mask & (write.mask - 1u))) {
+        uint32_t component = 0u;
+
+        while (!(write.mask & (1u << component)))
+          component++;
+
+        bool projected = false;
+        bool input = false;
+
+        for (uint32_t i = 0u; i < ins.getSrcCount(); i++) {
+          const Operand& src = ins.getSrc(i);
+
+          projected |= src.getRegisterType() == RegisterType::eConst
+                    && src.getIndex() == component
+                    && src.getModifier() == OperandModifier::eNone
+                    && src.getSwizzle(info) == dxbc_spv::util::Swizzle::identity();
+          input |= src.getRegisterType() == RegisterType::eInput;
+        }
+
+        write.dp4 = projected && input;
+      }
+
+      tempWrites.push_back(write);
+    }
+
+    if (positionWrites.size() != 1u)
+      return { };
+
+    // Each component of the copied temporary written once, before the copy
+    std::array<const Write*, 4u> rows = { };
+
+    for (const auto& write : tempWrites) {
+      if (write.temp != copiedTemp)
+        continue;
+
+      if (!write.dp4 || write.range.offset > positionWrites[0u].offset)
+        return { };
+
+      uint32_t component = 0u;
+
+      while (!(write.mask & (1u << component)))
+        component++;
+
+      if (rows[component])
+        return { };
+
+      rows[component] = &write;
+    }
+
+    for (auto row : rows) {
+      if (!row)
+        return { };
+    }
+
+    auto bytes = reinterpret_cast<const uint8_t*>(bytecode);
+    const Range& copy = positionWrites[0u];
+
+    uint32_t copyDst = 0u;
+    std::memcpy(&copyDst, bytes + copy.offset + sizeof(uint32_t), sizeof(copyDst));
+
+    std::vector<uint8_t> result(bytes, bytes + copy.offset);
+
+    for (uint32_t c = 0u; c < rows.size(); c++) {
+      std::array<uint32_t, 4u> tokens = { };
+      std::memcpy(tokens.data(), bytes + rows[c]->range.offset, Dp4Bytes);
+
+      tokens[1u] = (copyDst & ~WriteMaskBits) | ((1u << c) << WriteMaskShift);
+
+      auto data = reinterpret_cast<const uint8_t*>(tokens.data());
+      result.insert(result.end(), data, data + Dp4Bytes);
+    }
+
+    result.insert(result.end(), bytes + copy.offset + copy.bytes, bytes + size);
+    return result;
   }
 
 
