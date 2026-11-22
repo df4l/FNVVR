@@ -120,6 +120,21 @@ TEST_CASE(performance_governor_raises_a_level_after_two_calm_seconds) {
 }
 
 
+TEST_CASE(performance_governor_raises_a_level_despite_a_few_slow_frames) {
+  VrPerformanceGovernor governor(4, 3);
+  run(governor, CpuHeavy, 260.0);
+  CHECK(governor.levels().distance == 1);
+
+  // Mostly light frames with a slower one now and then, as in play
+  const VrPerformanceSample Slower = frame(12.5, 6.0);
+
+  for (uint32_t i = 0; i < 3 * 72; i++)
+    governor.update(i % 20 == 0 ? Slower : Light);
+
+  CHECK(governor.levels().distance == 0);
+}
+
+
 TEST_CASE(performance_governor_waits_longer_after_a_relapse) {
   VrPerformanceGovernor governor(4, 3);
   run(governor, CpuHeavy, 260.0);
@@ -133,7 +148,8 @@ TEST_CASE(performance_governor_waits_longer_after_a_relapse) {
   run(governor, Light, 3000.0);
   CHECK(governor.levels().distance == 1);
 
-  run(governor, Light, 1100.0);
+  // Steps are taken at the end of a quarter (19 frames at 72 Hz)
+  run(governor, Light, 1400.0);
   CHECK(governor.levels().distance == 0);
 }
 

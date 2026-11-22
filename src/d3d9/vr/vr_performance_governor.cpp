@@ -16,6 +16,11 @@ namespace dxvk {
     /// Share of a window's frames over budget that lowers a level, as a ratio
     constexpr uint32_t OverPerWindow = 4;
 
+    /// Share of a window's frames that may miss the calm mark in a calm
+    /// window, as a ratio: a single slow frame (a cell attaching, a save,
+    /// the game's own hitches) must not restart the wait for a step up
+    constexpr uint32_t UncalmPerWindow = 10;
+
   }
 
 
@@ -29,6 +34,7 @@ namespace dxvk {
     m_level        = 0;
     m_windowFrames = 0;
     m_overFrames   = 0;
+    m_uncalmFrames = 0;
     m_windowMs     = 0.0;
     m_calmMs       = 0.0;
     m_sinceDownMs  = std::numeric_limits<double>::infinity();
@@ -46,31 +52,36 @@ namespace dxvk {
   bool VrPerformanceGovernor::Ladder::step(bool over, bool calm, double periodMs) {
     m_windowFrames += 1;
     m_overFrames   += over ? 1 : 0;
+    m_uncalmFrames += calm ? 0 : 1;
     m_windowMs     += periodMs;
     m_sinceDownMs  += periodMs;
     m_sinceUpMs    += periodMs;
-    m_calmMs        = calm ? m_calmMs + periodMs : 0.0;
 
     // A long time without trouble forgets earlier relapses
     if (m_sinceDownMs >= MaxCalmMs)
       m_calmNeededMs = CalmMs;
 
-    if (m_windowMs >= WindowMs) {
-      bool overloaded = m_overFrames * OverPerWindow >= m_windowFrames;
+    if (m_windowMs < WindowMs)
+      return false;
 
-      m_windowFrames = 0;
-      m_overFrames   = 0;
-      m_windowMs     = 0.0;
+    bool overloaded = m_overFrames * OverPerWindow >= m_windowFrames;
+    bool calmWindow = !overloaded && m_uncalmFrames * UncalmPerWindow <= m_windowFrames;
 
-      if (overloaded && m_level < m_steps) {
-        if (m_sinceUpMs < RelapseMs)
-          m_calmNeededMs = std::min(m_calmNeededMs * 2.0, MaxCalmMs);
+    m_calmMs = calmWindow ? m_calmMs + m_windowMs : 0.0;
 
-        m_level      += 1;
-        m_sinceDownMs = 0.0;
-        m_calmMs      = 0.0;
-        return true;
-      }
+    m_windowFrames = 0;
+    m_overFrames   = 0;
+    m_uncalmFrames = 0;
+    m_windowMs     = 0.0;
+
+    if (overloaded && m_level < m_steps) {
+      if (m_sinceUpMs < RelapseMs)
+        m_calmNeededMs = std::min(m_calmNeededMs * 2.0, MaxCalmMs);
+
+      m_level      += 1;
+      m_sinceDownMs = 0.0;
+      m_calmMs      = 0.0;
+      return true;
     }
 
     if (m_level > 0 && m_calmMs >= m_calmNeededMs && m_sinceDownMs >= m_calmNeededMs) {

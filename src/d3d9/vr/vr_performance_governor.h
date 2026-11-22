@@ -49,7 +49,8 @@ namespace dxvk {
    * period, or the runtime reprojected it for that resource; calm below 75 %.
    * Every quarter of a second, a level goes down one step if a quarter of
    * the frames was over budget. A level goes back up one step after two
-   * seconds of calm frames. When a resource is over budget again within five
+   * seconds of calm quarters, a quarter being calm when at least nine frames
+   * in ten were calm and it did not lower a level. When a resource is over budget again within five
    * seconds of a step up, the calm needed doubles (up to 16 seconds), so the
    * image does not keep switching between two levels; it goes back to two
    * seconds after 16 seconds without a step down.
@@ -115,6 +116,7 @@ namespace dxvk {
       uint32_t m_level        = 0;
       uint32_t m_windowFrames = 0;
       uint32_t m_overFrames   = 0;
+      uint32_t m_uncalmFrames = 0;
       double   m_windowMs     = 0.0;
       double   m_calmMs       = 0.0;
       double   m_sinceDownMs  = 0.0;
