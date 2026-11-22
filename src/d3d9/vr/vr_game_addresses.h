@@ -4202,6 +4202,20 @@ namespace dxvk {
     constexpr uintptr_t SettingUseWaterDepth          = 0x011C7BBC;
 
     /**
+     * Water refractions, turned off by the performance mode while it draws
+     * the right eye from the left eye's commands: bUseWaterRefractions:Water
+     * (Setting, same layout and handling as SettingUseWaterReflections).
+     * TESWaterSystem::UpdateShader recomputes WaterShaderProperty::
+     * bRefractions from it every frame and rebuilds the shader's passes when
+     * it changes; without refraction passes, BSShaderAccumulator::
+     * FinishAccumulating_Standard_PostResolveDepth (0x00B65C60) makes no
+     * refraction copy of the screen. In replayed frames that copy showed the
+     * left eye's world under the water in the right eye, one frame in two or
+     * so (findings/performance.md section 18).
+     */
+    constexpr uintptr_t SettingUseWaterRefractions    = 0x011C7C60;
+
+    /**
      * Grass distance, a lever of the performance mode: fGrassStartFadeDistance
      * :Grass (Setting, float at SettingValue), read every frame by
      * TESTerrainLODManager::UpdateGrass (0x0057D0A0), which builds grass for

@@ -51,7 +51,7 @@ namespace dxvk {
       m_available   = m_levers.initialize();
 
       if (m_available && !m_levers.canStereoReplay())
-        Logger::warn("VR: The performance mode cannot turn water reflections, water depth maps and specular highlights off, it never draws the right eye from the left eye's commands");
+        Logger::warn("VR: The performance mode cannot turn water reflections, depth maps and refractions and specular highlights off, it never draws the right eye from the left eye's commands");
     }
 
     if (enabled == m_enabled)
@@ -249,9 +249,10 @@ namespace dxvk {
       "; reprojected for the CPU ", percent(w.cpuReprojected, w.frames),
       " %, for the GPU ", percent(w.gpuReprojected, w.frames), " %; ", w.changes,
       " level changes; time at each distance scale (replay: right eye drawn from the left eye's commands, "
-      "water reflections, water depth maps and specular off): ", distances.str(),
+      "water reflections, depth maps and refractions and specular off): ", distances.str(),
       "; at each shadow and specular scale / world resolution: ", gpuLevels.str(),
-      "; now distances ", distanceLabel(levels.distance),
+      "; now distances ", distanceLabel(appliedLevels().distance),
+      m_replayForced ? " (d3d9.vrStereoReplayTest forces the replay, the times above are the governor's levels)" : "",
       ", shadows and specular x", fixed(VrPerformanceLevers::gpuScale(levels.gpu)),
       ", world resolution ", percent(VrPerformanceLevers::renderScale(levels.gpu), 1.0), " %"));
 

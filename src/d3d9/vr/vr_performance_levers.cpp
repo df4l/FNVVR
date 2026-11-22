@@ -47,6 +47,7 @@ namespace dxvk {
 
     constexpr char WaterReflectionsName[]  = "bUseWaterReflections:Water";
     constexpr char WaterDepthName[]        = "bUseWaterDepth:Water";
+    constexpr char WaterRefractionsName[]  = "bUseWaterRefractions:Water";
     constexpr char GrassStartFadeName[]    = "fGrassStartFadeDistance:Grass";
     constexpr char GrassMinStartFadeName[] = "fGrassMinStartFadeDistance:Grass";
 
@@ -146,16 +147,20 @@ namespace dxvk {
     }
 
     bool water = settingNamed(VrGame::SettingUseWaterReflections, WaterReflectionsName);
-    bool depth = settingNamed(VrGame::SettingUseWaterDepth, WaterDepthName);
+    bool depth = settingNamed(VrGame::SettingUseWaterDepth, WaterDepthName)
+              && settingNamed(VrGame::SettingUseWaterRefractions, WaterRefractionsName);
 
-    m_waterReflections = Flag();
-    m_waterDepth       = Flag();
+    m_waterReflections  = Flag();
+    m_waterDepth        = Flag();
+    m_waterRefractions  = Flag();
 
     if (water)
       m_waterReflections.address = reinterpret_cast<uint8_t*>(VrGame::SettingUseWaterReflections + VrGame::SettingValue);
 
-    if (depth)
-      m_waterDepth.address = reinterpret_cast<uint8_t*>(VrGame::SettingUseWaterDepth + VrGame::SettingValue);
+    if (depth) {
+      m_waterDepth.address       = reinterpret_cast<uint8_t*>(VrGame::SettingUseWaterDepth + VrGame::SettingValue);
+      m_waterRefractions.address = reinterpret_cast<uint8_t*>(VrGame::SettingUseWaterRefractions + VrGame::SettingValue);
+    }
 
     // A game setting the game could save lowered is not a lever
     if ((grass || water || depth) && !hookSettingsSaves()) {
@@ -167,13 +172,14 @@ namespace dxvk {
       depth = false;
       m_waterReflections = Flag();
       m_waterDepth       = Flag();
+      m_waterRefractions = Flag();
     }
 
     Logger::info(str::format("VR: Performance mode levers: object fades ", fades ? "found" : "not found",
       ", light fades ", lights ? "found" : "not found", ", shadow fades ", shadows ? "found" : "not found",
       ", specular fades ", specular ? "found" : "not found", ", grass ", grass ? "found" : "not found",
       ", water reflections ", water ? "found" : "not found",
-      ", water depth maps ", depth ? "found" : "not found"));
+      ", water depth maps and refractions ", depth ? "found" : "not found"));
 
     return !m_distanceValues.empty() || !m_gpuValues.empty() || specular || water;
   }
@@ -213,11 +219,15 @@ namespace dxvk {
     else
       give(m_waterReflections);
 
-    // Drawn in the left eye's screen space before the replayed commands
-    if (stereoReplay(levels.distance))
-      clear(m_waterDepth);
-    else
-      give(m_waterDepth);
+    // Depth maps are drawn in the left eye's screen space before the
+    // replayed commands; the refraction copy of the screen shows the left
+    // eye's world under the water in some replayed frames
+    for (Flag* flag : { &m_waterDepth, &m_waterRefractions }) {
+      if (stereoReplay(levels.distance))
+        clear(*flag);
+      else
+        give(*flag);
+    }
   }
 
 
@@ -236,6 +246,7 @@ namespace dxvk {
 
     give(m_waterReflections);
     give(m_waterDepth);
+    give(m_waterRefractions);
   }
 
 
@@ -322,7 +333,7 @@ namespace dxvk {
     }
 
     if (!chainable) {
-      Logger::warn("VR: The game's INI saves were not found, the performance mode leaves water reflections, water depth maps and grass alone");
+      Logger::warn("VR: The game's INI saves were not found, the performance mode leaves water reflections, depth maps, refractions and grass alone");
       return false;
     }
 
@@ -340,7 +351,7 @@ namespace dxvk {
       }
     }
 
-    for (Flag* flag : { &m_waterReflections, &m_waterDepth }) {
+    for (Flag* flag : { &m_waterReflections, &m_waterDepth, &m_waterRefractions }) {
       if (flag->address && flag->held && *flag->address == 0) {
         *flag->address = flag->base;
         flag->lent = true;
@@ -357,7 +368,7 @@ namespace dxvk {
       value.lent = false;
     }
 
-    for (Flag* flag : { &m_waterReflections, &m_waterDepth }) {
+    for (Flag* flag : { &m_waterReflections, &m_waterDepth, &m_waterRefractions }) {
       if (flag->lent && *flag->address == flag->base)
         *flag->address = 0;
 

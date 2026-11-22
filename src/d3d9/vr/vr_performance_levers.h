@@ -66,11 +66,12 @@ namespace dxvk {
 
     /**
      * \brief Whether the replay level can turn off what the replayed eye
-     *    would draw wrong: water reflections, water depth maps and specular
+     *    would draw wrong: water reflections, depth maps and refractions,
+     *    and specular
      *    highlights
      */
     bool canStereoReplay() const {
-      return m_waterReflections.address && m_waterDepth.address
+      return m_waterReflections.address && m_waterDepth.address && m_waterRefractions.address
           && m_specularStart.address && m_specularEnd.address;
     }
 
@@ -119,7 +120,8 @@ namespace dxvk {
 
     /**
      * \brief Whether a distance level draws the right eye from the left eye's
-     *    commands, with specular highlights and water depth maps off
+     *    commands, with specular highlights, water depth maps and water
+     *    refractions off
      */
     static bool stereoReplay(uint32_t level) {
       return level >= StereoReplayDistanceLevel;
@@ -152,6 +154,7 @@ namespace dxvk {
     Value              m_specularEnd;
     Flag               m_waterReflections;
     Flag               m_waterDepth;
+    Flag               m_waterRefractions;
     bool               m_hooked = false;
 
     bool hookSettingsSaves();
