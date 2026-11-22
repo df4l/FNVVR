@@ -4,8 +4,11 @@
 #include "../../util/log/log.h"
 #include "../../util/util_string.h"
 
+#include "shaders/vr_upscale_sharpen_ps.h"
+
 #include "vr_game_addresses.h"
 #include "vr_game_memory.h"
+#include "vr_painter.h"
 #include "vr_render_scale.h"
 
 namespace dxvk {
@@ -65,23 +68,20 @@ namespace dxvk {
     }
 
     // BSRenderedTexture -> NiRenderedTexture -> its renderer data -> the device's texture
-    bool renderedTextureSurface(void* rendered, Com<IDirect3DSurface9>& surface) {
+    bool renderedTexture(void* rendered, Com<IDirect3DTexture9>& d3dTexture) {
       void* texture = rendered ? field<void*>(rendered, VrGame::RenderedTextureFirst) : nullptr;
       void* data    = texture ? field<void*>(texture, VrGame::TextureRendererData) : nullptr;
       auto  base    = data ? field<IDirect3DBaseTexture9*>(data, VrGame::TextureDataD3DTexture) : nullptr;
 
-      Com<IDirect3DTexture9> d3dTexture;
-
       return base && base->GetType() == D3DRTYPE_TEXTURE
-          && SUCCEEDED(base->QueryInterface(__uuidof(IDirect3DTexture9), reinterpret_cast<void**>(&d3dTexture)))
-          && SUCCEEDED(d3dTexture->GetSurfaceLevel(0, &surface));
+          && SUCCEEDED(base->QueryInterface(__uuidof(IDirect3DTexture9), reinterpret_cast<void**>(&d3dTexture)));
     }
 
   }
 
 
-  VrRenderScale::VrRenderScale(IDirect3DDevice9* device)
-  : m_device(device) { }
+  VrRenderScale::VrRenderScale(IDirect3DDevice9* device, VrPainter& painter)
+  : m_device(device), m_painter(painter) { }
 
 
   VrRenderScale::~VrRenderScale() {
@@ -92,7 +92,7 @@ namespace dxvk {
   }
 
 
-  std::unique_ptr<VrRenderScale> VrRenderScale::install(IDirect3DDevice9* device) {
+  std::unique_ptr<VrRenderScale> VrRenderScale::install(IDirect3DDevice9* device, VrPainter& painter) {
     if (g_renderScale)
       return nullptr;
 
@@ -114,7 +114,7 @@ namespace dxvk {
       return nullptr;
     }
 
-    std::unique_ptr<VrRenderScale> scale(new VrRenderScale(device));
+    std::unique_ptr<VrRenderScale> scale(new VrRenderScale(device, painter));
     g_renderScale = scale.get();
     return scale;
   }
@@ -163,17 +163,50 @@ namespace dxvk {
 
     m_upscale = false;
 
-    Com<IDirect3DSurface9> source;
+    Com<IDirect3DTexture9> source;
     Com<IDirect3DSurface9> screen;
 
-    bool stretched = renderedTextureSurface(m_finalTarget, source)
+    bool stretched = renderedTexture(m_finalTarget, source)
       && SUCCEEDED(m_device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &screen))
-      && SUCCEEDED(m_device->StretchRect(source.ptr(), nullptr, screen.ptr(), nullptr, D3DTEXF_LINEAR));
+      && stretch(source.ptr(), screen.ptr());
 
     if (!stretched && !m_loggedFailure) {
       Logger::err("VR: Failed to stretch the scaled world into the game's screen");
       m_loggedFailure = true;
     }
+  }
+
+
+  bool VrRenderScale::stretch(IDirect3DTexture9* source, IDirect3DSurface9* screen) {
+    if (!m_sharpenTried) {
+      m_sharpenTried = true;
+
+      if (FAILED(m_device->CreatePixelShader(reinterpret_cast<const DWORD*>(VrUpscaleSharpenPixelShader), &m_sharpen))) {
+        Logger::warn("VR: Failed to make the sharpening shader, the scaled world is only stretched");
+        m_sharpen = nullptr;
+      }
+    }
+
+    D3DSURFACE_DESC desc = { };
+
+    if (m_sharpen != nullptr && SUCCEEDED(source->GetLevelDesc(0, &desc))) {
+      float scale = float(m_scaled.width) / float(m_screen.width);
+
+      const float constants[4] = {
+        1.0f / float(desc.Width),
+        1.0f / float(desc.Height),
+        vrSharpenWeight(scale),
+        0.0f,
+      };
+
+      if (m_painter.shade(screen, m_sharpen.ptr(), source, nullptr, constants))
+        return true;
+    }
+
+    Com<IDirect3DSurface9> surface;
+
+    return SUCCEEDED(source->GetSurfaceLevel(0, &surface))
+        && SUCCEEDED(m_device->StretchRect(surface.ptr(), nullptr, screen, nullptr, D3DTEXF_LINEAR));
   }
 
 
@@ -194,7 +227,7 @@ namespace dxvk {
 
       if (!m_loggedScale) {
         Logger::info(str::format("VR: The eyes' world is drawn at ", m_scaled.width, "x", m_scaled.height,
-          " for a screen of ", m_screen.width, "x", m_screen.height, ", then stretched to it"));
+          " for a screen of ", m_screen.width, "x", m_screen.height, ", then stretched and sharpened to it"));
         m_loggedScale = true;
       }
     }

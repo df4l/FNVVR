@@ -4,9 +4,13 @@
 
 #include "../d3d9_include.h"
 
+#include "../../util/com/com_pointer.h"
+
 #include "vr_render_scale_size.h"
 
 namespace dxvk {
+
+  class VrPainter;
 
   /**
    * \brief Draws the eyes' world at a lower resolution, switchable at once
@@ -20,7 +24,9 @@ namespace dxvk {
    * image space manager's swap target, borrowed once at start, is replaced
    * for the eyes by one of the scaled size, and the last image space pass
    * draws into a scaled target that is then stretched (bilinear) into the
-   * game's back buffer, where the eye copy takes it as before.
+   * game's back buffer, where the eye copy takes it as before. The stretch
+   * sharpens the image (contrast-adaptive, stronger at lower scales) to give
+   * back part of what it softens.
    *
    * The scope's view, the Pip-Boy's world and the menus are drawn at the
    * full size. findings/performance.md §16.
@@ -40,7 +46,7 @@ namespace dxvk {
      * \brief Redirects the game's calls
      * \returns \c nullptr if the executable is not the supported version
      */
-    static std::unique_ptr<VrRenderScale> install(IDirect3DDevice9* device);
+    static std::unique_ptr<VrRenderScale> install(IDirect3DDevice9* device, VrPainter& painter);
 
     /**
      * \brief Sets the scale of the frame
@@ -84,9 +90,14 @@ namespace dxvk {
 
   private:
 
-    explicit VrRenderScale(IDirect3DDevice9* device);
+    VrRenderScale(IDirect3DDevice9* device, VrPainter& painter);
 
     IDirect3DDevice9* m_device;
+    VrPainter&        m_painter;
+
+    // Stretches and sharpens, made at the first stretch
+    Com<IDirect3DPixelShader9> m_sharpen;
+    bool              m_sharpenTried  = false;
 
     float    m_scale        = 1.0f;
     VrExtent m_screen;
@@ -106,6 +117,8 @@ namespace dxvk {
 
     bool     m_loggedScale    = false;
     bool     m_loggedFailure  = false;
+
+    bool stretch(IDirect3DTexture9* source, IDirect3DSurface9* screen);
 
     bool scaling() const {
       return m_inWorld && m_scaled.width != m_screen.width;

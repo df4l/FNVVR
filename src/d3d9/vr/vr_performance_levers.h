@@ -21,14 +21,15 @@ namespace dxvk {
    * Distance levels scale the fade distances of objects, items, actors,
    * lights and grass, and turn water reflections off from WaterOffDistanceLevel; GPU
    * levels scale those of specular highlights and shadows, then lower the
-   * resolution the eyes' world is drawn at (applied by VrRenderScale).
+   * resolution the eyes' world is drawn at (applied by VrRenderScale) by
+   * 5 % per step, so that each change is small.
    */
   class VrPerformanceLevers {
 
   public:
 
     static constexpr uint32_t DistanceSteps = 4;
-    static constexpr uint32_t GpuSteps      = 4;
+    static constexpr uint32_t GpuSteps      = 8;
     static constexpr uint32_t WaterOffDistanceLevel = 2;
 
     /**
@@ -61,7 +62,7 @@ namespace dxvk {
      * \brief Shadow and specular fade scale of a GPU level, 1 for level 0
      */
     static float gpuScale(uint32_t level) {
-      constexpr std::array<float, GpuSteps + 1> scales = { 1.0f, 0.7f, 0.5f, 0.35f, 0.35f };
+      constexpr std::array<float, GpuSteps + 1> scales = { 1.0f, 0.7f, 0.5f, 0.35f, 0.35f, 0.35f, 0.35f, 0.35f, 0.35f };
       return scales[std::min<size_t>(level, GpuSteps)];
     }
 
@@ -69,7 +70,7 @@ namespace dxvk {
      * \brief World resolution of a GPU level, as a share of each side
      */
     static float renderScale(uint32_t level) {
-      constexpr std::array<float, GpuSteps + 1> scales = { 1.0f, 1.0f, 0.9f, 0.8f, 0.7f };
+      constexpr std::array<float, GpuSteps + 1> scales = { 1.0f, 1.0f, 1.0f, 0.95f, 0.9f, 0.85f, 0.8f, 0.75f, 0.7f };
       return scales[std::min<size_t>(level, GpuSteps)];
     }
 

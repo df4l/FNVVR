@@ -91,3 +91,23 @@ TEST_CASE(performance_levers_lower_resolution_only_after_shadows) {
   CHECK(!VrPerformanceLevers::waterReflectionsOff(1));
   CHECK(VrPerformanceLevers::waterReflectionsOff(2));
 }
+
+
+TEST_CASE(render_scale_sharpens_more_at_lower_scales) {
+  CHECK(vrSharpenWeight(1.0f) == 0.0f);
+  CHECK(vrSharpenWeight(0.95f) < 0.0f);
+  CHECK(vrSharpenWeight(0.8f) < vrSharpenWeight(0.95f));
+  CHECK_NEAR(vrSharpenWeight(0.7f), -1.0f / 5.5f, 1e-5f);
+  CHECK(vrSharpenWeight(0.5f) == vrSharpenWeight(0.7f));
+  CHECK(vrSharpenWeight(0.95f) > -1.0f / 9.0f);
+}
+
+
+TEST_CASE(performance_levers_lower_resolution_by_five_percent) {
+  for (uint32_t level = 1; level <= VrPerformanceLevers::GpuSteps; level++) {
+    float step = VrPerformanceLevers::renderScale(level - 1) - VrPerformanceLevers::renderScale(level);
+    CHECK(step >= 0.0f && step <= 0.05f + 1e-5f);
+  }
+
+  CHECK(VrPerformanceLevers::renderScale(VrPerformanceLevers::GpuSteps) == 0.7f);
+}

@@ -37,4 +37,16 @@ namespace dxvk {
    */
   bool vrScaleScreenTexture(VrExtent screen, VrExtent scaled, uint32_t& width, uint32_t& height);
 
+  /**
+   * \brief Weight of the neighbours in the sharpening of a stretched world
+   *
+   * The lower the scale, the more the stretch softens the image and the
+   * stronger the sharpening, up to a weight of -1/5.5 at 70 % and below.
+   * Light at 95 %, none at the game's own size.
+   *
+   * \param [in] scale Share of each side the world was drawn at
+   * \returns A negative weight, 0 for no sharpening
+   */
+  float vrSharpenWeight(float scale);
+
 }

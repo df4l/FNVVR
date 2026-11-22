@@ -1274,7 +1274,7 @@ namespace dxvk {
 
     if (enabled && !m_renderScaleTried && m_renderPasses) {
       m_renderScaleTried = true;
-      m_renderScale = VrRenderScale::install(m_device);
+      m_renderScale = VrRenderScale::install(m_device, *m_painter);
       m_renderPasses->setRenderScale(m_renderScale.get());
     }
 

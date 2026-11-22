@@ -11,6 +11,12 @@ namespace dxvk {
     constexpr uint32_t MinSide   = 64;
     constexpr uint32_t MaxShift  = 2;
 
+    // Divisors of the neighbours' weight at the lightest and the strongest
+    // sharpening, and the scale the strongest is reached at
+    constexpr float LightDivisor  = 10.0f;
+    constexpr float StrongDivisor = 5.5f;
+    constexpr float StrongScale   = 0.7f;
+
     uint32_t scaleSide(uint32_t side, float scale) {
       uint32_t scaled = uint32_t(std::lround(float(side) * scale / float(Alignment))) * Alignment;
       return std::min(side, std::max(scaled, MinSide));
@@ -42,6 +48,15 @@ namespace dxvk {
     }
 
     return false;
+  }
+
+
+  float vrSharpenWeight(float scale) {
+    if (scale >= 1.0f)
+      return 0.0f;
+
+    float strength = std::clamp((1.0f - scale) / (1.0f - StrongScale), 0.0f, 1.0f);
+    return -1.0f / (LightDivisor + (StrongDivisor - LightDivisor) * strength);
   }
 
 }
