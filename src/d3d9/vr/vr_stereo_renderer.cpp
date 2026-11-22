@@ -193,7 +193,7 @@ namespace dxvk {
   VrStereoRenderer::VrStereoRenderer(IVRBackend& backend, IDirect3DDevice9* device,
     bool showPreview, const VrPanelConfig& panel)
   : m_backend(backend), m_device(device), m_showPreview(showPreview), m_panelConfig(panel),
-    m_controls(backend) { }
+    m_submitter(device, backend), m_performance(backend), m_controls(backend) { }
 
 
   VrStereoRenderer::~VrStereoRenderer() {
@@ -202,6 +202,7 @@ namespace dxvk {
     hidePanel();
     hideHud();
     hideHandHud();
+    m_submitter.finish();
   }
 
 
@@ -327,6 +328,12 @@ namespace dxvk {
 
     if (VrGameConsole::install())
       renderer->m_terminal = std::make_unique<VrConsoleTerminal>(*renderer->m_painter, backend, texts);
+
+    if (VrOcclusionCulling::pluginLoaded()) {
+      renderer->m_occlusionPluginNotice = texts.text("occlusion.plugin",
+        "Uninstall the Occlusion Culling plugin: in VR it gives both eyes the same answers. "
+        "FNVVR's performance mode has its own occlusion culling.");
+    }
 
     if (VrGameTextEdit::install())
       renderer->m_textFieldKeyboard = std::make_unique<VrTextFieldKeyboard>(backend);
@@ -479,13 +486,23 @@ namespace dxvk {
     if (renderer->m_renderPasses) {
       renderer->m_foveation = VrFoveation::create(device, passes.foveationZones);
       renderer->m_foveationTestGaze = passes.foveationTestGaze;
+      renderer->m_worldScaleTest = passes.worldScaleTest;
 
-      if (renderer->m_foveation) {
-        VrFoveation* foveation = renderer->m_foveation.get();
-        renderer->m_renderPasses->setWorldCallbacks(
-          [foveation] (uint32_t eye) { foveation->beginWorld(eye); },
-          [foveation] { foveation->endWorld(); });
-      }
+      renderer->m_renderPasses->setWorldCallbacks(
+        [self] (uint32_t eye) {
+          if (self->m_foveation)
+            self->m_foveation->beginWorld(eye);
+
+          if (self->m_occlusion)
+            self->m_occlusion->beginWorld(eye);
+        },
+        [self] {
+          if (self->m_foveation)
+            self->m_foveation->endWorld();
+
+          if (self->m_occlusion)
+            self->m_occlusion->endWorld();
+        });
     }
 
     renderer->m_scopeGame = VrScopeGame::install();
@@ -697,6 +714,14 @@ namespace dxvk {
     VrD3D9Bridge::beginFrame(m_device, m_backend);
     m_paced = timing.paced;
     countFrame(timing);
+    m_performance.update(state == VrGameStateKind::InGame || state == VrGameStateKind::PipBoy, timing);
+
+    if (m_renderScale) {
+      bool forced = m_performanceOn && m_worldScaleTest > 0.0f;
+      m_renderScale->setScale(forced ? m_worldScaleTest : m_performance.renderScale());
+    }
+
+    showOcclusionPluginNotice(state);
 
     if (!timing.shouldRender) {
       VrD3D9Bridge::submitEmptyFrame(m_device, m_backend, timing.predictedDisplayTime);
@@ -867,6 +892,9 @@ namespace dxvk {
     if (m_renderPasses)
       m_renderPasses->endFrame();
 
+    if (m_occlusion)
+      m_occlusion->endFrame();
+
     if (m_spikeLog && m_renderPasses)
       m_spikeLog->setCpuPasses(m_frameId, m_renderPasses->lastFrame());
 
@@ -892,8 +920,9 @@ namespace dxvk {
 
     drawFaders(eyes);
 
-    // The panels go first: the eye submission starts the hand-off, which
-    // holds DXVK's queue on its thread, and each panel waits for that queue
+    // The panels go to the runtime with the eyes, before them
+    m_submitter.beginFrame();
+
     if (m_hudRendered)
       submitHud();
     else
@@ -921,9 +950,8 @@ namespace dxvk {
     if (m_gpuTimer)
       m_gpuTimer->endFrame();
 
-    if (!VrD3D9Bridge::submitStereoFrame(m_device, m_backend, eyes, views,
-        timing.predictedDisplayTime) && !m_loggedFailure) {
-      Logger::err("VR: The backend rejected a stereo frame");
+    if (!m_submitter.submitFrame(eyes, views, timing.predictedDisplayTime) && !m_loggedFailure) {
+      Logger::err("VR: The eye images could not be handed to the backend");
       m_loggedFailure = true;
     }
 
@@ -942,6 +970,12 @@ namespace dxvk {
     VrD3D9Bridge::beginFrame(m_device, m_backend);
     m_paced = timing.paced;
     countFrame(timing);
+    m_performance.update(false, timing);
+
+    // Answers of the world's last frames age while it is not drawn
+    if (m_occlusion)
+      m_occlusion->endFrame();
+
     VrInputState input = m_backend.pollInput(timing.predictedDisplayTime);
     trackHead(input);
 
@@ -1175,6 +1209,12 @@ namespace dxvk {
     if (m_renderPasses)
       m_renderPasses->beginEye(eye);
 
+    if (m_renderScale) {
+      D3DSURFACE_DESC screen = { };
+      m_gameTarget->GetDesc(&screen);
+      m_renderScale->beginEye(VrExtent { screen.Width, screen.Height });
+    }
+
     // The left eye's pass moves time on for the frame
     bool repeat = eye != 0 && m_repeatedPasses;
 
@@ -1185,6 +1225,9 @@ namespace dxvk {
 
     if (repeat)
       m_repeatedPasses->endRepeat();
+
+    if (m_renderScale)
+      m_renderScale->endEye();
 
     if (m_renderPasses)
       m_renderPasses->endEye();
@@ -1244,7 +1287,75 @@ namespace dxvk {
     D3DSURFACE_DESC target = { };
     m_gameTarget->GetDesc(&target);
 
-    m_foveation->prepareFrame(views, gaze, VrExtent { target.Width, target.Height });
+    VrExtent world = { target.Width, target.Height };
+
+    if (m_renderScale)
+      world = m_renderScale->worldExtent(world);
+
+    m_foveation->prepareFrame(views, gaze, world);
+  }
+
+
+  void VrStereoRenderer::setPerformanceMode(bool enabled) {
+    m_performanceOn = enabled;
+    m_performance.setEnabled(enabled);
+
+    if (enabled && !m_renderScaleTried && m_renderPasses) {
+      m_renderScaleTried = true;
+      m_renderScale = VrRenderScale::install(m_device, *m_painter);
+      m_renderPasses->setRenderScale(m_renderScale.get());
+    }
+
+    m_submitter.setThreaded(m_asyncSubmitWanted || m_performanceOn);
+    updateOcclusion();
+  }
+
+
+  void VrStereoRenderer::setAsyncSubmit(bool enabled) {
+    m_asyncSubmitWanted = enabled;
+    m_submitter.setThreaded(m_asyncSubmitWanted || m_performanceOn);
+  }
+
+
+  void VrStereoRenderer::setOcclusionUse(VrOcclusionUse use) {
+    m_occlusionUse = use;
+    updateOcclusion();
+  }
+
+
+  void VrStereoRenderer::showOcclusionPluginNotice(VrGameStateKind state) {
+    // A few seconds into the world, past the fade from the loading screen
+    constexpr uint32_t NoticeDelayFrames = 360;
+    constexpr float    NoticeSeconds     = 10.0f;
+
+    using ShowHudMessageFn = uint32_t (__cdecl*)(const char* text, uint32_t emotion, const char* image,
+      const char* sound, float time, uint32_t instant);
+
+    if (!m_occlusionPluginNotice || state != VrGameStateKind::InGame || ++m_noticeFrames < NoticeDelayFrames)
+      return;
+
+    if (VrGameMemory::matches(VrGame::ShowHudMessage, VrGame::ShowHudMessagePrologue, sizeof(VrGame::ShowHudMessagePrologue))) {
+      reinterpret_cast<ShowHudMessageFn>(VrGame::ShowHudMessage)(m_occlusionPluginNotice,
+        VrGame::HudMessageSad, nullptr, nullptr, NoticeSeconds, 0);
+      Logger::info("VR: The player was told to uninstall the Occlusion Culling plugin");
+    }
+
+    m_occlusionPluginNotice = nullptr;
+  }
+
+
+  void VrStereoRenderer::updateOcclusion() {
+    bool wanted = m_occlusionUse == VrOcclusionUse::Always
+      || (m_occlusionUse == VrOcclusionUse::Performance && m_performanceOn);
+
+    // Its eyes are told by the render passes' world callbacks
+    if (wanted && !m_occlusionTried && m_renderPasses) {
+      m_occlusionTried = true;
+      m_occlusion = VrOcclusionCulling::install(m_device);
+    }
+
+    if (m_occlusion)
+      m_occlusion->setEnabled(wanted);
   }
 
 
@@ -2489,6 +2600,9 @@ namespace dxvk {
 
 
   VrFrameTiming VrStereoRenderer::waitFrame() {
+    // The last frame reaches the runtime before it is asked for the next
+    m_submitter.finish();
+
     VrCpuPhaseScope phase(m_cpuSampler.get(), uint8_t(VrCpuPhase::Wait));
     return m_backend.waitFrame();
   }
@@ -2995,7 +3109,7 @@ namespace dxvk {
     pose.position.y = m_panelConfig.hudHeight;
     pose.position.z = -m_panelConfig.hudDistance;
 
-    m_hudShown = VrD3D9Bridge::submitPanel(m_device, m_backend, VrPanelId::HudHead,
+    m_hudShown = m_submitter.submitPanel(VrPanelId::HudHead,
       m_hudPanelTexture.ptr(), pose, m_panelConfig.hudWidth, VrPanelAnchor::Head);
 
     if (!m_hudShown && !m_loggedHudFailure) {
@@ -3021,7 +3135,7 @@ namespace dxvk {
 
     float panelWidth = minigamePanel ? minigamePanel->width : m_panelConfig.hudWidth;
 
-    m_panelShown = VrD3D9Bridge::submitPanel(m_device, m_backend, VrPanelId::Menu,
+    m_panelShown = m_submitter.submitPanel(VrPanelId::Menu,
       m_menuTexture.ptr(), m_panelPose, panelWidth, VrPanelAnchor::Room);
     m_panelWidth = panelWidth;
 
@@ -3036,7 +3150,7 @@ namespace dxvk {
     if (!m_hudShown)
       return;
 
-    m_backend.hidePanel(VrPanelId::HudHead);
+    m_submitter.hidePanel(VrPanelId::HudHead);
     m_hudShown = false;
   }
 
@@ -3262,7 +3376,7 @@ namespace dxvk {
         panelSurface.ptr(), &part.target, D3DTEXF_NONE));
     }
 
-    bool shown = copied && VrD3D9Bridge::submitPanel(m_device, m_backend, id,
+    bool shown = copied && m_submitter.submitPanel(id,
       texture.ptr(), pose, float(width) * metresPerPixel, VrPanelAnchor::Room);
 
     if (!shown && !m_loggedHandHudFailure) {
@@ -3278,7 +3392,7 @@ namespace dxvk {
     if (!shown)
       return;
 
-    m_backend.hidePanel(id);
+    m_submitter.hidePanel(id);
     shown = false;
   }
 
@@ -3319,7 +3433,7 @@ namespace dxvk {
     if (!m_panelShown || (!m_panelPlacedWithHead && m_hasHeadPose))
       placePanel(m_panelConfig.distance);
 
-    m_panelShown = VrD3D9Bridge::submitPanel(m_device, m_backend, VrPanelId::Menu,
+    m_panelShown = m_submitter.submitPanel(VrPanelId::Menu,
       m_panelTexture.ptr(), m_panelPose, m_panelConfig.width, VrPanelAnchor::Room);
     m_panelWidth = m_panelConfig.width;
 
@@ -3401,7 +3515,7 @@ namespace dxvk {
     if (!m_panelShown)
       return;
 
-    m_backend.hidePanel(VrPanelId::Menu);
+    m_submitter.hidePanel(VrPanelId::Menu);
     m_panelShown = false;
   }
 

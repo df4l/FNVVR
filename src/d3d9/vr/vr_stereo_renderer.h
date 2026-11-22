@@ -41,6 +41,10 @@
 #include "vr_minigames.h"
 #include "vr_manual_reload.h"
 #include "vr_foveation.h"
+#include "vr_frame_submitter.h"
+#include "vr_occlusion_culling.h"
+#include "vr_performance_mode.h"
+#include "vr_render_scale.h"
 #include "vr_part_highlight.h"
 #include "vr_npc_gaze.h"
 #include "vr_painter.h"
@@ -300,6 +304,29 @@ namespace dxvk {
      */
     void setFoveationEnabled(bool enabled);
 
+    /**
+     * \brief Turns the performance mode on or off
+     *
+     * See VrPerformanceMode. Called from the game's options page, on the
+     * game's thread.
+     */
+    void setPerformanceMode(bool enabled);
+
+    /**
+     * \brief Hands frames to the runtime from a thread of their own
+     *
+     * See VrFrameSubmitter (d3d9.vrAsyncSubmit). The performance mode also
+     * uses the thread while it is on.
+     */
+    void setAsyncSubmit(bool enabled);
+
+    /**
+     * \brief Sets when occlusion culling runs (d3d9.vrOcclusionCulling)
+     *
+     * See VrOcclusionCulling. Installed the first time it is wanted.
+     */
+    void setOcclusionUse(VrOcclusionUse use);
+
   private:
 
     static constexpr uint32_t NoEye = ~0u;
@@ -327,6 +354,25 @@ namespace dxvk {
 
     Com<IDirect3DTexture9> m_eyeTextures[VrEyeCount];
     std::unique_ptr<VrPreviewWindow> m_preview;
+
+    // Every panel and frame of the renderer goes to the backend through it
+    VrFrameSubmitter   m_submitter;
+
+    VrPerformanceMode  m_performance;
+    // The performance mode's world resolution, installed when it is first on
+    std::unique_ptr<VrRenderScale> m_renderScale;
+    bool               m_renderScaleTried  = false;
+    bool               m_performanceOn     = false;
+    bool               m_asyncSubmitWanted = false;
+
+    // Occlusion culling, installed the first time it is wanted
+    std::unique_ptr<VrOcclusionCulling> m_occlusion;
+    bool               m_occlusionTried    = false;
+    VrOcclusionUse     m_occlusionUse      = VrOcclusionUse::Performance;
+    // Shown once in the world when the Occlusion Culling plugin is loaded,
+    // after NoticeDelayFrames frames there, then cleared
+    const char*        m_occlusionPluginNotice = nullptr;
+    uint32_t           m_noticeFrames      = 0;
 
     // The game composes its final 3D image into the backbuffer
     Com<IDirect3DSurface9> m_gameTarget;
@@ -558,6 +604,8 @@ namespace dxvk {
     VrGazeHold m_gazeHold;
     bool m_foveationEnabled  = false;
     bool m_foveationTestGaze = false;
+    // World resolution forced while the performance mode is on, 0 for none
+    float m_worldScaleTest = 0.0f;
 
     // The game's flat scope is off with a headset, findings/optics.md §10
     std::unique_ptr<VrScopeGame> m_scopeGame;
@@ -771,6 +819,10 @@ namespace dxvk {
     /**
      * \brief Sets the frame's shading rates from where the eyes look
      */
+    void updateOcclusion();
+
+    void showOcclusionPluginNotice(VrGameStateKind state);
+
     void updateFoveation(const std::array<VrEyeView, VrEyeCount>& views, float dt);
 
     void logGameFrustum();

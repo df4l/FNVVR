@@ -4137,6 +4137,202 @@ namespace dxvk {
     constexpr uintptr_t LockFreeMapCount                    = 0x18;
     constexpr uint8_t   ModelLoaderUpdateReferencesPrologue[] = { 0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x40, 0xCD, 0xEE, 0x00 };
 
+    /**
+     * Distances the performance mode lowers, read by the game every frame
+     * (findings/performance.md §14.1). Only these run-time copies are
+     * written, never the settings, so the player's saved values stay.
+     *
+     * - FadeOutMultipliers: BSFadeNode::fFadeOutMultipliers, a float per
+     *   ENUM_LOD_MULT, read by BSFadeNode::OnVisible. Indices from
+     *   TES::InitFadeOutMultipliers: items, actors, and the six taking the
+     *   objects' multiplier. Checked through the whole of
+     *   BSFadeNode::SetFadeOutMultiplier (0x004504F0) and
+     *   GetFadeOutMultiplier (0x007D1D00), which hold its address.
+     * - LightLodStartFade/End, ShadowLod..., SpecularLod...: the
+     *   BSShaderManager copies of the Display settings, read by
+     *   ShadowSceneLight::TestFrustumCull for lights. Checked through the
+     *   settings menu's stores to them (fstp dword ptr [address]).
+     */
+    constexpr uintptr_t FadeOutMultipliers            = 0x011AD7B8;
+    constexpr uint32_t  FadeOutMultiplierItems        = 2;
+    constexpr uint32_t  FadeOutMultiplierActors       = 3;
+    constexpr uint32_t  FadeOutMultiplierObjects[]    = { 0, 1, 4, 5, 8, 10 };
+    constexpr uintptr_t SetFadeOutMultiplier          = 0x004504F0;
+    constexpr uint8_t   SetFadeOutMultiplierCode[]    = { 0x55, 0x8B, 0xEC, 0x8B, 0x45, 0x08, 0xD9, 0x45, 0x0C,
+      0xD9, 0x1C, 0x85, 0xB8, 0xD7, 0x1A, 0x01, 0x5D, 0xC3 };
+    constexpr uintptr_t GetFadeOutMultiplier          = 0x007D1D00;
+    constexpr uint8_t   GetFadeOutMultiplierCode[]    = { 0x55, 0x8B, 0xEC, 0x8B, 0x45, 0x08, 0xD9, 0x04, 0x85,
+      0xB8, 0xD7, 0x1A, 0x01, 0x5D, 0xC3 };
+
+    constexpr uintptr_t LightLodStartFade             = 0x011F9444;
+    constexpr uintptr_t LightLodEnd                   = 0x011F9448;
+    constexpr uintptr_t ShadowLodStartFade            = 0x011F944C;
+    constexpr uintptr_t ShadowLodEnd                  = 0x011F9450;
+    constexpr uintptr_t SpecularLodStartFade          = 0x011F9454;
+    constexpr uintptr_t SpecularLodEnd                = 0x011F9458;
+    constexpr uintptr_t LightLodStartFadeStore        = 0x007D22D3;
+    constexpr uintptr_t LightLodEndStore              = 0x007D22E8;
+    constexpr uintptr_t ShadowLodStartFadeStore       = 0x007D2173;
+    constexpr uintptr_t ShadowLodEndStore             = 0x007D2188;
+    constexpr uintptr_t SpecularLodStartFadeStore     = 0x007D2433;
+    constexpr uintptr_t SpecularLodEndStore           = 0x007D2448;
+
+    /**
+     * Water reflections, a lever of the performance mode:
+     * bUseWaterReflections:Water (Setting, bool at SettingValue, name at
+     * SettingName, checked before use), read every frame by
+     * TESWaterSystem::UpdatePlaceableWater and UpdateShader. Only the value
+     * in memory is written, given back in menus and while the game saves its
+     * INI files (SettingsSaveAll), so the settings menu shows and saves the
+     * player's own.
+     */
+    constexpr uintptr_t SettingUseWaterReflections    = 0x011C7B6C;
+
+    /**
+     * Grass distance, a lever of the performance mode: fGrassStartFadeDistance
+     * :Grass (Setting, float at SettingValue), read every frame by
+     * TESTerrainLODManager::UpdateGrass (0x0057D0A0), which builds grass for
+     * the cells closer than it plus fGrassFadeRange and removes it beyond.
+     * Below fGrassMinStartFadeDistance (Setting) + 0.5 the update stops
+     * altogether, so the lever never goes under that. Only the value in
+     * memory is written, given back in menus as the water's.
+     */
+    constexpr uintptr_t SettingGrassStartFade         = 0x011CA450;
+    constexpr uintptr_t SettingGrassMinStartFade      = 0x011CA4AC;
+
+    /**
+     * INISettingCollection::SaveAll (thiscall, collection and file path,
+     * returns a bool): writes every setting of a collection to its INI
+     * file. Called by the console's SaveIniFiles (twice), the settings
+     * menu's StartMenu::SaveSettings (twice) and WinMain once the main loop
+     * has ended (FalloutPrefs.ini). The performance mode gives its two
+     * setting levers back around these calls, so a game closed in the world
+     * (window closed, console qqq) never saves a lowered value
+     * (ida-gog, 2026-11-22).
+     */
+    constexpr uintptr_t SettingsSaveAll               = 0x005E01B0;
+    constexpr uintptr_t SettingsSaveAllCallSites[]    = { 0x005B6C67, 0x005B6C80, 0x007D6D87, 0x007D6DA0, 0x0086B94A };
+
+    /**
+     * World render scale of the performance mode (findings/performance.md
+     * §16):
+     *
+     * - TextureLookupCallSite: BSTextureManager::BorrowRenderedTexture's
+     *   call of LookupTextureParameters (__thiscall on the texture manager:
+     *   renderer, texture type, UInt32* width, UInt32* height, D3DFORMAT*,
+     *   entry*, flags*, D3DMULTISAMPLE_TYPE*; ret 0x20). The size of every
+     *   texture borrowed after the start comes from there (the other callers
+     *   precreate textures). World targets are sized as the screen, or its
+     *   half or quarter per side.
+     * - WorldTargetCallSite: TESMain::DrawWorldStandard's call of
+     *   DrawWorld_InitRenderTexture (InitRenderTexture, __thiscall on Main:
+     *   renderer, texture, bool no image space, bool multisampled; returns
+     *   the borrowed main target; ret 0x10). The world's first borrow. The
+     *   texture passed is DrawWorldStandard's destination ([ebp+8]), null
+     *   when the world goes to the screen.
+     * - ImageSpaceSwapTarget: ImageSpaceManager::pSwapTarget, a
+     *   BSRenderedTexture* of type ImageSpaceTextureType borrowed once by
+     *   ImageSpaceManager::Initialize (the store at ImageSpaceSwapTargetStore)
+     *   and used between the effects by RenderEndOfFrameEffects.
+     * - RenderedTextureStart: BSRenderedTexture::Start (__cdecl: clear
+     *   flags, render target group, null for the screen's), which begins the
+     *   renderer's frame when outside one (RenderedTextureIsOutsideFrame,
+     *   __cdecl, returns a bool in al) and binds the group. The last image
+     *   space effect starts the screen's frame this way when it draws into
+     *   the screen (ImageSpaceShader::Render 0x00C03D80), and ends the
+     *   offscreen frame when it draws into a texture. Outside a frame,
+     *   InterfaceManager::Click (0x00713FB0) starts the screen's with every
+     *   buffer cleared (7). Both functions are matched by their first bytes.
+     */
+    constexpr uintptr_t RenderedTextureStart          = 0x00B6B890;
+    constexpr uintptr_t RenderedTextureIsOutsideFrame = 0x004E9510;
+    constexpr uint8_t   RenderedTextureStartCode[]    = { 0x8B, 0x0D, 0x48, 0x47, 0x1F, 0x01, 0x83, 0xB9 };
+    constexpr uint8_t   RenderedTextureIsOutsideFrameCode[] = { 0x55, 0x8B, 0xEC, 0xE8, 0x98, 0x2F, 0xF5, 0xFF };
+    constexpr uint32_t  ClearNone                     = 0;
+    constexpr uintptr_t LookupTextureParameters       = 0x00B6C2C0;
+    constexpr uintptr_t TextureLookupCallSite         = 0x00B6E3C1;
+    constexpr uintptr_t WorldTargetCallSite           = 0x00870C53;
+    constexpr uintptr_t ImageSpaceSwapTarget          = 0x318;
+    constexpr uintptr_t ImageSpaceSwapTargetStore     = 0x00B978DA;
+    constexpr uint8_t   ImageSpaceSwapTargetStoreCode[] = { 0x89, 0x86, 0x18, 0x03, 0x00, 0x00 };
+    constexpr uint32_t  ImageSpaceTextureType         = 3;
+
+    /**
+     * Occlusion culling, see findings/performance.md §17 (GOG database,
+     * checked 2026-11-22; the approach follows mrfury97's FNV Occlusion
+     * Culling, whose code is not used).
+     *
+     * - SceneAccumulateCallSite: TESMain::DrawScene's call of
+     *   BSShaderUtil::AccumulateScene (__cdecl: camera, scene graph, culling
+     *   process) that gathers the main view (the bMTRendering branch before
+     *   it uses AccumulateSceneList instead);
+     * - SceneOpaqueCallSite: its call of BSShaderUtil::
+     *   RenderScenePreResolveDepth (__cdecl: camera, accumulator, 1) right
+     *   after, which draws the opaque part: the depth buffer then holds the
+     *   finished scene (the game's VATS query follows);
+     * - the OnVisible slot (53) of BSFadeNode (every placed object's root),
+     *   BSTreeNode (SpeedTree trees and shrubs) and BSMultiBoundNode (land
+     *   quadrants, terrain LOD chunks, grass groups), __thiscall: culling
+     *   process. Skipping it is what the culler does with what lies outside
+     *   the view;
+     * - NiDX9Renderer: the view (relative to RendererPosAdjust) and
+     *   projection D3D matrices of the camera last set, its inverse view
+     *   (row 4: the camera's position minus RendererPosAdjust) and
+     *   m_bDeviceLost;
+     * - BSFadeNode::pLinkedObj, the object's reference; NiAVObject flag bit
+     *   0 (APP_CULLED) hides a node;
+     * - BSMultiBoundNode::spMultiBound, BSMultiBound::spShape and the AABB
+     *   shape's centre and half extents; BSMultiBoundShape::WithinFrustum
+     *   (vtable +0x9C, __thiscall: NiFrustumPlanes*) tested against the
+     *   culling process's planes (+0x2C);
+     * - NiRTTI: name (+0x00) and base (+0x04), from GetRTTI
+     *   (ObjectGetRttiSlot).
+     */
+    constexpr uintptr_t SceneAccumulateCallSite       = 0x0087415B;
+    constexpr uintptr_t SceneOpaqueCallSite           = 0x00874180;
+    constexpr uintptr_t RenderScenePreResolveDepth    = 0x00B6BA20;
+    constexpr uintptr_t FadeNodeOnVisibleSlot         = 0x010A9064;
+    constexpr uintptr_t FadeNodeOnVisible             = 0x00B4E490;
+    constexpr uintptr_t TreeNodeOnVisibleSlot         = 0x010669B8;
+    constexpr uintptr_t TreeNodeOnVisible             = 0x0066BF50;
+    constexpr uintptr_t MultiBoundNodeOnVisibleSlot   = 0x010C1DE8;
+    constexpr uintptr_t MultiBoundNodeOnVisible       = 0x00C46F60;
+    constexpr uintptr_t RendererD3DView               = 0x980;
+    constexpr uintptr_t RendererD3DProj               = 0x9C0;
+    constexpr uintptr_t RendererInvView               = 0xA40;
+    constexpr uintptr_t RendererDeviceLost            = 0x6FC;
+    constexpr uintptr_t FadeNodeLinkedRef             = 0xCC;
+    constexpr uint32_t  ObjectAppCulled               = 0x1;
+    constexpr uintptr_t MultiBoundNodeBound           = 0xAC;
+    constexpr uintptr_t MultiBoundShape               = 0x0C;
+    constexpr uintptr_t MultiBoundAabbVtable          = 0x0101E8E4;
+    constexpr uintptr_t MultiBoundAabbCentre          = 0x0C;
+    constexpr uintptr_t MultiBoundAabbHalfExtents     = 0x18;
+    constexpr uintptr_t MultiBoundWithinFrustumSlot   = 0x9C;
+    constexpr uintptr_t CullerPlanes                  = 0x2C;
+    constexpr uintptr_t NiNodeRtti                    = 0x011F4428;
+    constexpr uintptr_t NiGeometryRtti                = 0x011F4ACC;
+    constexpr uintptr_t RttiName                      = 0x00;
+    constexpr uintptr_t RttiBase                      = 0x04;
+
+    /** Form types (TESForm +0x04) of the references occlusion culling sorts */
+    constexpr uint8_t   FormTypeTalkingActivator      = 22;
+    constexpr uint8_t   FormTypeTerminal              = 23;
+    constexpr uint8_t   FormTypeDoor                  = 28;
+    constexpr uint8_t   FormTypeLight                 = 30;
+    constexpr uint8_t   FormTypePlaceableWater        = 35;
+    constexpr uint8_t   FormTypeCharacter             = 59;
+    constexpr uint8_t   FormTypeCreature              = 60;
+    constexpr uint8_t   FormTypeMissileProjectile     = 61;
+    constexpr uint8_t   FormTypeFlameProjectile       = 64;
+    constexpr uint8_t   FormTypeContinuousBeam        = 105;
+
+    /** ENUM_LOD_MULT values of BSFadeNode::eMultType (FadeNodeLodMultType) */
+    constexpr uint32_t  LodMultActors                 = 3;
+    constexpr uint32_t  LodMultDistantLod             = 6;
+    constexpr uint32_t  LodMultActorBodyPart          = 7;
+    constexpr uint32_t  LodMultInvisible              = 9;
+
   }
 
 }

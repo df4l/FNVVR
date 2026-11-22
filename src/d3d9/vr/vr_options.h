@@ -34,6 +34,8 @@ namespace dxvk {
     bool  roomscale       = false;
     /// Shade the world at full rate only where the eyes look, see vr_foveation.h
     bool  foveation       = false;
+    /// Lower distances and GPU work to hold the headset's rate, see vr_performance_mode.h
+    bool  performanceMode = false;
   };
 
   /// Slowest smooth turning speed of the options page, in degrees per second

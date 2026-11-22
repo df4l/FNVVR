@@ -169,6 +169,22 @@ namespace dxvk {
   };
 
   /**
+   * \brief How the runtime saw a recent frame
+   *
+   * For the performance mode, see VrPerformanceGovernor.
+   */
+  struct VrFrameLoad {
+    /// Runtime's own number of the frame, to count each frame once
+    uint32_t frameIndex     = 0;
+    /// GPU time of the frame, the runtime's work included, in milliseconds
+    double   gpuMs          = -1.0;
+    /// The runtime reprojected the frame because the CPU was late
+    bool     cpuReprojected = false;
+    /// The runtime reprojected the frame because the GPU was late
+    bool     gpuReprojected = false;
+  };
+
+  /**
    * \brief Abstract VR runtime
    *
    * All game-facing VR code talks to this interface. The implementation is
@@ -186,7 +202,11 @@ namespace dxvk {
    * beginFrame, submitFrame, submitEmptyFrame and submitPanel are called with
    * the device queue locked, so they may use it.
    *
-   * Methods are called from the render/game thread only.
+   * Methods are called from the render/game thread, except a stereo
+   * frame's submitFrame and the submitPanel and hidePanel calls of its
+   * panels, which may come from the renderer's submission thread (see
+   * VrFrameSubmitter) while the game thread runs the game's update. Those
+   * calls are made with the device queue locked, like any submitPanel.
    */
   class IVRBackend {
 
@@ -313,6 +333,19 @@ namespace dxvk {
      * Either call tells the runtime that the frame's rendering is done.
      */
     virtual bool submitFrame(const VrFrameSubmission& frame) = 0;
+
+    /**
+     * \brief Reads how the runtime saw the latest frame it showed
+     *
+     * \param [out] load GPU time and reprojection of the frame
+     * \returns \c false if the runtime does not tell
+     */
+    virtual bool readFrameLoad(VrFrameLoad& load) = 0;
+
+    /**
+     * \brief Model name of the headset, as the runtime gives it
+     */
+    virtual std::string headsetModel() const = 0;
 
     virtual void submitEmptyFrame(int64_t displayTime) = 0;
 

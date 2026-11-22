@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdint>
+#include <string>
+
 namespace dxvk {
 
   /**
@@ -24,6 +27,25 @@ namespace dxvk {
      * \brief Installs the handler, once
      */
     static void install();
+
+    /**
+     * \brief Also logs every exception raised on one thread, the first
+     *    few, whatever its kind
+     *
+     * C++ exceptions, runtime assertions and the like end a thread
+     * without an access violation; this shows them for a thread under
+     * investigation. Only one thread is watched at a time.
+     */
+    static void watchThread(uint32_t threadId);
+
+    /**
+     * \brief Where another thread is: its instruction with its module, and
+     *    the return addresses on its stack, for a log line
+     *
+     * Meant for a thread that stopped making progress: its stack is read
+     * after it is resumed.
+     */
+    static std::string describeThread(uint32_t threadId);
 
   };
 
