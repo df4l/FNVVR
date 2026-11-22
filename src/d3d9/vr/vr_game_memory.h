@@ -130,13 +130,14 @@ namespace dxvk {
      * xNVSE and its plugins patch the game before the first Direct3D call,
      * so a call may already reach their code. That hook stays in the chain:
      * the new function calls \c previous instead of the game's function.
+     * Another hook of this library is chained the same way.
      *
      * \param [in] site Address of a 5-byte call (opcode E8)
      * \param [in] expectedTarget Function the call reaches without other mods
      * \param [in] newTarget Function to call instead
      * \param [out] previous Function the call reached, unchanged on failure
      * \returns \c true if the call was redirected. A call that reaches another
-     *    function of the game, or this library, is left alone.
+     *    function of the game, or \c newTarget already, is left alone.
      */
     static bool chainCall(
             uintptr_t             site,

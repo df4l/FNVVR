@@ -21,6 +21,7 @@
 
 #include "d3d9_interop.h"
 #include "d3d9_on_12.h"
+#include "d3d9_stereo_replay.h"
 
 #include <cstdint>
 #include <unordered_set>
@@ -821,6 +822,74 @@ namespace dxvk {
     }
 
     /**
+     * \brief Records a VR layer command that knows which eye it runs for
+     *
+     * The command gets the context and the eye: 0 when it runs as
+     * recorded, 1 when it runs again for the right eye during
+     * ReplayVrStereoCapture.
+     */
+    template<typename Cmd>
+    void EmitVrStereoCommand(Cmd&& command) {
+      D3D9DeviceLock lock = LockDevice();
+      EmitCs([
+        cState   = m_stereo.cs,
+        cCommand = std::forward<Cmd>(command)
+      ] (DxvkContext* ctx) {
+        cCommand(ctx, cState->eye);
+      });
+    }
+
+    /**
+     * \brief Starts keeping the commands recorded from now on
+     *
+     * Used to draw the left eye once and run its commands a second time
+     * for the right eye (stereo replay). Flushes of the command list made
+     * while the commands are kept are not kept with them. A capture that
+     * was not replayed is discarded.
+     */
+    void BeginVrStereoCapture();
+
+    /**
+     * \brief Tells the kept commands what the following draws show
+     *
+     * \param [in] world \c true for the world seen from the eye, which the
+     *    replay moves to the right eye with the right eye's matrix, \c false
+     *    for passes drawn in screen space, which it draws unchanged
+     */
+    void SetVrStereoWorld(bool world);
+
+    /**
+     * \brief Stops keeping commands
+     */
+    void EndVrStereoCapture();
+
+    /**
+     * \brief Whether commands were kept and not replayed yet
+     */
+    bool HasVrStereoCapture() const {
+      return m_stereo.captured;
+    }
+
+    /**
+     * \brief Runs the kept commands again for the right eye
+     *
+     * The bindings and the buffers' storage the commands were recorded with
+     * are restored before they run, and the current ones after, so that the
+     * device's own state is unchanged. Vertex shaders multiply their clip
+     * position by \c rows while the world is drawn.
+     *
+     * \param [in] rows Clip-space matrix from the left eye to the right eye,
+     *    row by row: out[i] = dot(rows[i], position)
+     * \returns \c false if no complete capture was there
+     */
+    bool ReplayVrStereoCapture(const std::array<float, 16>& rows);
+
+    /**
+     * \brief Drops kept commands that will not be replayed
+     */
+    void DiscardVrStereoCapture();
+
+    /**
      * \brief Flushes the VR layer's rendering so far
      *
      * \returns Sequence number of the CS chunk holding the flush,
@@ -1234,7 +1303,9 @@ namespace dxvk {
     }
 
     DxvkCsChunkRef AllocCsChunk() {
-      DxvkCsChunk* chunk = m_csChunkPool.allocChunk(DxvkCsChunkFlag::SingleUse);
+      // Kept chunks run a second time: their commands must outlive the first run
+      DxvkCsChunk* chunk = m_csChunkPool.allocChunk(m_stereo.capturing
+        ? DxvkCsChunkFlags() : DxvkCsChunkFlags(DxvkCsChunkFlag::SingleUse));
       return DxvkCsChunkRef(chunk, &m_csChunkPool);
     }
 
@@ -1314,6 +1385,16 @@ namespace dxvk {
     }
 
     void ExecuteFlush(bool Synchronize9On12);
+
+    void InitStereoReplay();
+
+    void ReplaceCsChunk();
+
+    bool PauseStereoCapture();
+
+    void ResumeStereoCapture(bool Paused);
+
+    void DiscardStereoCaptureLocked();
 
     void DetermineConstantLayouts(bool canSWVP);
 
@@ -1688,6 +1769,9 @@ namespace dxvk {
     D3D9ViewportInfo                m_viewportInfo;
 
     DxvkCsChunkPool                 m_csChunkPool;
+
+    D3D9StereoReplay                m_stereo;
+
     DxvkCsThread                    m_csThread;
     DxvkCsChunkRef                  m_csChunk;
     uint64_t                        m_csSeqNum = 0ull;

@@ -332,8 +332,13 @@ namespace dxvk {
     if (!g_renderPasses)
       return original(main, nullptr);
 
-    return g_renderPasses->runShadows(
+    uintptr_t result = g_renderPasses->runShadows(
       [&] { return original(main, nullptr); });
+
+    if (g_renderPasses->m_eye != NoEye && g_renderPasses->m_afterShadows)
+      g_renderPasses->m_afterShadows();
+
+    return result;
   }
 
 

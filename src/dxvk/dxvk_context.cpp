@@ -1347,6 +1347,10 @@ namespace dxvk {
     const Rc<DxvkBuffer>&           buffer,
           Rc<DxvkResourceAllocation>&& slice) {
     Rc<DxvkResourceAllocation> prevAllocation = buffer->assignStorage(std::move(slice));
+
+    if (unlikely(m_stereoJournal))
+      m_stereoJournal->note(buffer, prevAllocation);
+
     m_cmd->track(std::move(prevAllocation));
 
     buffer->resetTracking();

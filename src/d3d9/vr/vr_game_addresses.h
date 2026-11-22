@@ -2120,6 +2120,13 @@ namespace dxvk {
      * creation opens. See findings/menu-scenes.md.
      */
     constexpr uintptr_t RaceSexBackgroundCallSite  = 0x007FD6F6;
+
+    /**
+     * TESMain::OnIdle captures the same frozen background each time an hour
+     * passes in the sleep and wait menu (SleepWaitMenu::UpdateSleeping
+     * returned true), with Main in ECX. See findings/menu-scenes.md.
+     */
+    constexpr uintptr_t SleepWaitBackgroundCallSite = 0x0086ED86;
     constexpr uintptr_t PipBoyBackground           = 0x00871DC0;
     constexpr uintptr_t WorldRenderCallSite        = 0x00870244;
     constexpr uintptr_t Render                     = 0x008706B0;
@@ -4189,6 +4196,33 @@ namespace dxvk {
     constexpr uintptr_t SettingUseWaterReflections    = 0x011C7B6C;
 
     /**
+     * Water depth maps, turned off by the performance mode while it draws
+     * the right eye from the left eye's commands: bUseWaterDepth:Water
+     * (Setting, same layout and handling as SettingUseWaterReflections).
+     * TESWaterSystem::UpdatePlaceableWater draws a group's depth map
+     * (MTRenderSelectiveDepthTexture) only while it is on, and UpdateShader
+     * (0x004E3590) recomputes WaterShaderProperty::bDepth from it every
+     * frame and rebuilds the shader's passes when it changes. The depth maps
+     * are drawn in the eye's screen space before the shadow pass, outside
+     * the replayed commands (findings/performance.md section 18).
+     */
+    constexpr uintptr_t SettingUseWaterDepth          = 0x011C7BBC;
+
+    /**
+     * Water refractions, turned off by the performance mode while it draws
+     * the right eye from the left eye's commands: bUseWaterRefractions:Water
+     * (Setting, same layout and handling as SettingUseWaterReflections).
+     * TESWaterSystem::UpdateShader recomputes WaterShaderProperty::
+     * bRefractions from it every frame and rebuilds the shader's passes when
+     * it changes; without refraction passes, BSShaderAccumulator::
+     * FinishAccumulating_Standard_PostResolveDepth (0x00B65C60) makes no
+     * refraction copy of the screen. In replayed frames that copy showed the
+     * left eye's world under the water in the right eye, one frame in two or
+     * so (findings/performance.md section 18).
+     */
+    constexpr uintptr_t SettingUseWaterRefractions    = 0x011C7C60;
+
+    /**
      * Grass distance, a lever of the performance mode: fGrassStartFadeDistance
      * :Grass (Setting, float at SettingValue), read every frame by
      * TESTerrainLODManager::UpdateGrass (0x0057D0A0), which builds grass for
@@ -4256,6 +4290,37 @@ namespace dxvk {
     constexpr uintptr_t ImageSpaceSwapTargetStore     = 0x00B978DA;
     constexpr uint8_t   ImageSpaceSwapTargetStoreCode[] = { 0x89, 0x86, 0x18, 0x03, 0x00, 0x00 };
     constexpr uint32_t  ImageSpaceTextureType         = 3;
+
+    /**
+     * Stereo replay (the performance mode's first distance level),
+     * findings/performance.md §15 and §18.
+     *
+     * - DrawWorldStandardCallSite: TESMain::DrawWorld's call of
+     *   DrawWorldStandard (__thiscall on Main: destination BSRenderedTexture*,
+     *   bool Pip-Boy mode; ret 8), the world render after the shadow maps of
+     *   which the right eye replays the left eye's commands. Skipping it
+     *   for the right eye also skips the last image space effect's
+     *   RenderedTextureStart of the screen, which the replay then makes.
+     */
+    constexpr uintptr_t DrawWorldStandardCallSite     = 0x0087075E;
+    constexpr uintptr_t DrawWorldStandard             = 0x00870BD0;
+
+    /**
+     * - ScreenEffectCallSites: the calls of ImageSpaceManager::RenderEffect
+     *   (__thiscall on the manager: effect id, renderer, source and
+     *   destination BSRenderedTexture*, parameters, bool end frame;
+     *   ret 0x18) made inside the world render, before its image space
+     *   pass: the water's refraction copy of the screen
+     *   (BSShaderAccumulator::FinishAccumulating_Standard_PostResolveDepth,
+     *   effect Copy into a borrowed TEX_MAIN_FIRSTPERSON, drawn before the
+     *   water batches) and the volumetric fog's composite
+     *   (BSShaderAccumulator::RenderVolumetricFog, from
+     *   TESMain::DrawWorld_DoVolumetricFog). Both draw a screen quad, which
+     *   the right eye's clip matrix would move. The other callers run
+     *   outside the kept commands (water update, shadows, image space,
+     *   menus, local map). RenderEffect is ImageSpaceRenderEffect.
+     */
+    constexpr uintptr_t ScreenEffectCallSites[]       = { 0x00B65CD1, 0x00B654C1 };
 
     /**
      * Occlusion culling, see findings/performance.md §17 (GOG database,

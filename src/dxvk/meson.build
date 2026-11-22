@@ -36,6 +36,7 @@ dxvk_src = [
   'dxvk_compute.cpp',
   'dxvk_constant_state.cpp',
   'dxvk_context.cpp',
+  'dxvk_context_stereo.cpp',
   'dxvk_cs.cpp',
   'dxvk_descriptor_heap.cpp',
   'dxvk_descriptor_info.cpp',

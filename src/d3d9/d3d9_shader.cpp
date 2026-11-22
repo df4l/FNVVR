@@ -2,6 +2,7 @@
 
 #include "d3d9_caps.h"
 #include "d3d9_device.h"
+#include "d3d9_shader_stereo.h"
 #include "d3d9_util.h"
 
 #include <sm3/sm3_parser.h>
@@ -17,8 +18,10 @@ namespace dxvk {
     D3D9ShaderLowerLegacyInputPass(
             dxbc_spv::ir::Builder&  builder,
       const D3D9ShaderOptions&      options,
-      const D3D9ShaderAnalysis&     analysis)
-    : m_builder(builder), m_options(options), m_analysis(analysis) { }
+      const D3D9ShaderAnalysis&     analysis,
+            bool                    projectsWithFirstConstants)
+    : m_builder(builder), m_options(options), m_analysis(analysis),
+      m_projectsWithFirstConstants(projectsWithFirstConstants) { }
 
     void run() {
       using namespace dxbc_spv;
@@ -33,6 +36,10 @@ namespace dxvk {
 
       setupStaticCbv();
       setupDynamicCbv();
+
+      // Runs on the constant loads, before they are lowered
+      if (m_shaderStage == ir::ShaderStage::eVertex && m_projectsWithFirstConstants)
+        D3D9ApplyStereoProjection(m_builder, m_entryPoint);
 
       dxvk::small_vector<ir::SsaDef, 32u> inputs;
 
@@ -70,6 +77,9 @@ namespace dxvk {
             break;
         }
       }
+
+      if (m_shaderStage == ir::ShaderStage::eVertex)
+        D3D9ApplyStereoTransform(m_builder, m_entryPoint);
     }
 
   private:
@@ -94,6 +104,7 @@ namespace dxvk {
     dxbc_spv::ir::Builder&    m_builder;
     D3D9ShaderOptions         m_options;
     const D3D9ShaderAnalysis& m_analysis;
+    bool                      m_projectsWithFirstConstants;
 
     dxbc_spv::ir::ShaderStage m_shaderStage = {};
     dxbc_spv::ir::SsaDef      m_entryPoint = {};
@@ -1119,14 +1130,23 @@ namespace dxvk {
       options.isSWVP = m_options.isSWVP && isVs;
       options.forceDynamicTextureType = m_options.forceSamplerTypeSpecConstants && !isVs;
 
-      dxbc_spv::util::ByteReader reader(m_dxbc.data(), m_dxbc.size());
+      // The stereo replay needs a projected position written directly
+      std::vector<uint8_t> rewritten;
+
+      if (isVs)
+        rewritten = D3D9ProjectPositionDirectly(m_dxbc.data(), m_dxbc.size());
+
+      const std::vector<uint8_t>& code = rewritten.empty() ? m_dxbc : rewritten;
+
+      dxbc_spv::util::ByteReader reader(code.data(), code.size());
 
       dxbc_spv::sm3::Converter converter(reader, options);
 
       if (!converter.convertShader(builder))
         throw DxvkError(str::format("Failed to convert shader: ", m_key.toString()));
 
-      D3D9ShaderLowerLegacyInputPass lowerLegacyPass(builder, m_options, m_analysis);
+      D3D9ShaderLowerLegacyInputPass lowerLegacyPass(builder, m_options, m_analysis,
+        isVs && D3D9ProjectsWithFirstConstants(code.data(), code.size()));
       lowerLegacyPass.run();
     }
 

@@ -165,6 +165,12 @@ uniform ClipPlanes {
     vec4 clipPlanes[MaxClipPlaneCount];
 };
 
+// Clip-space matrix of the VR layer's stereo replay, the identity otherwise
+layout(set = CBV_SET, binding = CBV_VS_STEREO, std140)
+uniform StereoTransform {
+    vec4 stereoRows[4];
+};
+
 layout(push_constant, scalar, row_major)
 uniform RenderStates {
     D3D9SharedPushData global;
@@ -704,7 +710,11 @@ Lighting computeLighting(vec4 vertex, vec3 normal) {
 void main() {
     Vertex vtx = transformVertex();
 
-    gl_Position = vtx.transformed;
+    gl_Position = vec4(
+        dot(stereoRows[0], vtx.transformed),
+        dot(stereoRows[1], vtx.transformed),
+        dot(stereoRows[2], vtx.transformed),
+        dot(stereoRows[3], vtx.transformed));
     gl_PointSize = calculatePointSize(vtx.coord);
 
     emitVsClipping(vtx.coord);

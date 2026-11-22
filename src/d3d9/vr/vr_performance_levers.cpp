@@ -36,11 +36,16 @@ namespace dxvk {
     }
 
     constexpr char WaterReflectionsName[]  = "bUseWaterReflections:Water";
+    constexpr char WaterDepthName[]        = "bUseWaterDepth:Water";
+    constexpr char WaterRefractionsName[]  = "bUseWaterRefractions:Water";
     constexpr char GrassStartFadeName[]    = "fGrassStartFadeDistance:Grass";
     constexpr char GrassMinStartFadeName[] = "fGrassMinStartFadeDistance:Grass";
 
     // Above the 0.5 under which the game stops updating grass
     constexpr float GrassFloorMargin = 1.0f;
+
+    constexpr float SpecularOffStart = 0.0f;
+    constexpr float SpecularOffEnd   = 1.0f;
 
     // fstp dword ptr [address]
     bool storesTo(uintptr_t site, uintptr_t address) {
@@ -112,9 +117,12 @@ namespace dxvk {
     bool specular = storesTo(VrGame::SpecularLodStartFadeStore, VrGame::SpecularLodStartFade)
       && storesTo(VrGame::SpecularLodEndStore, VrGame::SpecularLodEnd);
 
+    m_specularStart = Value();
+    m_specularEnd   = Value();
+
     if (specular) {
-      m_gpuValues.push_back({ gameFloat(VrGame::SpecularLodStartFade) });
-      m_gpuValues.push_back({ gameFloat(VrGame::SpecularLodEnd) });
+      m_specularStart.address = gameFloat(VrGame::SpecularLodStartFade);
+      m_specularEnd.address   = gameFloat(VrGame::SpecularLodEnd);
     }
 
     bool grass = settingNamed(VrGame::SettingGrassStartFade, GrassStartFadeName)
@@ -129,28 +137,41 @@ namespace dxvk {
     }
 
     bool water = settingNamed(VrGame::SettingUseWaterReflections, WaterReflectionsName);
+    bool depth = settingNamed(VrGame::SettingUseWaterDepth, WaterDepthName)
+              && settingNamed(VrGame::SettingUseWaterRefractions, WaterRefractionsName);
 
-    m_waterReflections = Flag();
+    m_waterReflections  = Flag();
+    m_waterDepth        = Flag();
+    m_waterRefractions  = Flag();
 
     if (water)
       m_waterReflections.address = reinterpret_cast<uint8_t*>(VrGame::SettingUseWaterReflections + VrGame::SettingValue);
 
+    if (depth) {
+      m_waterDepth.address       = reinterpret_cast<uint8_t*>(VrGame::SettingUseWaterDepth + VrGame::SettingValue);
+      m_waterRefractions.address = reinterpret_cast<uint8_t*>(VrGame::SettingUseWaterRefractions + VrGame::SettingValue);
+    }
+
     // A game setting the game could save lowered is not a lever
-    if ((grass || water) && !hookSettingsSaves()) {
+    if ((grass || water || depth) && !hookSettingsSaves()) {
       if (grass)
         m_distanceValues.pop_back();
 
       grass = false;
       water = false;
+      depth = false;
       m_waterReflections = Flag();
+      m_waterDepth       = Flag();
+      m_waterRefractions = Flag();
     }
 
     Logger::info(str::format("VR: Performance mode levers: object fades ", fades ? "found" : "not found",
       ", light fades ", lights ? "found" : "not found", ", shadow fades ", shadows ? "found" : "not found",
       ", specular fades ", specular ? "found" : "not found", ", grass ", grass ? "found" : "not found",
-      ", water reflections ", water ? "found" : "not found"));
+      ", water reflections ", water ? "found" : "not found",
+      ", water depth maps and refractions ", depth ? "found" : "not found"));
 
-    return !m_distanceValues.empty() || !m_gpuValues.empty() || water;
+    return !m_distanceValues.empty() || !m_gpuValues.empty() || specular || water;
   }
 
 
@@ -169,10 +190,34 @@ namespace dxvk {
         give(value);
     }
 
+    for (Value* value : { &m_specularStart, &m_specularEnd }) {
+      if (!value->address)
+        continue;
+
+      // Specular highlights fade out from the start to the end distance:
+      // one game unit leaves none (BSShaderPPLightingProperty::GetSpecularLODFade)
+      if (stereoReplay(levels.distance))
+        hold(*value, value == &m_specularStart ? SpecularOffStart : SpecularOffEnd);
+      else if (levels.gpu)
+        scale(*value, gpuScale(levels.gpu));
+      else
+        give(*value);
+    }
+
     if (waterReflectionsOff(levels.distance))
       clear(m_waterReflections);
     else
       give(m_waterReflections);
+
+    // Depth maps are drawn in the left eye's screen space before the
+    // replayed commands; the refraction copy of the screen shows the left
+    // eye's world under the water in some replayed frames
+    for (Flag* flag : { &m_waterDepth, &m_waterRefractions }) {
+      if (stereoReplay(levels.distance))
+        clear(*flag);
+      else
+        give(*flag);
+    }
   }
 
 
@@ -183,7 +228,15 @@ namespace dxvk {
     for (Value& value : m_gpuValues)
       give(value);
 
+    if (m_specularStart.address)
+      give(m_specularStart);
+
+    if (m_specularEnd.address)
+      give(m_specularEnd);
+
     give(m_waterReflections);
+    give(m_waterDepth);
+    give(m_waterRefractions);
   }
 
 
@@ -195,6 +248,19 @@ namespace dxvk {
       value.base = current;
 
     value.written = std::max(value.base * factor, std::min(value.floor, value.base));
+    value.held    = true;
+    *value.address = value.written;
+  }
+
+
+  void VrPerformanceLevers::hold(Value& value, float target) {
+    float current = *value.address;
+
+    // The settings menu wrote the player's new choice
+    if (!value.held || current != value.written)
+      value.base = current;
+
+    value.written = target;
     value.held    = true;
     *value.address = value.written;
   }
@@ -247,7 +313,7 @@ namespace dxvk {
     if (!VrGameMemory::chainCalls(VrGame::SettingsSaveAllCallSites, std::size(VrGame::SettingsSaveAllCallSites),
           VrGame::SettingsSaveAll, reinterpret_cast<const void*>(&saveSettingsHook),
           &g_previousSaveAll)) {
-      Logger::warn("VR: The game's INI saves were not found, the performance mode leaves water reflections and grass alone");
+      Logger::warn("VR: The game's INI saves were not found, the performance mode leaves water reflections, depth maps, refractions and grass alone");
       return false;
     }
 
@@ -265,11 +331,11 @@ namespace dxvk {
       }
     }
 
-    Flag& flag = m_waterReflections;
-
-    if (flag.address && flag.held && *flag.address == 0) {
-      *flag.address = flag.base;
-      flag.lent = true;
+    for (Flag* flag : { &m_waterReflections, &m_waterDepth, &m_waterRefractions }) {
+      if (flag->address && flag->held && *flag->address == 0) {
+        *flag->address = flag->base;
+        flag->lent = true;
+      }
     }
   }
 
@@ -282,12 +348,12 @@ namespace dxvk {
       value.lent = false;
     }
 
-    Flag& flag = m_waterReflections;
+    for (Flag* flag : { &m_waterReflections, &m_waterDepth, &m_waterRefractions }) {
+      if (flag->lent && *flag->address == flag->base)
+        *flag->address = 0;
 
-    if (flag.lent && *flag.address == flag.base)
-      *flag.address = 0;
-
-    flag.lent = false;
+      flag->lent = false;
+    }
   }
 
 }

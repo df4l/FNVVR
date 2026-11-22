@@ -20,11 +20,15 @@ namespace dxvk {
    * run-time copy: their game settings are written, and given back while
    * the game saves its INI files, menus and the end of the game included.
    *
-   * Distance levels scale the fade distances of objects, items, actors,
-   * lights and grass, and turn water reflections off from WaterOffDistanceLevel; GPU
-   * levels scale those of specular highlights and shadows, then lower the
-   * resolution the eyes' world is drawn at (applied by VrRenderScale) by
-   * 5 % per step, so that each change is small.
+   * The first distance level draws the right eye from the left eye's
+   * commands (VrStereoReplay, applied by the renderer), which takes the
+   * right eye's work off the game thread without lowering any distance;
+   * water reflections and specular highlights, which the replayed eye
+   * would show from the left eye's position, are off from there. The next
+   * levels scale the fade distances of objects, items, actors, lights and
+   * grass. GPU levels scale those of specular highlights and shadows, then
+   * lower the resolution the eyes' world is drawn at (applied by
+   * VrRenderScale) by 5 % per step, so that each change is small.
    */
   class VrPerformanceLevers {
 
@@ -37,9 +41,10 @@ namespace dxvk {
     VrPerformanceLevers             (const VrPerformanceLevers&) = delete;
     VrPerformanceLevers& operator = (const VrPerformanceLevers&) = delete;
 
-    static constexpr uint32_t DistanceSteps = 4;
+    static constexpr uint32_t DistanceSteps = 5;
     static constexpr uint32_t GpuSteps      = 8;
-    static constexpr uint32_t WaterOffDistanceLevel = 2;
+    static constexpr uint32_t StereoReplayDistanceLevel = 1;
+    static constexpr uint32_t WaterOffDistanceLevel = StereoReplayDistanceLevel;
 
     /**
      * \brief Checks the game code that holds the values
@@ -60,6 +65,17 @@ namespace dxvk {
     void restore();
 
     /**
+     * \brief Whether the replay level can turn off what the replayed eye
+     *    would draw wrong: water reflections, depth maps and refractions,
+     *    and specular
+     *    highlights
+     */
+    bool canStereoReplay() const {
+      return m_waterReflections.address && m_waterDepth.address && m_waterRefractions.address
+          && m_specularStart.address && m_specularEnd.address;
+    }
+
+    /**
      * \brief Gives the lowered game settings back while the game saves them
      *
      * Called by the hook on the game's INI saves, followed by retakeSettings.
@@ -75,7 +91,7 @@ namespace dxvk {
      * \brief Scale of a distance level, 1 for level 0
      */
     static float distanceScale(uint32_t level) {
-      constexpr std::array<float, DistanceSteps + 1> scales = { 1.0f, 0.85f, 0.72f, 0.6f, 0.5f };
+      constexpr std::array<float, DistanceSteps + 1> scales = { 1.0f, 1.0f, 0.85f, 0.72f, 0.6f, 0.5f };
       return scales[std::min<size_t>(level, DistanceSteps)];
     }
 
@@ -102,6 +118,15 @@ namespace dxvk {
       return level >= WaterOffDistanceLevel;
     }
 
+    /**
+     * \brief Whether a distance level draws the right eye from the left eye's
+     *    commands, with specular highlights, water depth maps and water
+     *    refractions off
+     */
+    static bool stereoReplay(uint32_t level) {
+      return level >= StereoReplayDistanceLevel;
+    }
+
   private:
 
     struct Value {
@@ -125,12 +150,18 @@ namespace dxvk {
 
     std::vector<Value> m_distanceValues;
     std::vector<Value> m_gpuValues;
+    Value              m_specularStart;
+    Value              m_specularEnd;
     Flag               m_waterReflections;
+    Flag               m_waterDepth;
+    Flag               m_waterRefractions;
     bool               m_hooked = false;
 
     bool hookSettingsSaves();
 
     static void scale(Value& value, float factor);
+
+    static void hold(Value& value, float target);
 
     static void give(Value& value);
 
