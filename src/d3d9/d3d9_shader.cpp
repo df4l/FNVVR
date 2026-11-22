@@ -18,8 +18,10 @@ namespace dxvk {
     D3D9ShaderLowerLegacyInputPass(
             dxbc_spv::ir::Builder&  builder,
       const D3D9ShaderOptions&      options,
-      const D3D9ShaderAnalysis&     analysis)
-    : m_builder(builder), m_options(options), m_analysis(analysis) { }
+      const D3D9ShaderAnalysis&     analysis,
+            bool                    projectsWithFirstConstants)
+    : m_builder(builder), m_options(options), m_analysis(analysis),
+      m_projectsWithFirstConstants(projectsWithFirstConstants) { }
 
     void run() {
       using namespace dxbc_spv;
@@ -34,6 +36,10 @@ namespace dxvk {
 
       setupStaticCbv();
       setupDynamicCbv();
+
+      // Runs on the constant loads, before they are lowered
+      if (m_shaderStage == ir::ShaderStage::eVertex && m_projectsWithFirstConstants)
+        D3D9ApplyStereoProjection(m_builder, m_entryPoint);
 
       dxvk::small_vector<ir::SsaDef, 32u> inputs;
 
@@ -98,6 +104,7 @@ namespace dxvk {
     dxbc_spv::ir::Builder&    m_builder;
     D3D9ShaderOptions         m_options;
     const D3D9ShaderAnalysis& m_analysis;
+    bool                      m_projectsWithFirstConstants;
 
     dxbc_spv::ir::ShaderStage m_shaderStage = {};
     dxbc_spv::ir::SsaDef      m_entryPoint = {};
@@ -1130,7 +1137,8 @@ namespace dxvk {
       if (!converter.convertShader(builder))
         throw DxvkError(str::format("Failed to convert shader: ", m_key.toString()));
 
-      D3D9ShaderLowerLegacyInputPass lowerLegacyPass(builder, m_options, m_analysis);
+      D3D9ShaderLowerLegacyInputPass lowerLegacyPass(builder, m_options, m_analysis,
+        isVs && D3D9ProjectsWithFirstConstants(m_dxbc.data(), m_dxbc.size()));
       lowerLegacyPass.run();
     }
 
