@@ -49,6 +49,9 @@ namespace dxvk {
     if (enabled && !m_initialized) {
       m_initialized = true;
       m_available   = m_levers.initialize();
+
+      if (m_available && !m_levers.canStereoReplay())
+        Logger::warn("VR: The performance mode cannot turn water reflections and specular highlights off, it never draws the right eye from the left eye's commands");
     }
 
     if (enabled == m_enabled)
@@ -113,7 +116,7 @@ namespace dxvk {
     }
 
     if (changed || !m_applied) {
-      m_levers.apply(m_governor.levels());
+      m_levers.apply(appliedLevels());
       m_applied = true;
     }
   }
@@ -129,7 +132,27 @@ namespace dxvk {
 
   bool VrPerformanceMode::stereoReplay() const {
     return m_enabled && m_applied
-        && VrPerformanceLevers::stereoReplay(m_governor.levels().distance);
+        && m_levers.canStereoReplay()
+        && VrPerformanceLevers::stereoReplay(appliedLevels().distance);
+  }
+
+
+  void VrPerformanceMode::forceStereoReplay(bool forced) {
+    if (forced == m_replayForced)
+      return;
+
+    m_replayForced = forced;
+    m_applied = false;
+  }
+
+
+  VrPerformanceLevels VrPerformanceMode::appliedLevels() const {
+    VrPerformanceLevels levels = m_governor.levels();
+
+    if (m_replayForced)
+      levels.distance = std::max(levels.distance, VrPerformanceLevers::StereoReplayDistanceLevel);
+
+    return levels;
   }
 
 

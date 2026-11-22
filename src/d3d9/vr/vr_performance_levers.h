@@ -65,6 +65,14 @@ namespace dxvk {
     void restore();
 
     /**
+     * \brief Whether the replay level can turn off what the replayed eye
+     *    would draw wrong: water reflections and specular highlights
+     */
+    bool canStereoReplay() const {
+      return m_waterReflections.address && m_specularStart.address && m_specularEnd.address;
+    }
+
+    /**
      * \brief Gives the lowered game settings back while the game saves them
      *
      * Called by the hook on the game's INI saves, followed by retakeSettings.

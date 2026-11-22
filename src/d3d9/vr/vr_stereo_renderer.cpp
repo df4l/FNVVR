@@ -491,6 +491,7 @@ namespace dxvk {
       renderer->m_stereoReplay = VrStereoReplay::install(device, passes.stereoReplayTest);
 
       if (renderer->m_stereoReplay) {
+        renderer->m_performance.forceStereoReplay(renderer->m_stereoReplay->forced());
         renderer->m_renderPasses->setAfterShadows([self] { self->m_stereoReplay->afterShadows(); });
 
         // The mini-game drawn in the left eye's world is in the replay
@@ -1570,7 +1571,7 @@ namespace dxvk {
   void VrStereoRenderer::beginStereoReplay(VrGameStateKind state, const std::array<VrEyeView, VrEyeCount>& views) {
     bool inWorld = state == VrGameStateKind::InGame || state == VrGameStateKind::PipBoy;
     bool active = m_performanceOn && inWorld
-      && (m_performance.stereoReplay() || m_stereoReplay->forced());
+      && m_performance.stereoReplay();
 
     std::array<VrStereoEyeCamera, VrEyeCount> eyeCameras;
 
