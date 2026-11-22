@@ -108,6 +108,15 @@ namespace dxvk {
     VrGameMemory::chainCall(VrGame::WorldRenderCallSite, VrGame::Render,
       reinterpret_cast<const void*>(&worldRenderHook), &g_worldRender);
 
+    // Waiting captures the background again every hour, which would freeze
+    // the world behind the menu from the first hour on
+    if (VrGameMemory::callsTo(VrGame::SleepWaitBackgroundCallSite, VrGame::PipBoyBackground)) {
+      VrGameMemory::redirectCall(VrGame::SleepWaitBackgroundCallSite, VrGame::PipBoyBackground,
+        reinterpret_cast<const void*>(&backgroundHook));
+    } else {
+      Logger::info("VR: The wait menu's background capture was not found, waiting shows a frozen background");
+    }
+
     std::unique_ptr<VrPipBoyRender> render(new VrPipBoyRender());
     render->m_screenPass = std::move(screenPass);
     g_pipBoyRender = render.get();
@@ -119,7 +128,8 @@ namespace dxvk {
           void*                 main,
           void*                 unused) {
     // Without the frozen background, its flag stays clear and the world
-    // branch below draws the Pip-Boy or the character creation
+    // branch below draws the Pip-Boy, the character creation or the world
+    // behind the wait menu
     if (!g_pipBoyRender)
       game<MainFn>(VrGame::PipBoyBackground)(main, nullptr);
   }
