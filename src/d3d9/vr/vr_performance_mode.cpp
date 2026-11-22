@@ -27,6 +27,11 @@ namespace dxvk {
       return whole > 0.0 ? uint32_t(100.0 * part / whole + 0.5) : 0u;
     }
 
+    std::string distanceLabel(uint32_t level) {
+      return str::format(VrPerformanceLevers::stereoReplay(level) ? "replay " : "",
+        "x", fixed(VrPerformanceLevers::distanceScale(level)));
+    }
+
   }
 
 
@@ -122,6 +127,12 @@ namespace dxvk {
   }
 
 
+  bool VrPerformanceMode::stereoReplay() const {
+    return m_enabled && m_applied
+        && VrPerformanceLevers::stereoReplay(m_governor.levels().distance);
+  }
+
+
   void VrPerformanceMode::recall(double periodMs) {
     m_memoryKey = VrPerformanceMemory::key(m_backend.headsetModel(), periodMs);
 
@@ -140,8 +151,8 @@ namespace dxvk {
     m_governor.start(levels);
     levels = m_governor.levels();
 
-    Logger::info(str::format("VR: Performance mode on ", m_memoryKey, " starts where it settled last time: distances x",
-      fixed(VrPerformanceLevers::distanceScale(levels.distance)), ", shadows and specular x",
+    Logger::info(str::format("VR: Performance mode on ", m_memoryKey, " starts where it settled last time: distances ",
+      distanceLabel(levels.distance), ", shadows and specular x",
       fixed(VrPerformanceLevers::gpuScale(levels.gpu)), ", world resolution ",
       percent(VrPerformanceLevers::renderScale(levels.gpu), 1.0), " %"));
   }
@@ -195,7 +206,7 @@ namespace dxvk {
 
     std::ostringstream distances;
     for (uint32_t i = 0; i < w.distanceMs.size(); i++) {
-      distances << (i ? ", " : "") << fixed(VrPerformanceLevers::distanceScale(i))
+      distances << (i ? ", " : "") << distanceLabel(i)
         << " " << percent(w.distanceMs[i], w.ms) << " %";
     }
 
@@ -214,10 +225,10 @@ namespace dxvk {
       " ms, over the period ", percent(w.cpuOver, w.frames), " %; GPU ", gpu,
       "; reprojected for the CPU ", percent(w.cpuReprojected, w.frames),
       " %, for the GPU ", percent(w.gpuReprojected, w.frames), " %; ", w.changes,
-      " level changes; time at each distance scale: ", distances.str(),
-      " (water reflections off from x", fixed(VrPerformanceLevers::distanceScale(VrPerformanceLevers::WaterOffDistanceLevel)),
-      "); at each shadow and specular scale / world resolution: ", gpuLevels.str(),
-      "; now distances x", fixed(VrPerformanceLevers::distanceScale(levels.distance)),
+      " level changes; time at each distance scale (replay: right eye drawn from the left eye's commands, "
+      "water reflections and specular off): ", distances.str(),
+      "; at each shadow and specular scale / world resolution: ", gpuLevels.str(),
+      "; now distances ", distanceLabel(levels.distance),
       ", shadows and specular x", fixed(VrPerformanceLevers::gpuScale(levels.gpu)),
       ", world resolution ", percent(VrPerformanceLevers::renderScale(levels.gpu), 1.0), " %"));
 

@@ -4244,6 +4244,20 @@ namespace dxvk {
     constexpr uint32_t  ImageSpaceTextureType         = 3;
 
     /**
+     * Stereo replay (the performance mode's first distance level),
+     * findings/performance.md §15 and §18.
+     *
+     * - DrawWorldStandardCallSite: TESMain::DrawWorld's call of
+     *   DrawWorldStandard (__thiscall on Main: destination BSRenderedTexture*,
+     *   bool Pip-Boy mode; ret 8), the world render after the shadow maps of
+     *   which the right eye replays the left eye's commands. Skipping it
+     *   for the right eye also skips the last image space effect's
+     *   RenderedTextureStart of the screen, which the replay then makes.
+     */
+    constexpr uintptr_t DrawWorldStandardCallSite     = 0x0087075E;
+    constexpr uintptr_t DrawWorldStandard             = 0x00870BD0;
+
+    /**
      * Occlusion culling, see findings/performance.md §17 (GOG database,
      * checked 2026-11-22; the approach follows mrfury97's FNV Occlusion
      * Culling, whose code is not used).

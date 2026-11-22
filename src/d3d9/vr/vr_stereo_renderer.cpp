@@ -488,15 +488,32 @@ namespace dxvk {
       renderer->m_foveationTestGaze = passes.foveationTestGaze;
       renderer->m_worldScaleTest = passes.worldScaleTest;
 
+      renderer->m_stereoReplay = VrStereoReplay::install(device, passes.stereoReplayTest);
+
+      if (renderer->m_stereoReplay) {
+        renderer->m_renderPasses->setAfterShadows([self] { self->m_stereoReplay->afterShadows(); });
+
+        // The mini-game drawn in the left eye's world is in the replay
+        renderer->m_stereoReplay->setOnReplay([self] { self->m_minigameDrawn[1] = self->m_minigameInWorld[0]; });
+      }
+
       renderer->m_renderPasses->setWorldCallbacks(
         [self] (uint32_t eye) {
           if (self->m_foveation)
             self->m_foveation->beginWorld(eye);
 
-          if (self->m_occlusion)
+          // A replayed right eye would run the left eye's queries again
+          // and overwrite their answers: no occlusion culling then
+          bool replayed = self->m_stereoReplay && self->m_stereoReplay->active();
+
+          if (self->m_occlusion && !replayed)
             self->m_occlusion->beginWorld(eye);
         },
         [self] {
+          // The image space passes are drawn as they are in a replay
+          if (self->m_stereoReplay)
+            self->m_stereoReplay->beforeScreenPasses();
+
           if (self->m_foveation)
             self->m_foveation->endWorld();
 
@@ -876,15 +893,22 @@ namespace dxvk {
     gpuEnd(scopeGpu);
 
     m_minigameDrawn = { };
+    m_minigameInWorld = { };
 
     // After the game's update, for both eyes only
     if (m_minigames)
       m_minigames->bendChallengerArm();
 
+    if (m_stereoReplay)
+      beginStereoReplay(state, views);
+
     for (uint32_t eye = 0; eye < VrEyeCount; eye++) {
       m_eyeCopied[eye] = false;
       renderEye(eye, views[eye], main);
     }
+
+    if (m_stereoReplay)
+      m_stereoReplay->endFrame();
 
     if (m_minigames)
       m_minigames->restoreChallengerArm();
@@ -1209,6 +1233,9 @@ namespace dxvk {
     if (m_renderPasses)
       m_renderPasses->beginEye(eye);
 
+    if (m_stereoReplay)
+      m_stereoReplay->beginEye(eye);
+
     if (m_renderScale) {
       D3DSURFACE_DESC screen = { };
       m_gameTarget->GetDesc(&screen);
@@ -1228,6 +1255,9 @@ namespace dxvk {
 
     if (m_renderScale)
       m_renderScale->endEye();
+
+    if (m_stereoReplay)
+      m_stereoReplay->endEye();
 
     if (m_renderPasses)
       m_renderPasses->endEye();
@@ -1526,14 +1556,35 @@ namespace dxvk {
   }
 
 
-  void VrStereoRenderer::applyEyePose() {
+  VrGameCameraPose VrStereoRenderer::eyeCameraPose(const VrEyeView& view) const {
     VrPose eyeInReference = m_hasReference
-      ? vrComputeEyeInReference(m_reference, m_eyeView->pose)
+      ? vrComputeEyeInReference(m_reference, view.pose)
       : VrPose();
 
-    VrGameCameraPose pose = m_scopeCamera
+    return m_scopeCamera
       ? *m_scopeCamera
       : vrComputeEyeCameraPose(m_gameCameraPose, eyeInReference, VrGameUnitsPerMetre);
+  }
+
+
+  void VrStereoRenderer::beginStereoReplay(VrGameStateKind state, const std::array<VrEyeView, VrEyeCount>& views) {
+    bool inWorld = state == VrGameStateKind::InGame || state == VrGameStateKind::PipBoy;
+    bool active = m_performanceOn && inWorld
+      && (m_performance.stereoReplay() || m_stereoReplay->forced());
+
+    std::array<VrStereoEyeCamera, VrEyeCount> eyeCameras;
+
+    for (uint32_t eye = 0; eye < VrEyeCount; eye++) {
+      eyeCameras[eye].pose    = eyeCameraPose(views[eye]);
+      eyeCameras[eye].frustum = vrComputeGameFrustum(views[eye].fov);
+    }
+
+    m_stereoReplay->beginFrame(active, eyeCameras);
+  }
+
+
+  void VrStereoRenderer::applyEyePose() {
+    VrGameCameraPose pose = eyeCameraPose(*m_eyeView);
     m_eyePosition = pose.position;
 
     if (m_screenPass)
@@ -2510,8 +2561,10 @@ namespace dxvk {
     if (m_renderPasses) {
       m_renderPasses->setBeforeFirstPerson([this] {
         if (m_minigames && m_minigames->drawsBeforeFirstPerson()
-         && m_eye != NoEye && m_eyeView && !m_minigameDrawn[m_eye])
+         && m_eye != NoEye && m_eyeView && !m_minigameDrawn[m_eye]) {
           drawMinigame();
+          m_minigameInWorld[m_eye] = true;
+        }
       });
     }
   }

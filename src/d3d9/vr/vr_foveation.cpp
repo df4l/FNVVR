@@ -130,24 +130,37 @@ namespace dxvk {
     if (eye >= VrEyeCount)
       return;
 
+    // The query counts the left eye's world as the game draws it, not a
+    // replay of its commands for the right eye (VrStereoReplay)
     if (eye == 0u && m_sample != Sample::None && !m_queryActive) {
-      m_device->EmitVrCommand([
+      m_device->EmitVrStereoCommand([
         cQuery = m_invocations[m_sample == Sample::Rates ? 0u : 1u]
-      ] (DxvkContext* ctx) {
-        ctx->beginQuery(cQuery);
+      ] (DxvkContext* ctx, uint32_t replayEye) {
+        if (!replayEye)
+          ctx->beginQuery(cQuery);
       });
 
       m_queryActive = true;
     }
 
-    if (!m_eyes[eye].foveated)
+    // A replay of the left eye's commands takes the right eye's rates
+    bool foveated = m_eyes[eye].foveated || (eye == 0u && m_eyes[1u].foveated);
+
+    if (!foveated)
       return;
 
-    m_device->EmitVrCommand([
-      cView      = m_eyes[eye].view,
+    std::array<Rc<DxvkImageView>, VrEyeCount> views = { };
+
+    for (uint32_t i = eye; i < VrEyeCount; i++)
+      views[i] = m_eyes[i].foveated ? m_eyes[i].view : nullptr;
+
+    m_device->EmitVrStereoCommand([
+      cEye       = eye,
+      cViews     = std::move(views),
       cTexelSize = VkExtent2D { m_texelSize, m_texelSize }
-    ] (DxvkContext* ctx) {
-      ctx->setShadingRateAttachment(cView, cTexelSize);
+    ] (DxvkContext* ctx, uint32_t replayEye) {
+      const auto& view = cViews[std::min<uint32_t>(cEye + replayEye, VrEyeCount - 1u)];
+      ctx->setShadingRateAttachment(view, view != nullptr ? cTexelSize : VkExtent2D { });
     });
 
     m_attached = true;
@@ -156,10 +169,11 @@ namespace dxvk {
 
   void VrFoveation::endWorld() {
     if (m_queryActive) {
-      m_device->EmitVrCommand([
+      m_device->EmitVrStereoCommand([
         cQuery = m_invocations[m_sample == Sample::Rates ? 0u : 1u]
-      ] (DxvkContext* ctx) {
-        ctx->endQuery(cQuery);
+      ] (DxvkContext* ctx, uint32_t replayEye) {
+        if (!replayEye)
+          ctx->endQuery(cQuery);
       });
 
       m_ratesSampled |= m_sample == Sample::Rates;

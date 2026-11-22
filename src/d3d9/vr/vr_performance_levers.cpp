@@ -20,6 +20,9 @@ namespace dxvk {
     // Above the 0.5 under which the game stops updating grass
     constexpr float GrassFloorMargin = 1.0f;
 
+    constexpr float SpecularOffStart = 0.0f;
+    constexpr float SpecularOffEnd   = 1.0f;
+
     // fstp dword ptr [address]
     bool storesTo(uintptr_t site, uintptr_t address) {
       uint8_t code[6] = { 0xD9, 0x1D,
@@ -83,9 +86,12 @@ namespace dxvk {
     bool specular = storesTo(VrGame::SpecularLodStartFadeStore, VrGame::SpecularLodStartFade)
       && storesTo(VrGame::SpecularLodEndStore, VrGame::SpecularLodEnd);
 
+    m_specularStart = Value();
+    m_specularEnd   = Value();
+
     if (specular) {
-      m_gpuValues.push_back({ gameFloat(VrGame::SpecularLodStartFade) });
-      m_gpuValues.push_back({ gameFloat(VrGame::SpecularLodEnd) });
+      m_specularStart.address = gameFloat(VrGame::SpecularLodStartFade);
+      m_specularEnd.address   = gameFloat(VrGame::SpecularLodEnd);
     }
 
     bool grass = settingNamed(VrGame::SettingGrassStartFade, GrassStartFadeName)
@@ -110,7 +116,7 @@ namespace dxvk {
       ", specular fades ", specular ? "found" : "not found", ", grass ", grass ? "found" : "not found",
       ", water reflections ", water ? "found" : "not found"));
 
-    return !m_distanceValues.empty() || !m_gpuValues.empty() || water;
+    return !m_distanceValues.empty() || !m_gpuValues.empty() || specular || water;
   }
 
 
@@ -129,6 +135,20 @@ namespace dxvk {
         give(value);
     }
 
+    for (Value* value : { &m_specularStart, &m_specularEnd }) {
+      if (!value->address)
+        continue;
+
+      // Specular highlights fade out from the start to the end distance:
+      // one game unit leaves none (BSShaderPPLightingProperty::GetSpecularLODFade)
+      if (stereoReplay(levels.distance))
+        hold(*value, value == &m_specularStart ? SpecularOffStart : SpecularOffEnd);
+      else if (levels.gpu)
+        scale(*value, gpuScale(levels.gpu));
+      else
+        give(*value);
+    }
+
     if (waterReflectionsOff(levels.distance))
       clear(m_waterReflections);
     else
@@ -143,6 +163,12 @@ namespace dxvk {
     for (Value& value : m_gpuValues)
       give(value);
 
+    if (m_specularStart.address)
+      give(m_specularStart);
+
+    if (m_specularEnd.address)
+      give(m_specularEnd);
+
     give(m_waterReflections);
   }
 
@@ -155,6 +181,19 @@ namespace dxvk {
       value.base = current;
 
     value.written = std::max(value.base * factor, std::min(value.floor, value.base));
+    value.held    = true;
+    *value.address = value.written;
+  }
+
+
+  void VrPerformanceLevers::hold(Value& value, float target) {
+    float current = *value.address;
+
+    // The settings menu wrote the player's new choice
+    if (!value.held || current != value.written)
+      value.base = current;
+
+    value.written = target;
     value.held    = true;
     *value.address = value.written;
   }

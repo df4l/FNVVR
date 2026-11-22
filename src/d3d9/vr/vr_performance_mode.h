@@ -54,6 +54,14 @@ namespace dxvk {
      */
     float renderScale() const;
 
+    /**
+     * \brief Whether the right eye is drawn from the left eye's commands
+     *    this frame (VrStereoReplay)
+     *
+     * \c false while the mode is off or in menus.
+     */
+    bool stereoReplay() const;
+
   private:
 
     struct Window {
