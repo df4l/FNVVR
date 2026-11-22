@@ -4220,7 +4220,21 @@ namespace dxvk {
      *   BSRenderedTexture* of type ImageSpaceTextureType borrowed once by
      *   ImageSpaceManager::Initialize (the store at ImageSpaceSwapTargetStore)
      *   and used between the effects by RenderEndOfFrameEffects.
+     * - RenderedTextureStart: BSRenderedTexture::Start (__cdecl: clear
+     *   flags, render target group, null for the screen's), which begins the
+     *   renderer's frame when outside one (RenderedTextureIsOutsideFrame,
+     *   __cdecl, returns a bool in al) and binds the group. The last image
+     *   space effect starts the screen's frame this way when it draws into
+     *   the screen (ImageSpaceShader::Render 0x00C03D80), and ends the
+     *   offscreen frame when it draws into a texture. Outside a frame,
+     *   InterfaceManager::Click (0x00713FB0) starts the screen's with every
+     *   buffer cleared (7). Both functions are matched by their first bytes.
      */
+    constexpr uintptr_t RenderedTextureStart          = 0x00B6B890;
+    constexpr uintptr_t RenderedTextureIsOutsideFrame = 0x004E9510;
+    constexpr uint8_t   RenderedTextureStartCode[]    = { 0x8B, 0x0D, 0x48, 0x47, 0x1F, 0x01, 0x83, 0xB9 };
+    constexpr uint8_t   RenderedTextureIsOutsideFrameCode[] = { 0x55, 0x8B, 0xEC, 0xE8, 0x98, 0x2F, 0xF5, 0xFF };
+    constexpr uint32_t  ClearNone                     = 0;
     constexpr uintptr_t LookupTextureParameters       = 0x00B6C2C0;
     constexpr uintptr_t TextureLookupCallSite         = 0x00B6E3C1;
     constexpr uintptr_t WorldTargetCallSite           = 0x00870C53;

@@ -23,6 +23,8 @@ namespace dxvk {
       uint32_t type, uint32_t a, uint32_t b, uint32_t c);
     using ReturnFn      = void  (__fastcall*)(void* manager, void* unused, void* texture);
     using PointerFn     = void* (__cdecl*)();
+    using StartFn       = void  (__cdecl*)(uint32_t clear, void* group);
+    using IsOutsideFn   = bool  (__cdecl*)();
 
     VrRenderScale* g_renderScale = nullptr;
 
@@ -102,6 +104,10 @@ namespace dxvk {
         VrGame::ReturnRenderedTexturePrologue, sizeof(VrGame::ReturnRenderedTexturePrologue))
       && VrGameMemory::matches(VrGame::ImageSpaceSwapTargetStore,
         VrGame::ImageSpaceSwapTargetStoreCode, sizeof(VrGame::ImageSpaceSwapTargetStoreCode))
+      && VrGameMemory::matches(VrGame::RenderedTextureStart,
+        VrGame::RenderedTextureStartCode, sizeof(VrGame::RenderedTextureStartCode))
+      && VrGameMemory::matches(VrGame::RenderedTextureIsOutsideFrame,
+        VrGame::RenderedTextureIsOutsideFrameCode, sizeof(VrGame::RenderedTextureIsOutsideFrameCode))
       && VrGameMemory::canChainCall(VrGame::TextureLookupCallSite, VrGame::LookupTextureParameters)
       && VrGameMemory::canChainCall(VrGame::WorldTargetCallSite, VrGame::InitRenderTexture);
 
@@ -162,6 +168,13 @@ namespace dxvk {
       return;
 
     m_upscale = false;
+
+    // Drawing into a texture, the last effect ended the renderer's
+    // offscreen frame, and the interface would start the screen's with
+    // every buffer cleared, over the stretched world. It starts here
+    // without a clear, as when the effect draws into the screen.
+    if (game<IsOutsideFn>(VrGame::RenderedTextureIsOutsideFrame)())
+      game<StartFn>(VrGame::RenderedTextureStart)(VrGame::ClearNone, nullptr);
 
     Com<IDirect3DTexture9> source;
     Com<IDirect3DSurface9> screen;
