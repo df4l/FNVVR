@@ -138,6 +138,8 @@ namespace dxvk {
       uint32_t frames   = 0;
       uint32_t replayed = 0;
       uint32_t widened  = 0;
+      uint32_t notActive = 0;
+      uint32_t switches = 0;
       std::array<uint32_t, uint32_t(Refusal::Count)> refused = { };
     };
 
@@ -148,6 +150,7 @@ namespace dxvk {
 
     std::array<VrStereoEyeCamera, 2> m_eyes = { };
     bool     m_active    = false;
+    bool     m_wasActive = false;
     uint32_t m_eye       = NoEye;
 
     bool     m_capturing = false;

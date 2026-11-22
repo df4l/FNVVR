@@ -103,6 +103,12 @@ namespace dxvk {
     if (!active && m_device->HasVrStereoCapture())
       m_device->DiscardVrStereoCapture();
 
+    // A right eye that changes between replayed and drawn from one frame
+    // to the next shows every difference between the two as a flicker
+    m_window.notActive += active ? 0u : 1u;
+    m_window.switches  += active != m_wasActive ? 1u : 0u;
+    m_wasActive = active;
+
     m_active    = active;
     m_eyes      = eyes;
     m_captured  = false;
@@ -331,7 +337,9 @@ namespace dxvk {
       m_window.widened, " culled for both eyes); drawn for both eyes: ",
       refused[uint32_t(Refusal::NoCapture)], " without the left eye's world, ",
       refused[uint32_t(Refusal::Camera)], " with another camera, ",
-      refused[uint32_t(Refusal::Arguments)], " with another world render"));
+      refused[uint32_t(Refusal::Arguments)], " with another world render; ",
+      m_window.notActive, " frames in the world without the replay, ",
+      m_window.switches, " switches between the two"));
   }
 
 
