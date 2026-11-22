@@ -4182,8 +4182,9 @@ namespace dxvk {
      * bUseWaterReflections:Water (Setting, bool at SettingValue, name at
      * SettingName, checked before use), read every frame by
      * TESWaterSystem::UpdatePlaceableWater and UpdateShader. Only the value
-     * in memory is written, given back in menus, so the settings menu shows
-     * and saves the player's own.
+     * in memory is written, given back in menus and while the game saves its
+     * INI files (SettingsSaveAll), so the settings menu shows and saves the
+     * player's own.
      */
     constexpr uintptr_t SettingUseWaterReflections    = 0x011C7B6C;
 
@@ -4198,6 +4199,19 @@ namespace dxvk {
      */
     constexpr uintptr_t SettingGrassStartFade         = 0x011CA450;
     constexpr uintptr_t SettingGrassMinStartFade      = 0x011CA4AC;
+
+    /**
+     * INISettingCollection::SaveAll (thiscall, collection and file path,
+     * returns a bool): writes every setting of a collection to its INI
+     * file. Called by the console's SaveIniFiles (twice), the settings
+     * menu's StartMenu::SaveSettings (twice) and WinMain once the main loop
+     * has ended (FalloutPrefs.ini). The performance mode gives its two
+     * setting levers back around these calls, so a game closed in the world
+     * (window closed, console qqq) never saves a lowered value
+     * (ida-gog, 2026-11-22).
+     */
+    constexpr uintptr_t SettingsSaveAll               = 0x005E01B0;
+    constexpr uintptr_t SettingsSaveAllCallSites[]    = { 0x005B6C67, 0x005B6C80, 0x007D6D87, 0x007D6DA0, 0x0086B94A };
 
     /**
      * World render scale of the performance mode (findings/performance.md

@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <iterator>
 
 #include "../../util/log/log.h"
 #include "../../util/util_string.h"
@@ -12,6 +13,27 @@
 namespace dxvk {
 
   namespace {
+
+    using SaveAllFn = bool (__fastcall*)(void* collection, void* unused, const char* path);
+
+    VrPerformanceLevers* g_levers = nullptr;
+
+    // The function the redirected calls reached: the game's or another mod's hook
+    uintptr_t g_previousSaveAll = VrGame::SettingsSaveAll;
+
+    bool __fastcall saveSettingsHook(void* collection, void* unused, const char* path) {
+      VrPerformanceLevers* levers = g_levers;
+
+      if (levers)
+        levers->lendSettings();
+
+      bool saved = reinterpret_cast<SaveAllFn>(g_previousSaveAll)(collection, nullptr, path);
+
+      if (levers)
+        levers->retakeSettings();
+
+      return saved;
+    }
 
     constexpr char WaterReflectionsName[]  = "bUseWaterReflections:Water";
     constexpr char GrassStartFadeName[]    = "fGrassStartFadeDistance:Grass";
@@ -45,6 +67,13 @@ namespace dxvk {
           && !std::memcmp(reinterpret_cast<const void*>(text), name, size);
     }
 
+  }
+
+
+  VrPerformanceLevers::~VrPerformanceLevers() {
+    // The redirected calls stay in place and fall through to the game's function
+    if (g_levers == this)
+      g_levers = nullptr;
   }
 
 
@@ -101,6 +130,7 @@ namespace dxvk {
       Value value;
       value.address = gameFloat(VrGame::SettingGrassStartFade + VrGame::SettingValue);
       value.floor   = *gameFloat(VrGame::SettingGrassMinStartFade + VrGame::SettingValue) + GrassFloorMargin;
+      value.setting = true;
       m_distanceValues.push_back(value);
     }
 
@@ -110,6 +140,16 @@ namespace dxvk {
 
     if (water)
       m_waterReflections.address = reinterpret_cast<uint8_t*>(VrGame::SettingUseWaterReflections + VrGame::SettingValue);
+
+    // A game setting the game could save lowered is not a lever
+    if ((grass || water) && !hookSettingsSaves()) {
+      if (grass)
+        m_distanceValues.pop_back();
+
+      grass = false;
+      water = false;
+      m_waterReflections = Flag();
+    }
 
     Logger::info(str::format("VR: Performance mode levers: object fades ", fades ? "found" : "not found",
       ", light fades ", lights ? "found" : "not found", ", shadow fades ", shadows ? "found" : "not found",
@@ -233,6 +273,60 @@ namespace dxvk {
       *flag.address = flag.base;
 
     flag.held = false;
+  }
+
+
+  bool VrPerformanceLevers::hookSettingsSaves() {
+    if (m_hooked)
+      return true;
+
+    if (g_levers)
+      return false;
+
+    if (!VrGameMemory::chainCalls(VrGame::SettingsSaveAllCallSites, std::size(VrGame::SettingsSaveAllCallSites),
+          VrGame::SettingsSaveAll, reinterpret_cast<const void*>(&saveSettingsHook),
+          &g_previousSaveAll)) {
+      Logger::warn("VR: The game's INI saves were not found, the performance mode leaves water reflections and grass alone");
+      return false;
+    }
+
+    g_levers = this;
+    m_hooked = true;
+    return true;
+  }
+
+
+  void VrPerformanceLevers::lendSettings() {
+    for (Value& value : m_distanceValues) {
+      if (value.setting && value.held && *value.address == value.written) {
+        *value.address = value.base;
+        value.lent = true;
+      }
+    }
+
+    Flag& flag = m_waterReflections;
+
+    if (flag.address && flag.held && *flag.address == 0) {
+      *flag.address = flag.base;
+      flag.lent = true;
+    }
+  }
+
+
+  void VrPerformanceLevers::retakeSettings() {
+    for (Value& value : m_distanceValues) {
+      if (value.lent && *value.address == value.base)
+        *value.address = value.written;
+
+      value.lent = false;
+    }
+
+    Flag& flag = m_waterReflections;
+
+    if (flag.lent && *flag.address == flag.base)
+      *flag.address = 0;
+
+    flag.lent = false;
   }
 
 }
