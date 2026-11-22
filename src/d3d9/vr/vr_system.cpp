@@ -282,13 +282,14 @@ namespace dxvk {
     g_vrSystem->m_asyncHandOff = config.getOption<bool>("d3d9.vrAsyncHandOff", true);
     g_vrSystem->m_asyncSubmit = config.getOption<bool>("d3d9.vrAsyncSubmit", false);
 
-    std::string occlusion = config.getOption<std::string>("d3d9.vrOcclusionCulling", "performance");
+    // An option missing from dxvk.conf reads as an empty string
+    std::string occlusion = config.getOption<std::string>("d3d9.vrOcclusionCulling");
 
     if (occlusion == "always")
       g_vrSystem->m_occlusionUse = VrOcclusionUse::Always;
     else if (occlusion == "never")
       g_vrSystem->m_occlusionUse = VrOcclusionUse::Never;
-    else if (occlusion != "performance")
+    else if (!occlusion.empty() && occlusion != "performance")
       Logger::warn(str::format("VR: d3d9.vrOcclusionCulling: '", occlusion, "' is not performance, always or never, performance is used"));
     g_vrSystem->m_scopes = options.scopeLens;
     g_vrSystem->m_roomscale = options.roomscale;
