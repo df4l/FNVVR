@@ -46,6 +46,7 @@ namespace dxvk {
     }
 
     constexpr char WaterReflectionsName[]  = "bUseWaterReflections:Water";
+    constexpr char WaterDepthName[]        = "bUseWaterDepth:Water";
     constexpr char GrassStartFadeName[]    = "fGrassStartFadeDistance:Grass";
     constexpr char GrassMinStartFadeName[] = "fGrassMinStartFadeDistance:Grass";
 
@@ -145,26 +146,34 @@ namespace dxvk {
     }
 
     bool water = settingNamed(VrGame::SettingUseWaterReflections, WaterReflectionsName);
+    bool depth = settingNamed(VrGame::SettingUseWaterDepth, WaterDepthName);
 
     m_waterReflections = Flag();
+    m_waterDepth       = Flag();
 
     if (water)
       m_waterReflections.address = reinterpret_cast<uint8_t*>(VrGame::SettingUseWaterReflections + VrGame::SettingValue);
 
+    if (depth)
+      m_waterDepth.address = reinterpret_cast<uint8_t*>(VrGame::SettingUseWaterDepth + VrGame::SettingValue);
+
     // A game setting the game could save lowered is not a lever
-    if ((grass || water) && !hookSettingsSaves()) {
+    if ((grass || water || depth) && !hookSettingsSaves()) {
       if (grass)
         m_distanceValues.pop_back();
 
       grass = false;
       water = false;
+      depth = false;
       m_waterReflections = Flag();
+      m_waterDepth       = Flag();
     }
 
     Logger::info(str::format("VR: Performance mode levers: object fades ", fades ? "found" : "not found",
       ", light fades ", lights ? "found" : "not found", ", shadow fades ", shadows ? "found" : "not found",
       ", specular fades ", specular ? "found" : "not found", ", grass ", grass ? "found" : "not found",
-      ", water reflections ", water ? "found" : "not found"));
+      ", water reflections ", water ? "found" : "not found",
+      ", water depth maps ", depth ? "found" : "not found"));
 
     return !m_distanceValues.empty() || !m_gpuValues.empty() || specular || water;
   }
@@ -203,6 +212,12 @@ namespace dxvk {
       clear(m_waterReflections);
     else
       give(m_waterReflections);
+
+    // Drawn in the left eye's screen space before the replayed commands
+    if (stereoReplay(levels.distance))
+      clear(m_waterDepth);
+    else
+      give(m_waterDepth);
   }
 
 
@@ -220,6 +235,7 @@ namespace dxvk {
       give(m_specularEnd);
 
     give(m_waterReflections);
+    give(m_waterDepth);
   }
 
 
@@ -306,7 +322,7 @@ namespace dxvk {
     }
 
     if (!chainable) {
-      Logger::warn("VR: The game's INI saves were not found, the performance mode leaves water reflections and grass alone");
+      Logger::warn("VR: The game's INI saves were not found, the performance mode leaves water reflections, water depth maps and grass alone");
       return false;
     }
 
@@ -324,11 +340,11 @@ namespace dxvk {
       }
     }
 
-    Flag& flag = m_waterReflections;
-
-    if (flag.address && flag.held && *flag.address == 0) {
-      *flag.address = flag.base;
-      flag.lent = true;
+    for (Flag* flag : { &m_waterReflections, &m_waterDepth }) {
+      if (flag->address && flag->held && *flag->address == 0) {
+        *flag->address = flag->base;
+        flag->lent = true;
+      }
     }
   }
 
@@ -341,12 +357,12 @@ namespace dxvk {
       value.lent = false;
     }
 
-    Flag& flag = m_waterReflections;
+    for (Flag* flag : { &m_waterReflections, &m_waterDepth }) {
+      if (flag->lent && *flag->address == flag->base)
+        *flag->address = 0;
 
-    if (flag.lent && *flag.address == flag.base)
-      *flag.address = 0;
-
-    flag.lent = false;
+      flag->lent = false;
+    }
   }
 
 }

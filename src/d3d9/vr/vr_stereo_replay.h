@@ -33,9 +33,9 @@ namespace dxvk {
    *
    * While the left eye's world is kept, the game culls its objects with a
    * view that holds both eyes (vrComputeStereoCullingView), so that what only
-   * the right eye sees is drawn too. Water reflections and specular
-   * highlights, which would show the left eye's position, are turned off by
-   * the performance mode's levers at the same level.
+   * the right eye sees is drawn too. Water reflections, water depth maps and
+   * specular highlights, which would show the left eye's view, are turned
+   * off by the performance mode's levers at the same level.
    *
    * A frame is drawn for both eyes as before when the left eye's world was
    * not drawn with the left eye's camera (checked against the renderer's

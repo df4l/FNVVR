@@ -4189,6 +4189,19 @@ namespace dxvk {
     constexpr uintptr_t SettingUseWaterReflections    = 0x011C7B6C;
 
     /**
+     * Water depth maps, turned off by the performance mode while it draws
+     * the right eye from the left eye's commands: bUseWaterDepth:Water
+     * (Setting, same layout and handling as SettingUseWaterReflections).
+     * TESWaterSystem::UpdatePlaceableWater draws a group's depth map
+     * (MTRenderSelectiveDepthTexture) only while it is on, and UpdateShader
+     * (0x004E3590) recomputes WaterShaderProperty::bDepth from it every
+     * frame and rebuilds the shader's passes when it changes. The depth maps
+     * are drawn in the eye's screen space before the shadow pass, outside
+     * the replayed commands (findings/performance.md section 18).
+     */
+    constexpr uintptr_t SettingUseWaterDepth          = 0x011C7BBC;
+
+    /**
      * Grass distance, a lever of the performance mode: fGrassStartFadeDistance
      * :Grass (Setting, float at SettingValue), read every frame by
      * TESTerrainLODManager::UpdateGrass (0x0057D0A0), which builds grass for
