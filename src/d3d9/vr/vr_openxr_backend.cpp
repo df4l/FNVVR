@@ -13,6 +13,7 @@
 #include "vr_openxr_backend.h"
 #include "vr_openxr_convert.h"
 #include "vr_openxr_image_copy.h"
+#include "vr_openxr_input.h"
 #include "vr_openxr_loader.h"
 
 namespace dxvk {
@@ -141,6 +142,9 @@ namespace dxvk {
   VrOpenXrBackend::~VrOpenXrBackend() {
     endSession();
 
+    // The actions belong to the instance
+    m_input = nullptr;
+
     if (m_instance != XR_NULL_HANDLE && m_xr->destroyInstance)
       m_xr->destroyInstance(m_instance);
   }
@@ -187,6 +191,9 @@ namespace dxvk {
       return false;
 
     logViewConfiguration();
+
+    // Without them the game is still shown, played with a gamepad
+    m_input = VrOpenXrInput::create(*m_loader, m_instance);
 
     // Required before a session can be created
     XrGraphicsRequirementsVulkanKHR requirements = { XR_TYPE_GRAPHICS_REQUIREMENTS_VULKAN_KHR };
@@ -431,6 +438,9 @@ namespace dxvk {
       return false;
     }
 
+    if (m_input && !m_input->attach(m_session))
+      m_input = nullptr;
+
     Logger::info("VR: OpenXR session created, waiting for the runtime to start it");
 
     // The runtime usually tells the session to start right away
@@ -504,6 +514,9 @@ namespace dxvk {
     for (Swapchain& eye : m_eyes)
       destroySwapchain(eye);
 
+    if (m_input)
+      m_input->detach();
+
     if (m_viewSpace != XR_NULL_HANDLE)
       m_xr->destroySpace(m_viewSpace);
 
@@ -559,6 +572,11 @@ namespace dxvk {
 
         case XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING:
           Logger::info("VR: The OpenXR play area changes");
+          break;
+
+        case XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED:
+          if (m_input)
+            m_input->logInteractionProfiles();
           break;
 
         default:
@@ -709,12 +727,15 @@ namespace dxvk {
       m_loggedHead = true;
     }
 
+    if (m_input)
+      m_input->read(m_context, m_space, XrTime(displayTime), input);
+
     return input;
   }
 
 
   void VrOpenXrBackend::setInputContext(VrInputContext context) {
-
+    m_context = context;
   }
 
 
@@ -1061,7 +1082,8 @@ namespace dxvk {
 
 
   void VrOpenXrBackend::applyHaptic(VrHand hand, float amplitude, int64_t durationNs) {
-
+    if (m_running && m_input)
+      m_input->vibrate(hand, amplitude, durationNs);
   }
 
 

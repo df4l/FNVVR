@@ -12,6 +12,7 @@
 
 namespace dxvk {
 
+  class VrOpenXrInput;
   class VrOpenXrLoader;
   class VrXrImageCopy;
 
@@ -36,9 +37,10 @@ namespace dxvk {
    * Poses are given in the stage space (floor at y = 0), or the local floor
    * space without a stage. Head-anchored panels use the view space.
    *
-   * Not done yet (findings/openxr-backend.md §5): controllers and actions,
-   * lasers, haptics, fades, the runtime's keyboard, eye tracking and the
-   * launcher's panel session.
+   * Controllers are read through OpenXR actions, see VrOpenXrInput.
+   *
+   * Not done yet (findings/openxr-backend.md §5): lasers, fades, the
+   * runtime's keyboard, eye tracking and the launcher's panel session.
    */
   class VrOpenXrBackend : public IVRBackend {
 
@@ -195,6 +197,8 @@ namespace dxvk {
     std::unique_ptr<VrOpenXrLoader>   m_loader;
     std::unique_ptr<Functions>        m_xr;
     std::unique_ptr<VrXrImageCopy>    m_copy;
+    std::unique_ptr<VrOpenXrInput>    m_input;
+    VrInputContext                    m_context        = VrInputContext::Game;
     VrGraphicsBinding                 m_binding;
 
     bool                              m_initialized    = false;
