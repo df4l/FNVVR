@@ -1,5 +1,6 @@
 #include "test.h"
 
+#include "../vr_math.h"
 #include "../vr_openxr_convert.h"
 
 using namespace dxvk;
@@ -108,4 +109,83 @@ TEST_CASE(openxr_session_runs_only_once_begun) {
   CHECK(vrSessionStateFromXr(XR_SESSION_STATE_STOPPING, true) == VrSessionState::Stopping);
   CHECK(vrSessionStateFromXr(XR_SESSION_STATE_EXITING, false) == VrSessionState::Stopping);
   CHECK(vrSessionStateFromXr(XR_SESSION_STATE_LOSS_PENDING, true) == VrSessionState::Lost);
+}
+
+
+TEST_CASE(openxr_beam_quad_lies_along_the_laser_facing_the_eye) {
+  // Laser from 1 m high pointing along -Z for 2 m, eye above and behind it
+  VrPose origin;
+  origin.position = { 0.0f, 1.0f, 0.0f };
+
+  VrPose pose = vrXrBeamPose(origin, 2.0f, { 0.0f, 2.0f, 1.0f });
+
+  CHECK_NEAR(pose.position.x, 0.0, 1e-5);
+  CHECK_NEAR(pose.position.y, 1.0, 1e-5);
+  CHECK_NEAR(pose.position.z, -1.0, 1e-5);
+
+  // The quad's +Y runs along the laser, its +Z faces up towards the eye
+  VrVector3 up     = vrRotate(pose.orientation, { 0.0f, 1.0f, 0.0f });
+  VrVector3 normal = vrRotate(pose.orientation, { 0.0f, 0.0f, 1.0f });
+
+  CHECK_NEAR(up.z, -1.0, 1e-5);
+  CHECK_NEAR(normal.y, 1.0, 1e-5);
+}
+
+
+TEST_CASE(openxr_beam_quad_is_valid_when_looking_along_the_laser) {
+  VrPose origin;
+  origin.position = { 0.0f, 1.0f, 0.0f };
+
+  VrPose pose = vrXrBeamPose(origin, 1.0f, { 0.0f, 1.0f, 1.0f });
+  VrVector3 up = vrRotate(pose.orientation, { 0.0f, 1.0f, 0.0f });
+
+  CHECK_NEAR(up.z, -1.0, 1e-5);
+  CHECK_NEAR(vrLength(vrRotate(pose.orientation, { 1.0f, 0.0f, 0.0f })), 1.0, 1e-5);
+}
+
+
+TEST_CASE(openxr_gaze_is_given_in_each_eye_view) {
+  // Looking 45 degrees to the right, eye facing -Z
+  VrGaze gaze;
+  CHECK(vrGazeFromXrDirection(VrQuaternion(), { 1.0f, 0.0f, -1.0f }, gaze));
+  CHECK_NEAR(gaze.tanX, 1.0, 1e-5);
+  CHECK_NEAR(gaze.tanY, 0.0, 1e-5);
+
+  // The same gaze seen from an eye turned 45 degrees to the right is straight ahead
+  VrQuaternion turned = vrQuaternionFromAxisAngle({ 0.0f, 1.0f, 0.0f }, -0.785398163f);
+  CHECK(vrGazeFromXrDirection(turned, { 1.0f, 0.0f, -1.0f }, gaze));
+  CHECK_NEAR(gaze.tanX, 0.0, 1e-5);
+
+  // Looking up, and behind the eye
+  CHECK(vrGazeFromXrDirection(VrQuaternion(), { 0.0f, 0.5f, -1.0f }, gaze));
+  CHECK_NEAR(gaze.tanY, 0.5, 1e-5);
+  CHECK(!vrGazeFromXrDirection(VrQuaternion(), { 0.0f, 0.0f, 1.0f }, gaze));
+}
+
+
+TEST_CASE(openxr_srgb_values_become_linear) {
+  CHECK_NEAR(vrXrLinearFromSrgb(0.0f), 0.0, 1e-6);
+  CHECK_NEAR(vrXrLinearFromSrgb(1.0f), 1.0, 1e-5);
+  CHECK_NEAR(vrXrLinearFromSrgb(0.5f), 0.214, 1e-3);
+  CHECK_NEAR(vrXrLinearFromSrgb(2.0f), 1.0, 1e-5);
+}
+
+
+TEST_CASE(openxr_fade_goes_from_the_shown_opacity) {
+  VrXrFade fade;
+  CHECK_NEAR(fade.opacity(0.0), 0.0, 1e-6);
+
+  // At once to black, then back over two seconds
+  fade.start(10.0, 0.0f, 1.0f);
+  CHECK_NEAR(fade.opacity(10.0), 1.0, 1e-6);
+
+  fade.start(11.0, 2.0f, 0.0f);
+  CHECK_NEAR(fade.opacity(12.0), 0.5, 1e-5);
+  CHECK_NEAR(fade.opacity(13.5), 0.0, 1e-6);
+
+  // A new fade halfway starts from the opacity shown then
+  fade.start(20.0, 2.0f, 1.0f);
+  fade.start(21.0, 1.0f, 0.0f);
+  CHECK_NEAR(fade.opacity(21.0), 0.5, 1e-5);
+  CHECK_NEAR(fade.opacity(21.5), 0.25, 1e-5);
 }

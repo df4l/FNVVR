@@ -29,6 +29,9 @@ namespace dxvk {
    * The CPU never waits for the GPU: the copy goes to the game's queue
    * after its rendering, and the runtime reads the swapchain image after
    * the copy. All calls must be made with the queue locked.
+   *
+   * It also fills the images the backend draws itself (lasers, the fade)
+   * with a colour, and uploads the launcher's pixels.
    */
   class VrXrImageCopy {
 
@@ -57,6 +60,27 @@ namespace dxvk {
      */
     bool copy(const VrXrImageCopyRegion* regions, uint32_t count);
 
+    /**
+     * \brief Fills a whole swapchain image with one colour
+     *
+     * \param [in] target Swapchain image
+     * \param [in] color Colour in the image's format: linear values for an
+     *    sRGB format, which the GPU encodes
+     */
+    bool fill(VkImage target, const VkClearColorValue& color);
+
+    /**
+     * \brief Copies pixels from system memory into a swapchain image
+     *
+     * Goes through a staging buffer of the helper, reused once the GPU is
+     * done with the previous upload.
+     *
+     * \param [in] target Swapchain image of \c extent pixels
+     * \param [in] pixels Four bytes per pixel, top row first, in the image's
+     *    channel order
+     */
+    bool upload(VkImage target, VrExtent extent, const uint8_t* pixels);
+
   private:
 
     struct Functions;
@@ -74,11 +98,38 @@ namespace dxvk {
 
     bool initialize();
 
+    /**
+     * \brief Starts recording into the next slot, once the GPU is done with it
+     * \returns The slot, or \c nullptr on failure
+     */
+    Slot* beginSlot();
+
+    bool submitSlot(Slot& slot, const char* what);
+
+    /**
+     * \brief Records the barriers around a write of a whole target image
+     *
+     * \param [in] before Barrier into the transfer layout if \c true, out of
+     *    it into the layout a released swapchain image must be in otherwise
+     */
+    void targetBarrier(VkCommandBuffer commandBuffer, VkImage target, bool before);
+
+    bool prepareStaging(VkDeviceSize size);
+
+    void destroyStaging();
+
     VrGraphicsBinding           m_binding;
     std::unique_ptr<Functions>  m_vk;
     VkCommandPool               m_pool     = VK_NULL_HANDLE;
     std::array<Slot, SlotCount> m_slots    = { };
     uint32_t                    m_nextSlot = 0;
+
+    VkBuffer                    m_staging       = VK_NULL_HANDLE;
+    VkDeviceMemory              m_stagingMemory = VK_NULL_HANDLE;
+    VkDeviceSize                m_stagingSize   = 0;
+    void*                       m_stagingData   = nullptr;
+    /// Fence of the slot of the last upload, which read the staging buffer
+    VkFence                     m_stagingFence  = VK_NULL_HANDLE;
 
   };
 

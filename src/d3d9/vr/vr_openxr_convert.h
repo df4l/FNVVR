@@ -78,4 +78,69 @@ namespace dxvk {
    */
   VrSessionState vrSessionStateFromXr(XrSessionState state, bool running);
 
+  /**
+   * \brief Pose of the quad layer a laser is drawn with
+   *
+   * The quad is centred halfway along the laser, its +Y axis along the
+   * laser and its face turned towards the eye as far as the laser allows,
+   * so it is seen across its width from anywhere.
+   *
+   * \param [in] origin Start of the laser, which goes along its -Z axis
+   * \param [in] length Length of the laser, in metres
+   * \param [in] eye Position of the head, in the same space
+   */
+  VrPose vrXrBeamPose(const VrPose& origin, float length, const VrVector3& eye);
+
+  /**
+   * \brief Where one eye looks, from a gaze direction
+   *
+   * OpenXR gives one gaze for both eyes; each eye is taken to look along it.
+   *
+   * \param [in] eye Orientation of the eye's view
+   * \param [in] direction Gaze direction, in the same space
+   * \param [out] gaze Tangents of the gaze, right and up, in the eye's view
+   * \returns \c false if the gaze does not point ahead of the eye
+   */
+  bool vrGazeFromXrDirection(const VrQuaternion& eye, const VrVector3& direction, VrGaze& gaze);
+
+  /**
+   * \brief Linear value of an sRGB-encoded colour channel in [0, 1]
+   *
+   * A swapchain image in an sRGB format is filled with linear values.
+   */
+  float vrXrLinearFromSrgb(float value);
+
+  /**
+   * \brief Black drawn over the view, fading in or out over time
+   *
+   * OpenXR has no fade of its own: the backend draws a black quad with this
+   * opacity over the eyes. Times are in seconds, on any steady clock.
+   */
+  class VrXrFade {
+
+  public:
+
+    /**
+     * \brief Fades from the opacity shown now to another one
+     *
+     * \param [in] now Current time
+     * \param [in] seconds Duration, 0 for at once
+     * \param [in] opacity Opacity reached at the end, in [0, 1]
+     */
+    void start(double now, float seconds, float opacity);
+
+    /**
+     * \brief Opacity of the black at a time
+     */
+    float opacity(double now) const;
+
+  private:
+
+    double m_start    = 0.0;
+    float  m_duration = 0.0f;
+    float  m_from     = 0.0f;
+    float  m_to       = 0.0f;
+
+  };
+
 }
