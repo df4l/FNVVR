@@ -194,10 +194,12 @@ namespace dxvk {
      * The game also plays movies, such as the intro of a new game, in a
      * loop of its own that presents every movie frame and polls the
      * gamepad to let the player skip the movie. The controllers are read
-     * here for those frames, see \ref updateBlockedInput.
+     * here for those frames, see \ref updateBlockedInput. A backend whose
+     * panels need frames also gets a frame of its own for each of them,
+     * see \ref endFrameOutsideLoop.
      *
-     * Frames drawn by the game's main loop were paced by the runtime, so
-     * they are presented without waiting for the desktop display.
+     * Frames paced by the runtime are presented without waiting for the
+     * desktop display.
      *
      * \param [in] swapchain Swap chain being presented
      * \returns What the swap chain does with the present
@@ -640,6 +642,7 @@ namespace dxvk {
     high_resolution_clock::time_point m_blockedInputTime;
     bool   m_blockedInput  = false;
     bool   m_loggedBlockedInput = false;
+    bool   m_loggedFrameOutsideLoop = false;
 
     // Latest tracked head pose, used to place the panel
     VrPose m_headPose;
@@ -721,6 +724,8 @@ namespace dxvk {
     void trackHead(const VrInputState& input);
 
     void updateBlockedInput();
+
+    bool endFrameOutsideLoop();
 
     VrGameStateKind readGameState();
 

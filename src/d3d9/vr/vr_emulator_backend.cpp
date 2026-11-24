@@ -214,6 +214,11 @@ namespace dxvk {
   }
 
 
+  bool VrEmulatorBackend::panelsNeedFrames() const {
+    return false;
+  }
+
+
   bool VrEmulatorBackend::submitPanelPixels(VrPanelId id, const VrPanelPixels& panel) {
     if (m_state != VrSessionState::Running || !panel.rgba)
       return false;

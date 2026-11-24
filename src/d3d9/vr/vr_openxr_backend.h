@@ -86,6 +86,8 @@ namespace dxvk {
 
     bool submitPanel(VrPanelId id, const VrPanelSubmission& panel) override;
 
+    bool panelsNeedFrames() const override;
+
     void hidePanel(VrPanelId id) override;
 
     bool submitPanelPixels(VrPanelId id, const VrPanelPixels& panel) override;

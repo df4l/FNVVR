@@ -1321,6 +1321,12 @@ namespace dxvk {
   }
 
 
+  bool VrOpenVrBackend::panelsNeedFrames() const {
+    // Overlays are drawn by the compositor between the game's frames
+    return false;
+  }
+
+
   bool VrOpenVrBackend::submitPanelPixels(VrPanelId id, const VrPanelPixels& panel) {
     if (m_state != VrSessionState::Running || !panel.rgba || !createPanel(id))
       return false;

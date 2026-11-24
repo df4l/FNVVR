@@ -1039,6 +1039,12 @@ namespace dxvk {
   }
 
 
+  bool VrOpenXrBackend::panelsNeedFrames() const {
+    // Quad layers are only given to the runtime with xrEndFrame
+    return true;
+  }
+
+
   bool VrOpenXrBackend::submitPanelPixels(VrPanelId id, const VrPanelPixels& panel) {
     return false;
   }

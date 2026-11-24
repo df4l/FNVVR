@@ -620,11 +620,19 @@ namespace dxvk {
     bool paced = m_swapped && m_paced;
 
     if (m_eye == NoEye) {
-      if (!m_swapped && m_mainThread == GetCurrentThreadId())
+      // No main loop frame came before: a movie, or the game's start before
+      // its main loop, which runs on the thread that will be the main one
+      bool outsideLoop = !m_swapped
+        && (!m_mainThread || m_mainThread == GetCurrentThreadId());
+
+      if (outsideLoop && m_mainThread)
         updateBlockedInput();
 
       m_swapped = false;
       updatePanel(swapchain);
+
+      if (outsideLoop && m_backend.panelsNeedFrames())
+        paced = endFrameOutsideLoop();
     }
 
     if (!paced)
@@ -1079,6 +1087,22 @@ namespace dxvk {
 
     m_controls.update(input, readGameState(),
       m_hasReference ? &m_reference : nullptr, menuPanel(), dt);
+  }
+
+
+  bool VrStereoRenderer::endFrameOutsideLoop() {
+    // The panel's new image is only shown with a frame. The movie paces
+    // itself at a lower rate than the headset, so waiting for the headset
+    // takes less than one movie frame.
+    if (!m_loggedFrameOutsideLoop) {
+      Logger::info("VR: Presents outside of the main loop end a headset frame each, to show the panel's new image");
+      m_loggedFrameOutsideLoop = true;
+    }
+
+    VrFrameTiming timing = waitFrame();
+    VrD3D9Bridge::beginFrame(m_device, m_backend);
+    VrD3D9Bridge::submitEmptyFrame(m_device, m_backend, timing.predictedDisplayTime);
+    return timing.paced;
   }
 
 
