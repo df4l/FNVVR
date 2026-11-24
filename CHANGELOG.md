@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## v1.0.0 (2026-11-24, since v0.21.0 `9cf30e7`)
+
+### OpenXR
+
+- **OpenXR backend** (`d3d9.vrBackend = openxr`): the game runs on an OpenXR runtime, without SteamVR. Everything of the OpenVR backend works through it: stereo, menus, HUD and mini-game panels, the launcher's panel, Touch controllers with lasers, haptics and the menu button, fades, eye gaze for foveated rendering, frame statistics. The Khronos loader ships as `fnvvr\openxr_loader.dll`. Tested on Linux with WiVRn and GE-Proton. Name entry has no runtime keyboard there: the name is typed on a keyboard.
 
 ### Performance
 

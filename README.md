@@ -39,7 +39,6 @@ Controllers: Oculus Touch (Quest) and Steam Frame, with default SteamVR bindings
 Developed and played on Linux (Proton), with an RTX 4070 and a Quest 2 over Steam Link; a Steam Frame and Windows testers help on the other setups. Everything that needs a headset is checked by hand before it is merged.
 
 Not done yet:
-- **OpenXR backend.** Only a runtime probe exists; it is waiting for a Proton build with a 32-bit, SteamVR-free `wineopenxr`. The OpenVR backend is the one in use.
 - Some V.A.T.S. playback cameras, melee power attacks and unarmed balance, weapon spread: see the changelog and the project notes.
 
 Known issues are listed in the notes of each release. NVAC is not supported.
@@ -47,7 +46,7 @@ Known issues are listed in the notes of each release. NVAC is not supported.
 ## Requirements
 
 - *Fallout: New Vegas* (Steam, 32-bit D3D9 build). The mod is written against Steam build `1510068`.
-- SteamVR with a connected headset (Quest over Steam Link or Air Link, or any SteamVR headset), and a Vulkan-capable GPU.
+- SteamVR with a connected headset (Quest over Steam Link or Air Link, or any SteamVR headset), or an OpenXR runtime with Touch controllers (tested on Linux with WiVRn and GE-Proton), and a Vulkan-capable GPU.
 - On Linux: Proton (Proton Experimental is the tested one).
 
 ## Install
@@ -74,7 +73,7 @@ Most options are in the game, under Settings > VR. The rest are read from `dxvk.
 
 | Option | Default | Purpose |
 |--------|---------|---------|
-| `d3d9.vrBackend` | `off` | `off`, `emulator` or `openvr`. Overridden by the `DXVK_VR_BACKEND` environment variable. The `dxvk.conf` in the release archive sets `openvr`; the one in the repository has every option commented out. |
+| `d3d9.vrBackend` | `off` | `off`, `emulator`, `openvr` or `openxr`. Overridden by the `DXVK_VR_BACKEND` environment variable. The `dxvk.conf` in the release archive sets `openvr`; the one in the repository has every option commented out. |
 | `d3d9.vrControllers` | on | VR controllers act as an Xbox gamepad while tracked. |
 | `d3d9.vrSmoothTurn`, `d3d9.vrSnapTurnAngle`, `d3d9.vrSmoothTurnSpeed` | off, 30, 120 | Turning: snap or smooth, step in degrees, speed in degrees per second. |
 | `d3d9.vrPipBoyScale`, `d3d9.vrPipBoyAngle` | 1, 0 | Pip-Boy size while open (1 to 2) and its turn about the forearm (0 to 90 degrees). |
@@ -101,7 +100,7 @@ The GPU is not spoofed: the `dxvk.conf` of the release archive sets `d3d9.hideNv
 
 Useful environment variables:
 
-- `DXVK_VR_BACKEND=openvr|emulator|off`: overrides `d3d9.vrBackend`.
+- `DXVK_VR_BACKEND=openvr|openxr|emulator|off`: overrides `d3d9.vrBackend`.
 - `DXVK_LOG_LEVEL=none|error|warn|info|debug` and `DXVK_LOG_PATH=/some/directory`: logging.
 
 ## Architecture
@@ -109,6 +108,7 @@ Useful environment variables:
 ```
 IVRBackend            (src/d3d9/vr/vr_backend.h)
 ├── OpenVRBackend     real headset through OpenVR
+├── VrOpenXrBackend   real headset through OpenXR
 └── EmulatorBackend   no headset: development and automated tests
 ```
 
@@ -148,9 +148,14 @@ The rest of the DXVK documentation (HUD, device filters, shader cache, debugging
 
 - [DXVK](https://github.com/doitsujin/dxvk) by Philip Rebohle and contributors, the base of this fork.
 - [OpenVR](https://github.com/ValveSoftware/openvr) by Valve (BSD-3-Clause), shipped as `openvr_api.dll`.
+- [OpenXR SDK](https://github.com/KhronosGroup/OpenXR-SDK) by the Khronos Group (Apache-2.0), headers in `include/openxr/`, loader shipped as `fnvvr/openxr_loader.dll`.
+- The original FNVVR, the mod this project ports and rewrites.
+- lStewieAl's Tweaks by lStewieAl and its contributors: the engine optimisations follow its inline patches.
+- NVTF and B42 Optics (lens placement measured from its INI files), studied as references.
+- FNV 4GB Patcher: the 4 GB offer changes the executable as it does.
 - Steam Frame controller bindings and control reference: Madison ([astromaddie/FNVVR](https://github.com/astromaddie/FNVVR)).
 - The study of which menu mode tests hold the world still, for the real-time casino: [Real Time Menus by WallSoGB](https://github.com/WallSoGB/Fallout-Real-Time-Menus) (read as a reference, no code copied).
-- Testers on Discord, whose logs and reports shaped many fixes.
+- Testers: JaminaPanAm (Steam Frame: the foveation crash log, profiling builds), LOBO (Quest 3: Pip-Boy angle) and spinfusor_ (TTW: missing scope reticles).
 
 ## Licence
 
