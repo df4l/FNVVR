@@ -133,7 +133,7 @@ TEST_CASE(openxr_raw_pose_sits_ahead_of_the_grip) {
   for (VrHand hand : { VrHand::Left, VrHand::Right }) {
     VrPose raw = vrOpenXrTouchRawPoseInGrip(hand);
 
-    // About 10 cm forward (-Z) and 3 cm up from the grip's centre
+    // About 10 cm forward (-Z) and 3 cm down from the grip's centre
     CHECK_NEAR(raw.position.z, -0.0961, 1e-3);
     CHECK_NEAR(raw.position.y, -0.0342, 1e-3);
     CHECK_NEAR(raw.position.x, hand == VrHand::Left ? -0.007 : 0.007, 1e-4);
