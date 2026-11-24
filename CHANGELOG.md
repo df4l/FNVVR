@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Performance
+
+- **Performance mode removed**, with the right eye drawn from the left eye's work: on the Steam Frame, every GPU crash (device lost) of v0.21 came from sessions where it had run. Settings > VR no longer has it, the distances, water, grass, shadows and resolution are always the game's own, and `fnvvr\performance.ini` is no longer read.
+- **Occlusion culling for everyone** (`d3d9.vrOcclusionCulling`, now `True` or `False`, on by default): objects, actors, doors, trees and land hidden behind buildings are left out of each eye's view, without changing what you see. The Occlusion Culling plugin of flat screens still turns it off and is still reported once in game.
+- The submission thread (`d3d9.vrAsyncSubmit`) is back to an option off by default.
+
 ## v0.21.0 (2026-11-22, since v0.20.0 `fee4949`)
 
 ### Performance
