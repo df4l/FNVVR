@@ -4,6 +4,7 @@ vr_src = files([
   'vr_emulator_backend.cpp',
   'vr_game_space.cpp',
   'vr_openvr_convert.cpp',
+  'vr_openxr_convert.cpp',
   'vr_virtual_gamepad.cpp',
   'vr_gamepad_head.cpp',
   'vr_controller_pad.cpp',
@@ -191,6 +192,7 @@ if add_languages('cpp', native: true, required: false)
     'tests/test_vr_virtual_gamepad.cpp',
     'tests/test_vr_gamepad_head.cpp',
     'tests/test_vr_openvr_convert.cpp',
+    'tests/test_vr_openxr_convert.cpp',
     'tests/test_vr_controller_pad.cpp',
     'tests/test_vr_turn_input.cpp',
     'tests/test_vr_roomscale.cpp',
@@ -250,7 +252,7 @@ if add_languages('cpp', native: true, required: false)
   vr_test = executable('vr_tests', vr_test_sources, vr_src,
     files('../../util/util_matrix.cpp'),
     native              : true,
-    include_directories : include_directories('../../../include/vulkan/include'),
+    include_directories : include_directories('../../../include/vulkan/include', '../../../include'),
     cpp_args            : [ '-DVR_OPENVR_DIR="@0@"'.format(meson.current_source_dir() / 'openvr') ],
     override_options    : [ 'cpp_std=c++17' ])
 
