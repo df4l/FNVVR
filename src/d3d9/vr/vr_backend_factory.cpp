@@ -4,6 +4,7 @@
 #include "vr_backend_factory.h"
 #include "vr_emulator_backend.h"
 #include "vr_openvr_backend.h"
+#include "vr_openxr_backend.h"
 
 namespace dxvk {
 
@@ -17,6 +18,9 @@ namespace dxvk {
 
     if (lower == "openvr")
       return std::make_unique<VrOpenVrBackend>();
+
+    if (lower == "openxr")
+      return std::make_unique<VrOpenXrBackend>();
 
     return nullptr;
   }
