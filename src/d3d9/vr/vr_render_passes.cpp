@@ -8,7 +8,6 @@
 #include "vr_game_addresses.h"
 #include "vr_game_memory.h"
 #include "vr_render_passes.h"
-#include "vr_render_scale.h"
 
 namespace dxvk {
 
@@ -387,16 +386,8 @@ namespace dxvk {
 
     g_renderPasses->endWorld();
 
-    VrRenderScale* scale = g_renderPasses->m_renderScale;
-    uintptr_t destination = scale ? scale->imageSpaceDestination(d) : d;
-
-    uintptr_t result = g_renderPasses->runPass(VrRenderPass::ImageSpace,
-      [&] { return original(main, nullptr, a, b, c, destination); });
-
-    if (scale)
-      scale->finishImageSpace();
-
-    return result;
+    return g_renderPasses->runPass(VrRenderPass::ImageSpace,
+      [&] { return original(main, nullptr, a, b, c, d); });
   }
 
 

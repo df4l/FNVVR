@@ -12,18 +12,6 @@
 namespace dxvk {
 
   /**
-   * \brief When occlusion culling runs (\c d3d9.vrOcclusionCulling)
-   */
-  enum class VrOcclusionUse {
-    /// While the performance mode is on
-    Performance,
-    /// Always
-    Always,
-    /// Never
-    Never,
-  };
-
-  /**
    * \brief Leaves out of each eye's view what the GPU proved hidden
    *
    * While an eye's scene is gathered, every large object, actor, door,

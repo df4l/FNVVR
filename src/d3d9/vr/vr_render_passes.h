@@ -14,8 +14,6 @@
 
 namespace dxvk {
 
-  class VrRenderScale;
-
   /**
    * \brief How the game's render passes are drawn per eye
    *
@@ -39,10 +37,6 @@ namespace dxvk {
     /// Without an eye tracker, foveation takes the centre of each view as
     /// the gaze, to check its look (d3d9.vrFoveationTestGaze)
     bool foveationTestGaze = false;
-    /// While the performance mode is on, the eyes' world is drawn at this
-    /// share of each side whatever the governor chooses, 0 to leave it to
-    /// the governor; to check the scaled world (d3d9.vrWorldScaleTest)
-    float worldScaleTest = 0.0f;
   };
 
   /**
@@ -182,18 +176,6 @@ namespace dxvk {
       m_cpuSampler = sampler;
     }
 
-    /**
-     * \brief Sets what draws the eyes' world at a lower resolution
-     *
-     * Its image space pass draws into the scaled target the object gives,
-     * then the object stretches it into the screen.
-     *
-     * \param [in] scale Outlives this object, or \c nullptr
-     */
-    void setRenderScale(VrRenderScale* scale) {
-      m_renderScale = scale;
-    }
-
   private:
 
     VrRenderPasses(const VrRenderPassConfig& config, ViewFn view);
@@ -211,8 +193,6 @@ namespace dxvk {
     uint32_t    m_eyeGpuToken = VrGpuTimer::NoToken;
 
     VrCpuSampler* m_cpuSampler = nullptr;
-
-    VrRenderScale* m_renderScale = nullptr;
     uint8_t       m_phaseBeforeEye = 0;
 
     const VrScopeArea* m_sceneScissor = nullptr;

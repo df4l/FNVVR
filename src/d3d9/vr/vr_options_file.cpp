@@ -63,11 +63,6 @@ namespace dxvk {
 
 
   bool VrOptionsFile::save(const VrOptions& options) {
-    return writeText(L"vr_options.ini", vrFormatOptions(options));
-  }
-
-
-  bool VrOptionsFile::writeText(const wchar_t* name, const std::string& text) {
     std::wstring folder = folderPath();
 
     if (folder.empty())
@@ -75,7 +70,7 @@ namespace dxvk {
 
     CreateDirectoryW(folder.c_str(), nullptr);
 
-    std::wstring path = folder + name;
+    std::wstring path = folder + L"vr_options.ini";
     HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0,
       nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
 
@@ -84,6 +79,7 @@ namespace dxvk {
       return false;
     }
 
+    std::string text = vrFormatOptions(options);
     DWORD written = 0;
     bool ok = WriteFile(file, text.data(), DWORD(text.size()), &written, nullptr) && written == text.size();
     CloseHandle(file);

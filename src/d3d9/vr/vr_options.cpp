@@ -18,7 +18,6 @@ namespace dxvk {
     constexpr char RoomscaleName[]       = "roomscale";
     constexpr char ScopeLensName[]       = "scopelens";
     constexpr char FoveationName[]       = "eyetrackedfoveation";
-    constexpr char PerformanceModeName[] = "performancemode";
 
     std::string trim(const std::string& text) {
       size_t begin = 0;
@@ -179,8 +178,6 @@ namespace dxvk {
         parseBool(value, options.roomscale);
       else if (name == FoveationName)
         parseBool(value, options.foveation);
-      else if (name == PerformanceModeName)
-        parseBool(value, options.performanceMode);
     }
   }
 
@@ -207,9 +204,6 @@ namespace dxvk {
     text += "\n";
     text += "EyeTrackedFoveation=";
     text += options.foveation ? "1" : "0";
-    text += "\n";
-    text += "PerformanceMode=";
-    text += options.performanceMode ? "1" : "0";
     text += "\n";
     return text;
   }

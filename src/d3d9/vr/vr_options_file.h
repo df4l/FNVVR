@@ -42,15 +42,6 @@ namespace dxvk {
      */
     static bool readText(const wchar_t* name, std::string& text);
 
-    /**
-     * \brief Writes a text file of the options' folder, creating the folder
-     *
-     * \param [in] name The file's name
-     * \param [in] text The file's text
-     * \returns \c true if the file was written
-     */
-    static bool writeText(const wchar_t* name, const std::string& text);
-
   };
 
 }

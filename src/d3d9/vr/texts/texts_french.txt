@@ -153,19 +153,12 @@ Marche réelle
 [text option.foveation]
 Rendu fovéal (regard)
 
-[text option.performance]
-Mode performance
-
 # Message quand le rendu fovéal ne peut pas être activé. Pas de & ni de ;.
 [text option.foveation.nogpu]
 Votre carte graphique ou son pilote ne peut pas faire le rendu fovéal suivant le regard. Il reste désactivé.
 
 [text option.foveation.noeyes]
 Votre casque n'indique pas où regardent vos yeux, ce dont le rendu fovéal suivant le regard a besoin. Il reste désactivé.
-
-# Quand le Mode performance est activé alors que le plugin Occlusion Culling est installé. Pas de & ni de ;.
-[text option.performance.occlusionplugin]
-Le plugin Occlusion Culling est installé. Il est fait pour un écran plat et donne les mêmes réponses aux deux yeux, des objets peuvent donc disparaître d'un œil. Le Mode performance a sa propre occlusion, faite pour la VR, qui reste désactivée tant que le plugin est là. Désinstallez le plugin pour en profiter.
 
 [text option.ok]
 OK
@@ -249,4 +242,4 @@ FIN
 
 # Message du HUD, une fois par partie, quand le plugin Occlusion Culling est installé.
 [text occlusion.plugin]
-Désinstallez le plugin Occlusion Culling : en VR il donne les mêmes réponses aux deux yeux. Le Mode performance de FNVVR a sa propre occlusion.
+Désinstallez le plugin Occlusion Culling : en VR il donne les mêmes réponses aux deux yeux. FNVVR a sa propre occlusion, faite pour la VR.

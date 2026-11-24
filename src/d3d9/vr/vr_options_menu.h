@@ -21,8 +21,8 @@ namespace dxvk {
    * The page's options: snap or smooth turning, the speed of smooth
    * turning, how large the Pip-Boy grows while it is open, whether the
    * weapons are reloaded with the hands, whether the player sneaks with the
-   * stick click or by crouching, the scopes' lenses, room-scale walking,
-   * eye-tracked foveation and the performance mode. Foveation is only turned on if the headset and
+   * stick click or by crouching, the scopes' lenses, room-scale walking and
+   * eye-tracked foveation. Foveation is only turned on if the headset and
    * the GPU can draw it: otherwise it goes back to Off and a message box
    * tells why.
    * After the VR entry, a Console entry opens the game's console; it is

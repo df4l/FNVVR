@@ -193,7 +193,7 @@ namespace dxvk {
   VrStereoRenderer::VrStereoRenderer(IVRBackend& backend, IDirect3DDevice9* device,
     bool showPreview, const VrPanelConfig& panel)
   : m_backend(backend), m_device(device), m_showPreview(showPreview), m_panelConfig(panel),
-    m_submitter(device, backend), m_performance(backend), m_controls(backend) { }
+    m_submitter(device, backend), m_controls(backend) { }
 
 
   VrStereoRenderer::~VrStereoRenderer() {
@@ -332,7 +332,7 @@ namespace dxvk {
     if (VrOcclusionCulling::pluginLoaded()) {
       renderer->m_occlusionPluginNotice = texts.text("occlusion.plugin",
         "Uninstall the Occlusion Culling plugin: in VR it gives both eyes the same answers. "
-        "FNVVR's performance mode has its own occlusion culling.");
+        "FNVVR has its own, made for VR.");
     }
 
     if (VrGameTextEdit::install())
@@ -486,7 +486,6 @@ namespace dxvk {
     if (renderer->m_renderPasses) {
       renderer->m_foveation = VrFoveation::create(device, passes.foveationZones);
       renderer->m_foveationTestGaze = passes.foveationTestGaze;
-      renderer->m_worldScaleTest = passes.worldScaleTest;
 
       renderer->m_renderPasses->setWorldCallbacks(
         [self] (uint32_t eye) {
@@ -714,13 +713,6 @@ namespace dxvk {
     VrD3D9Bridge::beginFrame(m_device, m_backend);
     m_paced = timing.paced;
     countFrame(timing);
-    m_performance.update(state == VrGameStateKind::InGame || state == VrGameStateKind::PipBoy, timing);
-
-    if (m_renderScale) {
-      bool forced = m_performanceOn && m_worldScaleTest > 0.0f;
-      m_renderScale->setScale(forced ? m_worldScaleTest : m_performance.renderScale());
-    }
-
     showOcclusionPluginNotice(state);
 
     if (!timing.shouldRender) {
@@ -970,8 +962,6 @@ namespace dxvk {
     VrD3D9Bridge::beginFrame(m_device, m_backend);
     m_paced = timing.paced;
     countFrame(timing);
-    m_performance.update(false, timing);
-
     // Answers of the world's last frames age while it is not drawn
     if (m_occlusion)
       m_occlusion->endFrame();
@@ -1209,12 +1199,6 @@ namespace dxvk {
     if (m_renderPasses)
       m_renderPasses->beginEye(eye);
 
-    if (m_renderScale) {
-      D3DSURFACE_DESC screen = { };
-      m_gameTarget->GetDesc(&screen);
-      m_renderScale->beginEye(VrExtent { screen.Width, screen.Height });
-    }
-
     // The left eye's pass moves time on for the frame
     bool repeat = eye != 0 && m_repeatedPasses;
 
@@ -1225,9 +1209,6 @@ namespace dxvk {
 
     if (repeat)
       m_repeatedPasses->endRepeat();
-
-    if (m_renderScale)
-      m_renderScale->endEye();
 
     if (m_renderPasses)
       m_renderPasses->endEye();
@@ -1287,39 +1268,24 @@ namespace dxvk {
     D3DSURFACE_DESC target = { };
     m_gameTarget->GetDesc(&target);
 
-    VrExtent world = { target.Width, target.Height };
-
-    if (m_renderScale)
-      world = m_renderScale->worldExtent(world);
-
-    m_foveation->prepareFrame(views, gaze, world);
-  }
-
-
-  void VrStereoRenderer::setPerformanceMode(bool enabled) {
-    m_performanceOn = enabled;
-    m_performance.setEnabled(enabled);
-
-    if (enabled && !m_renderScaleTried && m_renderPasses) {
-      m_renderScaleTried = true;
-      m_renderScale = VrRenderScale::install(m_device, *m_painter);
-      m_renderPasses->setRenderScale(m_renderScale.get());
-    }
-
-    m_submitter.setThreaded(m_asyncSubmitWanted || m_performanceOn);
-    updateOcclusion();
+    m_foveation->prepareFrame(views, gaze, VrExtent { target.Width, target.Height });
   }
 
 
   void VrStereoRenderer::setAsyncSubmit(bool enabled) {
-    m_asyncSubmitWanted = enabled;
-    m_submitter.setThreaded(m_asyncSubmitWanted || m_performanceOn);
+    m_submitter.setThreaded(enabled);
   }
 
 
-  void VrStereoRenderer::setOcclusionUse(VrOcclusionUse use) {
-    m_occlusionUse = use;
-    updateOcclusion();
+  void VrStereoRenderer::setOcclusionCulling(bool enabled) {
+    // Its eyes are told by the render passes' world callbacks
+    if (enabled && !m_occlusionTried && m_renderPasses) {
+      m_occlusionTried = true;
+      m_occlusion = VrOcclusionCulling::install(m_device);
+    }
+
+    if (m_occlusion)
+      m_occlusion->setEnabled(enabled);
   }
 
 
@@ -1341,21 +1307,6 @@ namespace dxvk {
     }
 
     m_occlusionPluginNotice = nullptr;
-  }
-
-
-  void VrStereoRenderer::updateOcclusion() {
-    bool wanted = m_occlusionUse == VrOcclusionUse::Always
-      || (m_occlusionUse == VrOcclusionUse::Performance && m_performanceOn);
-
-    // Its eyes are told by the render passes' world callbacks
-    if (wanted && !m_occlusionTried && m_renderPasses) {
-      m_occlusionTried = true;
-      m_occlusion = VrOcclusionCulling::install(m_device);
-    }
-
-    if (m_occlusion)
-      m_occlusion->setEnabled(wanted);
   }
 
 

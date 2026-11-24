@@ -232,19 +232,3 @@ TEST_CASE(options_round_trip_the_eye_tracked_foveation) {
   vrParseOptions("EyeTrackedFoveation=0", read);
   CHECK(!read.foveation);
 }
-
-
-TEST_CASE(options_round_trip_the_performance_mode) {
-  VrOptions options;
-  CHECK(!options.performanceMode);
-
-  VrOptions written;
-  written.performanceMode = true;
-
-  VrOptions read;
-  vrParseOptions(vrFormatOptions(written), read);
-  CHECK(read.performanceMode);
-
-  vrParseOptions("PerformanceMode=0", read);
-  CHECK(!read.performanceMode);
-}
