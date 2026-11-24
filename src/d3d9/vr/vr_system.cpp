@@ -140,7 +140,7 @@ namespace dxvk {
 
     // The launcher loads this DLL too, and has no game to render
     if (VrLauncherOverlay::isLauncherProcess()) {
-      if (name == "openvr" && config.getOption<bool>("d3d9.vrLauncherOverlay", true)) {
+      if ((name == "openvr" || name == "openxr") && config.getOption<bool>("d3d9.vrLauncherOverlay", true)) {
         VrPanelConfig panel;
         g_launcherOverlay = new VrLauncherOverlay(name,
           config.getOption<float>("d3d9.vrPanelDistance", panel.distance),

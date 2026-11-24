@@ -23,6 +23,9 @@ namespace dxvk {
    * Hand poses follow OpenVR's: the controller pose is OpenVR's raw pose,
    * placed from OpenXR's grip pose (vrOpenXrTouchRawPoseInGrip), and the aim
    * pose is OpenXR's.
+   *
+   * With XR_EXT_eye_gaze_interaction, the \c hands set also holds the gaze
+   * of the eyes, bound for the extension's own profile.
    */
   class VrOpenXrInput {
 
@@ -30,9 +33,12 @@ namespace dxvk {
 
     /**
      * \brief Creates the actions and suggests their bindings
+     *
+     * \param [in] eyeGaze XR_EXT_eye_gaze_interaction is enabled and the
+     *    headset has an eye tracker
      * \returns The input, or \c nullptr if the runtime refused the actions
      */
-    static std::unique_ptr<VrOpenXrInput> create(const VrOpenXrLoader& loader, XrInstance instance);
+    static std::unique_ptr<VrOpenXrInput> create(const VrOpenXrLoader& loader, XrInstance instance, bool eyeGaze);
 
     ~VrOpenXrInput();
 
@@ -62,6 +68,14 @@ namespace dxvk {
     void read(VrInputContext context, XrSpace space, XrTime displayTime, VrInputState& input);
 
     /**
+     * \brief Where the eyes look, as synchronised by the last read
+     *
+     * \param [out] gaze Pose whose -Z axis is the gaze, in \c space
+     * \returns \c true if the eye tracker sees the eyes
+     */
+    bool readGaze(XrSpace space, XrTime displayTime, VrPose& gaze) const;
+
+    /**
      * \brief Vibrates a controller
      */
     void vibrate(VrHand hand, float amplitude, int64_t durationNs);
@@ -88,11 +102,13 @@ namespace dxvk {
       bool    loggedPose = false;
     };
 
-    VrOpenXrInput(const VrOpenXrLoader& loader, XrInstance instance);
+    VrOpenXrInput(const VrOpenXrLoader& loader, XrInstance instance, bool eyeGaze);
 
     bool createActions();
 
     bool suggestBindings();
+
+    bool suggestGazeBinding();
 
     XrActionSet createActionSet(const char* name, const char* label);
 
@@ -128,6 +144,10 @@ namespace dxvk {
     XrAction                                     m_squeeze       = XR_NULL_HANDLE;
     XrAction                                     m_thumbTouch    = XR_NULL_HANDLE;
     std::array<Hand, VrHandCount>                m_hands;
+
+    bool                                         m_eyeGaze       = false;
+    XrAction                                     m_gazePose      = XR_NULL_HANDLE;
+    XrSpace                                      m_gazeSpace     = XR_NULL_HANDLE;
 
     bool                                         m_loggedSync    = false;
 

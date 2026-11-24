@@ -41,6 +41,7 @@ namespace dxvk {
     PFN_xrGetActionStateBoolean             getActionStateBoolean          = nullptr;
     PFN_xrGetActionStateFloat               getActionStateFloat            = nullptr;
     PFN_xrGetActionStateVector2f            getActionStateVector2f         = nullptr;
+    PFN_xrGetActionStatePose                getActionStatePose             = nullptr;
     PFN_xrApplyHapticFeedback               applyHapticFeedback            = nullptr;
     PFN_xrGetCurrentInteractionProfile      getCurrentInteractionProfile   = nullptr;
 
@@ -71,6 +72,7 @@ namespace dxvk {
       load(getActionStateBoolean, "xrGetActionStateBoolean");
       load(getActionStateFloat, "xrGetActionStateFloat");
       load(getActionStateVector2f, "xrGetActionStateVector2f");
+      load(getActionStatePose, "xrGetActionStatePose");
       load(applyHapticFeedback, "xrApplyHapticFeedback");
       load(getCurrentInteractionProfile, "xrGetCurrentInteractionProfile");
       return complete;
@@ -78,20 +80,26 @@ namespace dxvk {
   };
 
 
-  std::unique_ptr<VrOpenXrInput> VrOpenXrInput::create(const VrOpenXrLoader& loader, XrInstance instance) {
-    std::unique_ptr<VrOpenXrInput> input(new VrOpenXrInput(loader, instance));
+  std::unique_ptr<VrOpenXrInput> VrOpenXrInput::create(const VrOpenXrLoader& loader, XrInstance instance, bool eyeGaze) {
+    std::unique_ptr<VrOpenXrInput> input(new VrOpenXrInput(loader, instance, eyeGaze));
 
     if (!input->m_xr || !input->createActions() || !input->suggestBindings()) {
       Logger::err("VR: The OpenXR controller actions could not be set up, the controllers are not read");
       return nullptr;
     }
 
+    // The controllers work without it
+    if (input->m_eyeGaze && !input->suggestGazeBinding()) {
+      Logger::warn("VR: The OpenXR eye gaze could not be bound, foveated rendering has no eye tracker");
+      input->m_eyeGaze = false;
+    }
+
     return input;
   }
 
 
-  VrOpenXrInput::VrOpenXrInput(const VrOpenXrLoader& loader, XrInstance instance)
-  : m_xr(std::make_unique<Functions>()), m_instance(instance) {
+  VrOpenXrInput::VrOpenXrInput(const VrOpenXrLoader& loader, XrInstance instance, bool eyeGaze)
+  : m_xr(std::make_unique<Functions>()), m_instance(instance), m_eyeGaze(eyeGaze) {
     if (!m_xr->load(loader, instance))
       m_xr = nullptr;
   }
@@ -222,6 +230,11 @@ namespace dxvk {
     m_squeeze      = createAction(m_handsSet, XR_ACTION_TYPE_FLOAT_INPUT, "grip_curl", "Other fingers", true);
     m_thumbTouch   = createAction(m_handsSet, XR_ACTION_TYPE_BOOLEAN_INPUT, "thumb_touch", "Thumb down", true);
 
+    if (m_eyeGaze) {
+      m_gazePose = createAction(m_handsSet, XR_ACTION_TYPE_POSE_INPUT, "eye_gaze", "Eye gaze", false);
+      m_eyeGaze  = m_gazePose != XR_NULL_HANDLE;
+    }
+
     return m_gripPose != XR_NULL_HANDLE && m_aimPose != XR_NULL_HANDLE && m_haptic != XR_NULL_HANDLE
         && m_trigger != XR_NULL_HANDLE && m_triggerTouch != XR_NULL_HANDLE
         && m_squeeze != XR_NULL_HANDLE && m_thumbTouch != XR_NULL_HANDLE;
@@ -275,6 +288,25 @@ namespace dxvk {
   }
 
 
+  bool VrOpenXrInput::suggestGazeBinding() {
+    XrActionSuggestedBinding binding = { m_gazePose, path("/user/eyes_ext/input/gaze_ext/pose") };
+
+    XrInteractionProfileSuggestedBinding suggested = { XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING };
+    suggested.interactionProfile     = path("/interaction_profiles/ext/eye_gaze_interaction");
+    suggested.countSuggestedBindings = 1;
+    suggested.suggestedBindings      = &binding;
+
+    if (binding.binding == XR_NULL_PATH || suggested.interactionProfile == XR_NULL_PATH)
+      return false;
+
+    if (!check(m_xr->suggestBindings(m_instance, &suggested), "xrSuggestInteractionProfileBindings (eye gaze)"))
+      return false;
+
+    Logger::info("VR: OpenXR binding suggested for the eye gaze");
+    return true;
+  }
+
+
   bool VrOpenXrInput::attach(XrSession session) {
     detach();
 
@@ -292,6 +324,15 @@ namespace dxvk {
     for (uint32_t i = 0; i < VrHandCount; i++) {
       m_hands[i].gripSpace = createHandSpace(m_gripPose, VrHand(i), vrOpenXrTouchRawPoseInGrip(VrHand(i)));
       m_hands[i].aimSpace  = createHandSpace(m_aimPose, VrHand(i), VrPose());
+    }
+
+    if (m_eyeGaze) {
+      XrActionSpaceCreateInfo info = { XR_TYPE_ACTION_SPACE_CREATE_INFO };
+      info.action            = m_gazePose;
+      info.poseInActionSpace = vrPoseToXr(VrPose());
+
+      if (!check(m_xr->createActionSpace(m_session, &info, &m_gazeSpace), "xrCreateActionSpace (eye gaze)"))
+        m_gazeSpace = XR_NULL_HANDLE;
     }
 
     return true;
@@ -313,7 +354,11 @@ namespace dxvk {
       hand.aimSpace  = XR_NULL_HANDLE;
     }
 
-    m_session = XR_NULL_HANDLE;
+    if (m_gazeSpace != XR_NULL_HANDLE)
+      m_xr->destroySpace(m_gazeSpace);
+
+    m_gazeSpace = XR_NULL_HANDLE;
+    m_session   = XR_NULL_HANDLE;
   }
 
 
@@ -454,6 +499,30 @@ namespace dxvk {
 
     input.actions.move = readStick(actions.move);
     input.actions.turn = readStick(actions.turn);
+  }
+
+
+  bool VrOpenXrInput::readGaze(XrSpace space, XrTime displayTime, VrPose& gaze) const {
+    if (m_gazeSpace == XR_NULL_HANDLE)
+      return false;
+
+    XrActionStateGetInfo info = { XR_TYPE_ACTION_STATE_GET_INFO };
+    info.action = m_gazePose;
+
+    XrActionStatePose state = { XR_TYPE_ACTION_STATE_POSE };
+
+    if (XR_FAILED(m_xr->getActionStatePose(m_session, &info, &state)) || !state.isActive)
+      return false;
+
+    // Only the orientation is needed: the gaze is taken from both eyes
+    XrSpaceLocation location = { XR_TYPE_SPACE_LOCATION };
+
+    if (XR_FAILED(m_xr->locateSpace(m_gazeSpace, space, displayTime, &location))
+     || !(location.locationFlags & XR_SPACE_LOCATION_ORIENTATION_TRACKED_BIT))
+      return false;
+
+    gaze = vrPoseFromXr(location.pose);
+    return true;
   }
 
 

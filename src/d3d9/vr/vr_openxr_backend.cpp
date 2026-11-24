@@ -1,5 +1,11 @@
+#include <windows.h>
+
 #include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <cstring>
+#include <iomanip>
+#include <sstream>
 
 #include <vulkan/vulkan_core.h>
 
@@ -10,17 +16,56 @@
 #include "../../util/log/log.h"
 #include "../../util/util_string.h"
 
+#include "vr_math.h"
 #include "vr_openxr_backend.h"
 #include "vr_openxr_convert.h"
 #include "vr_openxr_image_copy.h"
 #include "vr_openxr_input.h"
 #include "vr_openxr_loader.h"
+#include "vr_openxr_vulkan_device.h"
 
 namespace dxvk {
 
   namespace {
 
     constexpr XrViewConfigurationType ViewConfiguration = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+
+    // The lasers: as OpenVR's, a strip a few millimetres wide in the menu
+    // pointer's colour, sRGB-encoded, brighter while it points at something
+    constexpr float                PointerWidth         = 0.005f;
+    constexpr std::array<float, 3> PointerColor         = { 1.0f, 182.0f / 255.0f, 66.0f / 255.0f };
+    constexpr float                PointerActiveAlpha   = 0.9f;
+    constexpr float                PointerInactiveAlpha = 0.35f;
+
+    // Images filled with one colour are only a few texels wide
+    constexpr VrExtent             SolidImageExtent     = { 8, 8 };
+
+    // The fade's quad: in front of the eyes and wider than any field of view
+    constexpr float                FadeDistance         = 0.5f;
+    constexpr float                FadeSize             = 8.0f;
+    // Smallest change of opacity that refills the fade's image
+    constexpr float                FadeStep             = 0.5f / 255.0f;
+
+    // Longest wait for the runtime to start the launcher's session
+    constexpr double               PanelSessionStartSeconds = 5.0;
+
+    // Seconds of frames in each frame statistics line
+    constexpr double               StatsPeriodSeconds   = 10.0;
+
+    double steadySeconds() {
+      return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+
+    double wallClockSeconds() {
+      // FILETIME counts 100 ns units since 1601
+      constexpr uint64_t UnitsPerSecond = 10000000;
+      constexpr uint64_t UnixEpoch      = 116444736000000000;
+
+      FILETIME now;
+      GetSystemTimePreciseAsFileTime(&now);
+      uint64_t value = (uint64_t(now.dwHighDateTime) << 32) | now.dwLowDateTime;
+      return double(value - UnixEpoch) / double(UnitsPerSecond);
+    }
 
     std::string xrVersionString(XrVersion version) {
       return str::format(XR_VERSION_MAJOR(version), ".", XR_VERSION_MINOR(version), ".", XR_VERSION_PATCH(version));
@@ -193,7 +238,7 @@ namespace dxvk {
     logViewConfiguration();
 
     // Without them the game is still shown, played with a gamepad
-    m_input = VrOpenXrInput::create(*m_loader, m_instance);
+    m_input = VrOpenXrInput::create(*m_loader, m_instance, m_eyeGaze);
 
     // Required before a session can be created
     XrGraphicsRequirementsVulkanKHR requirements = { XR_TYPE_GRAPHICS_REQUIREMENTS_VULKAN_KHR };
@@ -256,6 +301,11 @@ namespace dxvk {
     if (m_localFloor)
       enabled.push_back(XR_EXT_LOCAL_FLOOR_EXTENSION_NAME);
 
+    m_eyeGazeExtension = offers(XR_EXT_EYE_GAZE_INTERACTION_EXTENSION_NAME);
+
+    if (m_eyeGazeExtension)
+      enabled.push_back(XR_EXT_EYE_GAZE_INTERACTION_EXTENSION_NAME);
+
     XrInstanceCreateInfo info = { XR_TYPE_INSTANCE_CREATE_INFO };
     std::strncpy(info.applicationInfo.applicationName, "Fallout New Vegas", XR_MAX_APPLICATION_NAME_SIZE - 1);
     std::strncpy(info.applicationInfo.engineName, "FNVVR", XR_MAX_ENGINE_NAME_SIZE - 1);
@@ -298,15 +348,22 @@ namespace dxvk {
     if (!check(result, "xrGetSystem"))
       return false;
 
+    XrSystemEyeGazeInteractionPropertiesEXT eyeGaze = { XR_TYPE_SYSTEM_EYE_GAZE_INTERACTION_PROPERTIES_EXT };
     XrSystemProperties properties = { XR_TYPE_SYSTEM_PROPERTIES };
 
+    if (m_eyeGazeExtension)
+      properties.next = &eyeGaze;
+
     if (check(m_xr->getSystemProperties(m_instance, m_system, &properties), "xrGetSystemProperties")) {
+      m_eyeGaze = m_eyeGazeExtension && eyeGaze.supportsEyeGazeInteraction;
+
       Logger::info(str::format("VR: OpenXR headset: ", properties.systemName,
         ", vendor ", properties.vendorId,
         ", max swapchain ", properties.graphicsProperties.maxSwapchainImageWidth,
         "x", properties.graphicsProperties.maxSwapchainImageHeight,
         ", max layers ", properties.graphicsProperties.maxLayerCount,
-        ", position tracking ", properties.trackingProperties.positionTracking ? "yes" : "no"));
+        ", position tracking ", properties.trackingProperties.positionTracking ? "yes" : "no",
+        ", eye tracker ", m_eyeGaze ? "yes" : "no"));
     }
 
     return true;
@@ -487,8 +544,35 @@ namespace dxvk {
 
 
   bool VrOpenXrBackend::beginPanelSession() {
-    // Only the launcher uses it, and it shows its panel through OpenVR only
-    return false;
+    if (m_session != XR_NULL_HANDLE || !initializeRuntime())
+      return false;
+
+    m_panelDevice = VrXrVulkanDevice::create(*this);
+
+    if (!m_panelDevice)
+      return false;
+
+    if (!beginSession(m_panelDevice->binding())) {
+      m_panelDevice = nullptr;
+      return false;
+    }
+
+    // The launcher's loop runs while the session does
+    double deadline = steadySeconds() + PanelSessionStartSeconds;
+
+    while (!m_running && !m_lost && steadySeconds() < deadline) {
+      Sleep(10);
+      pollEvents();
+    }
+
+    if (!m_running) {
+      Logger::warn("VR: The OpenXR runtime did not start the panel session");
+      endSession();
+      return false;
+    }
+
+    Logger::info("VR: OpenXR panel session running on a Vulkan device of its own");
+    return true;
   }
 
 
@@ -496,6 +580,9 @@ namespace dxvk {
     // Destroying the session ends it, whatever state it is in. No frame is
     // closed: the device and its queue may be gone already.
     destroySession();
+
+    // The panel session's device outlives the swapchains made on it
+    m_panelDevice = nullptr;
   }
 
 
@@ -509,6 +596,15 @@ namespace dxvk {
         destroySwapchain(panel.swapchain);
         panel.visible = false;
       }
+
+      for (Swapchain& image : m_pointerImages)
+        destroySwapchain(image);
+
+      for (Pointer& pointer : m_pointers)
+        pointer.visible = false;
+
+      destroySwapchain(m_fadeImage);
+      m_fadeFilled = -1.0f;
     }
 
     for (Swapchain& eye : m_eyes)
@@ -531,9 +627,12 @@ namespace dxvk {
 
     m_session     = XR_NULL_HANDLE;
     m_running     = false;
-    m_frameWaited = false;
-    m_frameBegun  = false;
-    m_xrState     = XR_SESSION_STATE_UNKNOWN;
+    m_frameWaited  = false;
+    m_frameBegun   = false;
+    m_xrState      = XR_SESSION_STATE_UNKNOWN;
+    m_frameClock   = FrameClock();
+    m_statsRunning = false;
+    m_hasLastCycle = false;
   }
 
 
@@ -649,6 +748,8 @@ namespace dxvk {
     if (m_session == XR_NULL_HANDLE || m_lost)
       return timing;
 
+    double waitStart = steadySeconds();
+
     // A frame waited for must be begun and ended before the next wait
     if (m_frameWaited || m_frameBegun) {
       if (m_binding.lockQueue)
@@ -672,6 +773,9 @@ namespace dxvk {
     if (!check(result, "xrWaitFrame"))
       return timing;
 
+    m_hasLastCycle = false;
+    measureFrame(waitStart, steadySeconds());
+
     if (result == XR_SESSION_LOSS_PENDING)
       m_lost = true;
 
@@ -687,6 +791,9 @@ namespace dxvk {
     timing.paced                = true;
     timing.predictedDisplayTime = m_frameState.predictedDisplayTime;
     timing.predictedPeriod      = m_frameState.predictedDisplayPeriod;
+    timing.hasPreviousCycle     = m_hasLastCycle;
+    timing.previousCycle        = m_lastCycle;
+    timing.previousCycleEnd     = m_lastCycleEnd;
     return timing;
   }
 
@@ -718,8 +825,10 @@ namespace dxvk {
       const XrSpaceLocationFlags valid = XR_SPACE_LOCATION_ORIENTATION_VALID_BIT | XR_SPACE_LOCATION_POSITION_VALID_BIT;
       input.isHeadTracked = (location.locationFlags & valid) == valid;
 
-      if (input.isHeadTracked)
+      if (input.isHeadTracked) {
         input.headPose = vrPoseFromXr(location.pose);
+        m_headPosition = input.headPose.position;
+      }
     }
 
     if (!m_loggedHead) {
@@ -767,12 +876,35 @@ namespace dxvk {
 
 
   bool VrOpenXrBackend::supportsEyeTracking() {
-    return false;
+    std::array<VrGaze, VrEyeCount> gaze;
+    return m_eyeGaze && (m_loggedGaze || locateGaze(gaze));
   }
 
 
   bool VrOpenXrBackend::locateGaze(std::array<VrGaze, VrEyeCount>& gaze) {
-    return false;
+    if (!m_eyeGaze || !m_input || !m_running)
+      return false;
+
+    VrPose pose;
+
+    // The actions were synchronised by pollInput, for the same display time
+    if (!m_input->readGaze(m_space, m_frameState.predictedDisplayTime, pose))
+      return false;
+
+    VrVector3 direction = vrRotate(pose.orientation, { 0.0f, 0.0f, -1.0f });
+
+    for (uint32_t i = 0; i < VrEyeCount; i++) {
+      if (!vrGazeFromXrDirection(m_views[i].pose.orientation, direction, gaze[i]))
+        return false;
+    }
+
+    if (!m_loggedGaze) {
+      m_loggedGaze = true;
+      Logger::info(str::format("VR: The headset gives the gaze: left eye ", gaze[0].tanX, ", ", gaze[0].tanY,
+        ", right eye ", gaze[1].tanX, ", ", gaze[1].tanY, " (tangents right and up)"));
+    }
+
+    return true;
   }
 
 
@@ -836,6 +968,7 @@ namespace dxvk {
 
     swapchain.extent = extent;
     swapchain.format = sourceFormat;
+    swapchain.srgb   = format.srgb;
 
     Logger::info(str::format("VR: OpenXR swapchain for the ", what, ": ", extent.width, "x", extent.height,
       ", format ", uint32_t(format.format), ", ", count, " images"));
@@ -892,10 +1025,15 @@ namespace dxvk {
 
     m_frameBegun = false;
 
+    // The eyes, the fade over them, the panels, then the lasers over all
+    constexpr uint32_t QuadCount = 1 + VrPanelCount + VrHandCount;
+
     XrCompositionLayerProjection projection = { XR_TYPE_COMPOSITION_LAYER_PROJECTION };
-    std::array<XrCompositionLayerQuad, VrPanelCount> quads;
-    std::array<const XrCompositionLayerBaseHeader*, VrPanelCount + 1> layers = { };
+    std::array<XrCompositionLayerQuad, QuadCount> quads;
+    std::array<const XrCompositionLayerBaseHeader*, QuadCount + 1> layers = { };
     uint32_t layerCount = 0;
+    uint32_t quadCount  = 0;
+    uint32_t panelCount = 0;
 
     if (eyes) {
       projection.space     = m_space;
@@ -906,6 +1044,9 @@ namespace dxvk {
 
     std::lock_guard<dxvk::mutex> lock(m_panelMutex);
 
+    if (eyes && prepareFade(quads[quadCount]))
+      layers[layerCount++] = reinterpret_cast<const XrCompositionLayerBaseHeader*>(&quads[quadCount++]);
+
     // In the order of VrPanelId: the head HUD over the menu, the hand panels over the head HUD
     for (uint32_t i = 0; i < VrPanelCount; i++) {
       const Panel& panel = m_panels[i];
@@ -913,7 +1054,7 @@ namespace dxvk {
       if (!panel.visible || !panel.swapchain.hasImage)
         continue;
 
-      XrCompositionLayerQuad& quad = quads[i];
+      XrCompositionLayerQuad& quad = quads[quadCount++];
       quad = { XR_TYPE_COMPOSITION_LAYER_QUAD };
       quad.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
 
@@ -927,6 +1068,12 @@ namespace dxvk {
       quad.pose          = vrPoseToXr(panel.pose);
       quad.size          = vrXrQuadSize(panel.width, panel.swapchain.extent);
       layers[layerCount++] = reinterpret_cast<const XrCompositionLayerBaseHeader*>(&quad);
+      panelCount += 1;
+    }
+
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      if (preparePointer(VrHand(i), quads[quadCount]))
+        layers[layerCount++] = reinterpret_cast<const XrCompositionLayerBaseHeader*>(&quads[quadCount++]);
     }
 
     XrFrameEndInfo info = { XR_TYPE_FRAME_END_INFO };
@@ -937,8 +1084,13 @@ namespace dxvk {
 
     bool ended = check(m_xr->endFrame(m_session, &info), "xrEndFrame");
 
+    if (ended && eyes) {
+      m_frameClock.ended     = steadySeconds();
+      m_frameClock.submitted = true;
+    }
+
     if (ended && eyes && !m_loggedEndFrame) {
-      Logger::info(str::format("VR: First stereo frame shown, ", layerCount - 1, " panels over it"));
+      Logger::info(str::format("VR: First stereo frame shown, ", panelCount, " panels over it"));
       m_loggedEndFrame = true;
     }
 
@@ -949,6 +1101,9 @@ namespace dxvk {
   bool VrOpenXrBackend::submitFrame(const VrFrameSubmission& frame) {
     if (!m_frameBegun || !m_copy)
       return false;
+
+    m_frameClock.submitStart = steadySeconds();
+    m_frameClock.syncMs      = frame.syncMs;
 
     for (const VrEyeImage& eye : frame.images) {
       if (eye.image == VK_NULL_HANDLE || eye.layout == VK_IMAGE_LAYOUT_UNDEFINED) {
@@ -996,6 +1151,8 @@ namespace dxvk {
         ready = false;
     }
 
+    m_frameClock.copied = steadySeconds();
+
     return endFrame(ready ? views.data() : nullptr) && ready;
   }
 
@@ -1015,6 +1172,8 @@ namespace dxvk {
     if (!m_running || !m_copy || index >= VrPanelCount
      || submission.image.image == VK_NULL_HANDLE || submission.image.layout == VK_IMAGE_LAYOUT_UNDEFINED)
       return false;
+
+    double start = steadySeconds();
 
     std::lock_guard<dxvk::mutex> lock(m_panelMutex);
     Panel& panel = m_panels[index];
@@ -1045,6 +1204,7 @@ namespace dxvk {
       panel.logged = true;
     }
 
+    m_frameClock.panelMs += submission.syncMs + (steadySeconds() - start) * 1000.0;
     return true;
   }
 
@@ -1066,18 +1226,145 @@ namespace dxvk {
   }
 
 
-  bool VrOpenXrBackend::submitPanelPixels(VrPanelId id, const VrPanelPixels& panel) {
-    return false;
+  bool VrOpenXrBackend::submitPanelPixels(VrPanelId id, const VrPanelPixels& pixels) {
+    uint32_t index = uint32_t(id);
+
+    if (!m_running || !m_copy || index >= VrPanelCount || !pixels.rgba || !pixels.width || !pixels.height)
+      return false;
+
+    if (m_binding.lockQueue)
+      m_binding.lockQueue();
+
+    bool shown = false;
+
+    { std::lock_guard<dxvk::mutex> lock(m_panelMutex);
+      Panel& panel = m_panels[index];
+      VrExtent extent = { pixels.width, pixels.height };
+
+      if (prepareSwapchain(panel.swapchain, extent, VK_FORMAT_R8G8B8A8_UNORM, panelName(id))) {
+        VkImage target = acquireImage(panel.swapchain);
+
+        if (target != VK_NULL_HANDLE) {
+          bool uploaded = m_copy->upload(target, extent, pixels.rgba);
+          shown = releaseImage(panel.swapchain) && uploaded;
+        }
+      }
+
+      if (shown) {
+        panel.pose          = pixels.pose;
+        panel.width         = pixels.metres;
+        panel.anchor        = VrPanelAnchor::Room;
+        panel.premultiplied = false;
+        panel.visible       = true;
+
+        if (!panel.logged) {
+          Logger::info(str::format("VR: The ", panelName(id), " panel is shown as an OpenXR quad, from system memory"));
+          panel.logged = true;
+        }
+      }
+    }
+
+    if (m_binding.releaseQueue)
+      m_binding.releaseQueue();
+
+    return shown;
   }
 
 
-  void VrOpenXrBackend::showPointer(VrHand hand, const VrPointerSubmission& pointer) {
+  bool VrOpenXrBackend::fillSwapchain(Swapchain& swapchain, const std::array<float, 4>& rgba, const char* what) {
+    if (!prepareSwapchain(swapchain, SolidImageExtent, VK_FORMAT_R8G8B8A8_UNORM, what))
+      return false;
 
+    // An sRGB image is filled with linear values, which the GPU encodes
+    VkClearColorValue color = { };
+
+    for (uint32_t i = 0; i < 3; i++)
+      color.float32[i] = swapchain.srgb ? vrXrLinearFromSrgb(rgba[i]) : rgba[i];
+
+    color.float32[3] = rgba[3];
+
+    VkImage target = acquireImage(swapchain);
+
+    if (target == VK_NULL_HANDLE)
+      return false;
+
+    bool filled = m_copy->fill(target, color);
+    return releaseImage(swapchain) && filled;
+  }
+
+
+  bool VrOpenXrBackend::prepareFade(XrCompositionLayerQuad& quad) {
+    float opacity = m_fade.opacity(steadySeconds());
+
+    if (opacity <= 0.0f || !m_copy)
+      return false;
+
+    if (std::abs(opacity - m_fadeFilled) > FadeStep || !m_fadeImage.hasImage) {
+      if (!fillSwapchain(m_fadeImage, { 0.0f, 0.0f, 0.0f, opacity }, "fade"))
+        return false;
+
+      m_fadeFilled = opacity;
+    }
+
+    quad = { XR_TYPE_COMPOSITION_LAYER_QUAD };
+    quad.layerFlags    = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT | XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT;
+    quad.space         = m_viewSpace;
+    quad.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
+    quad.subImage.swapchain = m_fadeImage.handle;
+    quad.subImage.imageRect = { { 0, 0 }, { int32_t(SolidImageExtent.width), int32_t(SolidImageExtent.height) } };
+    quad.pose          = vrPoseToXr(VrPose());
+    quad.pose.position = { 0.0f, 0.0f, -FadeDistance };
+    quad.size          = { FadeSize, FadeSize };
+    return true;
+  }
+
+
+  bool VrOpenXrBackend::preparePointer(VrHand hand, XrCompositionLayerQuad& quad) {
+    const Pointer& pointer = m_pointers[uint32_t(hand)];
+
+    if (!pointer.visible || !m_copy)
+      return false;
+
+    Swapchain& image = m_pointerImages[pointer.active ? 1 : 0];
+
+    if (!image.hasImage) {
+      float alpha = pointer.active ? PointerActiveAlpha : PointerInactiveAlpha;
+
+      if (!fillSwapchain(image, { PointerColor[0], PointerColor[1], PointerColor[2], alpha },
+            pointer.active ? "active laser" : "laser"))
+        return false;
+    }
+
+    quad = { XR_TYPE_COMPOSITION_LAYER_QUAD };
+    quad.layerFlags    = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT | XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT;
+    quad.space         = m_space;
+    quad.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
+    quad.subImage.swapchain = image.handle;
+    quad.subImage.imageRect = { { 0, 0 }, { int32_t(SolidImageExtent.width), int32_t(SolidImageExtent.height) } };
+    quad.pose          = vrPoseToXr(pointer.pose);
+    quad.size          = { PointerWidth, pointer.length };
+    return true;
+  }
+
+
+  void VrOpenXrBackend::showPointer(VrHand hand, const VrPointerSubmission& submission) {
+    if (!m_running || submission.length <= 0.0f)
+      return;
+
+    VrPose pose = vrXrBeamPose(submission.origin, submission.length, m_headPosition);
+
+    std::lock_guard<dxvk::mutex> lock(m_panelMutex);
+    Pointer& pointer = m_pointers[uint32_t(hand)];
+    pointer.pose    = pose;
+    pointer.length  = submission.length;
+    pointer.active  = submission.active;
+    pointer.visible = true;
   }
 
 
   void VrOpenXrBackend::hidePointer(VrHand hand) {
-
+    std::lock_guard<dxvk::mutex> lock(m_panelMutex);
+    m_pointers[uint32_t(hand)].visible = false;
   }
 
 
@@ -1088,11 +1375,13 @@ namespace dxvk {
 
 
   void VrOpenXrBackend::fadeView(float seconds, float opacity) {
-
+    std::lock_guard<dxvk::mutex> lock(m_panelMutex);
+    m_fade.start(steadySeconds(), seconds, opacity);
   }
 
 
   bool VrOpenXrBackend::showKeyboard(const VrKeyboardRequest& request) {
+    // OpenXR has no text keyboard (only Meta's runtime has an extension for one)
     return false;
   }
 
@@ -1104,6 +1393,71 @@ namespace dxvk {
 
   VrKeyboardEvent VrOpenXrBackend::takeKeyboardEvent(std::string& typed) {
     return VrKeyboardEvent::None;
+  }
+
+
+  void VrOpenXrBackend::measureFrame(double waitStart, double waitEnd) {
+    const FrameClock& frame = m_frameClock;
+    double periodMs = double(m_frameState.predictedDisplayPeriod) * 1e-6;
+
+    auto ms = [] (double from, double to) {
+      return (to - from) * 1000.0;
+    };
+
+    if (frame.submitted && m_statsRunning) {
+      VrFrameCycle cycle = { };
+      cycle[uint32_t(VrFrameStep::Interval)]   = ms(frame.waitEnd,     waitEnd);
+      cycle[uint32_t(VrFrameStep::Render)]     = ms(frame.waitEnd,     frame.submitStart) - frame.syncMs - frame.panelMs;
+      cycle[uint32_t(VrFrameStep::Sync)]       = frame.syncMs;
+      cycle[uint32_t(VrFrameStep::Transition)] = 0.0;
+      cycle[uint32_t(VrFrameStep::Submit)]     = ms(frame.submitStart, frame.copied);
+      cycle[uint32_t(VrFrameStep::HandOff)]    = ms(frame.copied,      frame.ended);
+      cycle[uint32_t(VrFrameStep::After)]      = ms(frame.ended,       waitStart);
+      cycle[uint32_t(VrFrameStep::Panels)]     = frame.panelMs;
+      cycle[uint32_t(VrFrameStep::Wait)]       = ms(waitStart,         waitEnd);
+
+      m_hasLastCycle = true;
+      m_lastCycle    = cycle;
+      m_lastCycleEnd = wallClockSeconds();
+
+      if (m_stats.add(cycle))
+        logFrameStats();
+    } else if (frame.submitted && periodMs > 0.0) {
+      m_stats        = VrFrameStats(std::max(1u, uint32_t(StatsPeriodSeconds * 1000.0 / periodMs)), periodMs);
+      m_statsRunning = true;
+    } else {
+      m_statsRunning = false;
+    }
+
+    m_frameClock = FrameClock();
+    m_frameClock.waitStart = waitStart;
+    m_frameClock.waitEnd   = waitEnd;
+  }
+
+
+  void VrOpenXrBackend::logFrameStats() {
+    auto fixed = [] (double value) {
+      std::ostringstream stream;
+      stream << std::fixed << std::setprecision(2) << value;
+      return stream.str();
+    };
+
+    auto step = [&] (VrFrameStep step) {
+      return fixed(m_stats.average(step)) + "/" + fixed(m_stats.step(step).max);
+    };
+
+    double seconds = m_stats.seconds();
+
+    Logger::info(str::format("VR: ", m_stats.frames(), " frames in ", fixed(seconds),
+      " s, ", seconds > 0.0 ? std::lround(double(m_stats.frames()) / seconds) : 0, " fps, ",
+      m_stats.lateFrames(), " late by a display period or more, ", m_stats.busyFrames(),
+      " busy for longer than a period. Average/longest ms: frame ", step(VrFrameStep::Interval),
+      ", eye rendering ", step(VrFrameStep::Render), ", panels ", step(VrFrameStep::Panels),
+      ", DXVK sync ", step(VrFrameStep::Sync), ", copy into the swapchains ", step(VrFrameStep::Submit),
+      ", xrEndFrame ", step(VrFrameStep::HandOff), ", after submission ", step(VrFrameStep::After),
+      ", waiting for the runtime ", step(VrFrameStep::Wait)));
+
+    m_stats.reset();
   }
 
 }
