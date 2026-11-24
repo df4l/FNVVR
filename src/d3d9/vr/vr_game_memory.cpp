@@ -59,23 +59,6 @@ namespace dxvk {
     }
 
     /**
-     * \brief Checks that code belongs to this library
-     *
-     * Two features of the mod may take the same call; the hooks stay in
-     * place for the whole session, so each can call the other's.
-     */
-    bool isOwnCode(uintptr_t target) {
-      HMODULE self = nullptr;
-      HMODULE holder = nullptr;
-
-      return GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-          reinterpret_cast<const char*>(&isOwnCode), &self)
-        && GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-          reinterpret_cast<const char*>(target), &holder)
-        && holder == self;
-    }
-
-    /**
      * \brief Logs which module holds a site of ours, once per site
      *
      * A feature that does not start names no other mod by itself, this
@@ -207,7 +190,7 @@ namespace dxvk {
     uintptr_t current = 0;
 
     return readCallTarget(site, &current)
-        && (current == expectedTarget || isForeignCode(current) || isOwnCode(current));
+        && (current == expectedTarget || isForeignCode(current));
   }
 
 
@@ -219,10 +202,6 @@ namespace dxvk {
     uintptr_t current = 0;
 
     if (!canChainCall(site, expectedTarget) || !readCallTarget(site, &current))
-      return false;
-
-    // A hook taking its own call would call itself
-    if (current == reinterpret_cast<uintptr_t>(newTarget))
       return false;
 
     if (!redirectCall(site, current, newTarget))

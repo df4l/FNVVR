@@ -247,15 +247,6 @@ namespace dxvk {
     passes.worldScaleTest = std::min(std::max(config.getOption<float>("d3d9.vrWorldScaleTest",
       passes.worldScaleTest), 0.0f), 1.0f);
 
-    std::string replayTest = config.getOption<std::string>("d3d9.vrStereoReplayTest", "");
-
-    if (replayTest == "force")
-      passes.stereoReplayTest = VrStereoReplayTest::Force;
-    else if (replayTest == "unmoved")
-      passes.stereoReplayTest = VrStereoReplayTest::Unmoved;
-    else if (!replayTest.empty())
-      Logger::warn(str::format("VR: d3d9.vrStereoReplayTest = ", replayTest, " is not force or unmoved, ignored"));
-
     VrDeveloperConfig developer;
     developer.enabled = config.getOption<bool>("d3d9.vrDeveloperMode", developer.enabled);
 

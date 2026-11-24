@@ -53,16 +53,6 @@ namespace dxvk {
      */
     virtual void exec(DxvkContext* ctx) = 0;
 
-    /**
-     * \brief Executes a copy of the embedded command
-     *
-     * Commands may move their captured objects out when they run. A
-     * command of a chunk that runs more than once runs a copy instead,
-     * so that the next run finds it as it was recorded.
-     * \param [in] ctx The target context
-     */
-    virtual void execCopy(DxvkContext* ctx) = 0;
-
   private:
 
     DxvkCsCmd* m_next = nullptr;
@@ -89,11 +79,6 @@ namespace dxvk {
     
     void exec(DxvkContext* ctx) {
       m_command(ctx);
-    }
-
-    void execCopy(DxvkContext* ctx) {
-      T command(m_command);
-      command(ctx);
     }
     
   private:
@@ -176,11 +161,6 @@ namespace dxvk {
     void exec(DxvkContext* ctx) {
       // No const here so that the function can move objects efficiently
       m_command(ctx, reinterpret_cast<M*>(m_data.first()), m_data.count());
-    }
-
-    void execCopy(DxvkContext* ctx) {
-      T command(m_command);
-      command(ctx, reinterpret_cast<M*>(m_data.first()), m_data.count());
     }
 
     DxvkCsDataBlock* data() {

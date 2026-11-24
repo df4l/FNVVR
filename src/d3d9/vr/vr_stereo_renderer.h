@@ -44,7 +44,6 @@
 #include "vr_frame_submitter.h"
 #include "vr_occlusion_culling.h"
 #include "vr_performance_mode.h"
-#include "vr_stereo_replay.h"
 #include "vr_render_scale.h"
 #include "vr_part_highlight.h"
 #include "vr_npc_gaze.h"
@@ -368,10 +367,6 @@ namespace dxvk {
 
     // Occlusion culling, installed the first time it is wanted
     std::unique_ptr<VrOcclusionCulling> m_occlusion;
-
-    // The performance mode's first distance level: the right eye drawn
-    // from the left eye's commands
-    std::unique_ptr<VrStereoReplay> m_stereoReplay;
     bool               m_occlusionTried    = false;
     VrOcclusionUse     m_occlusionUse      = VrOcclusionUse::Performance;
     // Shown once in the world when the Occlusion Culling plugin is loaded,
@@ -512,9 +507,6 @@ namespace dxvk {
     // The scenes of the mini-games, in the eye images instead of the panel
     std::unique_ptr<VrMinigames> m_minigames;
     std::array<bool, VrEyeCount> m_minigameDrawn = { };
-    // Drawn before the first-person model, inside the world render that
-    // the stereo replay runs again for the right eye
-    std::array<bool, VrEyeCount> m_minigameInWorld = { };
     uint32_t            m_minigamePanelRevision = 0;
 
     // The activation target, picked along the hands instead of the view
@@ -772,16 +764,6 @@ namespace dxvk {
     VrGameCameraPose eyeInGame(const VrEyeView& view) const;
 
     void applyEyePose();
-
-    /**
-     * \brief Camera of an eye in game space, as applyEyePose gives it
-     */
-    VrGameCameraPose eyeCameraPose(const VrEyeView& view) const;
-
-    /**
-     * \brief Starts the stereo replay's frame, if the performance mode wants it
-     */
-    void beginStereoReplay(VrGameStateKind state, const std::array<VrEyeView, VrEyeCount>& views);
 
     void setScreenPass(const VrVector3* shift);
 

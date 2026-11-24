@@ -88,24 +88,8 @@ TEST_CASE(performance_levers_lower_resolution_only_after_shadows) {
     CHECK(VrPerformanceLevers::renderScale(level) >= 0.7f);
   }
 
-  CHECK(!VrPerformanceLevers::waterReflectionsOff(0));
-  CHECK(VrPerformanceLevers::waterReflectionsOff(1));
-}
-
-
-TEST_CASE(performance_levers_replay_the_right_eye_before_lowering_distances) {
-  CHECK(!VrPerformanceLevers::stereoReplay(0));
-  CHECK(VrPerformanceLevers::stereoReplay(1));
-  CHECK(VrPerformanceLevers::distanceScale(1) == 1.0f);
-  CHECK(VrPerformanceLevers::distanceScale(2) < 1.0f);
-
-  for (uint32_t level = 2; level <= VrPerformanceLevers::DistanceSteps; level++) {
-    CHECK(VrPerformanceLevers::stereoReplay(level));
-    CHECK(VrPerformanceLevers::distanceScale(level) < VrPerformanceLevers::distanceScale(level - 1));
-  }
-
-  // Replayed eyes show water reflections from the left eye's position
-  CHECK(VrPerformanceLevers::waterReflectionsOff(VrPerformanceLevers::StereoReplayDistanceLevel));
+  CHECK(!VrPerformanceLevers::waterReflectionsOff(1));
+  CHECK(VrPerformanceLevers::waterReflectionsOff(2));
 }
 
 

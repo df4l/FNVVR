@@ -24,7 +24,7 @@ namespace dxvk {
 
 
   Rc<DxvkShader> D3D9FFShaderModuleSet::buildVs() {
-    small_vector<DxvkBindingInfo, 4> bindings = {};
+    small_vector<DxvkBindingInfo, 3> bindings = {};
 
     auto& fixedFunctionDataBinding = bindings.emplace_back();
     fixedFunctionDataBinding.set             = CbvSet;
@@ -49,14 +49,6 @@ namespace dxvk {
     clipPlanesBinding.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     clipPlanesBinding.access          = VK_ACCESS_UNIFORM_READ_BIT;
     clipPlanesBinding.flags.set(DxvkDescriptorFlag::UniformBuffer);
-
-    auto& stereoBinding = bindings.emplace_back();
-    stereoBinding.set             = CbvSet;
-    stereoBinding.binding         = D3D9ShaderResourceMapping::VSStereoTransform;
-    stereoBinding.resourceIndex   = D3D9ShaderResourceMapping::VSStereoTransform;
-    stereoBinding.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    stereoBinding.access          = VK_ACCESS_UNIFORM_READ_BIT;
-    stereoBinding.flags.set(DxvkDescriptorFlag::UniformBuffer);
 
     DxvkSpirvShaderCreateInfo info;
     info.bindingCount = bindings.size();

@@ -54,22 +54,6 @@ namespace dxvk {
      */
     float renderScale() const;
 
-    /**
-     * \brief Whether the right eye is drawn from the left eye's commands
-     *    this frame (VrStereoReplay)
-     *
-     * \c false while the mode is off or in menus.
-     */
-    bool stereoReplay() const;
-
-    /**
-     * \brief Holds the replay level at least (d3d9.vrStereoReplayTest)
-     *
-     * Its levers then turn off what the replayed eye would draw wrong, as at
-     * the governor's replay level.
-     */
-    void forceStereoReplay(bool forced);
-
   private:
 
     struct Window {
@@ -100,12 +84,9 @@ namespace dxvk {
     bool      m_available     = false;
     bool      m_enabled       = false;
     bool      m_applied       = false;
-    bool      m_replayForced  = false;
     bool      m_hasFrameIndex = false;
     uint32_t  m_frameIndex    = 0;
     Window    m_window;
-
-    VrPerformanceLevels appliedLevels() const;
 
     void account(const VrPerformanceSample& sample, bool hasGpu, bool changed);
 

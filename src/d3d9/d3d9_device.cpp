@@ -119,7 +119,6 @@ namespace dxvk {
     });
 
     CreateConstantBuffers();
-    InitStereoReplay();
 
     m_availableMemory = DetermineInitialTextureMemory();
 
@@ -5894,10 +5893,6 @@ namespace dxvk {
     for (auto& cbv : m_constantBuffers)
       cbv.ResetStreamCommand();
 
-    // A chunk recorded for the left eye runs again for the right eye
-    if (unlikely(m_stereo.capturing))
-      m_stereo.chunks.push_back(chunk);
-
     m_csSeqNum = m_csThread.dispatchChunk(std::move(chunk));
   }
 
@@ -6133,9 +6128,6 @@ namespace dxvk {
   void D3D9DeviceEx::ExecuteFlush(bool Synchronize9On12) {
     D3D9DeviceLock lock = LockDevice();
 
-    // A flush signals fences with increasing values: it must run once
-    bool stereoPaused = PauseStereoCapture();
-
     if (Synchronize9On12)
       m_submitStatus.result = VK_NOT_READY;
 
@@ -6174,8 +6166,6 @@ namespace dxvk {
     // Notify the device that the context has been flushed,
     // this resets some resource initialization heuristics.
     m_initializer->NotifyContextFlush();
-
-    ResumeStereoCapture(stereoPaused);
   }
 
 

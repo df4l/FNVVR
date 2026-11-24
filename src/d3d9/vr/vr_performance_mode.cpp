@@ -27,11 +27,6 @@ namespace dxvk {
       return whole > 0.0 ? uint32_t(100.0 * part / whole + 0.5) : 0u;
     }
 
-    std::string distanceLabel(uint32_t level) {
-      return str::format(VrPerformanceLevers::stereoReplay(level) ? "replay " : "",
-        "x", fixed(VrPerformanceLevers::distanceScale(level)));
-    }
-
   }
 
 
@@ -49,9 +44,6 @@ namespace dxvk {
     if (enabled && !m_initialized) {
       m_initialized = true;
       m_available   = m_levers.initialize();
-
-      if (m_available && !m_levers.canStereoReplay())
-        Logger::warn("VR: The performance mode cannot turn water reflections, depth maps and refractions and specular highlights off, it never draws the right eye from the left eye's commands");
     }
 
     if (enabled == m_enabled)
@@ -116,7 +108,7 @@ namespace dxvk {
     }
 
     if (changed || !m_applied) {
-      m_levers.apply(appliedLevels());
+      m_levers.apply(m_governor.levels());
       m_applied = true;
     }
   }
@@ -127,32 +119,6 @@ namespace dxvk {
       return 1.0f;
 
     return VrPerformanceLevers::renderScale(m_governor.levels().gpu);
-  }
-
-
-  bool VrPerformanceMode::stereoReplay() const {
-    return m_enabled && m_applied
-        && m_levers.canStereoReplay()
-        && VrPerformanceLevers::stereoReplay(appliedLevels().distance);
-  }
-
-
-  void VrPerformanceMode::forceStereoReplay(bool forced) {
-    if (forced == m_replayForced)
-      return;
-
-    m_replayForced = forced;
-    m_applied = false;
-  }
-
-
-  VrPerformanceLevels VrPerformanceMode::appliedLevels() const {
-    VrPerformanceLevels levels = m_governor.levels();
-
-    if (m_replayForced)
-      levels.distance = std::max(levels.distance, VrPerformanceLevers::StereoReplayDistanceLevel);
-
-    return levels;
   }
 
 
@@ -174,8 +140,8 @@ namespace dxvk {
     m_governor.start(levels);
     levels = m_governor.levels();
 
-    Logger::info(str::format("VR: Performance mode on ", m_memoryKey, " starts where it settled last time: distances ",
-      distanceLabel(levels.distance), ", shadows and specular x",
+    Logger::info(str::format("VR: Performance mode on ", m_memoryKey, " starts where it settled last time: distances x",
+      fixed(VrPerformanceLevers::distanceScale(levels.distance)), ", shadows and specular x",
       fixed(VrPerformanceLevers::gpuScale(levels.gpu)), ", world resolution ",
       percent(VrPerformanceLevers::renderScale(levels.gpu), 1.0), " %"));
   }
@@ -229,7 +195,7 @@ namespace dxvk {
 
     std::ostringstream distances;
     for (uint32_t i = 0; i < w.distanceMs.size(); i++) {
-      distances << (i ? ", " : "") << distanceLabel(i)
+      distances << (i ? ", " : "") << fixed(VrPerformanceLevers::distanceScale(i))
         << " " << percent(w.distanceMs[i], w.ms) << " %";
     }
 
@@ -248,11 +214,10 @@ namespace dxvk {
       " ms, over the period ", percent(w.cpuOver, w.frames), " %; GPU ", gpu,
       "; reprojected for the CPU ", percent(w.cpuReprojected, w.frames),
       " %, for the GPU ", percent(w.gpuReprojected, w.frames), " %; ", w.changes,
-      " level changes; time at each distance scale (replay: right eye drawn from the left eye's commands, "
-      "water reflections, depth maps and refractions and specular off): ", distances.str(),
-      "; at each shadow and specular scale / world resolution: ", gpuLevels.str(),
-      "; now distances ", distanceLabel(appliedLevels().distance),
-      m_replayForced ? " (d3d9.vrStereoReplayTest forces the replay, the times above are the governor's levels)" : "",
+      " level changes; time at each distance scale: ", distances.str(),
+      " (water reflections off from x", fixed(VrPerformanceLevers::distanceScale(VrPerformanceLevers::WaterOffDistanceLevel)),
+      "); at each shadow and specular scale / world resolution: ", gpuLevels.str(),
+      "; now distances x", fixed(VrPerformanceLevers::distanceScale(levels.distance)),
       ", shadows and specular x", fixed(VrPerformanceLevers::gpuScale(levels.gpu)),
       ", world resolution ", percent(VrPerformanceLevers::renderScale(levels.gpu), 1.0), " %"));
 

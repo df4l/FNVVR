@@ -59,7 +59,6 @@ spirv_instruction(set = "GLSL.std.450", id = 81) vec4 spvNClamp(vec4, vec4, vec4
 #define CBV_VS_CLIP_PLANES      0
 #define CBV_VS_FIXED_FUNCTION   1
 #define CBV_VS_VERTEX_BLEND     2
-#define CBV_VS_STEREO           7
 
 #define CBV_PS_SHARED           5
 

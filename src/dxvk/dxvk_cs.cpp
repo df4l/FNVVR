@@ -34,7 +34,7 @@ namespace dxvk {
       m_next = &m_head;
     } else {
       while (cmd != nullptr) {
-        cmd->execCopy(ctx);
+        cmd->exec(ctx);
         cmd = cmd->next();
       }
     }

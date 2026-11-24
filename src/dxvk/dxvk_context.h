@@ -10,7 +10,6 @@
 #include "dxvk_latency.h"
 #include "dxvk_objects.h"
 #include "dxvk_queue.h"
-#include "dxvk_stereo_replay.h"
 #include "dxvk_util.h"
 
 namespace dxvk {
@@ -122,50 +121,6 @@ namespace dxvk {
      * \returns Current command list object
      */
     Rc<DxvkCommandList> beginExternalRendering();
-
-    /**
-     * \brief Saves the bindings recorded commands may rely on
-     *
-     * Used by the VR layer to run a stretch of recorded commands a
-     * second time from the bindings they were recorded with.
-     * \param [out] bindings Saved bindings
-     */
-    void saveStereoBindings(
-            DxvkStereoBindings&       bindings);
-
-    /**
-     * \brief Restores bindings saved by saveStereoBindings
-     *
-     * Ends the current pass and invalidates all derived state,
-     * as beginExternalRendering does.
-     * \param [in] bindings Saved bindings
-     */
-    void restoreStereoBindings(
-      const DxvkStereoBindings&       bindings);
-
-    /**
-     * \brief Sets the journal of replaced buffer storage
-     *
-     * While set, every buffer invalidation notes the storage the
-     * buffer had before in the journal.
-     * \param [in] journal Journal, or \c nullptr to stop noting
-     */
-    void setStereoBufferJournal(
-            DxvkStereoBufferJournal*  journal) {
-      m_stereoJournal = journal;
-    }
-
-    /**
-     * \brief Gives a buffer back storage it had before
-     *
-     * Same as invalidateBuffer, without noting the
-     * replaced storage in the journal.
-     * \param [in] buffer The buffer
-     * \param [in] storage Storage to assign
-     */
-    void assignStereoBufferStorage(
-      const Rc<DxvkBuffer>&           buffer,
-      const Rc<DxvkResourceAllocation>& storage);
 
     /**
      * \brief Begins generating query data
@@ -1477,8 +1432,6 @@ namespace dxvk {
     bool                    m_endLatencyTracking = false;
 
     DxvkImplicitResolveTracker  m_implicitResolves;
-
-    DxvkStereoBufferJournal*    m_stereoJournal = nullptr;
 
     void blitImageFb(
             Rc<DxvkImageView>     dstView,
