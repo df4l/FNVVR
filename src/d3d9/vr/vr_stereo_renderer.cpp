@@ -6,19 +6,38 @@
 #include "../../util/util_string.h"
 
 #include "vr_d3d9_bridge.h"
+#include "vr_fader_size.h"
 #include "vr_game_addresses.h"
+#include "vr_game_depth.h"
 #include "vr_game_ammo.h"
 #include "vr_game_console.h"
+#include "vr_game_text_edit.h"
 #include "vr_game_memory.h"
 #include "vr_game_nodes.h"
 #include "vr_head_hud.h"
+#include "vr_options_file.h"
 #include "vr_math.h"
+#include "vr_menu_cursor.h"
 #include "vr_stereo_renderer.h"
+#include "vr_tree_leaves.h"
+#include "vr_water_reflection.h"
 #include "vr_weapon_types.h"
 
 namespace dxvk {
 
   namespace {
+
+    // A script holds the player still and unarmed: the intro before its
+    // first steps, while the character is not made yet
+    bool playerHeldStill() {
+      auto player = *reinterpret_cast<const uint8_t* const*>(VrGame::Player);
+
+      if (!player)
+        return false;
+
+      uint8_t disabled = player[VrGame::PlayerDisabledControls];
+      return (disabled & VrGame::ControlMovement) && (disabled & VrGame::ControlFighting);
+    }
 
     // Main::Swap is __thiscall without stack arguments
     using SwapFn = void (__fastcall*)(void* main, void* unused);
@@ -47,7 +66,8 @@ namespace dxvk {
     // HUD groups shown on the panel in front of the head
     constexpr uintptr_t HeadHudGroups[] = {
       VrGame::HudMessages, VrGame::HudQuestReminder, VrGame::HudSubtitles,
-      VrGame::HudRadiationMeter, VrGame::HudXpMeter, VrGame::HudSneakMeter };
+      VrGame::HudRadiationMeter, VrGame::HudXpMeter, VrGame::HudSneakMeter,
+      VrGame::HudBreathMeter };
 
     // HUD groups shown on the hands
     constexpr uintptr_t HandHudGroups[] = {
@@ -144,6 +164,13 @@ namespace dxvk {
         std::clamp(LONG(std::lround(rect.bottom * scale)), LONG(0), LONG(desc.Height)) };
     }
 
+    /**
+     * \brief Size of the interface's panel images for the game's frame
+     */
+    VrExtent interfaceExtent(const D3DSURFACE_DESC& frame) {
+      return vrComputeInterfaceExtent({ frame.Width, frame.Height });
+    }
+
     VrInterfaceRect pixelsToRect(const RECT& rect) {
       return { float(rect.left), float(rect.top), float(rect.right), float(rect.bottom) };
     }
@@ -154,6 +181,7 @@ namespace dxvk {
 
     SwapFn            g_originalSwap            = reinterpret_cast<SwapFn>(VrGame::Swap);
     RenderInterfaceFn g_originalRenderInterface = reinterpret_cast<RenderInterfaceFn>(VrGame::RenderInterface);
+    uintptr_t         g_previousRenderInterface = VrGame::RenderInterface;
     InterfaceCullFn   g_originalInterfaceCull   = reinterpret_cast<InterfaceCullFn>(VrGame::InterfaceCull);
     AccumTaskFn       g_originalAccumTask       = reinterpret_cast<AccumTaskFn>(VrGame::AddAccumTask);
     PlaceCameraFn     g_originalPlaceCamera     = reinterpret_cast<PlaceCameraFn>(VrGame::PlaceCamera);
@@ -165,7 +193,7 @@ namespace dxvk {
   VrStereoRenderer::VrStereoRenderer(IVRBackend& backend, IDirect3DDevice9* device,
     bool showPreview, const VrPanelConfig& panel)
   : m_backend(backend), m_device(device), m_showPreview(showPreview), m_panelConfig(panel),
-    m_controls(backend) { }
+    m_submitter(device, backend), m_controls(backend) { }
 
 
   VrStereoRenderer::~VrStereoRenderer() {
@@ -174,6 +202,7 @@ namespace dxvk {
     hidePanel();
     hideHud();
     hideHandHud();
+    m_submitter.finish();
   }
 
 
@@ -187,7 +216,8 @@ namespace dxvk {
     const VrGameTimerConfig&    timer,
     const VrRenderPassConfig&   passes,
     const VrDeveloperConfig&    developer,
-    const VrSwingConfig&        swing) {
+    const VrSwingConfig&        swing,
+    const VrTexts&              texts) {
     if (g_stereoRenderer)
       return nullptr;
 
@@ -196,8 +226,10 @@ namespace dxvk {
     bool patched = VrGameMemory::redirectCall(VrGame::SwapCallSite, VrGame::Swap,
       reinterpret_cast<const void*>(&VrStereoRenderer::swapHook));
 
-    patched = patched && VrGameMemory::redirectCall(VrGame::RenderInterfaceCallSite,
-      VrGame::RenderInterface, reinterpret_cast<const void*>(&VrStereoRenderer::renderInterfaceHook));
+    // JohnnyGuitar holds this call for its camera overlays
+    patched = patched && VrGameMemory::chainCall(VrGame::RenderInterfaceCallSite,
+      VrGame::RenderInterface, reinterpret_cast<const void*>(&VrStereoRenderer::renderInterfaceHook),
+      &g_previousRenderInterface);
 
     patched = patched && VrGameMemory::redirectCall(VrGame::InterfaceCullCallSite,
       VrGame::InterfaceCull, reinterpret_cast<const void*>(&VrStereoRenderer::interfaceCullHook));
@@ -292,9 +324,19 @@ namespace dxvk {
     renderer->m_chargeRing = std::make_unique<VrChargeRing>(*renderer->m_painter, backend);
     renderer->m_quickWheel = std::make_unique<VrQuickWheel>(*renderer->m_painter, backend, renderer->m_gameImages);
     renderer->m_ammoLabel  = std::make_unique<VrAmmoLabel>(*renderer->m_painter, backend, renderer->m_gameImages);
+    renderer->m_caravanValues = std::make_unique<VrCaravanValues>(*renderer->m_painter, backend, renderer->m_gameImages);
 
     if (VrGameConsole::install())
-      renderer->m_terminal = std::make_unique<VrConsoleTerminal>(*renderer->m_painter, backend);
+      renderer->m_terminal = std::make_unique<VrConsoleTerminal>(*renderer->m_painter, backend, texts);
+
+    if (VrOcclusionCulling::pluginLoaded()) {
+      renderer->m_occlusionPluginNotice = texts.text("occlusion.plugin",
+        "Uninstall the Occlusion Culling plugin: in VR it gives both eyes the same answers. "
+        "FNVVR has its own, made for VR.");
+    }
+
+    if (VrGameTextEdit::install())
+      renderer->m_textFieldKeyboard = std::make_unique<VrTextFieldKeyboard>(backend);
 
     renderer->m_handPick = VrHandActivatePick::install();
 
@@ -305,6 +347,9 @@ namespace dxvk {
 
     if (!renderer->m_skyAnchor)
       Logger::warn("VR: The sky placement was not found, the sky is drawn around the camera instead of each eye");
+
+    if (!VrTreeLeaves::install())
+      Logger::warn("VR: The SpeedTree leaf shader was not found, tree leaves turn with the head");
 
     VrStereoRenderer* self = renderer.get();
     renderer->m_cullingCamera = VrCullingCamera::install(
@@ -334,6 +379,20 @@ namespace dxvk {
     if (!renderer->m_comfortSettings)
       Logger::info("VR: The idle and kill camera settings were not found, the game may leave the first person");
 
+    renderer->m_fadersOverlaid = renderer->m_faderOverlay.initialize() && VrFaderSize::install();
+
+    VrWaterReflection::install();
+
+    renderer->m_roomscale = VrRoomscale::install();
+
+    if (!renderer->m_roomscale)
+      Logger::info("VR: The player's move was not found, the capsule does not follow the head");
+
+    renderer->m_bodyView = VrBodyView::install();
+
+    if (!renderer->m_bodyView)
+      Logger::info("VR: The temporary third person was not found, sitting down is seen from behind the player");
+
     renderer->m_npcGaze = VrNpcGaze::install();
 
     if (!renderer->m_npcGaze)
@@ -346,9 +405,30 @@ namespace dxvk {
 
     renderer->m_physicsGrab = VrPhysicsGrab::install();
 
-    if (renderer->m_physicsGrab)
+    if (renderer->m_physicsGrab) {
       renderer->m_controls.setGrabByHands(true);
-    else
+      renderer->m_npcReaction = VrNpcReaction::install();
+
+      if (!renderer->m_npcReaction)
+        Logger::info("VR: The game's comments on the player's actions were not found, grabbed actors do not react");
+
+      renderer->m_physicsGrab->setNpcReaction(renderer->m_npcReaction.get());
+
+      // Objects are struck while Havok is idle, in the player's update
+      if (renderer->m_meleeSwing) {
+        renderer->m_meleeObjectHit = VrMeleeObjectHit::install();
+
+        if (renderer->m_meleeObjectHit) {
+          VrMeleeObjectHit* objectHit = renderer->m_meleeObjectHit.get();
+          renderer->m_meleeSwing->setObjectHit(objectHit);
+          renderer->m_physicsGrab->setPlayerUpdateTask([objectHit] (uint8_t* player, float dt) {
+            objectHit->run(player, dt);
+          });
+        } else {
+          Logger::info("VR: The game's melee hits on objects were not found, swings only hit actors");
+        }
+      }
+    } else
       Logger::info("VR: The game's grab was not found, the right grip grabs as the game's grab key");
 
     if (renderer->m_manualReload && renderer->m_weaponHand) {
@@ -386,6 +466,62 @@ namespace dxvk {
     if (!renderer->m_renderPasses)
       Logger::info("VR: The world render's passes were not found, they are drawn for each eye and not timed");
 
+    renderer->m_spikeLogWanted = passes.spikeLog && renderer->m_renderPasses;
+    renderer->m_cpuSamplesWanted = passes.cpuSamples;
+
+    if (passes.gpuTimings) {
+      renderer->m_gpuTimer = VrGpuTimer::create(device);
+
+      if (!renderer->m_gpuTimer)
+        Logger::warn("VR: The device has no timestamp queries, GPU timings are off");
+      else if (renderer->m_renderPasses)
+        renderer->m_renderPasses->setGpuTimer(renderer->m_gpuTimer.get());
+    }
+
+    renderer->m_repeatedPasses = VrRepeatedPasses::install();
+
+    if (!renderer->m_repeatedPasses)
+      Logger::info("VR: The game's timers were not found, time moves on in every eye's world pass");
+
+    if (renderer->m_renderPasses) {
+      renderer->m_foveation = VrFoveation::create(device, passes.foveationZones);
+      renderer->m_foveationTestGaze = passes.foveationTestGaze;
+
+      renderer->m_renderPasses->setWorldCallbacks(
+        [self] (uint32_t eye) {
+          if (self->m_foveation)
+            self->m_foveation->beginWorld(eye);
+
+          if (self->m_occlusion)
+            self->m_occlusion->beginWorld(eye);
+        },
+        [self] {
+          if (self->m_foveation)
+            self->m_foveation->endWorld();
+
+          if (self->m_occlusion)
+            self->m_occlusion->endWorld();
+        });
+    }
+
+    renderer->m_scopeGame = VrScopeGame::install();
+
+    if (renderer->m_weaponHand && renderer->m_renderPasses) {
+      renderer->m_scopeRender = VrScopeRender::install(device, passes.scopeResolution);
+
+      if (renderer->m_scopeRender) {
+        std::string corrections;
+
+        if (VrOptionsFile::readText(L"scopes.ini", corrections)) {
+          size_t count = renderer->m_weaponHand->scopeTable().parse(corrections);
+          Logger::info(str::format("VR: ", count, " scope places read from fnvvr\\scopes.ini"));
+        }
+
+        renderer->m_renderPasses->setAfterFirstPerson([self] { self->drawScopeLens(); });
+        renderer->m_weaponHand->setScopesEnabled(renderer->m_scopesEnabled);
+      }
+    }
+
     if (!renderer->m_gameTimer)
       Logger::info("VR: The game's frame timer update was not found, it is not measured");
 
@@ -413,11 +549,19 @@ namespace dxvk {
     if (g_stereoRenderer) {
       g_stereoRenderer->captureEye();
 
-      if (g_stereoRenderer->renderLayer(interfaceManager, arg0, arg1))
+      uint32_t eye = g_stereoRenderer->m_eye;
+      uint32_t token = eye != NoEye
+        ? g_stereoRenderer->gpuBegin(VrGpuSection::pass(eye, VrRenderPass::Interface))
+        : VrGpuTimer::NoToken;
+
+      bool drawn = g_stereoRenderer->renderLayer(interfaceManager, arg0, arg1);
+      g_stereoRenderer->gpuEnd(token);
+
+      if (drawn)
         return;
     }
 
-    g_originalRenderInterface(interfaceManager, nullptr, arg0, arg1);
+    reinterpret_cast<RenderInterfaceFn>(g_previousRenderInterface)(interfaceManager, nullptr, arg0, arg1);
   }
 
 
@@ -497,9 +641,22 @@ namespace dxvk {
 
   void VrStereoRenderer::renderFrame(void* main) {
     m_mainThread   = GetCurrentThreadId();
+
+    if (m_cpuSamplesWanted) {
+      m_cpuSamplesWanted = false;
+      m_cpuSampler = VrCpuSampler::start(m_mainThread);
+
+      if (m_cpuSampler && m_renderPasses)
+        m_renderPasses->setCpuSampler(m_cpuSampler.get());
+    }
+
+    VrCpuPhaseScope framePhase(m_cpuSampler.get(), uint8_t(VrCpuPhase::Frame));
     m_swapped      = true;
     m_paced        = false;
     m_blockedInput = false;
+
+    if (m_repeatedPasses)
+      m_repeatedPasses->beginFrame();
 
     disableStaticMenuBackground();
 
@@ -508,7 +665,7 @@ namespace dxvk {
     VrGameStateKind state = readGameState();
 
     if (m_comfortSettings)
-      m_comfortSettings->update(state == VrGameStateKind::InGame);
+      m_comfortSettings->update(state == VrGameStateKind::InGame, m_weaponHand && m_weaponHand->hidesModel());
 
     if (m_developerMode)
       m_developerMode->update(state);
@@ -552,9 +709,11 @@ namespace dxvk {
       return;
     }
 
-    VrFrameTiming timing = m_backend.waitFrame();
+    VrFrameTiming timing = waitFrame();
     VrD3D9Bridge::beginFrame(m_device, m_backend);
     m_paced = timing.paced;
+    countFrame(timing);
+    showOcclusionPluginNotice(state);
 
     if (!timing.shouldRender) {
       VrD3D9Bridge::submitEmptyFrame(m_device, m_backend, timing.predictedDisplayTime);
@@ -579,8 +738,14 @@ namespace dxvk {
     // The weapon hand decided on the previous frame whether the game aims,
     // the melee guard whether it blocks (the same control), and the gaze
     // whether the Pip-Boy closes
-    if (m_weaponHand)
+    if (m_weaponHand) {
       m_controls.setGameAim(m_weaponHand->wantsGameAim() || (m_meleeSwing && m_meleeSwing->wantsBlock()));
+
+      if (m_scopeGame)
+        m_scopeGame->setSteadied(m_weaponHand->leftHandOnWeapon());
+    }
+
+    m_shutterHeld = input.hasActions && input.actions.isPressed(VrAction::Attack);
 
     m_controls.setSwingsWithHand((m_meleeSwing && m_meleeSwing->swingsWithHand())
       || (m_handThrow && m_handThrow->throwsWithHand()));
@@ -605,9 +770,15 @@ namespace dxvk {
 
     // The Pip-Boy inventory's hotkey wheel takes the navigation stick
     m_controls.setHotKeyWheelShown(state == VrGameStateKind::PipBoy && VrGameHotKeys::inventoryWheelShown());
-    m_controls.setHandsFree(m_weaponDrawn && m_weaponDrawn->playerHolstered());
+    m_controls.setHandsFree(m_weaponDrawn && m_weaponDrawn->handsFree());
 
     float dt = float(timing.predictedPeriod) * 1e-9f;
+
+    // Eating a corpse holds the stick from this frame's controls on
+    if (m_bodyView)
+      m_bodyView->updateMoveHold();
+
+    m_controls.setMoveHeld(m_bodyView && m_bodyView->holdsMove());
 
     updateControls(input, state, true, dt);
 
@@ -617,6 +788,7 @@ namespace dxvk {
     }
 
     auto views = m_backend.locateViews(timing.predictedDisplayTime);
+    updateFoveation(views, dt);
 
     m_cullingFov    = vrComputeCullingFov(views[0].fov, views[1].fov, CullingMargin);
     m_hasCullingFov = true;
@@ -628,8 +800,43 @@ namespace dxvk {
     // The game placed its first-person model for its own camera
     VrGameCameraPose modelCamera = m_gameCameraPose;
 
+    if (m_bodyView)
+      m_bodyView->placeCamera(m_gameCameraPose, dt);
+
     // The game turned its camera with the head already
-    m_controls.updateCamera(m_gameCameraPose, dt);
+    bool headTurnsCamera = m_controls.updateCamera(m_gameCameraPose, dt);
+
+    if (m_bodyView) {
+      m_bodyView->finishCamera(m_gameCameraPose, headTurnsCamera, dt);
+
+      // The frame the animation lets go of the head, the head's look starts
+      // again from the view's heading
+      float viewHeading = m_bodyView->viewHeading();
+      bool holdsLook = m_bodyView->holdsLook();
+
+      m_controls.holdBodyHeading(m_bodyView->movesView() || m_heldLook ? &viewHeading : nullptr);
+      m_controls.holdLook(holdsLook);
+      m_heldLook = holdsLook;
+    }
+
+    bool moveHeld = m_bodyView && m_bodyView->holdsMove();
+
+    m_viewMoved = m_bodyView && m_bodyView->movesView();
+
+    // A mini-game on an object of the world has brought the player to it. It
+    // comes last: its heading is the object's, not the body's.
+    if (const VrGameCameraPose* seat = m_minigames ? m_minigames->seatCamera() : nullptr) {
+      m_gameCameraPose = *seat;
+      m_viewMoved = true;
+    } else if (m_minigames) {
+      m_minigames->viewFrom(m_gameCameraPose);
+    }
+
+    if (m_roomscale && m_hasReference) {
+      m_roomscale->update(m_reference, m_gameCameraPose, m_hasHeadPose ? &m_headPose : nullptr,
+        state == VrGameStateKind::InGame && m_controls.cameraFollowsHead() && !m_viewMoved && !moveHeld);
+    }
+
     updateNpcGaze();
     updateHolster(input, state);
     updateQuickWheel(input, state);
@@ -637,6 +844,7 @@ namespace dxvk {
     updateManualReload(input, state, dt);
     updateAmmoChoice(input, state);
     updateMeleeSwing(input, state, dt);
+    updatePunches(input, state, dt);
     updateHandThrow(input, state, dt);
     updatePhysicsGrab(input, state);
     updateHandPick(input, state);
@@ -646,17 +854,41 @@ namespace dxvk {
     D3DSURFACE_DESC targetDesc = { };
     m_gameTarget->GetDesc(&targetDesc);
 
+    VrExtent interfaceSize = interfaceExtent(targetDesc);
+
     m_hudMetersPlaced = m_hudMetersAvailable
-      ? m_hudMeters.place(vrComputeInterfaceSize(targetDesc.Width, targetDesc.Height).y)
+      ? m_hudMeters.place(vrComputeInterfaceSize(interfaceSize.width, interfaceSize.height).y)
       : VrHudMetersPlaced();
+
+    if (m_gpuTimer)
+      m_gpuTimer->beginFrame(m_frameId);
+
+    uint32_t scopeGpu = gpuBegin(VrGpuSection::part(VrGpuFramePart::Scope));
+    renderScope(state, main, views);
+    gpuEnd(scopeGpu);
+
+    m_minigameDrawn = { };
+
+    // After the game's update, for both eyes only
+    if (m_minigames)
+      m_minigames->bendChallengerArm();
 
     for (uint32_t eye = 0; eye < VrEyeCount; eye++) {
       m_eyeCopied[eye] = false;
       renderEye(eye, views[eye], main);
     }
 
+    if (m_minigames)
+      m_minigames->restoreChallengerArm();
+
     if (m_renderPasses)
       m_renderPasses->endFrame();
+
+    if (m_occlusion)
+      m_occlusion->endFrame();
+
+    if (m_spikeLog && m_renderPasses)
+      m_spikeLog->setCpuPasses(m_frameId, m_renderPasses->lastFrame());
 
     m_renderCamera.restore(m_gameCamera);
     m_gameTarget = nullptr;
@@ -667,17 +899,21 @@ namespace dxvk {
         m_loggedFailure = true;
       }
 
+      if (m_gpuTimer)
+        m_gpuTimer->cancelFrame();
+
       VrD3D9Bridge::submitEmptyFrame(m_device, m_backend, timing.predictedDisplayTime);
       return;
     }
 
     IDirect3DTexture9* eyes[VrEyeCount] = { m_eyeTextures[0].ptr(), m_eyeTextures[1].ptr() };
 
-    if (!VrD3D9Bridge::submitStereoFrame(m_device, m_backend, eyes, views,
-        timing.predictedDisplayTime) && !m_loggedFailure) {
-      Logger::err("VR: The backend rejected a stereo frame");
-      m_loggedFailure = true;
-    }
+    uint32_t panelsGpu = gpuBegin(VrGpuSection::part(VrGpuFramePart::Panels));
+
+    drawFaders(eyes);
+
+    // The panels go to the runtime with the eyes, before them
+    m_submitter.beginFrame();
 
     if (m_hudRendered)
       submitHud();
@@ -694,10 +930,22 @@ namespace dxvk {
     // and the runtime would draw the menu over it.
     if (m_terminal && m_terminal->showsScreen())
       hidePanel();
+    else if (leftRenderedMenu(state))
+      hidePanel();
     else if (m_menuRendered)
       submitMenu();
     else if (m_overPipBoy)
       hidePanel();
+
+    gpuEnd(panelsGpu);
+
+    if (m_gpuTimer)
+      m_gpuTimer->endFrame();
+
+    if (!m_submitter.submitFrame(eyes, views, timing.predictedDisplayTime) && !m_loggedFailure) {
+      Logger::err("VR: The eye images could not be handed to the backend");
+      m_loggedFailure = true;
+    }
 
     m_menuOverPipBoy = m_overPipBoy && m_menuRendered;
 
@@ -710,9 +958,14 @@ namespace dxvk {
     // The runtime draws the panel. The game draws one frame, which
     // onPresent copies to the panel. Waiting still paces the game to the
     // headset and provides the head pose the panel is placed with.
-    VrFrameTiming timing = m_backend.waitFrame();
+    VrFrameTiming timing = waitFrame();
     VrD3D9Bridge::beginFrame(m_device, m_backend);
     m_paced = timing.paced;
+    countFrame(timing);
+    // Answers of the world's last frames age while it is not drawn
+    if (m_occlusion)
+      m_occlusion->endFrame();
+
     VrInputState input = m_backend.pollInput(timing.predictedDisplayTime);
     trackHead(input);
 
@@ -738,6 +991,53 @@ namespace dxvk {
 
 
   void VrStereoRenderer::updateControls(const VrInputState& input, VrGameStateKind state, bool stereo, float dt) {
+    if (m_minigames) {
+      VrMinigameFrame frame;
+      frame.head          = m_headPose;
+      frame.stereo        = stereo && state == VrGameStateKind::Menu && m_hasHeadPose;
+      frame.panelWidth    = m_panelConfig.hudWidth;
+      frame.panelDistance = m_panelConfig.hudDistance;
+      frame.dt            = dt;
+      frame.hasReference  = m_hasReference;
+      frame.reference     = m_reference;
+
+      if (frame.stereo)
+        frame.cameraHeight = m_renderCamera.readPose().position.z;
+
+      frame.camera = m_gameCameraPose;
+
+      Com<IDirect3DSurface9> backBuffer;
+      D3DSURFACE_DESC desc = { };
+
+      if (SUCCEEDED(m_device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer))
+       && SUCCEEDED(backBuffer->GetDesc(&desc)) && desc.Width) {
+        VrExtent panel = interfaceExtent(desc);
+        frame.panelAspect = float(panel.height) / float(panel.width);
+      }
+
+      m_minigames->update(frame, input, m_controls.pointerSurfaceState());
+
+      bool valuesShown = false;
+
+      if (const VrCaravanBoard* board = m_minigames->caravanBoard())
+        valuesShown = m_caravanValues && m_caravanValues->show(*board);
+      else if (m_caravanValues)
+        m_caravanValues->hide();
+
+      m_minigames->setCaravanValuesShown(valuesShown);
+
+      m_controls.setMinigamePad(m_minigames->pad());
+      m_controls.setPointerSurface(m_minigames->surface());
+      m_menuScenes.leaveToEyes(m_minigames->menuId(), m_minigames->showsRenderedMenu());
+    }
+
+    if (m_textFieldKeyboard) {
+      m_textFieldKeyboard->update(dt);
+      m_controls.setSystemKeyboardShown(m_textFieldKeyboard->shown());
+    }
+
+    m_controls.setDialogueShown(stereo && m_dialogueSpeaker);
+    m_controls.setCompanionWheelShown(stereo && VrMenuCursor::companionWheelShown());
     m_controls.setTerminalPanel(m_terminal ? m_terminal->placement() : nullptr);
     m_controls.update(input, state, m_hasReference ? &m_reference : nullptr, menuPanel(), dt);
 
@@ -865,6 +1165,23 @@ namespace dxvk {
   }
 
 
+  void VrStereoRenderer::drawFaders(IDirect3DTexture9* const* eyes) {
+    if (!m_fadersOverlaid || !m_painter)
+      return;
+
+    D3DSURFACE_DESC desc = { };
+
+    if (FAILED(eyes[0]->GetLevelDesc(0, &desc)))
+      return;
+
+    if (!m_faderOverlay.update(float(desc.Width), float(desc.Height)))
+      return;
+
+    for (uint32_t eye = 0; eye < VrEyeCount; eye++)
+      m_painter->paint(eyes[eye], m_faderOverlay.fills(), false);
+  }
+
+
   void VrStereoRenderer::renderEye(
           uint32_t              eye,
     const VrEyeView&            view,
@@ -882,7 +1199,16 @@ namespace dxvk {
     if (m_renderPasses)
       m_renderPasses->beginEye(eye);
 
+    // The left eye's pass moves time on for the frame
+    bool repeat = eye != 0 && m_repeatedPasses;
+
+    if (repeat)
+      m_repeatedPasses->beginRepeat();
+
     g_originalSwap(main, nullptr);
+
+    if (repeat)
+      m_repeatedPasses->endRepeat();
 
     if (m_renderPasses)
       m_renderPasses->endEye();
@@ -898,12 +1224,267 @@ namespace dxvk {
   }
 
 
+  VrFoveationSupport VrStereoRenderer::foveationSupport() {
+    if (!m_foveation)
+      return VrFoveationSupport::NoGpuSupport;
+
+    if (!m_foveationTestGaze && !m_backend.supportsEyeTracking())
+      return VrFoveationSupport::NoEyeTracking;
+
+    return VrFoveationSupport::Available;
+  }
+
+
+  void VrStereoRenderer::setFoveationEnabled(bool enabled) {
+    if (enabled == m_foveationEnabled)
+      return;
+
+    m_foveationEnabled = enabled;
+    m_gazeHold.reset();
+
+    if (m_foveation && !enabled)
+      m_foveation->stop();
+
+    Logger::info(str::format("VR: Eye-tracked foveation is ", enabled ? "on" : "off",
+      enabled && !m_foveation ? ", but the GPU cannot draw it" : ""));
+  }
+
+
+  void VrStereoRenderer::updateFoveation(const std::array<VrEyeView, VrEyeCount>& views, float dt) {
+    if (!m_foveation || !m_foveationEnabled)
+      return;
+
+    std::array<VrGaze, VrEyeCount> tracked;
+    const std::array<VrGaze, VrEyeCount>* gaze = nullptr;
+
+    if (m_backend.locateGaze(tracked))
+      gaze = m_gazeHold.update(&tracked, dt);
+    else if (m_foveationTestGaze)
+      gaze = m_gazeHold.update(&(tracked = { }), dt);
+    else
+      gaze = m_gazeHold.update(nullptr, dt);
+
+    // The world is drawn into targets of the game's resolution
+    D3DSURFACE_DESC target = { };
+    m_gameTarget->GetDesc(&target);
+
+    m_foveation->prepareFrame(views, gaze, VrExtent { target.Width, target.Height });
+  }
+
+
+  void VrStereoRenderer::setAsyncSubmit(bool enabled) {
+    m_submitter.setThreaded(enabled);
+  }
+
+
+  void VrStereoRenderer::setOcclusionCulling(bool enabled) {
+    // Its eyes are told by the render passes' world callbacks
+    if (enabled && !m_occlusionTried && m_renderPasses) {
+      m_occlusionTried = true;
+      m_occlusion = VrOcclusionCulling::install(m_device);
+    }
+
+    if (m_occlusion)
+      m_occlusion->setEnabled(enabled);
+  }
+
+
+  void VrStereoRenderer::showOcclusionPluginNotice(VrGameStateKind state) {
+    // A few seconds into the world, past the fade from the loading screen
+    constexpr uint32_t NoticeDelayFrames = 360;
+    constexpr float    NoticeSeconds     = 10.0f;
+
+    using ShowHudMessageFn = uint32_t (__cdecl*)(const char* text, uint32_t emotion, const char* image,
+      const char* sound, float time, uint32_t instant);
+
+    if (!m_occlusionPluginNotice || state != VrGameStateKind::InGame || ++m_noticeFrames < NoticeDelayFrames)
+      return;
+
+    if (VrGameMemory::matches(VrGame::ShowHudMessage, VrGame::ShowHudMessagePrologue, sizeof(VrGame::ShowHudMessagePrologue))) {
+      reinterpret_cast<ShowHudMessageFn>(VrGame::ShowHudMessage)(m_occlusionPluginNotice,
+        VrGame::HudMessageSad, nullptr, nullptr, NoticeSeconds, 0);
+      Logger::info("VR: The player was told to uninstall the Occlusion Culling plugin");
+    }
+
+    m_occlusionPluginNotice = nullptr;
+  }
+
+
+  void VrStereoRenderer::setScopesEnabled(bool enabled) {
+    m_scopesEnabled = enabled;
+
+    if (m_weaponHand && m_scopeRender)
+      m_weaponHand->setScopesEnabled(enabled);
+  }
+
+
+  VrGameCameraPose VrStereoRenderer::eyeInGame(const VrEyeView& view) const {
+    return vrComputeEyeCameraPose(m_gameCameraPose,
+      vrComputeEyeInReference(m_reference, view.pose), VrGameUnitsPerMetre);
+  }
+
+
+  void VrStereoRenderer::renderScope(VrGameStateKind state, void* main, const std::array<VrEyeView, VrEyeCount>& views) {
+    constexpr float FallbackDefaultFov = 75.0f;
+    constexpr float RadiansPerDegree   = 3.14159265f / 180.0f;
+
+    m_scopeVisible = false;
+
+    // The game's menu mode follows the Pip-Boy's state by a frame
+    if (!m_scopeRender || !m_scopesEnabled || state != VrGameStateKind::InGame || !m_hasReference
+     || !m_weaponHand || m_pipBoyControl.state() != VrPipBoyState::Closed)
+      return;
+
+    if (!m_weaponHand->scopeLens(m_scopeLens))
+      return;
+
+    m_scopeVisible = true;
+
+    if (m_scopeLens.kind == VrOpticKind::Binoculars) {
+      VrGameCameraPose head = eyeInGame(views[0]);
+      head.position = (head.position + eyeInGame(views[1]).position) * 0.5f;
+      vrRaiseBinoculars(m_scopeLens, head);
+    }
+
+    // Without an eye at the eyepiece the lens is a dark glass, and costs no render
+    bool seen = false;
+
+    for (uint32_t eye = 0; eye < VrEyeCount; eye++)
+      seen |= vrScopeLensShowsImage(m_scopeLens, eyeInGame(views[eye]), views[eye].fov);
+
+    VrEquippedScope equipped;
+
+    if (!seen || !VrScopeGame::readEquipped(equipped)) {
+      m_scopeRender->forgetImage();
+      m_screenShown = false;
+      return;
+    }
+
+    bool onScreen = m_scopeLens.kind == VrOpticKind::Screen;
+    float screenFlash = 0.0f;
+    bool drawView = true;
+
+    if (onScreen)
+      drawView = updateScreenTurn(screenFlash);
+
+    if (!drawView) {
+      // The held view still flickers and flashes on the tube
+      if (m_shutterLeft > 0.0f && m_screenTurn)
+        m_scopeRender->updateScreen(false, screenFlash);
+
+      return;
+    }
+
+    m_scopeRender->selectReticle(m_scopeLens.kind == VrOpticKind::Scope ? equipped.scopeModel : nullptr);
+
+    float magnification = 1.0f;
+    float imageTangent  = std::tan(0.5f * equipped.sightFov * RadiansPerDegree);
+
+    if (!onScreen) {
+      float defaultFov = *reinterpret_cast<const float*>(VrGame::SettingDefaultWorldFov + VrGame::SettingValue);
+
+      if (!(defaultFov > equipped.sightFov && defaultFov < 170.0f))
+        defaultFov = std::max(FallbackDefaultFov, equipped.sightFov);
+
+      magnification = vrComputeScopeMagnification(equipped.sightFov, defaultFov);
+      imageTangent  = m_scopeLens.apparentTangent;
+    }
+
+    VrEyeView view;
+
+    if (!m_scopeRender->prepareView(magnification, imageTangent, m_scopeLens.kind, view.fov)) {
+      m_scopeRender->forgetImage();
+      m_screenShown = false;
+      return;
+    }
+
+    VrGameCameraPose camera = vrComputeScopeCamera(m_scopeLens);
+
+    // The camera hooks keep the camera on this view while the world is drawn
+    m_eye         = NoEye;
+    m_eyeView     = &view;
+    m_scopeCamera = &camera;
+    applyEyePose();
+
+    if (m_skyAnchor)
+      m_skyAnchor->setEye(&m_eyePosition);
+
+    if (m_renderPasses)
+      m_renderPasses->setSceneScissor(&m_scopeRender->area());
+
+    // Drawn before the eyes, but the left eye's pass moves time on
+    if (m_repeatedPasses)
+      m_repeatedPasses->beginRepeat();
+
+    m_scopeRender->render(main);
+
+    if (m_repeatedPasses)
+      m_repeatedPasses->endRepeat();
+
+    if (m_renderPasses)
+      m_renderPasses->setSceneScissor(nullptr);
+
+    if (m_skyAnchor)
+      m_skyAnchor->setEye(nullptr);
+
+    m_scopeCamera = nullptr;
+    m_eyeView     = nullptr;
+    m_renderCamera.restore(m_gameCamera);
+
+    if (m_cullingCamera)
+      m_cullingCamera->cullAgain();
+
+    if (onScreen) {
+      m_scopeRender->updateScreen(true, screenFlash);
+      m_screenShown = true;
+    }
+  }
+
+
+  bool VrStereoRenderer::updateScreenTurn(float& flash) {
+    // The view held on the screen after the shutter, and how long the flash lasts
+    constexpr float HoldSeconds  = 0.7f;
+    constexpr float FlashSeconds = 0.25f;
+
+    auto now = std::chrono::steady_clock::now();
+    float elapsed = m_screenShown ? std::chrono::duration<float>(now - m_screenClock).count() : 0.0f;
+    m_screenClock = now;
+
+    bool pressed = m_shutterHeld && !m_shutterWasHeld;
+    m_shutterWasHeld = m_shutterHeld;
+
+    m_shutterLeft = pressed ? HoldSeconds : std::max(m_shutterLeft - elapsed, 0.0f);
+    flash = std::max((m_shutterLeft - (HoldSeconds - FlashSeconds)) / FlashSeconds, 0.0f);
+
+    m_screenTurn = !m_screenTurn;
+
+    // A view from the first frame on, or a picture would have nothing to show
+    return !m_screenShown || (m_shutterLeft <= 0.0f && m_screenTurn);
+  }
+
+
+  void VrStereoRenderer::drawScopeLens() {
+    constexpr uint32_t NearIndex = 4;
+    constexpr uint32_t FarIndex  = 5;
+
+    if (!m_scopeVisible || m_eye == NoEye || !m_eyeView)
+      return;
+
+    VrGameCameraState camera = m_renderCamera.save();
+
+    m_scopeRender->drawLens(m_scopeLens, eyeInGame(*m_eyeView), m_eyeView->fov,
+      camera.frustum[NearIndex], camera.frustum[FarIndex]);
+  }
+
+
   void VrStereoRenderer::applyEyePose() {
     VrPose eyeInReference = m_hasReference
       ? vrComputeEyeInReference(m_reference, m_eyeView->pose)
       : VrPose();
 
-    VrGameCameraPose pose = vrComputeEyeCameraPose(m_gameCameraPose, eyeInReference, VrGameUnitsPerMetre);
+    VrGameCameraPose pose = m_scopeCamera
+      ? *m_scopeCamera
+      : vrComputeEyeCameraPose(m_gameCameraPose, eyeInReference, VrGameUnitsPerMetre);
     m_eyePosition = pose.position;
 
     if (m_screenPass)
@@ -959,11 +1540,44 @@ namespace dxvk {
       return;
     }
 
+    // Caravan's cards are held in the left hand and chosen with the right,
+    // the slot machine's lever is pulled by hand: both hands are shown
+    // there, the weapon put away. A hand on the lever stays on it.
+    if (state == VrGameStateKind::Menu && m_minigames && m_minigames->showsHands()
+     && m_hasReference && right.isActive) {
+      VrControllerState onRight = right;
+      VrControllerState onLeft  = left;
+      onRight.gripPose.position = right.gripPose.position + m_minigames->handShift(VrHand::Right);
+      onLeft.gripPose.position  = left.gripPose.position  + m_minigames->handShift(VrHand::Left);
+
+      VrGameCameraPose hand      = handInGame(onRight);
+      VrGameCameraPose otherHand = handInGame(onLeft);
+      m_weaponHand->beginFrame(gameCamera, &hand, left.isActive ? &otherHand : nullptr,
+        false, VrFirstPersonMode::FreeHands, dt);
+      return;
+    }
+
     // Menus are pointed at with the lasers, and the game animates the arms
     // in front of its camera meanwhile. V.A.T.S. is driven by the sticks
     // and shows the weapon as the game does.
     if (state == VrGameStateKind::Menu && input.hasActions
      && !*reinterpret_cast<const uint32_t*>(VrGame::VatsCameraState)) {
+      m_weaponHand->beginFrame(gameCamera, nullptr, nullptr, false, VrFirstPersonMode::Hidden, dt);
+      return;
+    }
+
+    // The body is the scene's until the game lets the player move, and the
+    // hands would show a skin the player has not chosen yet
+    bool heldStill = state == VrGameStateKind::InGame && playerHeldStill();
+
+    if (heldStill != m_handsHeldStill) {
+      m_handsHeldStill = heldStill;
+      Logger::info(heldStill
+        ? "VR: The hands are hidden while a script holds the player still"
+        : "VR: The hands are shown again");
+    }
+
+    if (heldStill) {
       m_weaponHand->beginFrame(gameCamera, nullptr, nullptr, false, VrFirstPersonMode::Hidden, dt);
       return;
     }
@@ -976,7 +1590,7 @@ namespace dxvk {
     VrGameCameraPose hand      = vrGrabCorrectHand(handInGame(right), glue[uint32_t(VrHand::Right)]);
     VrGameCameraPose otherHand = vrGrabCorrectHand(handInGame(left), glue[uint32_t(VrHand::Left)]);
 
-    VrFirstPersonMode mode = m_weaponDrawn && m_weaponDrawn->playerHolstered()
+    VrFirstPersonMode mode = m_weaponDrawn && m_weaponDrawn->handsFree()
       ? VrFirstPersonMode::FreeHands
       : VrFirstPersonMode::Hands;
 
@@ -1099,7 +1713,7 @@ namespace dxvk {
 
     VrHolsterInput holster;
     holster.active = state == VrGameStateKind::InGame && m_hasReference && m_hasHeadPose
-      && right.isActive && input.hasActions && !m_rightHandAtPipBoy;
+      && right.isActive && input.hasActions && !m_rightHandAtPipBoy && !VrWeaponDrawn::fightingDisabled();
     holster.kind   = vrHolsterForWeaponType(type);
     holster.drawn  = !m_weaponDrawn->playerHolstered();
     holster.grip   = input.actions.isPressed(VrAction::Grab);
@@ -1142,11 +1756,17 @@ namespace dxvk {
 
     bool inGame = state == VrGameStateKind::InGame && m_hasReference && input.hasActions;
 
-    // The right hand holds objects only while the weapon is holstered. A
-    // press at the holster, at the Pip-Boy or with the quick wheel open
-    // does something else, but an object held there stays held.
+    // The right hand holds objects unless it holds the weapon: holstered by
+    // the player or by a script that disabled fighting, or unarmed (no
+    // weapon, or one worn on the fist). A press at the holster, at the
+    // Pip-Boy or with the quick wheel open does something else, but an
+    // object held there stays held.
+    int32_t type = -1;
+    VrWeaponDrawn::equippedWeapon(type);
+
+    bool unarmed = type < 0 || type == VrGame::WeaponTypeHandToHand;
     bool rightBusy = m_holster.atHolster() || m_rightHandAtPipBoy || (m_quickWheel && m_quickWheel->isOpen());
-    bool rightFree = m_weaponDrawn && m_weaponDrawn->playerHolstered()
+    bool rightFree = m_weaponDrawn && (m_weaponDrawn->handsFree() || unarmed)
       && (m_physicsGrab->holds(VrHand::Right) || !rightBusy);
 
     // The left hand is free unless it holds the weapon, arms a grenade or
@@ -1154,6 +1774,15 @@ namespace dxvk {
     bool leftFree = !(m_weaponHand && m_weaponHand->leftHandOnWeapon())
       && !(m_handThrow && m_handThrow->throwsWithHand())
       && !(m_manualReload && m_manualReload->leftHandBusy());
+
+    // A fist closing as it lands punches, it does not take what it hits;
+    // an object already held stays held
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      VrHand hand = VrHand(i);
+
+      if (m_meleeSwing && m_meleeSwing->punches(hand) && !m_physicsGrab->holds(hand))
+        (hand == VrHand::Right ? rightFree : leftFree) = false;
+    }
 
     VrGameCameraPose rightHand;
     VrGameCameraPose leftHand;
@@ -1168,6 +1797,9 @@ namespace dxvk {
     // the target stays the game's until its next pick, after this frame
     bool aimedRight = m_handPick && m_handPick->pickedWithHands() && m_handPick->hand() == VrHand::Right;
     bool aimedLeft  = m_handPick && m_handPick->pickedWithHands() && m_handPick->hand() == VrHand::Left;
+
+    // Without fighting, living actors are neither held nor shoved
+    m_physicsGrab->setLivingAllowed(!VrWeaponDrawn::fightingDisabled());
 
     for (uint32_t i = 0; i < VrHandCount; i++)
       m_physicsGrab->setFingerRig(VrHand(i), m_weaponHand ? m_weaponHand->fingerRig(VrHand(i)) : nullptr);
@@ -1192,7 +1824,7 @@ namespace dxvk {
     VrPhysicsGrabEvents events = m_physicsGrab->takeEvents();
 
     for (uint32_t i = 0; i < VrHandCount; i++) {
-      if (events.grabbed[i])
+      if (events.grabbed[i] || events.shoved[i])
         m_backend.applyHaptic(VrHand(i), GrabHaptic, GrabHapticDuration);
       else if (events.stored[i])
         m_backend.applyHaptic(VrHand(i), GrabHaptic * 2.0f, GrabHapticDuration * 2.0f);
@@ -1415,6 +2047,76 @@ namespace dxvk {
   }
 
 
+  void VrStereoRenderer::updatePunches(
+    const VrInputState&         input,
+          VrGameStateKind       state,
+          float                 dt) {
+    if (!m_meleeSwing)
+      return;
+
+    int32_t type = -1;
+    bool equipped = VrWeaponDrawn::equippedWeapon(type) != nullptr;
+
+    // No fist strikes while a script disabled fighting, nor while swimming:
+    // the game refuses every attack in the water
+    bool inGame = state == VrGameStateKind::InGame && m_hasReference && input.hasActions && m_weaponDrawn
+      && !VrWeaponDrawn::fightingDisabled() && !m_weaponDrawn->swimming();
+    bool holstered = m_weaponDrawn && m_weaponDrawn->playerHolstered();
+    bool wornOnFist = type == VrGame::WeaponTypeHandToHand;
+
+    // Unarmed, the right fist takes the place of the game's attack: no
+    // weapon, or a hand-to-hand weapon, drawn
+    bool out = inGame && !holstered && (type < 0 || wornOnFist);
+
+    // Any free hand punches: the right one unless it holds the weapon, the
+    // left one whatever the right holds. Only the right fist wears a
+    // hand-to-hand weapon; a fist without it hits bare.
+    std::array<bool, VrHandCount> punches = { };
+    punches[uint32_t(VrHand::Right)] = out || (inGame && holstered);
+    punches[uint32_t(VrHand::Left)]  = inGame;
+
+    std::array<bool, VrHandCount> bare = { };
+    bare[uint32_t(VrHand::Right)] = equipped && (holstered || !wornOnFist);
+    bare[uint32_t(VrHand::Left)]  = equipped;
+
+    // A hand busy elsewhere does not punch; one holding an object does
+    // not either, the object is swung instead
+    std::array<bool, VrHandCount> busy = { };
+    busy[uint32_t(VrHand::Right)] = m_rightHandAtPipBoy || m_holster.atHolster()
+      || (m_quickWheel && m_quickWheel->isOpen());
+    busy[uint32_t(VrHand::Left)] = (m_handThrow && m_handThrow->throwsWithHand())
+      || (m_manualReload && m_manualReload->leftHandBusy())
+      || (m_weaponHand && m_weaponHand->leftHandOnWeapon());
+
+    const VrAction grips[VrHandCount] = { VrAction::TwoHandGrip, VrAction::Grab };
+    static_assert(uint32_t(VrHand::Left) == 0, "Grip actions are listed left hand first");
+
+    std::array<VrGameCameraPose, VrHandCount> poses;
+    std::array<VrFistInput, VrHandCount> fists;
+
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      const VrControllerState& controller = input.controllers[i];
+
+      if (!punches[i] || !controller.isActive || busy[i] || (m_physicsGrab && m_physicsGrab->holds(VrHand(i))))
+        continue;
+
+      poses[i] = handInGame(controller);
+      fists[i].hand   = &poses[i];
+      fists[i].closed = controller.hasFingers
+        ? vrIsFist(controller.fingerCurl)
+        : input.actions.isPressed(grips[i]);
+      fists[i].bare   = bare[i];
+    }
+
+    std::array<uint32_t, VrHandCount> hits = m_meleeSwing->updateFists(fists, out, m_gameCameraPose, dt);
+
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      if (hits[i])
+        m_backend.applyHaptic(VrHand(i), MeleeHitHaptic, MeleeHapticDuration);
+    }
+  }
+
+
   void VrStereoRenderer::updateHandThrow(
     const VrInputState&         input,
           VrGameStateKind       state,
@@ -1471,7 +2173,7 @@ namespace dxvk {
           int32_t&              cost) {
     // Only melee weapons swung with the hand charge: the trigger runs
     // automatic ones and fires the others
-    bool swung = m_meleeSwing->swingsWithHand();
+    bool swung = m_meleeSwing->chargesWithTrigger();
     bool held  = swung && input.hasActions && input.actions.isPressed(VrAction::Attack);
     bool lacksActionPoints = false;
     bool allowed = held && m_powerRules && m_powerRules->allowed(cost, lacksActionPoints);
@@ -1576,6 +2278,7 @@ namespace dxvk {
       || (gaze.state == VrPipBoyState::Changing && m_pipBoyGaze.isLooking());
 
     m_weaponHand->setPipBoyScale(m_pipBoyGrowth.update(grown, m_pipBoyScale, dt));
+    m_weaponHand->setPipBoyAngle(m_pipBoyAngle);
   }
 
 
@@ -1640,6 +2343,14 @@ namespace dxvk {
     if (!m_npcGaze)
       return;
 
+    // The Caravan challenger looks down at the cards on their way
+    VrVector3 table;
+
+    if (m_minigames && m_minigames->caravanTableGaze(table)) {
+      m_npcGaze->setHead(&table);
+      return;
+    }
+
     if (!m_hasReference || !m_hasHeadPose) {
       m_npcGaze->setHead(nullptr);
       return;
@@ -1656,7 +2367,12 @@ namespace dxvk {
     if (!m_hasReference || !m_hasHeadPose || !m_hasCullingFov)
       return false;
 
-    m_controls.adjustCamera(pose);
+    // The game passes its own camera, behind the player or far from a seat:
+    // the eyes' camera of the last frame is what is about to be seen
+    if (m_viewMoved)
+      pose = m_gameCameraPose;
+    else
+      m_controls.adjustCamera(pose);
 
     pose = vrComputeEyeCameraPose(pose,
       vrComputeEyeInReference(m_reference, m_headPose), VrGameUnitsPerMetre);
@@ -1681,18 +2397,82 @@ namespace dxvk {
     if (m_eye == NoEye || m_eyeCopied[m_eye])
       return;
 
+    // A mini-game's scene drawn at the last moment: when the first-person
+    // pass did not run, and for the rendered menus, like the console's. The
+    // game's clear does nothing outside of its render group.
+    if (m_minigames && m_minigames->active() && !m_minigameDrawn[m_eye]) {
+      if (!m_minigames->showsRenderedMenu())
+        m_device->Clear(0, nullptr, D3DCLEAR_ZBUFFER, 0, vrGameDepthClear(), 0);
+
+      drawMinigame();
+    }
+
     // The console's terminal belongs to the 3D image, drawn with the eye
     if (m_terminal)
       m_terminal->drawEye(*m_eyeView);
 
     logEyeCapture();
 
+    uint32_t copyGpu = gpuBegin(VrGpuSection::pass(m_eye, VrRenderPass::EyeCopy));
     m_eyeCopied[m_eye] = copyRenderTarget(m_eye);
+    gpuEnd(copyGpu);
+
+    if (m_eyeCopied[m_eye] && m_scopeVisible) {
+      Com<IDirect3DSurface9> eyeSurface;
+
+      if (SUCCEEDED(m_eyeTextures[m_eye]->GetSurfaceLevel(0, &eyeSurface)))
+        m_scopeRender->presentLens(eyeSurface.ptr());
+    }
 
     if (!m_eyeCopied[m_eye] && !m_loggedFailure) {
       Logger::err("VR: Failed to copy the rendered eye image");
       m_loggedFailure = true;
     }
+  }
+
+
+  void VrStereoRenderer::setMinigamesEnabled(bool enabled) {
+    if (enabled == (m_minigames != nullptr))
+      return;
+
+    m_menuScenes.leaveToEyes(0, false);
+
+    if (m_renderPasses)
+      m_renderPasses->setBeforeFirstPerson(nullptr);
+
+    if (!enabled) {
+      if (m_caravanValues)
+        m_caravanValues->hide();
+
+      m_minigames->setCaravanValuesShown(false);
+      m_minigames = nullptr;
+      return;
+    }
+
+    m_minigames = VrMinigames::create(m_device, m_backend);
+
+    if (!m_minigames) {
+      Logger::warn("VR: The mini-games' data was not found, they stay on the menu panel");
+      return;
+    }
+
+    Logger::info("VR: The mini-games' scenes are drawn in the eye images");
+
+    if (m_renderPasses) {
+      m_renderPasses->setBeforeFirstPerson([this] {
+        if (m_minigames && m_minigames->drawsBeforeFirstPerson()
+         && m_eye != NoEye && m_eyeView && !m_minigameDrawn[m_eye])
+          drawMinigame();
+      });
+    }
+  }
+
+
+  void VrStereoRenderer::drawMinigame() {
+    m_minigameDrawn[m_eye] = true;
+
+    VrGameCameraState world = m_renderCamera.save();
+    m_minigames->drawEye(*m_eyeView, world.frustum[4], world.frustum[5]);
   }
 
 
@@ -1770,6 +2550,59 @@ namespace dxvk {
   }
 
 
+  VrFrameTiming VrStereoRenderer::waitFrame() {
+    // The last frame reaches the runtime before it is asked for the next
+    m_submitter.finish();
+
+    VrCpuPhaseScope phase(m_cpuSampler.get(), uint8_t(VrCpuPhase::Wait));
+    return m_backend.waitFrame();
+  }
+
+
+  void VrStereoRenderer::countFrame(const VrFrameTiming& timing) {
+    if (m_spikeLog && timing.hasPreviousCycle)
+      m_spikeLog->setCycle(m_frameId, timing.previousCycle, timing.previousCycleEnd);
+
+    m_frameId += 1;
+
+    if (m_cpuSampler)
+      m_cpuSampler->setFrame(m_frameId);
+
+    double periodMs = double(timing.predictedPeriod) * 1e-6;
+
+    if (!m_spikeLogWanted || periodMs <= 0.0 || (m_spikeLog && m_spikeLogPeriodMs == periodMs))
+      return;
+
+    m_spikeLogPeriodMs = periodMs;
+    m_spikeLog = std::make_unique<VrSpikeLog>(periodMs, m_gpuTimer != nullptr,
+      [] (const std::string& line) { Logger::info(line); });
+
+    if (m_gpuTimer) {
+      m_gpuTimer->setFrameCallback([this] (uint64_t frameId, const VrGpuFrameTimes& times) {
+        m_spikeLog->setGpu(frameId, times);
+      });
+    }
+
+    if (m_cpuSampler) {
+      VrCpuSampler* sampler = m_cpuSampler.get();
+      m_spikeLog->setSpikeCallback([sampler] (uint64_t frameId) { sampler->markSpike(frameId); });
+    }
+
+    Logger::info(str::format("VR: Frames longer than the period of ", periodMs, " ms are logged one by one"));
+  }
+
+
+  uint32_t VrStereoRenderer::gpuBegin(VrGpuSection section) {
+    return m_gpuTimer ? m_gpuTimer->begin(section) : VrGpuTimer::NoToken;
+  }
+
+
+  void VrStereoRenderer::gpuEnd(uint32_t token) {
+    if (m_gpuTimer)
+      m_gpuTimer->end(token);
+  }
+
+
   bool VrStereoRenderer::copyRenderTarget(uint32_t eye) {
     Com<IDirect3DSurface9> destination;
 
@@ -1780,6 +2613,25 @@ namespace dxvk {
       m_gameTarget.ptr(), nullptr, destination.ptr(), nullptr, D3DTEXF_LINEAR));
   }
 
+
+
+  bool VrStereoRenderer::leftRenderedMenu(VrGameStateKind state) {
+    // A terminal powering off, then the menu mode the game stays in for a
+    // few frames, leave nothing but the interface's cursor to draw: the
+    // panel waits for a menu to be drawn there
+    bool renderedMenu = m_minigames && m_minigames->drawsRenderedMenu();
+
+    if (m_renderedMenuShown && !renderedMenu)
+      m_leavingRenderedMenu = true;
+
+    m_renderedMenuShown = renderedMenu;
+
+    if (m_leavingRenderedMenu && (state != VrGameStateKind::Menu || renderedMenu
+     || !m_hudLayers.menusFound() || m_hudLayers.isMenuDrawn()))
+      m_leavingRenderedMenu = false;
+
+    return m_leavingRenderedMenu;
+  }
 
 
   VrStereoRenderer::InterfaceLayer VrStereoRenderer::chooseLayer(VrGameStateKind state) const {
@@ -1830,11 +2682,15 @@ namespace dxvk {
     else if (layer == InterfaceLayer::HandHud)
       texture = m_handHudTexture.ptr();
 
+    // The game draws its interface over the whole target, which must have
+    // the size of its window for its scissor rectangles
     Com<IDirect3DSurface9> layerSurface;
+    Com<IDirect3DSurface9> drawSurface;
     Com<IDirect3DSurface9> renderTarget;
     Com<IDirect3DSurface9> depthStencil;
 
     if (FAILED(texture->GetSurfaceLevel(0, &layerSurface))
+     || FAILED(interfaceDrawTexture(texture)->GetSurfaceLevel(0, &drawSurface))
      || FAILED(m_device->GetRenderTarget(0, &renderTarget)))
       return false;
 
@@ -1842,7 +2698,7 @@ namespace dxvk {
     // match the texture's sample count
     m_device->GetDepthStencilSurface(&depthStencil);
     m_device->SetDepthStencilSurface(nullptr);
-    m_device->SetRenderTarget(0, layerSurface.ptr());
+    m_device->SetRenderTarget(0, drawSurface.ptr());
 
     if (layer == InterfaceLayer::Menu && m_menuScenes.isAnyOpen())
       renderMenuScenes();
@@ -1850,13 +2706,20 @@ namespace dxvk {
       m_device->Clear(0, nullptr, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 0, 0, 0), 1.0f, 0);
 
     // The other HUD groups were culled by isolateHud when the interface
-    // was culled, which may run on a worker thread that this pass waits for
+    // was culled, which may run on a worker thread that this pass waits for.
+    // This is the game's function, not a hook on its call: JohnnyGuitar's draws
+    // camera overlays with a flat camera on the bound target, which a panel
+    // must not get, and the cursor the game draws here without it.
     g_originalRenderInterface(interfaceManager, nullptr, arg0, arg1);
     m_hudLayers.restore();
 
     Com<IDirect3DSurface9> usedTarget;
     m_device->GetRenderTarget(0, &usedTarget);
-    bool kept = usedTarget == layerSurface;
+    bool kept = usedTarget == drawSurface;
+
+    // Stretched back to square pixels, see VrInterfaceShape
+    if (kept && drawSurface != layerSurface)
+      kept = SUCCEEDED(m_device->StretchRect(drawSurface.ptr(), nullptr, layerSurface.ptr(), nullptr, D3DTEXF_LINEAR));
     // Menus are shown even if the HUD could not be hidden: the game hides
     // most of it while a menu is open
     bool rendered = kept && (m_hudIsolated || layer == InterfaceLayer::Menu);
@@ -1891,7 +2754,7 @@ namespace dxvk {
       return;
 
     m_device->SetDepthStencilSurface(m_menuDepth.ptr());
-    m_device->Clear(0, nullptr, D3DCLEAR_ZBUFFER | D3DCLEAR_STENCIL, 0, 1.0f, 0);
+    m_device->Clear(0, nullptr, D3DCLEAR_ZBUFFER | D3DCLEAR_STENCIL, 0, vrGameDepthClear(), 0);
     m_menuScenes.render();
 
     Com<IDirect3DSurface9> usedDepth;
@@ -1911,9 +2774,11 @@ namespace dxvk {
 
   void VrStereoRenderer::makeMenuSceneOpaque(bool depthTested) {
     // The alpha written by the scene's shaders is not usable, so it is set
-    // to one wherever the scene wrote depth, with a quad at the far plane
+    // to one wherever the scene wrote depth, with a quad at the cleared
+    // depth: the test does not depend on which way depth goes
+    float cleared = vrGameDepthClear();
     D3DSURFACE_DESC desc = { };
-    m_menuTexture->GetLevelDesc(0, &desc);
+    interfaceDrawTexture(m_menuTexture.ptr())->GetLevelDesc(0, &desc);
 
     m_menuSceneState->Capture();
 
@@ -1925,7 +2790,7 @@ namespace dxvk {
     m_device->SetFVF(D3DFVF_XYZRHW);
 
     m_device->SetRenderState(D3DRS_ZENABLE,           depthTested ? D3DZB_TRUE : D3DZB_FALSE);
-    m_device->SetRenderState(D3DRS_ZFUNC,             D3DCMP_GREATER);
+    m_device->SetRenderState(D3DRS_ZFUNC,             D3DCMP_NOTEQUAL);
     m_device->SetRenderState(D3DRS_ZWRITEENABLE,      FALSE);
     m_device->SetRenderState(D3DRS_STENCILENABLE,     FALSE);
     m_device->SetRenderState(D3DRS_ALPHABLENDENABLE,  FALSE);
@@ -1948,10 +2813,10 @@ namespace dxvk {
     float right  = float(desc.Width)  - 0.5f;
     float bottom = float(desc.Height) - 0.5f;
     float quad[4][4] = {
-      { -0.5f,  -0.5f,  1.0f, 1.0f },
-      { right,  -0.5f,  1.0f, 1.0f },
-      { -0.5f,  bottom, 1.0f, 1.0f },
-      { right,  bottom, 1.0f, 1.0f },
+      { -0.5f,  -0.5f,  cleared, 1.0f },
+      { right,  -0.5f,  cleared, 1.0f },
+      { -0.5f,  bottom, cleared, 1.0f },
+      { right,  bottom, cleared, 1.0f },
     };
 
     m_device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, quad, sizeof(quad[0]));
@@ -1968,7 +2833,7 @@ namespace dxvk {
       return false;
 
     D3DSURFACE_DESC desc = { };
-    m_menuTexture->GetLevelDesc(0, &desc);
+    interfaceDrawTexture(m_menuTexture.ptr())->GetLevelDesc(0, &desc);
 
     if (FAILED(m_device->CreateDepthStencilSurface(desc.Width, desc.Height, D3DFMT_D24S8,
         D3DMULTISAMPLE_NONE, 0, TRUE, &m_menuDepth, nullptr))
@@ -2019,26 +2884,41 @@ namespace dxvk {
     // One texture per panel, since a panel keeps showing its last image.
     // The HUD is drawn into one texture and rearranged into the panel's,
     // and the hand HUD into another, which is cut out into the hand panels'.
-    bool created = SUCCEEDED(m_device->CreateTexture(desc.Width, desc.Height, 1,
+    // They have the interface's aspect; a target narrower than that gets a
+    // texture of its own size for the game to draw into.
+    VrExtent size = interfaceExtent(desc);
+
+    bool created = SUCCEEDED(m_device->CreateTexture(size.width, size.height, 1,
         D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &m_hudTexture, nullptr))
-      && SUCCEEDED(m_device->CreateTexture(desc.Width, desc.Height, 1,
+      && SUCCEEDED(m_device->CreateTexture(size.width, size.height, 1,
         D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &m_hudPanelTexture, nullptr))
-      && SUCCEEDED(m_device->CreateTexture(desc.Width, desc.Height, 1,
+      && SUCCEEDED(m_device->CreateTexture(size.width, size.height, 1,
         D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &m_handHudTexture, nullptr))
-      && SUCCEEDED(m_device->CreateTexture(desc.Width, desc.Height, 1,
+      && SUCCEEDED(m_device->CreateTexture(size.width, size.height, 1,
         D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &m_menuTexture, nullptr));
 
+    if (created && size.width != desc.Width) {
+      created = SUCCEEDED(m_device->CreateTexture(desc.Width, desc.Height, 1,
+        D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &m_interfaceDrawTexture, nullptr));
+    }
+
     if (!created) {
-      Logger::err(str::format("VR: Failed to create the ", desc.Width, "x", desc.Height,
+      Logger::err(str::format("VR: Failed to create the ", size.width, "x", size.height,
         " interface textures, the HUD and menus are not shown in the headset"));
       m_hudTexture  = nullptr;
       m_hudPanelTexture = nullptr;
       m_handHudTexture = nullptr;
       m_menuTexture = nullptr;
+      m_interfaceDrawTexture = nullptr;
       m_interfaceFailed = true;
     }
 
     return created;
+  }
+
+
+  IDirect3DTexture9* VrStereoRenderer::interfaceDrawTexture(IDirect3DTexture9* layer) const {
+    return m_interfaceDrawTexture != nullptr ? m_interfaceDrawTexture.ptr() : layer;
   }
 
 
@@ -2059,11 +2939,14 @@ namespace dxvk {
       ? m_panelConfig.hudMessagesOffset / m_panelConfig.hudWidth : 0.0f;
     float shift = std::round(shiftScale * imageSize.x);
 
-    // The crop of the meters placed in the top right corner
+    // The crop of the meters placed in the top right corner, if shown:
+    // the copy of a hidden meter would only erase the messages under it
     VrInterfaceRect radiationGroup;
     VrInterfaceRect xpGroup;
-    bool hasRadiation = m_hudMetersPlaced.radiation && m_hudLayers.groupRect(VrGame::HudRadiationMeter, radiationGroup);
-    bool hasXp        = m_hudMetersPlaced.xp && m_hudLayers.groupRect(VrGame::HudXpMeter, xpGroup);
+    bool hasRadiation = m_hudMetersPlaced.radiation && isHudMeterShown(VrGame::HudRadiationMeter)
+      && m_hudLayers.groupRect(VrGame::HudRadiationMeter, radiationGroup);
+    bool hasXp        = m_hudMetersPlaced.xp && isHudMeterShown(VrGame::HudXpMeter)
+      && m_hudLayers.groupRect(VrGame::HudXpMeter, xpGroup);
 
     VrVector2       size = vrComputeInterfaceSize(desc.Width, desc.Height);
     VrInterfaceRect metersGroup;
@@ -2081,10 +2964,42 @@ namespace dxvk {
     bool hasMessages   = m_hudLayers.groupRect(VrGame::HudMessages, messagesGroup);
     bool hasObjectives = m_hudLayers.groupRect(VrGame::HudQuestReminder, objectivesGroup);
 
+    // A long text can reach past its group's rectangle
+    extendHudCorner(VrGame::HudMessages, hasMessages, messagesGroup);
+    extendHudCorner(VrGame::HudQuestReminder, hasObjectives, objectivesGroup);
+
     float cornerRight = vrComputeHudCornerRight(hasMessages ? &messagesGroup : nullptr,
       hasObjectives ? &objectivesGroup : nullptr) * imageSize.x / size.x;
 
-    VrHeadHudLayout layout = vrComputeHeadHudLayout(imageSize, shift,
+    // A list of objectives can end below the middle, the move must not tear it
+    float cornerBottom = std::max(hasMessages ? messagesGroup.bottom : 0.0f,
+      hasObjectives ? objectivesGroup.bottom : 0.0f);
+
+    VrInterfaceRect sneak;
+    VrInterfaceRect subtitles;
+    bool hasSneak     = m_hudLayers.groupContent(VrGame::HudSneakMeter, sneak);
+    bool hasSubtitles = m_hudLayers.groupContent(VrGame::HudSubtitles, subtitles);
+
+    // The breath meter shares the sneak meter's place: a model, which
+    // groupContent does not measure, so its group's rectangle is used
+    VrInterfaceRect breath;
+
+    if (m_hudMetersPlaced.breath && m_hudLayers.groupShownRect(VrGame::HudBreathMeter, breath)) {
+      sneak    = hasSneak ? vrUniteRects(sneak, breath) : breath;
+      hasSneak = true;
+    }
+
+    float split = vrComputeHeadHudSplit(size.y, cornerBottom,
+      hasSneak ? &sneak : nullptr, hasSubtitles ? &subtitles : nullptr);
+
+    if (split > std::floor(0.5f * size.y) && !m_loggedHudSplitLowered) {
+      Logger::info(str::format("VR: The HUD texts in the top left corner reach ", cornerBottom,
+        " units down, the corner moves down to ", split, " units"));
+      m_loggedHudSplitLowered = true;
+    }
+
+    VrHeadHudLayout layout = vrComputeHeadHudLayout(imageSize,
+      std::round(split * imageSize.y / size.y), shift,
       hasMeters ? &meters : nullptr, std::round(cornerRight));
 
     if (FAILED(m_device->ColorFill(destination.ptr(), nullptr, D3DCOLOR_ARGB(0, 0, 0, 0))))
@@ -2105,6 +3020,30 @@ namespace dxvk {
   }
 
 
+  bool VrStereoRenderer::isHudMeterShown(uintptr_t group) const {
+    VrInterfaceRect content;
+
+    // Without a measure, the meter is assumed shown
+    return !m_hudLayers.contentFound() || m_hudLayers.groupContent(group, content);
+  }
+
+
+  void VrStereoRenderer::extendHudCorner(uintptr_t group, bool known, VrInterfaceRect& rect) {
+    VrInterfaceRect content;
+
+    if (!known || !m_hudLayers.groupContent(group, content))
+      return;
+
+    if (content.right > rect.right && !m_loggedHudTextPastGroup) {
+      Logger::info(str::format("VR: A HUD text in the top left corner reaches ", content.right - rect.right,
+        " units past its group, the meters stop after it"));
+      m_loggedHudTextPastGroup = true;
+    }
+
+    rect = vrUniteRects(rect, content);
+  }
+
+
   void VrStereoRenderer::submitHud() {
     if (!composeHud()) {
       if (!m_loggedHudFailure) {
@@ -2121,7 +3060,7 @@ namespace dxvk {
     pose.position.y = m_panelConfig.hudHeight;
     pose.position.z = -m_panelConfig.hudDistance;
 
-    m_hudShown = VrD3D9Bridge::submitPanel(m_device, m_backend, VrPanelId::HudHead,
+    m_hudShown = m_submitter.submitPanel(VrPanelId::HudHead,
       m_hudPanelTexture.ptr(), pose, m_panelConfig.hudWidth, VrPanelAnchor::Head);
 
     if (!m_hudShown && !m_loggedHudFailure) {
@@ -2134,15 +3073,22 @@ namespace dxvk {
   void VrStereoRenderer::submitMenu() {
     // Placed once when it appears, again once the head is known, and again
     // when a dialogue's speaker is first known or changes
+    const VrPanelPlacement* minigamePanel = m_minigames ? m_minigames->panel() : nullptr;
+    uint32_t minigameRevision = m_minigames ? m_minigames->panelRevision() : 0;
+
     if (!m_panelShown || (!m_panelPlacedWithHead && m_hasHeadPose)
-     || (m_dialogueSpeaker && m_dialogueSpeaker != m_panelSpeaker))
+     || (m_dialogueSpeaker && m_dialogueSpeaker != m_panelSpeaker)
+     || minigameRevision != m_minigamePanelRevision)
       placeMenuPanel();
 
+    m_minigamePanelRevision = minigameRevision;
     m_panelShowsMenu = true;
 
-    m_panelShown = VrD3D9Bridge::submitPanel(m_device, m_backend, VrPanelId::Menu,
-      m_menuTexture.ptr(), m_panelPose, m_panelConfig.hudWidth, VrPanelAnchor::Room);
-    m_panelWidth = m_panelConfig.hudWidth;
+    float panelWidth = minigamePanel ? minigamePanel->width : m_panelConfig.hudWidth;
+
+    m_panelShown = m_submitter.submitPanel(VrPanelId::Menu,
+      m_menuTexture.ptr(), m_panelPose, panelWidth, VrPanelAnchor::Room);
+    m_panelWidth = panelWidth;
 
     if (!m_panelShown && !m_loggedPanelFailure) {
       Logger::err("VR: The backend rejected the menu panel");
@@ -2155,7 +3101,7 @@ namespace dxvk {
     if (!m_hudShown)
       return;
 
-    m_backend.hidePanel(VrPanelId::HudHead);
+    m_submitter.hidePanel(VrPanelId::HudHead);
     m_hudShown = false;
   }
 
@@ -2178,7 +3124,24 @@ namespace dxvk {
     VrVector2 size  = vrComputeInterfaceSize(desc.Width, desc.Height);
     float     scale = float(desc.Width) / size.x;
 
-    VrHandHudCrops crops = vrComputeHandHudCrops(hitPoints, actionPoints, info, size);
+    // What the groups actually draw: a prompt that the game's data
+    // replaces can be wider or taller than its group
+    VrInterfaceRect  hitPointsContent;
+    VrInterfaceRect  actionPointsContent;
+    VrInterfaceRect  infoContent;
+    VrHandHudContent content;
+
+    if (m_hudLayers.groupContent(VrGame::HudInfo, infoContent)) {
+      content.info = &infoContent;
+
+      if (m_hudLayers.groupContent(VrGame::HudHitPoints, hitPointsContent))
+        content.hitPoints = &hitPointsContent;
+
+      if (m_hudLayers.groupContent(VrGame::HudActionPoints, actionPointsContent))
+        content.actionPoints = &actionPointsContent;
+    }
+
+    VrHandHudCrops crops = vrComputeHandHudCrops(hitPoints, actionPoints, info, size, content);
 
     if (!m_loggedHandHudCrops) {
       Logger::info(str::format("VR: Hand HUD crops in interface units: health bar and compass ",
@@ -2254,12 +3217,42 @@ namespace dxvk {
     // The button that activates with this hand, from the next frame on
     m_promptIcon.show(hand);
 
-    RECT prompt = interfaceToPixels(crops.prompt, scale, desc);
-    const HandPanelPart promptPart = { prompt, { 0, 0, prompt.right - prompt.left, prompt.bottom - prompt.top } };
+    if (!crops.promptPartCount) {
+      hideHandPanel(VrPanelId::HudPrompt, m_promptShown);
+      return;
+    }
 
-    m_promptShown = showHandPanel(VrPanelId::HudPrompt, &promptPart, 1,
-      VrHandHudLayout::PromptMetresPerUnit / scale,
-      vrComputePromptPanelPose(input.controllers[uint32_t(hand)], *head), m_promptTexture);
+    // The image keeps its size while the prompt changes and only grows,
+    // so that its texture is not made again for each target
+    if (m_promptImageSourceWidth != desc.Width) {
+      m_promptImageSize        = VrVector2();
+      m_promptImageSourceWidth = desc.Width;
+    }
+
+    VrInterfaceRect promptSources[2];
+
+    for (uint32_t i = 0; i < crops.promptPartCount; i++)
+      promptSources[i] = pixelsToRect(interfaceToPixels(crops.promptParts[i], scale, desc));
+
+    VrPromptImage promptImage = vrComputePromptImage(promptSources, crops.promptPartCount, m_promptImageSize);
+    m_promptImageSize = promptImage.size;
+
+    HandPanelPart promptParts[2];
+
+    for (uint32_t i = 0; i < crops.promptPartCount; i++)
+      promptParts[i] = { rectToPixels(promptSources[i]), rectToPixels(promptImage.targets[i]) };
+
+    if (content.info && !m_loggedMeasuredPrompt) {
+      Logger::info(str::format("VR: The interaction prompt is cut out from what it draws, ",
+        crops.prompt.left, ",", crops.prompt.top, " to ", crops.prompt.right, ",", crops.prompt.bottom,
+        " in interface units, in ", crops.promptPartCount, " part(s)"));
+      m_loggedMeasuredPrompt = true;
+    }
+
+    m_promptShown = showHandPanel(VrPanelId::HudPrompt,
+      promptParts, crops.promptPartCount, VrHandHudLayout::PromptMetresPerUnit / scale,
+      vrComputePromptPanelPose(input.controllers[uint32_t(hand)], *head), m_promptTexture,
+      UINT(promptImage.size.x), UINT(promptImage.size.y));
 
     if (m_promptShown && hand == VrHand::Left && !m_loggedLeftPrompt) {
       Logger::info("VR: The interaction prompt is at the left hand, the left hand's reload button activates");
@@ -2280,9 +3273,11 @@ namespace dxvk {
           size_t                count,
           float                 metresPerPixel,
     const VrPose&               pose,
-          Com<IDirect3DTexture9>& texture) {
-    UINT width  = 0;
-    UINT height = 0;
+          Com<IDirect3DTexture9>& texture,
+          UINT                  minWidth,
+          UINT                  minHeight) {
+    UINT width  = minWidth;
+    UINT height = minHeight;
 
     for (size_t i = 0; i < count; i++) {
       width  = std::max(width,  UINT(std::max(parts[i].target.right,  LONG(0))));
@@ -2292,7 +3287,8 @@ namespace dxvk {
     if (!width || !height)
       return false;
 
-    // The crops only change with the game's resolution
+    // The sizes only change with the game's resolution, or when a prompt
+    // needs a larger image
     if (texture != nullptr) {
       D3DSURFACE_DESC current = { };
       texture->GetLevelDesc(0, &current);
@@ -2331,7 +3327,7 @@ namespace dxvk {
         panelSurface.ptr(), &part.target, D3DTEXF_NONE));
     }
 
-    bool shown = copied && VrD3D9Bridge::submitPanel(m_device, m_backend, id,
+    bool shown = copied && m_submitter.submitPanel(id,
       texture.ptr(), pose, float(width) * metresPerPixel, VrPanelAnchor::Room);
 
     if (!shown && !m_loggedHandHudFailure) {
@@ -2347,7 +3343,7 @@ namespace dxvk {
     if (!shown)
       return;
 
-    m_backend.hidePanel(id);
+    m_submitter.hidePanel(id);
     shown = false;
   }
 
@@ -2388,7 +3384,7 @@ namespace dxvk {
     if (!m_panelShown || (!m_panelPlacedWithHead && m_hasHeadPose))
       placePanel(m_panelConfig.distance);
 
-    m_panelShown = VrD3D9Bridge::submitPanel(m_device, m_backend, VrPanelId::Menu,
+    m_panelShown = m_submitter.submitPanel(VrPanelId::Menu,
       m_panelTexture.ptr(), m_panelPose, m_panelConfig.width, VrPanelAnchor::Room);
     m_panelWidth = m_panelConfig.width;
 
@@ -2408,10 +3404,11 @@ namespace dxvk {
      || FAILED(backBuffer->GetDesc(&desc)) || !desc.Width)
       return nullptr;
 
-    // Both images of the panel are the size of the game's frame
+    // Both images of the panel have the interface's aspect
+    VrExtent size = interfaceExtent(desc);
     m_menuPanel.pose   = m_panelPose;
     m_menuPanel.width  = m_panelWidth;
-    m_menuPanel.height = m_panelWidth * float(desc.Height) / float(desc.Width);
+    m_menuPanel.height = m_panelWidth * float(size.height) / float(size.width);
     return &m_menuPanel;
   }
 
@@ -2430,6 +3427,13 @@ namespace dxvk {
 
   void VrStereoRenderer::placeMenuPanel() {
     m_panelSpeaker = m_dialogueSpeaker;
+
+    // A mini-game keeps it out of the way of its scene
+    if (const VrPanelPlacement* panel = m_minigames ? m_minigames->panel() : nullptr) {
+      m_panelPose = panel->pose;
+      m_panelPlacedWithHead = true;
+      return;
+    }
 
     // The speaker can stand anywhere around the player, even behind, and
     // sit lower than the eyes. The middle of the dialogue menu is left
@@ -2462,24 +3466,27 @@ namespace dxvk {
     if (!m_panelShown)
       return;
 
-    m_backend.hidePanel(VrPanelId::Menu);
+    m_submitter.hidePanel(VrPanelId::Menu);
     m_panelShown = false;
   }
 
 
   bool VrStereoRenderer::createPanelTextures(const D3DSURFACE_DESC& desc) {
+    VrExtent size = interfaceExtent(desc);
+
     if (m_panelTexture != nullptr) {
       D3DSURFACE_DESC current = { };
       m_panelTexture->GetLevelDesc(0, &current);
 
-      if (current.Width == desc.Width && current.Height == desc.Height)
+      if (current.Width == size.width && current.Height == size.height)
         return true;
 
       m_panelTexture = nullptr;
       m_panelStaging = nullptr;
     }
 
-    bool created = SUCCEEDED(m_device->CreateTexture(desc.Width, desc.Height, 1,
+    // The panel has the interface's aspect, which the frame is stretched to
+    bool created = SUCCEEDED(m_device->CreateTexture(size.width, size.height, 1,
       D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &m_panelTexture, nullptr));
 
     if (created && desc.Format != D3DFMT_X8R8G8B8) {
@@ -2488,7 +3495,7 @@ namespace dxvk {
     }
 
     if (!created) {
-      Logger::err(str::format("VR: Failed to create the ", desc.Width, "x", desc.Height,
+      Logger::err(str::format("VR: Failed to create the ", size.width, "x", size.height,
         " panel texture, menus are not shown in the headset"));
       m_panelTexture = nullptr;
       m_panelStaging = nullptr;
@@ -2528,7 +3535,7 @@ namespace dxvk {
     }
 
     return SUCCEEDED(m_device->StretchRect(
-      source.ptr(), nullptr, panel.ptr(), nullptr, D3DTEXF_NONE));
+      source.ptr(), nullptr, panel.ptr(), nullptr, D3DTEXF_LINEAR));
   }
 
 }

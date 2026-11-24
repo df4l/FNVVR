@@ -36,6 +36,8 @@ namespace dxvk {
   struct VrSwingConfig {
     /// Blade tip speed above which a contact hits, in metres per second
     float hitSpeed = 2.0f;
+    /// Most hits per second on the same target, see VrSwingTracker
+    float hitsPerSecond = 3.0f;
     /// Action points of a power attack, see VrPowerAttackRules
     VrPowerAttackCost powerCost;
   };
@@ -79,6 +81,24 @@ namespace dxvk {
    * \brief Places a blade held in a hand in the game world
    */
   VrSegment vrBladeInWorld(const VrGameCameraPose& hand, const VrBlade& blade);
+
+  /**
+   * \brief The part of a fist that strikes, as a blade in the hand's frame
+   *
+   * From the grip's centre forwards past the knuckles; the capsules around
+   * the bones it is tested against give it its thickness.
+   */
+  VrBlade vrFistBlade();
+
+  /**
+   * \brief Whether a hand's fingers make a fist
+   *
+   * The index, middle, ring and little fingers are closed; the thumb may
+   * rest anywhere (findings/melee.md §13).
+   *
+   * \param [in] curls Finger curls, 0 straight to 1 closed
+   */
+  bool vrIsFist(const VrFingerCurls& curls);
 
   /**
    * \brief Closest points of two segments
@@ -161,7 +181,7 @@ namespace dxvk {
    *
    * A swing lasts while the blade's tip moves at least as fast as the hit
    * speed. Each target is hit once per swing, and not again before
-   * \ref RehitTime, so that shaking the blade against a target does not
+   * \ref rehitTime, so that shaking the blade against a target does not
    * hit it at every shake.
    *
    * The tip is followed in the player's frame, not in the world, so that
@@ -170,10 +190,6 @@ namespace dxvk {
   class VrSwingTracker {
 
   public:
-
-    /// Shortest time between two hits on the same target, in seconds (at
-    /// most three hits per second)
-    constexpr static float RehitTime = 1.0f / 3.0f;
 
     explicit VrSwingTracker(const VrSwingConfig& config)
     : m_config(config) { }
@@ -199,6 +215,13 @@ namespace dxvk {
     }
 
     /**
+     * \brief Shortest time between two hits on the same target, in seconds
+     */
+    float rehitTime() const {
+      return 1.0f / m_config.hitsPerSecond;
+    }
+
+    /**
      * \brief Whether the blade moves fast enough to hit
      */
     bool swinging() const {
@@ -208,7 +231,7 @@ namespace dxvk {
     /**
      * \brief Whether a target cannot be hit yet
      *
-     * It was hit during the current swing, or less than \ref RehitTime ago.
+     * It was hit during the current swing, or less than \ref rehitTime ago.
      *
      * \param [in] target Compared, never dereferenced
      */

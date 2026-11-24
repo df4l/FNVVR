@@ -15,6 +15,8 @@ namespace dxvk {
 
     VrPipBoyControl* g_pipBoyControl = nullptr;
 
+    uintptr_t g_previousOpenPipBoy = VrGame::OpenPipBoy;
+
     uint8_t* interfaceManager() {
       return *reinterpret_cast<uint8_t* const*>(VrGame::InterfaceManager);
     }
@@ -37,8 +39,7 @@ namespace dxvk {
       && VrGameMemory::readable(VrGame::InterfaceManager, sizeof(uintptr_t));
 
     if (m_available && !g_pipBoyControl) {
-      if (VrGameMemory::redirectCall(VrGame::PipBoyControlOpenCallSite, VrGame::OpenPipBoy,
-          reinterpret_cast<const void*>(&VrPipBoyControl::gameOpenHook)))
+      if (chainGameOpen())
         g_pipBoyControl = this;
       else
         Logger::warn("VR: The Pip-Boy control was not found, closing the Pip-Boy by looking away may reopen it");
@@ -52,6 +53,23 @@ namespace dxvk {
       Logger::warn("VR: The Pip-Boy light setting was not found, the light cannot be switched with the hand");
 
     return m_available;
+  }
+
+
+  void VrPipBoyControl::blockGameOpen(bool blocked) {
+    // lStewieAl's Tweaks writes this call once the game runs, without keeping
+    // our hook, when it refuses the Pip-Boy in combat (bNoPipBoyInCombat).
+    // Nothing is written while the hook is in place.
+    if (blocked && !m_gameOpenBlocked && g_pipBoyControl == this)
+      chainGameOpen();
+
+    m_gameOpenBlocked = blocked;
+  }
+
+
+  bool VrPipBoyControl::chainGameOpen() {
+    return VrGameMemory::chainCall(VrGame::PipBoyControlOpenCallSite, VrGame::OpenPipBoy,
+      reinterpret_cast<const void*>(&VrPipBoyControl::gameOpenHook), &g_previousOpenPipBoy);
   }
 
 
@@ -97,7 +115,7 @@ namespace dxvk {
       return;
     }
 
-    reinterpret_cast<OpenPipBoyFn>(VrGame::OpenPipBoy)(interfaceManager,
+    reinterpret_cast<OpenPipBoyFn>(g_previousOpenPipBoy)(interfaceManager,
       reinterpret_cast<Callback>(callback), menu);
   }
 

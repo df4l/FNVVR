@@ -13,26 +13,43 @@
 #include "../../util/util_string.h"
 
 #include "vr_backend_factory.h"
+#include "vr_crash_log.h"
 #include "vr_d3d9_bridge.h"
 #include "vr_emulator_backend.h"
 #include "vr_emulator_keyboard.h"
 #include "vr_extension_provider.h"
 #include "vr_game_console.h"
+#include "vr_game_settings.h"
 #include "vr_game_space.h"
 #include "vr_gamepad_head.h"
+#include "vr_game_hotkeys.h"
 #include "vr_gamepad_hook.h"
+#include "vr_large_address.h"
+#include "vr_live_casino.h"
+#include "vr_engine_patches.h"
+#include "vr_game_heap.h"
+#include "vr_fast_math.h"
+#include "vr_loader_queue.h"
+#include "vr_sound_focus.h"
+#include "vr_game_window.h"
+#include "vr_interface_shape.h"
+#include "vr_launcher_overlay.h"
 #include "vr_menu_cursor.h"
 #include "vr_openxr_probe.h"
 #include "vr_options_file.h"
 #include "vr_options_menu.h"
 #include "vr_stereo_renderer.h"
 #include "vr_system.h"
+#include "vr_text_files.h"
 #include "vr_weapon_types.h"
 
 namespace dxvk {
 
   static std::unique_ptr<VrSystem> g_vrSystem;
   static bool                      g_vrInitialized = false;
+
+  // Never deleted: it runs on its own thread until the launcher's process ends
+  static VrLauncherOverlay*        g_launcherOverlay = nullptr;
 
 
   namespace {
@@ -122,6 +139,18 @@ namespace dxvk {
     if (name == "off" || name.empty())
       return;
 
+    // The launcher loads this DLL too, and has no game to render
+    if (VrLauncherOverlay::isLauncherProcess()) {
+      if (name == "openvr" && config.getOption<bool>("d3d9.vrLauncherOverlay", true)) {
+        VrPanelConfig panel;
+        g_launcherOverlay = new VrLauncherOverlay(name,
+          config.getOption<float>("d3d9.vrPanelDistance", panel.distance),
+          config.getOption<float>("d3d9.vrPanelWidth", panel.width));
+      }
+
+      return;
+    }
+
     // Until the OpenXR backend exists, its name only checks the runtime
     if (name == "openxr") {
       vrProbeOpenXr();
@@ -137,6 +166,8 @@ namespace dxvk {
     }
 
     Logger::info(str::format("VR: Using backend '", backend->name(), "'"));
+
+    VrCrashLog::install();
 
     // The emulator has no headset to look through, so it shows a window by default
     bool showPreview = config.getOption<bool>("d3d9.vrPreviewWindow", name == "emulator");
@@ -160,11 +191,18 @@ namespace dxvk {
     options.smoothTurnSpeed = turn.smoothSpeed;
     options.pipBoyScale     = std::min(std::max(config.getOption<float>("d3d9.vrPipBoyScale", options.pipBoyScale),
       VrPipBoyScaleMin), vrPipBoyStepToScale(VrPipBoyScaleSteps - 1));
+    options.pipBoyAngle     = std::min(std::max(config.getOption<float>("d3d9.vrPipBoyAngle", options.pipBoyAngle),
+      0.0f), vrPipBoyStepToAngle(VrPipBoyAngleSteps - 1));
     options.manualReload    = config.getOption<bool>("d3d9.vrManualReload", options.manualReload);
     options.physicalSneak   = config.getOption<bool>("d3d9.vrPhysicalSneak", options.physicalSneak);
+    options.scopeLens       = config.getOption<bool>("d3d9.vrScopes", options.scopeLens);
+    options.roomscale       = config.getOption<bool>("d3d9.vrRoomscale", options.roomscale);
+    options.foveation       = config.getOption<bool>("d3d9.vrFoveation", options.foveation);
     VrOptionsFile::load(options);
     turn.smooth      = options.smoothTurn;
     turn.smoothSpeed = options.smoothTurnSpeed;
+
+    bool emulated = dynamic_cast<VrEmulatorBackend*>(backend.get()) != nullptr;
 
     if (auto* emulator = dynamic_cast<VrEmulatorBackend*>(backend.get())) {
       VrEmulatorKeyboard keyboard;
@@ -187,8 +225,10 @@ namespace dxvk {
       gamepad.controllers = config.getOption<bool>("d3d9.vrControllers", true);
 
       // The controllers point at the menu panel with the game's cursor
-      if ((gamepad.hidePad || gamepad.controllers) && VrGamepadHook::install(gamepad) && gamepad.controllers)
+      if ((gamepad.hidePad || gamepad.controllers) && VrGamepadHook::install(gamepad) && gamepad.controllers) {
         VrMenuCursor::install();
+        VrGameHotKeys::muteHudGamepadWheel();
+      }
     }
 
     bool weaponInHand = config.getOption<bool>("d3d9.vrWeaponInHand", true);
@@ -201,6 +241,16 @@ namespace dxvk {
     VrRenderPassConfig passes;
     passes.shareShadows = config.getOption<bool>("d3d9.vrShareShadows", passes.shareShadows);
     passes.handsDepthTest = config.getOption<bool>("d3d9.vrHandsDepthTest", passes.handsDepthTest);
+    passes.scopeResolution = uint32_t(std::max<int32_t>(0,
+      config.getOption<int32_t>("d3d9.vrScopeResolution", int32_t(passes.scopeResolution))));
+    passes.gpuTimings = config.getOption<bool>("d3d9.vrGpuTimings", passes.gpuTimings);
+    passes.spikeLog   = config.getOption<bool>("d3d9.vrSpikeLog", passes.spikeLog);
+    passes.cpuSamples = config.getOption<bool>("d3d9.vrCpuSamples", passes.cpuSamples);
+    passes.foveationZones.fullDegrees = std::min(std::max(config.getOption<float>("d3d9.vrFoveationFullAngle",
+      passes.foveationZones.fullDegrees), 1.0f), 89.0f);
+    passes.foveationZones.halfDegrees = std::min(std::max(config.getOption<float>("d3d9.vrFoveationHalfAngle",
+      passes.foveationZones.halfDegrees), passes.foveationZones.fullDegrees), 89.0f);
+    passes.foveationTestGaze = config.getOption<bool>("d3d9.vrFoveationTestGaze", passes.foveationTestGaze);
 
     VrDeveloperConfig developer;
     developer.enabled = config.getOption<bool>("d3d9.vrDeveloperMode", developer.enabled);
@@ -220,30 +270,90 @@ namespace dxvk {
 
     VrSwingConfig swing;
     swing.hitSpeed = config.getOption<float>("d3d9.vrMeleeHitSpeed", swing.hitSpeed);
+    swing.hitsPerSecond = std::min(std::max(config.getOption<float>("d3d9.vrMeleeHitsPerSecond",
+      swing.hitsPerSecond), 1.0f), 30.0f);
     swing.powerCost.base = config.getOption<int32_t>("d3d9.vrPowerAttackApCost", swing.powerCost.base);
     swing.powerCost.max  = config.getOption<int32_t>("d3d9.vrPowerAttackApCostMax", swing.powerCost.max);
     swing.powerCost.weightMult = config.getOption<float>("d3d9.vrPowerAttackApWeightMult", swing.powerCost.weightMult);
 
     g_vrSystem.reset(new VrSystem(std::move(backend), showPreview, panel, turn, weaponInHand, headsetResolution,
       timer, passes, developer, swing));
+    g_vrSystem->m_texts = vrReadTexts();
     g_vrSystem->m_pipBoyScale = options.pipBoyScale;
+    g_vrSystem->m_pipBoyAngle = options.pipBoyAngle;
     g_vrSystem->m_manualReload = options.manualReload;
+    g_vrSystem->m_handPush = config.getOption<bool>("d3d9.vrHandPush", true);
+    g_vrSystem->m_eyeAspect = config.getOption<bool>("d3d9.vrEyeAspect", true);
+    g_vrSystem->m_asyncHandOff = config.getOption<bool>("d3d9.vrAsyncHandOff", true);
+    g_vrSystem->m_asyncSubmit = config.getOption<bool>("d3d9.vrAsyncSubmit", false);
+    g_vrSystem->m_occlusionCulling = config.getOption<bool>("d3d9.vrOcclusionCulling", true);
+    g_vrSystem->m_scopes = options.scopeLens;
+    g_vrSystem->m_roomscale = options.roomscale;
+    g_vrSystem->m_foveation = options.foveation;
+    g_vrSystem->m_immersiveMinigames = config.getOption<bool>("d3d9.vrImmersiveMinigames", true);
     g_vrSystem->m_sneakConfig.physical = options.physicalSneak;
     g_vrSystem->m_sneakConfig.crouch   = crouch;
+    g_vrSystem->m_forceGameSettings = !emulated && config.getOption<bool>("d3d9.vrForceGameSettings", true);
+    g_vrSystem->m_rewriteTutorials = !emulated && config.getOption<bool>("d3d9.vrTutorials", true);
+    g_vrSystem->m_hideGameWindow = !emulated && config.getOption<bool>("d3d9.vrHideGameWindow", true);
+    g_vrSystem->m_keepGameActive = g_vrSystem->m_hideGameWindow;
     DxvkInstance::registerExtensionProvider(g_vrSystem->m_extensionProvider.get());
 
-    VrOptionsMenu::install(options, [] (const VrOptions& changed) {
+    VrOptionsMenu::install(options, g_vrSystem->m_texts, [] (const VrOptions& changed) {
       if (g_vrSystem)
         g_vrSystem->applyOptions(changed);
     }, [] {
       VrGameConsole::requestOpen();
+    }, [] {
+      return g_vrSystem && g_vrSystem->m_stereoRenderer
+        ? g_vrSystem->m_stereoRenderer->foveationSupport()
+        : VrFoveationSupport::NoGpuSupport;
     });
+
+    VrLargeAddress::install(g_vrSystem->m_texts);
+    VrSoundFocus::install();
+    if (config.getOption<bool>("d3d9.vrFastMath", true))
+      VrFastMath::install();
+    if (config.getOption<bool>("d3d9.vrLoaderQueueSkip", true))
+      VrLoaderQueue::install();
+    if (config.getOption<bool>("d3d9.vrEnginePatches", true))
+      VrEnginePatches::install(config.getOption<std::string>("d3d9.vrEnginePatchGroups", "all"));
+    if (config.getOption<bool>("d3d9.vrGameHeap", true))
+      VrGameHeap::install();
+
+    if (g_vrSystem->m_hideGameWindow)
+      VrSoundFocus::keepPluginSound();
+
+    VrLiveCasino::install(
+      config.getOption<bool>("d3d9.vrRealTimeCasino", true),
+      config.getOption<bool>("d3d9.vrRealTimeVigorTester", true),
+      config.getOption<bool>("d3d9.vrRealTimeCaravan", true));
   }
 
 
   void VrSystem::onInterfaceCreated() {
-    if (g_vrSystem)
-      g_vrSystem->chooseResolution();
+    if (g_launcherOverlay)
+      g_launcherOverlay->start();
+
+    if (!g_vrSystem)
+      return;
+
+    g_vrSystem->chooseResolution();
+
+    if (g_vrSystem->m_forceGameSettings) {
+      g_vrSystem->m_forceGameSettings = false;
+      VrGameSettings::apply();
+    }
+
+    if (g_vrSystem->m_rewriteTutorials) {
+      g_vrSystem->m_rewriteTutorials = false;
+      g_vrSystem->m_tutorials = VrTutorials::install(g_vrSystem->m_texts);
+    }
+
+    if (g_vrSystem->m_keepGameActive) {
+      g_vrSystem->m_keepGameActive = false;
+      VrGameSettings::keepActive();
+    }
   }
 
 
@@ -260,7 +370,10 @@ namespace dxvk {
       return;
     }
 
-    VrExtent size = vrComputeGameResolution(eye, VrGameMinAspect);
+    // At the eye's aspect, the interface keeps its 4:3 layout and is
+    // stretched over the narrower target; without that, the 4:3 target
+    bool eyeAspect = m_eyeAspect && VrInterfaceShape::install();
+    VrExtent size = vrComputeGameResolution(eye, eyeAspect ? 0.0f : VrInterfaceMinAspect);
 
     if (!m_resolution.apply(size)) {
       Logger::info("VR: The game's display settings were not found, the game keeps its own resolution");
@@ -277,12 +390,20 @@ namespace dxvk {
     m_turnConfig.smoothSpeed = options.smoothTurnSpeed;
 
     m_pipBoyScale = options.pipBoyScale;
+    m_pipBoyAngle = options.pipBoyAngle;
     m_manualReload = options.manualReload;
     m_sneakConfig.physical = options.physicalSneak;
+    m_scopes = options.scopeLens;
+    m_roomscale = options.roomscale;
+    m_foveation = options.foveation;
 
     if (m_stereoRenderer) {
+      m_stereoRenderer->setScopesEnabled(m_scopes);
+      m_stereoRenderer->setRoomscale(m_roomscale);
+      m_stereoRenderer->setFoveationEnabled(m_foveation);
       m_stereoRenderer->setTurnConfig(m_turnConfig);
       m_stereoRenderer->setPipBoyScale(m_pipBoyScale);
+      m_stereoRenderer->setPipBoyAngle(m_pipBoyAngle);
       m_stereoRenderer->setManualReload(m_manualReload);
       m_stereoRenderer->setSneakConfig(m_sneakConfig);
     }
@@ -297,10 +418,21 @@ namespace dxvk {
 
 
   VrPresentMode VrSystem::onPresent(IDirect3DSwapChain9* swapchain) {
+    VrGameHeap::logStatsIfDue();
+
     if (!g_vrSystem || !g_vrSystem->m_stereoRenderer)
       return VrPresentMode::Game;
 
-    return g_vrSystem->m_stereoRenderer->onPresent(swapchain);
+    VrPresentMode mode = g_vrSystem->m_stereoRenderer->onPresent(swapchain);
+
+    if (!g_vrSystem->m_hideGameWindow || mode == VrPresentMode::Drop || !VrGameWindow::hide(swapchain))
+      return mode;
+
+    // Without a present, nothing else paces the frames the headset does not pace
+    if (mode == VrPresentMode::Game)
+      VrGameWindow::waitUnpacedFrame();
+
+    return VrPresentMode::Hidden;
   }
 
 
@@ -315,6 +447,8 @@ namespace dxvk {
 
     if (!VrD3D9Bridge::queryGraphicsBinding(device, binding))
       return false;
+
+    binding.asyncHandOff = m_asyncHandOff;
 
     logLoadedModules();
 
@@ -331,12 +465,20 @@ namespace dxvk {
     }
 
     m_stereoRenderer = VrStereoRenderer::install(*m_backend, device, m_showPreview, m_panelConfig, m_turnConfig,
-      m_weaponInHand, m_timerConfig, m_passConfig, m_developerConfig, m_swingConfig);
+      m_weaponInHand, m_timerConfig, m_passConfig, m_developerConfig, m_swingConfig, m_texts);
 
     if (m_stereoRenderer) {
       m_stereoRenderer->setPipBoyScale(m_pipBoyScale);
+      m_stereoRenderer->setPipBoyAngle(m_pipBoyAngle);
+      m_stereoRenderer->setMinigamesEnabled(m_immersiveMinigames);
+      m_stereoRenderer->setScopesEnabled(m_scopes);
       m_stereoRenderer->setManualReload(m_manualReload);
+      m_stereoRenderer->setRoomscale(m_roomscale);
+      m_stereoRenderer->setFoveationEnabled(m_foveation);
+      m_stereoRenderer->setHandPush(m_handPush);
       m_stereoRenderer->setSneakConfig(m_sneakConfig);
+      m_stereoRenderer->setAsyncSubmit(m_asyncSubmit);
+      m_stereoRenderer->setOcclusionCulling(m_occlusionCulling);
     }
 
     return true;

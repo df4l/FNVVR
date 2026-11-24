@@ -21,12 +21,18 @@ namespace dxvk {
     FirstPerson,
     /// Image space effects (HDR, bloom, depth of field, ...)
     ImageSpace,
+    /// The interface drawn into the headset's panel textures (GPU timings only)
+    Interface,
+    /// The finished 3D image copied into the eye texture (GPU timings only)
+    EyeCopy,
   };
 
-  constexpr uint32_t VrRenderPassCount = uint32_t(VrRenderPass::ImageSpace) + 1;
+  constexpr uint32_t VrRenderPassCount = uint32_t(VrRenderPass::EyeCopy) + 1;
 
   /**
-   * \brief CPU time of the render passes per eye, over a window of frames
+   * \brief Time of the render passes per eye, over a window of frames
+   *
+   * Used for the CPU time of the passes and for their GPU time.
    *
    * Times are added while an eye is drawn and summed per frame, so that a
    * pass the game runs more than once in a frame counts once. A frame is a
@@ -38,6 +44,9 @@ namespace dxvk {
   public:
 
     static constexpr uint32_t EyeCount = 2;
+
+    /// Time of each pass of each eye in one frame, in milliseconds
+    using EyePasses = std::array<std::array<double, VrRenderPassCount>, EyeCount>;
 
     /**
      * \param [in] windowFrames Frames covered by a window
@@ -83,6 +92,11 @@ namespace dxvk {
      */
     double otherMs(uint32_t eye) const;
 
+    /**
+     * \brief Times of the frame closed last by endFrame
+     */
+    const EyePasses& lastFrame() const { return m_last; }
+
   private:
 
     struct PassStats {
@@ -91,11 +105,10 @@ namespace dxvk {
       uint32_t frames = 0;
     };
 
-    using EyePasses = std::array<std::array<double, VrRenderPassCount>, EyeCount>;
-
     uint32_t  m_windowFrames;
     uint32_t  m_frames = 0;
     EyePasses m_current = { };
+    EyePasses m_last    = { };
 
     std::array<std::array<PassStats, VrRenderPassCount>, EyeCount> m_stats = { };
 

@@ -91,11 +91,20 @@ namespace dxvk {
 
     std::array<VrEyeView, VrEyeCount> locateViews(int64_t displayTime) override;
 
+    bool supportsEyeTracking() override;
+
+    /// The emulated eyes look straight ahead
+    bool locateGaze(std::array<VrGaze, VrEyeCount>& gaze) override;
+
     bool submitFrame(const VrFrameSubmission& frame) override;
 
     void submitEmptyFrame(int64_t displayTime) override;
 
+    bool beginPanelSession() override;
+
     bool submitPanel(VrPanelId id, const VrPanelSubmission& panel) override;
+
+    bool submitPanelPixels(VrPanelId id, const VrPanelPixels& panel) override;
 
     void hidePanel(VrPanelId id) override;
 
@@ -104,6 +113,17 @@ namespace dxvk {
     void hidePointer(VrHand hand) override;
 
     void applyHaptic(VrHand hand, float amplitude, int64_t durationNs) override;
+
+    void fadeView(float seconds, float opacity) override;
+
+    /**
+     * \brief Shows no keyboard: the computer's keyboard types in the game
+     */
+    bool showKeyboard(const VrKeyboardRequest& request) override;
+
+    void hideKeyboard() override;
+
+    VrKeyboardEvent takeKeyboardEvent(std::string& typed) override;
 
     /**
      * \brief Sets the keyboard and mouse input applied on the next frame

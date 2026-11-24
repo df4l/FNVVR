@@ -1,3 +1,4 @@
+#include <iterator>
 #include <windows.h>
 #include <xinput.h>
 
@@ -34,9 +35,34 @@ namespace dxvk {
     VrPadState g_controllerPad;
     bool       g_loggedControllers = false;
 
+    // Set for good the first time the interface meets the controllers, so
+    // that losing their tracking does not bring the keyboard shortcuts back
+    bool       g_showsGamepadControls = false;
+
     // Replaces the gamepad connection message boxes. The caller pops the
     // arguments, so ignoring them is safe.
     void __cdecl skipMessageBox() { }
+
+    using StringCompareFn = int (__cdecl*)(const char* first, const char* second);
+
+    uintptr_t g_previousStringCompare = VrGame::StringCompare;
+
+    // The laser's cursor mode changes the interface's gamepad flag each time
+    // it starts or ends, so the game's walk over the menu tiles runs far more
+    // often than with a real gamepad and meets tiles that have no name
+    int __cdecl compareTileName(const char* name, const char* expected) {
+      if (name)
+        return reinterpret_cast<StringCompareFn>(g_previousStringCompare)(name, expected);
+
+      static bool logged = false;
+
+      if (!logged) {
+        Logger::info("VR: A menu tile has no name, it is skipped when the interface changes its gamepad mode");
+        logged = true;
+      }
+
+      return 1;
+    }
 
     DWORD reportControllers(XINPUT_STATE* state) {
       if (!g_loggedControllers) {
@@ -145,11 +171,28 @@ namespace dxvk {
     DWORD WINAPI getInterfaceStateHook(DWORD index, XINPUT_STATE* state) {
       DWORD result = getStateHook(index, state);
 
-      if (index != 0 || !g_cursorMode || !g_controllersActive)
+      if (index != 0 || !g_controllersActive)
+        return result;
+
+      // The game writes the displayed controls only when its flag changes,
+      // so the flag has to rise once, even with a laser already on a menu
+      bool firstReport = !g_showsGamepadControls;
+      g_showsGamepadControls = true;
+
+      if (firstReport || !g_cursorMode)
         return result;
 
       *state = XINPUT_STATE();
       return ERROR_DEVICE_NOT_CONNECTED;
+    }
+
+    using Has360ControllerFn = bool (__cdecl*)();
+
+    // What the player reads stays on the gamepad in cursor mode: the lasers
+    // are the mouse, but the buttons shown are still those of the controllers
+    bool __cdecl showsGamepadControls() {
+      return g_showsGamepadControls
+        || reinterpret_cast<Has360ControllerFn>(VrGame::Has360Controller)();
     }
 
   }
@@ -193,6 +236,30 @@ namespace dxvk {
       for (uintptr_t site : messageSites) {
         if (!VrGameMemory::redirectCall(site, VrGame::ShowMessageBox, reinterpret_cast<const void*>(&skipMessageBox)))
           Logger::warn(str::format("VR: Gamepad message at 0x", std::hex, site, " was not found, it stays enabled"));
+      }
+
+      const uintptr_t tileNameSites[] = {
+        VrGame::TileNameButtonCompareCallSite,
+        VrGame::TileNameLabelCompareCallSite,
+      };
+
+      // lStewieAl's Tweaks makes the same null check on both calls before us
+      if (!VrGameMemory::chainCalls(tileNameSites, std::size(tileNameSites), VrGame::StringCompare,
+          reinterpret_cast<const void*>(&compareTileName), &g_previousStringCompare))
+        Logger::warn("VR: The tile name comparisons were not found, a tile without a name can crash the game");
+
+      const uintptr_t displaySites[] = {
+        VrGame::GamepadTraitCallSite,
+        VrGame::GamepadTileTraitCallSite,
+        VrGame::ControlNameCallSite,
+        VrGame::HelpManualCallSite,
+        VrGame::TutorialManualCallSite,
+        VrGame::StatsLimbLabelCallSite,
+      };
+
+      for (uintptr_t site : displaySites) {
+        if (!VrGameMemory::redirectCall(site, VrGame::Has360Controller, reinterpret_cast<const void*>(&showsGamepadControls)))
+          Logger::warn(str::format("VR: Gamepad display check at 0x", std::hex, site, " was not found, keyboard controls can show with the lasers"));
       }
     }
 

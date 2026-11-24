@@ -25,6 +25,7 @@ namespace dxvk {
     using SetVelocityFn       = void (__fastcall*)(uint8_t* body, void* unused, const float* velocity);
     using GetFilterFn         = uint32_t* (__fastcall*)(uint8_t* actor, void* unused, uint32_t* filter);
     using GetPartFn           = uint8_t* (__fastcall*)(uint8_t* object, void* unused);
+    using IsBatchingAddsFn    = int32_t (__fastcall*)(uint8_t* world, void* unused);
     using UpdateFilterFn      = void (__fastcall*)(uint8_t* world, void* unused, uint8_t* entity,
                                                    int32_t mode, int32_t collections);
 
@@ -120,7 +121,9 @@ namespace dxvk {
       && VrGameMemory::matches(VrGame::BodySetAngularVelocity,
         VrGame::BodySetVelocityPrologue, sizeof(VrGame::BodySetVelocityPrologue))
       && VrGameMemory::readable(VrGame::RigidBodyVtable, VrGame::RigidBodySetPositionSlot + sizeof(uintptr_t))
-      && VrGameMemory::readable(VrGame::HavokScale, sizeof(float));
+      && VrGameMemory::readable(VrGame::HavokScale, sizeof(float))
+      && VrGameMemory::matches(VrGame::WorldIsBatchingAdds,
+        VrGame::WorldIsBatchingAddsBytes, sizeof(VrGame::WorldIsBatchingAddsBytes));
 
     if (!found)
       return nullptr;
@@ -166,6 +169,11 @@ namespace dxvk {
     }
 
     if (!hkBody) {
+      // While a cell loads, the world would only queue the sphere: it is
+      // made once the world takes bodies again
+      if (reinterpret_cast<IsBatchingAddsFn>(VrGame::WorldIsBatchingAdds)(bhkWorld, nullptr))
+        return;
+
       if (!make(body, target, filter | VrGame::FilterNoCollision))
         return;
 
@@ -212,6 +220,31 @@ namespace dxvk {
   void VrHandBodies::stop() {
     for (Body& body : m_bodies)
       halt(body);
+  }
+
+
+  bool VrHandBodies::leaveWorld(const uint8_t* world) {
+    bool left = false;
+
+    for (Body& body : m_bodies) {
+      uint8_t* hkBody = havokBody(body.object);
+
+      if (!hkBody)
+        continue;
+
+      uint8_t* current = havokWorld(hkBody);
+
+      if (world && current == world)
+        continue;
+
+      if (current)
+        virtualFunction<RemoveFn>(body.object, VrGame::RigidBodyRemoveSlot)(body.object, nullptr);
+
+      drop(body);
+      left = true;
+    }
+
+    return left;
   }
 
 

@@ -65,6 +65,13 @@ namespace dxvk {
     }
 
     /**
+     * \brief Checks whether groupContent can measure what the groups draw
+     */
+    bool contentFound() const {
+      return m_contentFound;
+    }
+
+    /**
      * \brief Reads where a HUD group is laid out
      *
      * \param [in] group HUDMainMenu field of the group
@@ -72,6 +79,32 @@ namespace dxvk {
      * \returns \c false if the HUD or the group does not exist
      */
     bool groupRect(uintptr_t group, VrInterfaceRect& rect) const;
+
+    /**
+     * \brief Reads where a HUD group is laid out, if it is shown
+     *
+     * For groups that groupContent cannot measure, such as a model: the
+     * group must be visible and not faded out.
+     *
+     * \param [in] group HUDMainMenu field of the group
+     * \param [out] rect The group's rectangle, in interface units
+     * \returns \c false if the group does not exist, is hidden or cannot be checked
+     */
+    bool groupShownRect(uintptr_t group, VrInterfaceRect& rect) const;
+
+    /**
+     * \brief Measures what a HUD group draws
+     *
+     * Covers the group's visible texts and images, as the game laid them
+     * out for the last frame: a text's rectangle is the size the game
+     * stored for it, so a text longer or taller than its group's
+     * rectangle is covered whole. See findings/hud.md §15.
+     *
+     * \param [in] group HUDMainMenu field of the group
+     * \param [out] rect What the group draws, in interface units
+     * \returns \c false if the group does not exist or draws nothing
+     */
+    bool groupContent(uintptr_t group, VrInterfaceRect& rect) const;
 
     /**
      * \brief Checks whether the interface pass draws a menu other than the HUD
@@ -92,6 +125,8 @@ namespace dxvk {
     bool                    m_available = false;
     bool                    m_menusFound = false;
     bool                    m_rectsFound = false;
+    bool                    m_contentFound = false;
+    bool                    m_yuiLoaded = false;
     std::vector<uint32_t*>  m_culledFlags;
 
     void cullTile(uintptr_t tile);

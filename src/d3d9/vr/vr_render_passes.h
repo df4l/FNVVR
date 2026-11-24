@@ -5,8 +5,12 @@
 
 #include "../../util/util_time.h"
 
+#include "vr_cpu_sampler.h"
+#include "vr_foveation_map.h"
 #include "vr_game_camera.h"
+#include "vr_gpu_timer.h"
 #include "vr_render_profile.h"
+#include "vr_scope_lens.h"
 
 namespace dxvk {
 
@@ -20,6 +24,19 @@ namespace dxvk {
     bool shareShadows = true;
     /// The hands and the weapon are hidden by the world in front of them
     bool handsDepthTest = true;
+    /// Side in pixels of the square the scope's view is drawn in
+    uint32_t scopeResolution = 768;
+    /// The GPU time of the passes is measured and logged
+    bool gpuTimings = false;
+    /// Frames that miss their display period are logged one by one
+    bool spikeLog = false;
+    /// The game thread is sampled every two milliseconds (d3d9.vrCpuSamples)
+    bool cpuSamples = false;
+    /// Zones of the eye-tracked foveation around the gaze
+    VrFoveationZones foveationZones;
+    /// Without an eye tracker, foveation takes the centre of each view as
+    /// the gaze, to check its look (d3d9.vrFoveationTestGaze)
+    bool foveationTestGaze = false;
   };
 
   /**
@@ -35,6 +52,9 @@ namespace dxvk {
    *   of both eyes, and the right eye uses the same maps;
    * - water reflections are not shared: the water shader reads them at the
    *   pixel's position on the eye's screen, so each eye needs its own.
+   *
+   * What the passes after the left eye's must not do again (time steps,
+   * work that does not depend on the view) is VrRepeatedPasses's.
    *
    * The main loop's calls to the shadow and water passes, the scene, the
    * first-person model and the image space effects are redirected and
@@ -85,6 +105,77 @@ namespace dxvk {
      */
     void endFrame();
 
+    /**
+     * \brief CPU time of each pass of the frame ended last
+     */
+    const VrRenderProfile::EyePasses& lastFrame() const {
+      return m_lastFrame;
+    }
+
+    /**
+     * \brief Limits the scene pass to a part of its target
+     *
+     * Only the scene pass: the game's scissor applies to what is drawn before
+     * the next change of target, and the shadow, water and screen passes draw
+     * into targets of other sizes.
+     *
+     * \param [in] area The part to draw, stays valid until the next call, or
+     *    \c nullptr to draw it all
+     */
+    void setSceneScissor(const VrScopeArea* area);
+
+    /**
+     * \brief Sets what is drawn right after the first-person model of an eye
+     *
+     * While its depth buffer is still bound and holds the model and the world.
+     */
+    void setAfterFirstPerson(std::function<void()> callback) {
+      m_afterFirstPerson = std::move(callback);
+    }
+
+    /**
+     * \brief Sets what starts and ends the world's passes of an eye
+     *
+     * \c begin is called with the eye before its scene pass, \c end before
+     * its image space pass, or when the eye ends without one. The scope's
+     * view, drawn outside the eyes, does not count.
+     */
+    void setWorldCallbacks(std::function<void(uint32_t)> begin, std::function<void()> end) {
+      m_beginWorld = std::move(begin);
+      m_endWorld   = std::move(end);
+    }
+
+    /**
+     * \brief Sets what is drawn right before the first-person model of an eye
+     *
+     * The game's render group is active, so what clears the depth buffer
+     * through the game's renderer does clear it, and the model is then
+     * tested against what is drawn here. With no model to draw (the game
+     * hides it while the player sits), it is called right after the scene,
+     * with the same render group and the world's depth buffer.
+     */
+    void setBeforeFirstPerson(std::function<void()> callback) {
+      m_beforeFirstPerson = std::move(callback);
+    }
+
+    /**
+     * \brief Sets what times the eyes and their passes on the GPU
+     *
+     * \param [in] timer Outlives this object, or \c nullptr
+     */
+    void setGpuTimer(VrGpuTimer* timer) {
+      m_gpuTimer = timer;
+    }
+
+    /**
+     * \brief Sets what is told the eye and pass the game thread is in
+     *
+     * \param [in] sampler Outlives this object, or \c nullptr
+     */
+    void setCpuSampler(VrCpuSampler* sampler) {
+      m_cpuSampler = sampler;
+    }
+
   private:
 
     VrRenderPasses(const VrRenderPassConfig& config, ViewFn view);
@@ -93,9 +184,24 @@ namespace dxvk {
     ViewFn             m_view;
     VrGameCamera       m_camera;
     VrRenderProfile    m_profile;
+    VrRenderProfile::EyePasses m_lastFrame = { };
 
     uint32_t m_eye = NoEye;
     high_resolution_clock::time_point m_eyeStart;
+
+    VrGpuTimer* m_gpuTimer = nullptr;
+    uint32_t    m_eyeGpuToken = VrGpuTimer::NoToken;
+
+    VrCpuSampler* m_cpuSampler = nullptr;
+    uint8_t       m_phaseBeforeEye = 0;
+
+    const VrScopeArea* m_sceneScissor = nullptr;
+    std::function<void()> m_afterFirstPerson;
+    std::function<void()> m_beforeFirstPerson;
+    std::function<void(uint32_t)> m_beginWorld;
+    std::function<void()> m_endWorld;
+    bool     m_inWorld             = false;
+    bool     m_scissorFound        = false;
 
     bool     m_shadowsDrawnForLeft = false;
     uint32_t m_shadowsReused       = 0;
@@ -105,6 +211,13 @@ namespace dxvk {
 
     template<typename Fn>
     uintptr_t runShadows(Fn&& fn);
+
+    template<typename Fn>
+    uintptr_t runScene(Fn&& fn);
+
+    void beginWorld();
+
+    void endWorld();
 
     bool sharesShadows() const;
 

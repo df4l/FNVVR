@@ -1,3 +1,5 @@
+#include <cmath>
+
 #include "test.h"
 
 #include "../vr_game_space.h"
@@ -62,6 +64,44 @@ TEST_CASE(eye_offset_follows_a_rotated_base_camera) {
 
   VrGameCameraPose pose = vrComputeEyeCameraPose(base, eye, 1.0f);
   checkVector(pose.position, 0.0f, -1.0f, 0.0f);
+}
+
+
+TEST_CASE(vats_target_stays_in_front_of_a_head_turned_in_the_room) {
+  // The game turned its camera to a target to the east, looking down at it,
+  // and the player's head had been turned 90 degrees to the left of the
+  // reference when V.A.T.S. began
+  float pitch = 0.3f;
+
+  VrGameCameraPose game;
+  game.forward  = { std::cos(pitch), 0.0f, -std::sin(pitch) };
+  game.up       = { std::sin(pitch), 0.0f, std::cos(pitch) };
+  game.right    = { 0.0f, -1.0f, 0.0f };
+  game.position = { 1.0f, 2.0f, 3.0f };
+
+  VrPose head;
+  head.orientation = vrQuaternionFromAxisAngle({ 0.0f, 1.0f, 0.0f }, Pi / 2.0f);
+
+  float yaw = vrComputeHeadAngles(head).yaw;
+  CHECK_NEAR(yaw, -Pi / 2.0f, 1e-4);
+
+  VrGameCameraPose base = vrComputeVatsCameraPose(game, yaw);
+  VrGameCameraPose eye  = vrComputeEyeCameraPose(base, head, 1.0f);
+
+  // That head sees the target's heading, with the horizon level
+  checkVector(eye.forward, 1.0f, 0.0f, 0.0f);
+  checkVector(eye.up, 0.0f, 0.0f, 1.0f);
+  checkVector(base.position, 1.0f, 2.0f, 3.0f);
+}
+
+
+TEST_CASE(vats_camera_looking_straight_down_keeps_its_heading) {
+  VrGameCameraPose game;
+  game.forward = { 0.0f, 0.0f, -1.0f };
+  game.up      = { 1.0f, 0.0f, 0.0f };
+  game.right   = { 0.0f, -1.0f, 0.0f };
+
+  checkVector(vrComputeVatsCameraPose(game, 0.0f).forward, 1.0f, 0.0f, 0.0f);
 }
 
 
@@ -148,16 +188,102 @@ TEST_CASE(frustum_uses_tangents_of_the_field_of_view) {
 }
 
 
+TEST_CASE(reflection_frustum_keeps_a_symmetric_frustum) {
+  VrGameFrustum flat = { -0.549f, 0.549f, 0.575f, -0.575f };
+  VrGameFrustum mirrored = vrComputeReflectionFrustum(flat);
+
+  CHECK_NEAR(mirrored.left,   flat.left,   1e-6);
+  CHECK_NEAR(mirrored.right,  flat.right,  1e-6);
+  CHECK_NEAR(mirrored.top,    flat.top,    1e-6);
+  CHECK_NEAR(mirrored.bottom, flat.bottom, 1e-6);
+}
+
+
+TEST_CASE(reflection_lines_up_with_the_water_shader_lookup) {
+  // Quest 2 left eye
+  VrGameFrustum eye = { -1.15037f, 1.0f, 1.19175f, -1.11061f };
+  VrGameFrustum mirrored = vrComputeReflectionFrustum(eye);
+
+  auto ndcY = [] (const VrGameFrustum& f, float tangent) {
+    return (2.0f * tangent - (f.top + f.bottom)) / (f.top - f.bottom);
+  };
+
+  for (float tangent : { -0.9f, -0.2f, 0.0f, 0.4f, 1.1f }) {
+    // The shader reads the reflection at v = (1 + y) / 2 of the eye's own
+    // projection; the mirrored camera sees the point at the negated tangent
+    // and stores it at v = (1 - y) / 2 of its projection
+    float lookup = 0.5f * (1.0f + ndcY(eye, tangent));
+    float stored = 0.5f * (1.0f - ndcY(mirrored, -tangent));
+    CHECK_NEAR(lookup, stored, 1e-5);
+
+    // The game's own copy of the frustum misses it by 3.5 % of the height
+    float copied = 0.5f * (1.0f - ndcY(eye, -tangent));
+    CHECK(std::abs(lookup - copied) > 0.03f);
+  }
+}
+
+
 TEST_CASE(narrow_eye_is_widened_to_the_interface_aspect) {
-  VrExtent size = vrComputeGameResolution({ 1832, 1920 }, VrGameMinAspect);
+  VrExtent size = vrComputeGameResolution({ 1832, 1920 }, VrInterfaceMinAspect);
 
   CHECK(size.height == 1920);
   CHECK(size.width  == 2560);
 }
 
 
+TEST_CASE(eye_aspect_keeps_the_eye_size) {
+  VrExtent quest = vrComputeGameResolution({ 2244, 2352 }, 0.0f);
+  CHECK(quest.width  == 2244);
+  CHECK(quest.height == 2352);
+
+  VrExtent odd = vrComputeGameResolution({ 1831, 1920 }, 0.0f);
+  CHECK(odd.width == 1832);
+}
+
+
+TEST_CASE(interface_is_at_least_four_by_three) {
+  // A Quest 2 eye: the panels' images are as wide as the former target
+  VrExtent quest = vrComputeInterfaceExtent({ 2244, 2352 });
+  CHECK(quest.width  == 3136);
+  CHECK(quest.height == 2352);
+  CHECK_NEAR(vrComputeInterfaceAspect(2244, 2352), 4.0 / 3.0, 1e-6);
+
+  // A wide enough target is kept, odd width included
+  VrExtent wide = vrComputeInterfaceExtent({ 2501, 1400 });
+  CHECK(wide.width  == 2501);
+  CHECK(wide.height == 1400);
+  CHECK_NEAR(vrComputeInterfaceAspect(2501, 1400), 2501.0 / 1400.0, 1e-9);
+
+  CHECK_NEAR(vrComputeInterfaceAspect(0, 0), 4.0 / 3.0, 1e-6);
+}
+
+
+TEST_CASE(rendered_menu_pick_spans_the_interface_width) {
+  // A Quest 2 eye: 1280 units are the window's 2244 pixels
+  CHECK_NEAR(vrComputeRenderedMenuPickAspect(2244, 2352) * 2352.0, 2244.0, 1e-6);
+
+  // 4:3 and wider: the game's 4/3
+  CHECK_NEAR(vrComputeRenderedMenuPickAspect(3136, 2352), 4.0 / 3.0, 1e-6);
+  CHECK_NEAR(vrComputeRenderedMenuPickAspect(1920, 1080), 4.0 / 3.0, 1e-6);
+  CHECK_NEAR(vrComputeRenderedMenuPickAspect(0, 0), 4.0 / 3.0, 1e-6);
+}
+
+
+TEST_CASE(radial_pick_height_lands_in_interface_units) {
+  // A Quest 2 eye, interface 1280x960: the game scales by 1280 / 2244 on
+  // both axes, the bottom of the window must reach 960 units
+  double scale = vrComputeRadialPickScaleY(2244, 2352);
+  CHECK_NEAR(2352.0 * scale * (1280.0 / 2244.0), 960.0, 1e-3);
+
+  // 4:3 and wider: unchanged
+  CHECK_NEAR(vrComputeRadialPickScaleY(3136, 2352), 1.0, 1e-6);
+  CHECK_NEAR(vrComputeRadialPickScaleY(1920, 1080), 1.0, 1e-6);
+  CHECK_NEAR(vrComputeRadialPickScaleY(0, 0), 1.0, 1e-6);
+}
+
+
 TEST_CASE(wide_eye_keeps_its_size_and_width_is_even) {
-  VrExtent size = vrComputeGameResolution({ 2501, 1400 }, VrGameMinAspect);
+  VrExtent size = vrComputeGameResolution({ 2501, 1400 }, VrInterfaceMinAspect);
 
   CHECK(size.height == 1400);
   CHECK(size.width  == 2502);
@@ -341,4 +467,168 @@ TEST_CASE(menu_scene_points_map_back_to_the_room) {
   // And its forward direction is the eye's
   VrVector3 forward = vrRotate(eye.orientation, { 0.0f, 0.0f, -1.0f });
   checkVector(vrComputeMenuSceneDirectionInRoom(anchor, camera.forward), forward.x, forward.y, forward.z);
+}
+
+
+TEST_CASE(head_view_is_above_and_in_front_of_the_head_bone) {
+  // A body facing north, as the skeleton's head bone in its rest pose
+  const float rotation[9] = {
+    0.0f, 0.0f, -1.0f,
+    0.0f, 1.0f,  0.0f,
+    1.0f, 0.0f,  0.0f };
+
+  VrVector3 eyes = vrComputeHeadViewPosition({ 10.0f, 20.0f, 100.0f }, rotation, 2.0f);
+
+  checkVector(eyes, 10.0f, 36.0f, 112.0f);
+}
+
+
+TEST_CASE(camera_blend_continues_from_the_last_frame) {
+  VrCameraBlend blend;
+
+  VrGameCameraPose first = vrComputeBodyCameraPose(0.0f, { 0.0f, 0.0f, 100.0f });
+  checkVector(blend.update(first, false, 0.01f).position, 0.0f, 0.0f, 100.0f);
+
+  // Without a change, the camera is followed as it is
+  VrGameCameraPose moved = vrComputeBodyCameraPose(0.0f, { 5.0f, 0.0f, 100.0f });
+  checkVector(blend.update(moved, false, 0.01f).position, 5.0f, 0.0f, 100.0f);
+
+  // A change starts from what was shown, without a jump
+  VrGameCameraPose other = vrComputeBodyCameraPose(0.5f, { 5.0f, 0.0f, 70.0f });
+  VrGameCameraPose start = blend.update(other, true, 0.0f);
+  checkVector(start.position, 5.0f, 0.0f, 100.0f);
+  checkVector(start.forward, 0.0f, 1.0f, 0.0f);
+  checkVector(start.right, 1.0f, 0.0f, 0.0f);
+
+  // Halfway there, on the way to the new heading
+  VrGameCameraPose half = blend.update(other, false, 0.1f);
+  CHECK(half.position.z < 100.0f && half.position.z > 70.0f);
+  float heading = vrComputeCameraHeading(half);
+  CHECK(heading > 0.0f && heading < 0.5f);
+
+  // And it gets there
+  VrGameCameraPose end = blend.update(other, false, 5.0f);
+  checkVector(end.position, 5.0f, 0.0f, 70.0f);
+  CHECK_NEAR(vrComputeCameraHeading(end), 0.5f, 1e-4);
+}
+
+
+TEST_CASE(head_heading_is_where_the_face_looks) {
+  // Column 1 is the face, facing east (heading of 90 degrees)
+  const float east[9] = {
+    0.0f, 1.0f, 0.0f,
+    1.0f, 0.0f, 0.0f,
+    0.0f, 0.0f, 1.0f,
+  };
+
+  float heading = -1.0f;
+  CHECK(vrComputeHeadHeading(east, heading));
+  CHECK_NEAR(heading, 1.5707963f, 1e-4);
+
+  // Looking straight down, it says nothing
+  const float down[9] = {
+    0.0f,  0.0f, 1.0f,
+    1.0f,  0.0f, 0.0f,
+    0.0f, -1.0f, 0.0f,
+  };
+
+  heading = -1.0f;
+  CHECK(!vrComputeHeadHeading(down, heading));
+  CHECK_NEAR(heading, -1.0f, 1e-6);
+}
+
+TEST_CASE(camera_tilt_leaves_the_roll_out) {
+  // Standing, facing east
+  VrGameCameraPose standing = vrComputeBodyCameraPose(1.5707963f, { 0.0f, 0.0f, 0.0f });
+
+  float heading = -1.0f;
+  float pitch   = -1.0f;
+  CHECK(vrComputeCameraTilt(standing, heading, pitch));
+  CHECK_NEAR(heading, 1.5707963f, 1e-4);
+  CHECK_NEAR(pitch, 0.0f, 1e-4);
+
+  // Lying on the back, the top of the head to the west: the camera looks
+  // up, and sitting up would face east
+  VrGameCameraPose lying;
+  lying.forward = { 0.0f, 0.0f, 1.0f };
+  lying.up      = { -1.0f, 0.0f, 0.0f };
+  lying.right   = { 0.0f, -1.0f, 0.0f };
+
+  CHECK(vrComputeCameraTilt(lying, heading, pitch));
+  CHECK_NEAR(heading, 1.5707963f, 1e-4);
+  CHECK_NEAR(pitch, 1.5707963f, 1e-4);
+
+  // The camera built from it is the same, and gives that heading back
+  VrGameCameraPose pose = vrComputeTiltedCameraPose(heading, pitch, { 0.0f, 0.0f, 0.0f });
+  checkVector(pose.forward, 0.0f, 0.0f, 1.0f);
+  checkVector(pose.up, -1.0f, 0.0f, 0.0f);
+  checkVector(pose.right, 0.0f, -1.0f, 0.0f);
+  CHECK_NEAR(vrComputeCameraHeading(pose), 1.5707963f, 1e-4);
+
+  // Facing north, half tilted up and rolled: the camera built from it has
+  // a level right and still faces about north
+  VrGameCameraPose rolled = vrComputeTiltedCameraPose(0.0f, 0.5f, { 0.0f, 0.0f, 0.0f });
+  float r = 0.3f;
+  VrVector3 up    = rolled.up * std::cos(r) + rolled.right * std::sin(r);
+  rolled.right    = rolled.right * std::cos(r) - rolled.up * std::sin(r);
+  rolled.up       = up;
+
+  CHECK(vrComputeCameraTilt(rolled, heading, pitch));
+  CHECK_NEAR(heading, 0.0f, 0.2);
+  CHECK_NEAR(vrComputeTiltedCameraPose(heading, pitch, { 0.0f, 0.0f, 0.0f }).right.z, 0.0f, 1e-6);
+
+  // On its side, it says nothing
+  VrGameCameraPose onSide;
+  onSide.forward = { 0.0f, 1.0f, 0.0f };
+  onSide.up      = { 1.0f, 0.0f, 0.0f };
+  onSide.right   = { 0.0f, 0.0f, -1.0f };
+
+  heading = -1.0f;
+  pitch   = -1.0f;
+  CHECK(!vrComputeCameraTilt(onSide, heading, pitch));
+  CHECK_NEAR(heading, -1.0f, 1e-6);
+}
+
+
+TEST_CASE(view_heading_starts_where_the_view_is) {
+  VrViewHeading heading;
+
+  // The head is turned in the room: the view has nothing to do with the body
+  heading.start(3.0f, 1.0f);
+  CHECK_NEAR(heading.update(3.0f, 0.0f, 0.01f), 1.0f, 1e-4);
+
+  // The body turns nearly around, the view with it
+  CHECK_NEAR(heading.update(3.0f + 3.0f, 0.0f, 0.01f), 1.0f + 3.0f, 1e-4);
+}
+
+TEST_CASE(view_heading_turns_the_short_way_softly) {
+  VrViewHeading heading;
+  heading.start(3.0f, 3.0f);
+
+  // Across the wrap of the angle: 3.0 to -3.0 is about a third of a radian
+  float soft = heading.update(-3.0f, 0.1f, 0.05f);
+  CHECK(soft > 3.0f && soft < 3.2831853f);
+
+  float settled = heading.update(-3.0f, 0.1f, 10.0f);
+  CHECK_NEAR(std::remainder(settled + 3.0f, 6.2831853f), 0.0f, 1e-3);
+}
+
+TEST_CASE(view_heading_keeps_what_something_else_gave_it) {
+  VrViewHeading heading;
+  heading.start(0.0f, 0.0f);
+
+  heading.keep(0.7f);
+  CHECK_NEAR(heading.update(0.0f, 0.0f, 0.01f), 0.7f, 1e-4);
+  CHECK_NEAR(heading.update(0.5f, 0.0f, 0.01f), 1.2f, 1e-4);
+}
+
+TEST_CASE(camera_blend_cuts_when_too_far) {
+  VrCameraBlend blend;
+
+  blend.update(vrComputeBodyCameraPose(0.0f, { 0.0f, 0.0f, 0.0f }), false, 0.01f);
+
+  VrGameCameraPose result = blend.update(vrComputeBodyCameraPose(1.0f, { 500.0f, 0.0f, 0.0f }), true, 0.01f);
+
+  checkVector(result.position, 500.0f, 0.0f, 0.0f);
+  CHECK_NEAR(vrComputeCameraHeading(result), 1.0f, 1e-4);
 }

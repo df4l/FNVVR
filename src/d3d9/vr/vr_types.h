@@ -3,6 +3,8 @@
 #include <array>
 #include <cstdint>
 
+#include "vr_frame_stats.h"
+
 namespace dxvk {
 
   /**
@@ -89,11 +91,33 @@ namespace dxvk {
   };
 
   /**
+   * \brief Where an eye looks, in its own view
+   *
+   * Tangents of the direction's angles: \c tanX to the right and \c tanY
+   * up from the view's forward axis, so that (0, 0) looks straight ahead.
+   */
+  struct VrGaze {
+    float tanX = 0.0f;
+    float tanY = 0.0f;
+  };
+
+  /**
    * \brief Pixel size of one eye's render target
    */
   struct VrExtent {
     uint32_t width  = 0;
     uint32_t height = 0;
+  };
+
+  /**
+   * \brief What happened to the runtime's text keyboard
+   */
+  enum class VrKeyboardEvent : uint32_t {
+    None,
+    /// The text was confirmed
+    Done,
+    /// The keyboard was closed without confirming its text
+    Closed,
   };
 
   enum class VrSessionState : uint32_t {
@@ -114,6 +138,13 @@ namespace dxvk {
     bool     paced                = false;
     int64_t  predictedDisplayTime = 0;
     int64_t  predictedPeriod      = 0;
+    /// The previous frame's cycle, which this wait ended, is measured
+    bool         hasPreviousCycle = false;
+    /// Steps of that cycle, see VrFrameStep
+    VrFrameCycle previousCycle    = { };
+    /// Wall clock when that cycle ended, in seconds since 1970, to line it
+    /// up with a profiler's samples
+    double       previousCycleEnd = 0.0;
   };
 
   /**

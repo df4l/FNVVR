@@ -128,6 +128,48 @@ TEST_CASE(pipboy_size_positions) {
 }
 
 
+TEST_CASE(options_round_trip_the_pipboy_angle) {
+  VrOptions options;
+  CHECK_NEAR(options.pipBoyAngle, 0.0f, 1e-6);
+
+  VrOptions written;
+  written.pipBoyAngle = 45.0f;
+
+  VrOptions read;
+  vrParseOptions(vrFormatOptions(written), read);
+  CHECK_NEAR(read.pipBoyAngle, 45.0f, 1e-6);
+
+  // Back to the game's placement
+  vrParseOptions("PipBoyAngle=0", read);
+  CHECK_NEAR(read.pipBoyAngle, 0.0f, 1e-6);
+}
+
+
+TEST_CASE(options_parser_limits_the_pipboy_angle) {
+  VrOptions options;
+  vrParseOptions("PipBoyAngle=400", options);
+  CHECK_NEAR(options.pipBoyAngle, 90.0f, 1e-6);
+
+  vrParseOptions("PipBoyAngle=-30", options);
+  CHECK_NEAR(options.pipBoyAngle, 90.0f, 1e-6);
+
+  vrParseOptions("PipBoyAngle=tilted", options);
+  CHECK_NEAR(options.pipBoyAngle, 90.0f, 1e-6);
+}
+
+
+TEST_CASE(pipboy_angle_positions) {
+  CHECK_NEAR(vrPipBoyStepToAngle(0), 0.0f, 1e-6);
+  CHECK_NEAR(vrPipBoyStepToAngle(3), 45.0f, 1e-6);
+  CHECK_NEAR(vrPipBoyStepToAngle(99), 90.0f, 1e-6);
+
+  CHECK(vrPipBoyAngleToStep(0.0f) == 0);
+  CHECK(vrPipBoyAngleToStep(40.0f) == 3);
+  CHECK(vrPipBoyAngleToStep(-10.0f) == 0);
+  CHECK(vrPipBoyAngleToStep(500.0f) == VrPipBoyAngleSteps - 1);
+}
+
+
 TEST_CASE(options_round_trip_the_manual_reload) {
   VrOptions options;
   CHECK(options.manualReload);
@@ -157,4 +199,36 @@ TEST_CASE(options_round_trip_the_physical_sneak) {
 
   vrParseOptions("physicalsneak=0", read);
   CHECK(!read.physicalSneak);
+}
+
+
+TEST_CASE(options_round_trip_the_roomscale) {
+  VrOptions options;
+  CHECK(!options.roomscale);
+
+  VrOptions written;
+  written.roomscale = true;
+
+  VrOptions read;
+  vrParseOptions(vrFormatOptions(written), read);
+  CHECK(read.roomscale);
+
+  vrParseOptions("roomscale=0", read);
+  CHECK(!read.roomscale);
+}
+
+
+TEST_CASE(options_round_trip_the_eye_tracked_foveation) {
+  VrOptions options;
+  CHECK(!options.foveation);
+
+  VrOptions written;
+  written.foveation = true;
+
+  VrOptions read;
+  vrParseOptions(vrFormatOptions(written), read);
+  CHECK(read.foveation);
+
+  vrParseOptions("EyeTrackedFoveation=0", read);
+  CHECK(!read.foveation);
 }

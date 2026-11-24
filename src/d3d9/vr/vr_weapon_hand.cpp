@@ -11,7 +11,10 @@
 #include "vr_game_addresses.h"
 #include "vr_game_memory.h"
 #include "vr_game_nodes.h"
+#include "vr_forearm_cut.h"
+#include "vr_game_space.h"
 #include "vr_hand_fingers.h"
+#include "vr_scope_finder.h"
 #include "vr_melee.h"
 #include "vr_throw.h"
 #include "vr_weapon_hand.h"
@@ -74,6 +77,13 @@ namespace dxvk {
     using PlaySequenceFn = void* (__fastcall*)(uint8_t* animData, void* unused,
       void* sequence, uint32_t groupId, int32_t sequenceType);
 
+    // What the game's calls reached before our hook: the game's function, or
+    // kNVSE's hook, which replaces animations and then calls it
+    uintptr_t g_previousPlaySequence = VrGame::PlaySequence;
+
+    // lStewieAl's Tweaks puts its bullet trails on this call before us
+    uintptr_t g_previousProjectileCreate = VrGame::ProjectileCreate;
+
     // The weapon node is a few levels below the skeleton's root, and the
     // muzzle a few levels below the weapon
     constexpr uint32_t MaxModelDepth = 16;
@@ -115,6 +125,9 @@ namespace dxvk {
     // under 20 cm away
     constexpr float MagazineHandReach = 0.3f;
 
+    /// Meshes of the body hidden that are named in the log, at most
+    constexpr uint32_t MaxLoggedBodyMeshes = 32;
+
     // How far out along its way in a round enters the loading port, in
     // metres, and the part of the time to its place it takes to get there
     // from the fingers
@@ -143,6 +156,15 @@ namespace dxvk {
     // Bones of the free hand that take a pose: its fingers, the wrist and
     // the forearm's twist bone
     constexpr uint32_t MaxPosedBones = 48;
+
+    /** The left sleeve is cut this far inside the Pip-Boy's band */
+    constexpr float PipBoyBandOverlap = 0.015f * VrGameUnitsPerMetre;
+
+    /** More vertices than the Pip-Boy has: a model this large is not measured */
+    constexpr uint32_t MaxPipBoyVertices = 65536;
+
+    /// Frames a measure of the Pip-Boy's band is reused for at most
+    constexpr uint32_t RemeasureFrames = 120;
 
     constexpr float Pi               = 3.14159265f;
     constexpr float DegreesPerRadian = 180.0f / Pi;
@@ -272,6 +294,32 @@ namespace dxvk {
     }
 
     /**
+     * \brief Forearm bone carrying a hand bone
+     *
+     * The hand is a child of the forearm in the game's skeleton, but a
+     * plugin can insert nodes of its own between them, such as the "SC Hand"
+     * node of Titans of the New West that scales the left hand: the closest
+     * ancestor named as the forearm, else the hand's parent.
+     */
+    uint8_t* forearmBone(uint8_t* hand, const char* forearmName) {
+      constexpr uint32_t MaxInsertedNodes = 4;
+
+      uint8_t* parent = field<uint8_t*>(hand, VrGame::ObjectParent);
+      uint8_t* bone   = parent;
+
+      for (uint32_t i = 0; bone && i <= MaxInsertedNodes; i++) {
+        auto name = field<const char*>(bone, VrGame::ObjectName);
+
+        if (name && !std::strcmp(name, forearmName))
+          return bone;
+
+        bone = field<uint8_t*>(bone, VrGame::ObjectParent);
+      }
+
+      return parent;
+    }
+
+    /**
      * \brief Bones of one arm above the forearm
      *
      * The hand's meshes are skinned to the hand, the fingers and the
@@ -313,6 +361,91 @@ namespace dxvk {
       }
 
       return false;
+    }
+
+    /**
+     * \brief The forearms an arm mesh covers: bit 0 the left, bit 1 the right
+     *
+     * A forearm is covered when one of the mesh's bones is the forearm or
+     * below it.
+     */
+    uint32_t coveredForearms(uint8_t* geometry, const UpperArm (&arms)[2]) {
+      auto skin  = field<uint8_t*>(geometry, VrGame::GeometrySkinInstance);
+      auto data  = skin ? field<uint8_t*>(skin, VrGame::SkinInstanceData) : nullptr;
+      auto bones = skin ? field<uint8_t**>(skin, VrGame::SkinInstanceBones) : nullptr;
+
+      if (!data || !bones)
+        return 0;
+
+      uint32_t count = field<uint32_t>(data, VrGame::SkinDataBoneCount);
+      uint32_t forearms = 0;
+
+      for (uint32_t i = 0; i < count; i++) {
+        for (uint32_t arm = 0; arm < 2; arm++) {
+          if (bones[i] && arms[arm].forearm != arms[arm].top && isAncestor(arms[arm].forearm, bones[i]))
+            forearms |= 1u << arm;
+        }
+      }
+
+      return forearms;
+    }
+
+    /**
+     * \brief The model's node that holds a bone of its skeleton: the
+     *    skeleton's root bone
+     */
+    uint8_t* skeletonRoot(const uint8_t* root, uint8_t* bone) {
+      while (uint8_t* parent = field<uint8_t*>(bone, VrGame::ObjectParent)) {
+        if (parent == root)
+          return bone;
+
+        bone = parent;
+      }
+
+      return nullptr;
+    }
+
+    /**
+     * \brief Whether a mesh belongs to the body, away from the arms
+     *
+     * The game's first-person camera never sees the body, which the VR
+     * layer moves with the hands: some outfits add pieces of their own to
+     * the first-person model (legs, belts, pouches, a face wrap; the NCR
+     * armours). A skinned mesh is the body's when none of its bones is a
+     * hand's or a forearm's and one lies outside both arms; another mesh
+     * when it hangs from the skeleton outside both arms, the weapon aside.
+     * The hands and what they hold stay.
+     */
+    bool isBodyMesh(uint8_t* geometry, const UpperArm (&arms)[2], const uint8_t* skeleton, const uint8_t* weapon) {
+      auto skin = field<uint8_t*>(geometry, VrGame::GeometrySkinInstance);
+
+      if (!skin) {
+        return skeleton && isAncestor(skeleton, geometry)
+          && !isAncestor(arms[0].top, geometry) && !isAncestor(arms[1].top, geometry)
+          && !(weapon && isAncestor(weapon, geometry));
+      }
+
+      auto data  = field<uint8_t*>(skin, VrGame::SkinInstanceData);
+      auto bones = field<uint8_t**>(skin, VrGame::SkinInstanceBones);
+
+      if (!data || !bones)
+        return false;
+
+      uint32_t count = field<uint32_t>(data, VrGame::SkinDataBoneCount);
+      bool outside = false;
+
+      for (uint32_t i = 0; i < count; i++) {
+        if (!bones[i])
+          continue;
+
+        if (isAncestor(arms[0].forearm, bones[i]) || isAncestor(arms[1].forearm, bones[i]))
+          return false;
+
+        if (!isAncestor(arms[0].top, bones[i]) && !isAncestor(arms[1].top, bones[i]))
+          outside = true;
+      }
+
+      return outside;
     }
 
     /**
@@ -534,7 +667,7 @@ namespace dxvk {
         VrGame::FirstPersonZero, sizeof(VrGame::FirstPersonZero))
       && VrGameMemory::matches(VrGame::FirstPersonCameraSite,
         VrGame::FirstPersonCamera, sizeof(VrGame::FirstPersonCamera))
-      && VrGameMemory::callsTo(VrGame::ProjectileCreateCallSite, VrGame::ProjectileCreate);
+      && VrGameMemory::canChainCall(VrGame::ProjectileCreateCallSite, VrGame::ProjectileCreate);
 
     found = found && VrGameMemory::redirectCall(VrGame::FirstPersonUpdateCallSite,
       VrGame::ObjectUpdate, reinterpret_cast<const void*>(&VrWeaponHand::updateHook));
@@ -547,8 +680,8 @@ namespace dxvk {
 
     // If this one fails, the weapon is drawn in the hand but shoots from
     // the game's muzzle, along the head
-    if (found && !VrGameMemory::redirectCall(VrGame::ProjectileCreateCallSite,
-        VrGame::ProjectileCreate, reinterpret_cast<const void*>(&VrWeaponHand::createProjectileHook)))
+    if (found && !VrGameMemory::chainCall(VrGame::ProjectileCreateCallSite, VrGame::ProjectileCreate,
+        reinterpret_cast<const void*>(&VrWeaponHand::createProjectileHook), &g_previousProjectileCreate))
       Logger::warn("VR: The projectile call was not found, the weapon shoots along the head");
 
     // If this one fails, a grenade thrown by hand flies as fast as the
@@ -577,14 +710,9 @@ namespace dxvk {
       Logger::warn("VR: The auto-aim call was not found, shots bend towards where the head looks");
 
     if (found) {
-      bool redirected = true;
-
-      for (uintptr_t site : VrGame::PlaySequenceCallSites) {
-        redirected &= VrGameMemory::redirectCall(site,
-          VrGame::PlaySequence, reinterpret_cast<const void*>(&VrWeaponHand::playSequenceHook));
-      }
-
-      if (!redirected)
+      // kNVSE puts a single hook on the four calls
+      if (!VrGameMemory::chainCalls(VrGame::PlaySequenceCallSites, std::size(VrGame::PlaySequenceCallSites),
+          VrGame::PlaySequence, reinterpret_cast<const void*>(&VrWeaponHand::playSequenceHook), &g_previousPlaySequence))
         Logger::warn("VR: An animation call was not found, the left hand may reach for a pistol before aiming");
     }
 
@@ -595,6 +723,7 @@ namespace dxvk {
 
     std::unique_ptr<VrWeaponHand> weaponHand(new VrWeaponHand());
     g_weaponHand = weaponHand.get();
+    weaponHand->m_sleeveCut = VrSleeveCut::install();
 
     // If this one fails, a lit fuse shows no sparks
     weaponHand->m_canEmitSparks = VrGameMemory::matches(VrGame::PSysEmitterCtlrEmit,
@@ -742,7 +871,7 @@ namespace dxvk {
     if (g_weaponHand)
       g_weaponHand->m_handAimedShot = handAimed;
 
-    void* result = reinterpret_cast<ProjectileCreateFn>(VrGame::ProjectileCreate)(
+    void* result = reinterpret_cast<ProjectileCreateFn>(g_previousProjectileCreate)(
       projectile, shooter, target, weapon, x, y, z, heading, pitch,
       a9, a10, a11, a12, spreadHeading, spreadPitch, a15);
 
@@ -939,7 +1068,7 @@ namespace dxvk {
           void*                 sequence,
           uint32_t              groupId,
           int32_t               sequenceType) {
-    auto playSequence = reinterpret_cast<PlaySequenceFn>(VrGame::PlaySequence);
+    auto playSequence = reinterpret_cast<PlaySequenceFn>(g_previousPlaySequence);
     uint8_t* object = player();
     uint8_t  group  = uint8_t(groupId & 0xFF);
 
@@ -963,7 +1092,9 @@ namespace dxvk {
 
     g_weaponHand->m_snappedAim = true;
 
-    if (!g_weaponHand->m_loggedSnapAim) {
+    // kNVSE's aim blend fix crossfades these sequences itself by default and
+    // does not read the flag, so the line only stands for the game's function
+    if (!g_weaponHand->m_loggedSnapAim && g_previousPlaySequence == VrGame::PlaySequence) {
       Logger::info("VR: The aim animation starts without blending while the left hand supports the pistol");
       g_weaponHand->m_loggedSnapAim = true;
     }
@@ -972,9 +1103,280 @@ namespace dxvk {
   }
 
 
+  bool VrWeaponHand::scopeLens(VrScopeLens& lens) const {
+    if (!m_hasScopeLens || !m_hasHand)
+      return false;
+
+    VrGameCameraPose hand = m_hand;
+
+    if (m_scopeTwoHanded) {
+      hand = vrComputeTwoHandedPose(hand, vrCameraRotation(hand) * m_scopeSupport,
+        m_otherHand.position - m_hand.position);
+    }
+
+    VrGameRotation rotation = vrCameraRotation(hand) * m_scopeRotation;
+
+    // The columns of a rotation are the axes: x along the barrel, y up and
+    // z to the right in the game's weapon models
+    lens.eyepiece.position = vrPointFromHand(hand, m_scopeEyepiece);
+    lens.eyepiece.forward  = { rotation.m[0][0], rotation.m[1][0], rotation.m[2][0] };
+    lens.eyepiece.up       = { rotation.m[0][1], rotation.m[1][1], rotation.m[2][1] };
+    lens.eyepiece.right    = { rotation.m[0][2], rotation.m[1][2], rotation.m[2][2] };
+    lens.halfWidth         = m_scopeHalfWidth;
+    lens.halfHeight        = m_scopeHalfHeight;
+    lens.rectangular       = m_scopeRectangular;
+    lens.apparentTangent   = vrComputeScopeApparentTangent(m_scopeHalfWidth, m_scopeHalfHeight);
+    lens.objective         = vrPointFromHand(hand, m_scopeObjective);
+    lens.nightVision       = m_scopeNightVision;
+    lens.kind              = m_scopeKind;
+    lens.otherEyepiece     = vrPointFromHand(hand, m_scopeOtherEyepiece);
+    return true;
+  }
+
+
+  void VrWeaponHand::placeScope(
+          uint8_t*          weapon,
+          uint8_t*          muzzle,
+    const uint8_t*          form,
+    const VrGameCameraPose& hand,
+          bool              pointedByBothHands,
+    const VrVector3&        supportInHand) {
+    VrEquippedScope equipped;
+
+    if (!m_scopesEnabled || !form || !VrScopeGame::readEquipped(equipped))
+      return;
+
+    VrGameRotation modelRotation = readRotation(weapon, VrGame::ObjectWorldRotation);
+    VrVector3      modelOrigin   = readVector(weapon, VrGame::ObjectWorldTranslation);
+    float          modelScale    = field<float>(weapon, VrGame::ObjectWorldScale);
+
+    auto toWorld = [&] (const VrVector3& inModel) {
+      return modelRotation * (inModel * modelScale) + modelOrigin;
+    };
+
+    VrScopePlacement placement;
+
+    if (!m_scopeTable.find(equipped.weaponModel, placement)) {
+      // Without a projectile node the weapon's model is not attached yet
+      if (!muzzle)
+        return;
+
+      if (!findModelScope(weapon, muzzle, equipped.weaponModel, placement)) {
+        placement = VrScopeTable::guess(
+          vrTranspose(modelRotation) * (readVector(muzzle, VrGame::ObjectWorldTranslation) - modelOrigin) * (1.0f / modelScale));
+
+        if (form != m_loggedScopeForm) {
+          Logger::warn(str::format("VR: The scope of the model '", equipped.weaponModel ? equipped.weaponModel : "",
+            "' is not known and was not found in its geometry, its place is a guess. fnvvr\\scopes.ini can correct it."));
+        }
+      }
+    }
+
+    if (form != m_loggedScopeForm) {
+      Logger::info(str::format("VR: Scope of '", equipped.weaponModel ? equipped.weaponModel : "",
+        "': eyepiece at ", placement.eyepiece.x, ", ", placement.eyepiece.y, ", ", placement.eyepiece.z,
+        " half size ", placement.halfWidth, " x ", placement.halfHeight,
+        ", sight field ", equipped.sightFov, " degrees", equipped.nightVision ? ", night vision" : ""));
+      m_loggedScopeForm = form;
+    }
+
+    if (!placement.hasLens())
+      return;
+
+    m_scopeKind = placement.kind;
+
+    // The game's animations hold the binoculars in the fist, along its axis:
+    // their place comes from the node they move
+    if (placement.kind == VrOpticKind::Binoculars) {
+      uint8_t* node = findObject(weapon, VrBinocularsModel::NodeName);
+
+      if (!node)
+        return;
+
+      if (uint8_t* marker = findObject(weapon, VrBinocularsModel::MarkerName))
+        field<uint32_t>(marker, VrGame::ObjectFlags) |= VrGame::ObjectFlagAppCulled;
+
+      VrGameRotation nodeRotation = readRotation(node, VrGame::ObjectWorldRotation);
+      VrVector3      nodeOrigin   = readVector(node, VrGame::ObjectWorldTranslation);
+
+      auto inNode = [&] (const VrVector3& point) {
+        return nodeRotation * (point * modelScale) + nodeOrigin;
+      };
+
+      // Stored as columns forward, up, right, see scopeLens
+      VrGameRotation axes;
+
+      for (uint32_t row = 0; row < 3; row++) {
+        axes.m[row][0] =  nodeRotation.m[row][0];
+        axes.m[row][1] =  nodeRotation.m[row][2];
+        axes.m[row][2] = -nodeRotation.m[row][1];
+      }
+
+      m_scopeEyepiece      = vrPointToHand(hand, inNode(placement.eyepiece));
+      m_scopeOtherEyepiece = vrPointToHand(hand, inNode(placement.otherEyepiece));
+      m_scopeObjective     = vrPointToHand(hand, inNode(placement.objective));
+      m_scopeRotation      = vrTranspose(vrCameraRotation(hand)) * axes;
+      m_scopeHalfWidth     = placement.halfWidth * modelScale;
+      m_scopeHalfHeight    = placement.halfHeight * modelScale;
+      m_scopeRectangular   = false;
+      m_scopeNightVision   = false;
+      m_scopeTwoHanded     = false;
+      m_hasScopeLens       = true;
+      return;
+    }
+
+    // Without a projectile node the weapon's model is not attached yet
+    if (!muzzle)
+      return;
+
+    // Square to the barrel: the shots leave along the projectile node, whichever
+    // axis of the model that is. The barrel, up and right are its y, z and x.
+    // Stored as columns forward, up, right, see scopeLens.
+    VrGameRotation node = readRotation(muzzle, VrGame::ObjectWorldRotation);
+    VrGameRotation axes = node;
+
+    for (uint32_t row = 0; row < 3; row++) {
+      axes.m[row][0] = node.m[row][1];
+      axes.m[row][1] = node.m[row][2];
+      axes.m[row][2] = node.m[row][0];
+    }
+
+    VrVector3 eyepiece = toWorld(placement.eyepiece);
+
+    // The render looks from the barrel's end along the shots, so that the
+    // reticle's centre is where they go at any range: the offset of a
+    // scope's axis from the barrel is a matter of zeroing in a real one
+    // A screen has a lens of its own to look from.
+    VrVector3 objective = placement.kind == VrOpticKind::Screen
+      ? toWorld(placement.objective)
+      : readVector(muzzle, VrGame::ObjectWorldTranslation);
+
+    m_scopeEyepiece    = vrPointToHand(hand, eyepiece);
+    m_scopeObjective   = vrPointToHand(hand, objective);
+    m_scopeRotation    = vrTranspose(vrCameraRotation(hand)) * axes;
+    m_scopeHalfWidth   = placement.halfWidth * modelScale;
+    m_scopeHalfHeight  = placement.halfHeight * modelScale;
+    m_scopeRectangular = placement.rectangular;
+    m_scopeNightVision = equipped.nightVision;
+    m_scopeTwoHanded   = pointedByBothHands;
+    m_scopeSupport     = supportInHand;
+    m_hasScopeLens     = true;
+  }
+
+
+  bool VrWeaponHand::findModelScope(
+          uint8_t*          weapon,
+          uint8_t*          muzzle,
+    const char*             model,
+          VrScopePlacement& placement) {
+    std::string key = model ? model : "";
+    auto known = m_foundScopes.find(key);
+
+    if (known != m_foundScopes.end()) {
+      placement = known->second.placement;
+      return known->second.found;
+    }
+
+    // Everything in the frame of the weapon's model, as the table's values
+    VrGameRotation modelRotation = vrTranspose(readRotation(weapon, VrGame::ObjectWorldRotation));
+    VrVector3      modelOrigin   = readVector(weapon, VrGame::ObjectWorldTranslation);
+    float          modelScale    = field<float>(weapon, VrGame::ObjectWorldScale);
+    float          inverseScale  = modelScale > 0.0f ? 1.0f / modelScale : 1.0f;
+
+    auto toModel = [&] (const VrVector3& world) {
+      return modelRotation * (world - modelOrigin) * inverseScale;
+    };
+
+    std::vector<VrScopeShape> shapes;
+    size_t vertices = 0;
+
+    forEachObject(weapon, MaxModelDepth, [&] (uint8_t* object) {
+      uint8_t* geometry = (field<uint32_t>(object, VrGame::ObjectFlags) & VrGame::ObjectFlagAppCulled)
+        ? nullptr : asGeometry(object);
+      uint8_t* data = geometry ? field<uint8_t*>(geometry, VrGame::GeometryModelData) : nullptr;
+
+      if (!data)
+        return;
+
+      auto     points = field<const VrVector3*>(data, VrGame::GeometryDataVertices);
+      uint32_t count  = field<uint16_t>(data, VrGame::GeometryDataVertexCount);
+
+      if (!points || !count)
+        return;
+
+      VrGameRotation rotate    = readRotation(geometry, VrGame::ObjectWorldRotation);
+      VrVector3      translate = readVector(geometry, VrGame::ObjectWorldTranslation);
+      float          scale     = field<float>(geometry, VrGame::ObjectWorldScale);
+
+      VrScopeShape shape;
+      shape.namedScope = vrIsScopeName(field<const char*>(geometry, VrGame::ObjectName));
+      shape.points.reserve(count);
+
+      for (uint32_t i = 0; i < count; i++)
+        shape.points.push_back(toModel(translate + (rotate * points[i]) * scale));
+
+      vertices += count;
+      shapes.push_back(std::move(shape));
+    });
+
+    // The projectile node's x, y and z are the barrel's right, forward and up
+    VrGameRotation node = modelRotation * readRotation(muzzle, VrGame::ObjectWorldRotation);
+
+    VrScopeBarrel barrel;
+    barrel.muzzle  = toModel(readVector(muzzle, VrGame::ObjectWorldTranslation));
+    barrel.right   = { node.m[0][0], node.m[1][0], node.m[2][0] };
+    barrel.forward = { node.m[0][1], node.m[1][1], node.m[2][1] };
+    barrel.up      = { node.m[0][2], node.m[1][2], node.m[2][2] };
+
+    FoundScope result;
+    VrScopeFinding finding;
+    result.found = vrFindScope(shapes, barrel, result.placement, finding);
+
+    if (result.found) {
+      Logger::info(str::format("VR: Scope of the model '", key, "' found in its geometry (", shapes.size(), " parts, ",
+        vertices, " vertices): axis ", finding.above, " above the barrel and ", finding.right, " to its right, ",
+        finding.rings, " rings, ", finding.hasGlass
+          ? str::format("eyepiece glass ", finding.glassDepth, " in front of the lens")
+          : std::string("no eyepiece glass found")));
+    }
+
+    placement = result.placement;
+    m_foundScopes.emplace(std::move(key), result);
+    return result.found;
+  }
+
+
+  VrOpticKind VrWeaponHand::opticKind(const uint8_t* form) {
+    if (form == m_opticForm)
+      return m_opticKind;
+
+    VrEquippedScope equipped;
+    VrScopePlacement placement;
+
+    m_opticKind = VrOpticKind::Scope;
+    m_opticForm = nullptr;
+
+    // The weapon's data may not be there yet: asked again next time
+    if (form && VrScopeGame::readEquipped(equipped)) {
+      m_opticForm = form;
+
+      if (m_scopeTable.find(equipped.weaponModel, placement))
+        m_opticKind = placement.kind;
+    }
+
+    return m_opticKind;
+  }
+
+
   void VrWeaponHand::placeModel(uint8_t* root, void* updateData) {
+    m_hasScopeLens = false;
+
     uint8_t* main = m_main;
     m_main = nullptr;
+
+    // Found again by each placement that draws the arms
+    if (m_sleeveCut)
+      m_sleeveCut->clear();
 
     // Found again by each placement, for the eye about to be drawn
     m_highlightRoot = nullptr;
@@ -1003,10 +1405,11 @@ namespace dxvk {
       m_loggedFrame = true;
     }
 
-    // The size is written after the game's update, the next update shows it
+    // The size and turn are written after the game's update, the next
+    // update shows them
     PipBoyNodes pipBoy = findPipBoy(root);
     measurePipBoyScreen(pipBoy);
-    scalePipBoy(pipBoy);
+    placePipBoy(pipBoy);
 
     // The game places its camera at its own eye
     if (uint8_t* camera = field<uint8_t*>(main, VrGame::MainFirstPersonCamera))
@@ -1078,7 +1481,7 @@ namespace dxvk {
     // Where the game animates the weapon and the other hand, before the
     // model is moved
     uint8_t* otherHand = findObject(root, VrGame::LeftHandNodeName);
-    uint8_t* forearm   = otherHand ? field<uint8_t*>(otherHand, VrGame::ObjectParent) : nullptr;
+    uint8_t* forearm   = otherHand ? forearmBone(otherHand, VrGame::LeftForearmNodeName) : nullptr;
 
     VrVector3 drawnWeapon = readVector(weapon, VrGame::ObjectWorldTranslation);
     VrVector3 drawnHand   = forearm ? readVector(otherHand, VrGame::ObjectWorldTranslation) : drawnWeapon;
@@ -1166,10 +1569,16 @@ namespace dxvk {
     // two-handed melee weapon is swung by the right hand, the left hand
     // only rides on its handle.
     VrVector3 support = rig.rotate * (drawnHand - drawnWeapon);
-    GripKind  grip    = weaponGrip(object);
+    // Binoculars and the camera are not aimed: the left hand stays free and the
+    // game's aim state, with its animations and slow walk, stays out of them
+    VrOpticKind optic = opticKind(form);
+    GripKind    grip  = optic == VrOpticKind::Scope ? weaponGrip(object) : GripKind::None;
     updateGrip(grip, forearm != nullptr, support);
 
-    if (m_twoHanded && grip == GripKind::TwoHanded) {
+    VrVector3 supportInHand = vrTranspose(vrCameraRotation(hand)) * support;
+    bool pointedByBothHands = m_twoHanded && grip == GripKind::TwoHanded;
+
+    if (pointedByBothHands) {
       hand = vrComputeTwoHandedPose(hand, support, m_otherHand.position - m_hand.position);
       rig  = vrComputeRigToHand(m_gameCamera, drawnWeapon, hand);
     }
@@ -1284,6 +1693,8 @@ namespace dxvk {
       : hand.forward;
     m_hasAim         = true;
 
+    placeScope(weapon, muzzle, form, hand, pointedByBothHands, supportInHand);
+
     if (weapon != m_loggedBarrelWeapon) {
       VrHeadAngles barrelAngles = vrComputeAimAngles(m_aimDirection);
       VrHeadAngles handAngles   = vrComputeAimAngles(hand.forward);
@@ -1364,7 +1775,7 @@ namespace dxvk {
           void*                 updateData) {
     uint8_t* rightHand = findObject(root, VrGame::RightHandNodeName);
     uint8_t* otherHand = findObject(root, VrGame::LeftHandNodeName);
-    uint8_t* forearm   = otherHand ? field<uint8_t*>(otherHand, VrGame::ObjectParent) : nullptr;
+    uint8_t* forearm   = otherHand ? forearmBone(otherHand, VrGame::LeftForearmNodeName) : nullptr;
 
     if (!rightHand) {
       showArms(root);
@@ -1380,12 +1791,43 @@ namespace dxvk {
     hand.position = hand.position - shift;
 
     VrGameTransform target = vrComputeHeldTransform(hand, vrMirrorHandPose(FreeHandPose));
-    VrGameRotation drawnRotation = readRotation(rightHand, VrGame::ObjectWorldRotation);
-    VrVector3 drawnHand = readVector(rightHand, VrGame::ObjectWorldTranslation);
+
+    // The wrist and the twist bone take the left hand's free pose,
+    // mirrored, as the right forearm is drawn too: the game's holstered
+    // animation can leave them twisted after a weapon was put away. The
+    // model is moved so that the forearm carries the hand onto its target.
+    uint8_t* rightForearm = forearmBone(rightHand, VrGame::RightForearmNodeName);
+    uint8_t* rightTwist   = rightForearm ? findObject(rightForearm, VrGame::RightForeTwistNodeName) : nullptr;
 
     VrGameTransform rig;
-    rig.rotate    = target.rotate * vrTranspose(drawnRotation);
-    rig.translate = target.translate - rig.rotate * drawnHand;
+
+    if (rightForearm) {
+      VrGameRotation forearmRotation = readRotation(rightForearm, VrGame::ObjectWorldRotation);
+      VrVector3 forearmPosition      = readVector(rightForearm, VrGame::ObjectWorldTranslation);
+      VrVector3 wrist = vrTranspose(forearmRotation)
+        * (readVector(rightHand, VrGame::ObjectWorldTranslation) - forearmPosition);
+
+      VrGameRotation targetForearm = target.rotate * vrTranspose(vrMirrorHandRotation(FreeHandWrist));
+
+      rig.rotate    = targetForearm * vrTranspose(forearmRotation);
+      rig.translate = target.translate - targetForearm * wrist - rig.rotate * forearmPosition;
+    } else {
+      rig.rotate    = target.rotate * vrTranspose(readRotation(rightHand, VrGame::ObjectWorldRotation));
+      rig.translate = target.translate - rig.rotate * readVector(rightHand, VrGame::ObjectWorldTranslation);
+    }
+
+    std::array<SavedBone, 2> wristBones;
+    uint32_t wristCount = 0;
+
+    if (rightForearm) {
+      wristBones[wristCount++] = { rightHand, readRotation(rightHand, VrGame::ObjectLocalRotation) };
+      writeRotation(rightHand, VrGame::ObjectLocalRotation, vrMirrorHandRotation(FreeHandWrist));
+
+      if (rightTwist) {
+        wristBones[wristCount++] = { rightTwist, readRotation(rightTwist, VrGame::ObjectLocalRotation) };
+        writeRotation(rightTwist, VrGame::ObjectLocalRotation, vrMirrorHandRotation(FreeHandTwist));
+      }
+    }
 
     VrGameRotation worldRotation = rig.rotate * readRotation(root, VrGame::ObjectWorldRotation);
     VrVector3 worldTranslation   = rig.rotate * drawnRoot + rig.translate;
@@ -1409,6 +1851,9 @@ namespace dxvk {
     for (uint32_t i = 0; i < fingerCount; i++)
       writeRotation(fingers[i].bone, VrGame::ObjectLocalRotation, fingers[i].rotate);
 
+    for (uint32_t i = 0; i < wristCount; i++)
+      writeRotation(wristBones[i].bone, VrGame::ObjectLocalRotation, wristBones[i].rotate);
+
     if (forearm && m_hasOtherHand)
       placeOtherHand(root, otherHand, shift, updateData, nullptr);
 
@@ -1421,7 +1866,8 @@ namespace dxvk {
     m_hidesHolstered = true;
 
     if (!m_loggedFreeHands) {
-      Logger::info("VR: The weapon is holstered, both hands take the free pose around their controllers");
+      Logger::info(str::format("VR: The weapon is holstered, both hands take the free pose around their controllers",
+        rightTwist ? "" : " (no right twist bone, the right forearm keeps the game's twist)"));
       m_loggedFreeHands = true;
     }
   }
@@ -1503,7 +1949,7 @@ namespace dxvk {
   VrWeaponHand::PipBoyNodes VrWeaponHand::findPipBoy(uint8_t* root) {
     PipBoyNodes nodes;
     nodes.hand    = findObject(root, VrGame::LeftHandNodeName);
-    nodes.forearm = nodes.hand ? field<uint8_t*>(nodes.hand, VrGame::ObjectParent) : nullptr;
+    nodes.forearm = nodes.hand ? forearmBone(nodes.hand, VrGame::LeftForearmNodeName) : nullptr;
     nodes.twist   = nodes.forearm ? findObject(nodes.forearm, VrGame::LeftForeTwistNodeName) : nullptr;
     nodes.screen  = nodes.twist ? findObject(nodes.twist, VrGame::PipBoyScreenNodeName) : nullptr;
 
@@ -1586,17 +2032,18 @@ namespace dxvk {
   }
 
 
-  void VrWeaponHand::scalePipBoy(const PipBoyNodes& nodes) {
+  void VrWeaponHand::placePipBoy(const PipBoyNodes& nodes) {
     uint8_t* device = nodes.device;
 
     if (!device)
       return;
 
-    VrNodeScale current = {
-      readVector(device, VrGame::ObjectLocalTranslation),
-      field<float>(device, VrGame::ObjectLocalScale) };
+    VrNodePlacement current;
+    current.rotate    = readRotation(device, VrGame::ObjectLocalRotation);
+    current.translate = readVector(device, VrGame::ObjectLocalTranslation);
+    current.scale     = field<float>(device, VrGame::ObjectLocalScale);
 
-    // A model the game attached or placed again is at its own size
+    // A model the game attached or placed again is at its own placement
     bool replaced = device != m_pipBoyDevice
       || std::memcmp(&current, &m_pipBoyWrittenPlacement, sizeof(current));
 
@@ -1605,14 +2052,15 @@ namespace dxvk {
       m_pipBoyOwnPlacement     = current;
       m_pipBoyWrittenPlacement = current;
       m_pipBoyAppliedScale     = 1.0f;
+      m_pipBoyAppliedAngle     = 0.0f;
     }
 
-    if (m_pipBoyScale == m_pipBoyAppliedScale)
+    if (m_pipBoyScale == m_pipBoyAppliedScale && m_pipBoyAngle == m_pipBoyAppliedAngle)
       return;
 
-    VrNodeScale placement = m_pipBoyOwnPlacement;
+    VrNodePlacement placement = m_pipBoyOwnPlacement;
 
-    if (m_pipBoyScale != 1.0f) {
+    if (m_pipBoyScale != 1.0f || m_pipBoyAngle != 0.0f) {
       // The screen's centre in the twist bone's frame at the model's own
       // placement, and the forearm's axis there: the line from the forearm
       // bone to the wrist
@@ -1628,26 +2076,36 @@ namespace dxvk {
       if (auto bound = field<const uint8_t*>(nodes.screen, VrGame::ObjectWorldBound))
         centre = readVector(bound, 0);
 
-      VrVector3 screen = readRotation(device, VrGame::ObjectLocalRotation)
+      VrVector3 screen = m_pipBoyOwnPlacement.rotate
         * (model.toLocal(centre) * m_pipBoyOwnPlacement.scale) + m_pipBoyOwnPlacement.translate;
 
-      VrVector3 pivot = vrClosestPointOnLine(
-        twist.toLocal(readVector(nodes.forearm, VrGame::ObjectWorldTranslation)),
-        twist.toLocal(readVector(nodes.hand, VrGame::ObjectWorldTranslation)),
-        screen);
+      VrVector3 elbow = twist.toLocal(readVector(nodes.forearm, VrGame::ObjectWorldTranslation));
+      VrVector3 wrist = twist.toLocal(readVector(nodes.hand, VrGame::ObjectWorldTranslation));
 
-      placement = vrScaleAboutPoint(m_pipBoyOwnPlacement, pivot, m_pipBoyScale);
+      // The twist bone is a rotation of the game's right-handed frame, so a
+      // positive turn about the axis towards the hand takes the screen on
+      // the back of the left wrist towards the thumb
+      placement = vrPlaceAboutAxis(m_pipBoyOwnPlacement,
+        vrClosestPointOnLine(elbow, wrist, screen), wrist - elbow,
+        m_pipBoyAngle * (3.14159265f / 180.0f), m_pipBoyScale);
     }
 
+    writeRotation(device, VrGame::ObjectLocalRotation, placement.rotate);
     writeVector(device, VrGame::ObjectLocalTranslation, placement.translate);
     field<float>(device, VrGame::ObjectLocalScale) = placement.scale;
 
     m_pipBoyWrittenPlacement = placement;
     m_pipBoyAppliedScale     = m_pipBoyScale;
+    m_pipBoyAppliedAngle     = m_pipBoyAngle;
 
     if (!m_loggedPipBoyScale && m_pipBoyScale != 1.0f) {
       Logger::info(str::format("VR: The Pip-Boy grows while it is open, up to ", m_pipBoyScale, " times its size"));
       m_loggedPipBoyScale = true;
+    }
+
+    if (!m_loggedPipBoyAngle && m_pipBoyAngle != 0.0f) {
+      Logger::info(str::format("VR: The Pip-Boy is turned ", m_pipBoyAngle, " degrees about the forearm"));
+      m_loggedPipBoyAngle = true;
     }
   }
 
@@ -1703,7 +2161,7 @@ namespace dxvk {
     // The game animates the free hand anywhere, so its pose is not kept:
     // it takes a fixed pose around its controller. The forearm carries the
     // hand, and the hand's meshes only use bones below the forearm.
-    uint8_t* forearm = field<uint8_t*>(otherHand, VrGame::ObjectParent);
+    uint8_t* forearm = forearmBone(otherHand, VrGame::LeftForearmNodeName);
 
     VrGameRotation forearmRotation = readRotation(forearm, VrGame::ObjectWorldRotation);
     VrVector3 forearmPosition      = readVector(forearm, VrGame::ObjectWorldTranslation);
@@ -1803,20 +2261,31 @@ namespace dxvk {
   }
 
 
-  void VrWeaponHand::pinchRound(uint8_t* otherHand, const VrVector3& centre, float scale) {
+  bool VrWeaponHand::pinchPoint(uint8_t* otherHand, VrVector3& point) {
     uint8_t* thumb = findObject(otherHand, PinchThumbBone);
     uint8_t* index = findObject(otherHand, PinchIndexBone);
 
     VrVector3 thumbPoint, indexPoint;
-    m_hasPinch = thumb && index
-      && boneInHand(otherHand, thumb, &m_reloadAnimation.fingers, thumbPoint)
-      && boneInHand(otherHand, index, &m_reloadAnimation.fingers, indexPoint);
+
+    if (!thumb || !index
+     || !boneInHand(otherHand, thumb, &m_reloadAnimation.fingers, thumbPoint)
+     || !boneInHand(otherHand, index, &m_reloadAnimation.fingers, indexPoint))
+      return false;
+
+    point = (thumbPoint + indexPoint) * 0.5f;
+    return true;
+  }
+
+
+  void VrWeaponHand::pinchRound(uint8_t* otherHand, const VrVector3& centre, float scale) {
+    VrVector3 point;
+    m_hasPinch = pinchPoint(otherHand, point);
 
     if (!m_hasPinch)
       return;
 
     m_pinchInHand.rotate    = m_reloadAnimation.magazineInHand.rotate;
-    m_pinchInHand.translate = (thumbPoint + indexPoint) * 0.5f - m_pinchInHand.rotate * centre * scale;
+    m_pinchInHand.translate = point - m_pinchInHand.rotate * centre * scale;
   }
 
 
@@ -2298,8 +2767,14 @@ namespace dxvk {
     // middle of the weapon
     VrVector3 axis;
 
+    // A magazine the animation swings in from the side comes straight out
+    // from under the weapon in the hand
+    bool swungIn = m_hasReloadAnimation && !m_reloadAnimation.carried && !m_pinched
+      && action == ActionKind::None && vrMagazineSwingsIn(m_reloadAnimation.axis);
+
     if (m_hasReloadAnimation) {
-      axis = readRotation(weapon, VrGame::ObjectWorldRotation) * m_reloadAnimation.axis;
+      axis = readRotation(weapon, VrGame::ObjectWorldRotation)
+        * (swungIn ? VrVector3 { 0.0f, -1.0f, 0.0f } : m_reloadAnimation.axis);
     } else if (auto weaponBound = field<const uint8_t*>(weapon, VrGame::ObjectWorldBound)) {
       axis = well - readVector(weaponBound, 0);
     }
@@ -2316,6 +2791,31 @@ namespace dxvk {
 
     if (m_pinched && m_hasReloadAnimation && leftHand && handScale > 0.0f)
       pinchRound(leftHand, centre, scale / handScale);
+
+    // A magazine the animation never carries is held as the hand pushes
+    // it in, which may be upside down
+    bool pushedIn = m_hasReloadAnimation && !m_reloadAnimation.carried && !m_pinched
+      && action == ActionKind::None && leftHand && handScale > 0.0f;
+    float uprightAngle = 0.0f;
+    m_turnedUpright = false;
+
+    if (pushedIn && swungIn) {
+      // The animation's hold is taken halfway through its swing, 10 cm to
+      // the side of the hand and turned with the swing
+      VrVector3 heldCentre = centre * (scale / handScale);
+      const VrGameTransform& animated = m_reloadAnimation.magazineInHand;
+      VrVector3 point = animated.translate + animated.rotate * heldCentre;
+
+      pinchPoint(leftHand, point);
+
+      m_uprightInHand = vrMagazineHeldAsInWeapon(FreeHandPose.rotate, m_reloadAnimation.place.rotate, heldCentre, point);
+      m_turnedUpright = true;
+    } else if (pushedIn) {
+      VrVector3 insertion = vrTranspose(m_reloadAnimation.place.rotate) * m_reloadAnimation.axis * -1.0f;
+      m_uprightInHand = m_reloadAnimation.magazineInHand;
+      m_turnedUpright = vrUprightMagazineHold(FreeHandPose.rotate, ControllerUp, insertion,
+        centre * (scale / handScale), m_uprightInHand, uprightAngle);
+    }
 
     const VrGameTransform& inHand = magazineInHand();
 
@@ -2341,6 +2841,14 @@ namespace dxvk {
       } else {
         Logger::info(str::format(round ? "VR: The weapon is loaded round by round with '" : "VR: The weapon's magazine is '",
           name ? name : "", "'"));
+      }
+
+      if (pushedIn && swungIn) {
+        Logger::info("VR: The reload animation swings the magazine in from the side, the new magazine is held between the fingers as it sits in the weapon");
+      } else if (pushedIn) {
+        Logger::info(str::format("VR: The new magazine is held as the reload animation pushes it in, the end that goes in ",
+          uprightAngle * 57.2957795f, " degrees from the left controller's up",
+          m_turnedUpright ? ": turned upright" : ""));
       }
       m_loggedMagazine = true;
     }
@@ -2622,11 +3130,12 @@ namespace dxvk {
 
     m_hidesRightHand = rightHand;
 
+    const char* forearmNames[2] = { VrGame::LeftForearmNodeName, VrGame::RightForearmNodeName };
     UpperArm arms[2];
 
     for (uint32_t i = 0; i < 2; i++) {
       arms[i].top     = armBone(hands[i], hands[1 - i]);
-      arms[i].forearm = arms[i].top != hands[i] ? field<uint8_t*>(hands[i], VrGame::ObjectParent) : hands[i];
+      arms[i].forearm = arms[i].top != hands[i] ? forearmBone(hands[i], forearmNames[i]) : hands[i];
 
       if (!m_loggedArms) {
         auto top     = field<const char*>(arms[i].top, VrGame::ObjectName);
@@ -2642,17 +3151,41 @@ namespace dxvk {
         && !isSkinnedBelow(geometry, arms[0].forearm);
     };
 
+    uint8_t* skeleton = skeletonRoot(root, arms[0].top);
+    uint8_t* weaponNode = findObject(root, VrGame::WeaponNodeName);
+
+    bool cutsSleeves = m_sleeveCut
+      && placeSleeveCuts(root, arms[0].forearm, hands[0], arms[1].forearm, hands[1]);
+
     // The meshes are culled with the first-person camera after this update
-    forEachObject(root, MaxModelDepth, [this, &arms, &isRightHandMesh] (uint8_t* object) {
+    forEachObject(root, MaxModelDepth, [this, &arms, &isRightHandMesh, rightHand, cutsSleeves, skeleton, weaponNode] (uint8_t* object) {
       uint8_t* geometry = asGeometry(object);
 
       if (!geometry)
         return;
 
-      if (isArmMesh(geometry, arms))
-        hide(geometry, !m_loggedArms);
-      else if (isRightHandMesh(geometry))
+      if (isArmMesh(geometry, arms)) {
+        // The part of a sleeve along a drawn forearm is drawn, cut across it
+        uint32_t forearms = coveredForearms(geometry, arms) & (rightHand ? 1u : 3u);
+
+        if (cutsSleeves && forearms) {
+          show(geometry);
+          m_sleeveCut->addSleeve(geometry, forearms);
+
+          if (!m_loggedSleeves) {
+            auto name = field<const char*>(geometry, VrGame::ObjectName);
+            Logger::info(str::format("VR: Drawing '", name ? name : "", "' cut across the ",
+              forearms == 3u ? "forearms" : forearms == 1u ? "left forearm" : "right forearm"));
+          }
+        } else {
+          hide(geometry, !m_loggedArms);
+        }
+      } else if (isBodyMesh(geometry, arms, skeleton, weaponNode)) {
+        if (hide(geometry, m_loggedBodyMeshes < MaxLoggedBodyMeshes))
+          m_loggedBodyMeshes++;
+      } else if (isRightHandMesh(geometry)) {
         hide(geometry, !m_loggedRightHand);
+      }
     });
 
     if (rightHand) {
@@ -2665,7 +3198,139 @@ namespace dxvk {
     if (!m_loggedArms && m_hiddenObjects.empty())
       Logger::warn("VR: No arm mesh was found, the arms stay visible");
 
-    m_loggedArms = true;
+    m_loggedArms    = true;
+    m_loggedSleeves = m_loggedSleeves || cutsSleeves;
+  }
+
+
+  bool VrWeaponHand::placeSleeveCuts(
+          uint8_t*              root,
+          uint8_t*              leftForearm,
+          uint8_t*              leftHand,
+          uint8_t*              rightForearm,
+          uint8_t*              rightHand) {
+    // The band covers the left cut, and the right sleeve ends as far from
+    // its wrist. Without a Pip-Boy, as early in a new game, the sleeves'
+    // cut ends show what the band hides: they are left out, only the hands
+    // are drawn.
+    float distance = 0.0f;
+    bool underPipBoy = measurePipBoyCut(root, leftForearm, leftHand, distance);
+
+    if (underPipBoy) {
+      m_sleeveCut->setArm(0, leftForearm, leftHand, distance);
+      m_sleeveCut->setArm(1, rightForearm, rightHand, distance);
+    }
+
+    if (!m_loggedSleeveCut || underPipBoy != m_cutsSleeves) {
+      Logger::info(underPipBoy
+        ? str::format("VR: Sleeves are cut ", distance / VrGameUnitsPerMetre * 100.0f, " cm from the wrists, under the Pip-Boy's band")
+        : std::string("VR: No Pip-Boy on the left forearm, the sleeves are hidden and only the hands are drawn"));
+      m_loggedSleeveCut = true;
+    }
+
+    m_cutsSleeves = underPipBoy;
+    return underPipBoy;
+  }
+
+
+  bool VrWeaponHand::measurePipBoyCut(
+          uint8_t*              root,
+          uint8_t*              forearm,
+          uint8_t*              hand,
+          float&                distance) {
+    PipBoyNodes nodes = findPipBoy(root);
+
+    if (!nodes.device || nodes.forearm != forearm || nodes.hand != hand)
+      return false;
+
+    VrVector3 elbow = readVector(forearm, VrGame::ObjectWorldTranslation);
+    VrVector3 wrist = readVector(hand, VrGame::ObjectWorldTranslation);
+
+    // The drawn geometry of the Pip-Boy, in the walk's order
+    struct Part {
+      uint8_t*          geometry;
+      const VrVector3*  points;
+      uint32_t          count;
+    };
+
+    std::vector<Part> parts;
+    uint32_t vertices = 0;
+    uintptr_t models = 0;
+
+    forEachObject(nodes.device, MaxModelDepth, [&] (uint8_t* object) {
+      uint8_t* geometry = (field<uint32_t>(object, VrGame::ObjectFlags) & VrGame::ObjectFlagAppCulled)
+        ? nullptr : asGeometry(object);
+      uint8_t* data = geometry ? field<uint8_t*>(geometry, VrGame::GeometryModelData) : nullptr;
+
+      if (!data)
+        return;
+
+      auto points = field<const VrVector3*>(data, VrGame::GeometryDataVertices);
+      uint32_t count = field<uint16_t>(data, VrGame::GeometryDataVertexCount);
+
+      if (!points || vertices + count > MaxPipBoyVertices)
+        return;
+
+      parts.push_back({ geometry, points, count });
+      models = models * 31u + reinterpret_cast<uintptr_t>(data);
+      vertices += count;
+    });
+
+    if (!vertices) {
+      m_pipBoyCut.valid = false;
+      return false;
+    }
+
+    // The band's edge on the elbow's side is the vertex furthest from the
+    // wrist along the forearm. The twist bone turns the Pip-Boy about that
+    // axis, so the distance does not depend on the pose: it is measured
+    // again only when the model, the forearm's length or the scale change.
+    VrVector3 axis = wrist - elbow;
+    float length = vrLength(axis);
+    float scale  = field<float>(parts.front().geometry, VrGame::ObjectWorldScale);
+
+    auto close = [] (float a, float b) {
+      return std::fabs(a - b) <= 1e-3f * std::max(std::fabs(a), std::fabs(b));
+    };
+
+    PipBoyCutMeasure& last = m_pipBoyCut;
+
+    if (last.valid && last.device == nodes.device && last.forearm == forearm && last.hand == hand
+     && last.models == models && last.vertices == vertices
+     && close(last.length, length) && close(last.scale, scale)
+     && ++last.age < RemeasureFrames) {
+      distance = last.distance;
+      return true;
+    }
+
+    // As vrDistanceTowardsElbow for each vertex, with the axis taken once
+    float furthest = -FLT_MAX;
+    float inverse  = length > 0.0f ? 1.0f / length : 0.0f;
+
+    for (const Part& part : parts) {
+      VrGameRotation rotate = readRotation(part.geometry, VrGame::ObjectWorldRotation);
+      VrVector3 translate   = readVector(part.geometry, VrGame::ObjectWorldTranslation);
+      float partScale       = field<float>(part.geometry, VrGame::ObjectWorldScale);
+
+      for (uint32_t i = 0; i < part.count; i++) {
+        VrVector3 point = translate + (rotate * part.points[i]) * partScale;
+        furthest = std::max(furthest, length > 0.0f ? vrDot(wrist - point, axis) * inverse : 0.0f);
+      }
+    }
+
+    distance = furthest - PipBoyBandOverlap;
+
+    last.device   = nodes.device;
+    last.forearm  = forearm;
+    last.hand     = hand;
+    last.models   = models;
+    last.vertices = vertices;
+    last.length   = length;
+    last.scale    = scale;
+    last.distance = distance;
+    last.age      = 0;
+    last.valid    = true;
+    return true;
   }
 
 
@@ -2681,19 +3346,19 @@ namespace dxvk {
   }
 
 
-  void VrWeaponHand::hide(uint8_t* object, bool log) {
+  bool VrWeaponHand::hide(uint8_t* object, bool log) {
     uint32_t& flags = field<uint32_t>(object, VrGame::ObjectFlags);
     bool hidden = std::find(m_hiddenObjects.begin(), m_hiddenObjects.end(), object) != m_hiddenObjects.end();
 
     // An object the game culls itself is left to the game, so that it is
     // not shown again when the VR layer lets go of it
     if (!hidden && (flags & VrGame::ObjectFlagAppCulled))
-      return;
+      return false;
 
     flags |= VrGame::ObjectFlagAppCulled;
 
     if (hidden)
-      return;
+      return false;
 
     m_hiddenObjects.push_back(object);
 
@@ -2701,6 +3366,8 @@ namespace dxvk {
       auto name = field<const char*>(object, VrGame::ObjectName);
       Logger::info(str::format("VR: Hiding '", name ? name : "", "'"));
     }
+
+    return true;
   }
 
 

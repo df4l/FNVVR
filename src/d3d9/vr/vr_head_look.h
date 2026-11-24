@@ -65,6 +65,29 @@ namespace dxvk {
     }
 
     /**
+     * \brief Gives the body heading to take when the head gets the look back
+     *
+     * Something else placed the view: taking it from the game's heading, the
+     * view would jump. Called once per frame.
+     *
+     * \param [in] heading The heading, \c nullptr to take the game's
+     */
+    void holdBodyHeading(const float* heading);
+
+    /**
+     * \brief Keeps the head from writing the player's heading and look angle
+     *
+     * An animation places the view from the body's head: the look angle
+     * would bend that head, and nodding would move the view. Called once per
+     * frame.
+     *
+     * \param [in] held Whether the look is held
+     */
+    void holdLook(bool held) {
+      m_holdsLook = held;
+    }
+
+    /**
      * \brief Replaces the game's camera rotation by the body's
      *
      * Only while the heading and look angle are still the ones written
@@ -75,6 +98,17 @@ namespace dxvk {
      * \returns \c true if the pose was changed
      */
     bool adjustCamera(VrGameCameraPose& pose) const;
+
+    /**
+     * \brief Keeps the target of V.A.T.S. in front of the head
+     *
+     * While V.A.T.S. runs the game turns the camera by itself: see
+     * vrComputeVatsCameraPose.
+     *
+     * \param [in,out] pose Camera pose the game computed
+     * \returns \c true if V.A.T.S. runs and the pose was changed
+     */
+    bool adjustVatsCamera(VrGameCameraPose& pose) const;
 
     /**
      * \brief Actor the dialogue focused on since the last call
@@ -100,11 +134,19 @@ namespace dxvk {
     bool         m_hasHead     = false;
     float        m_pendingTurn = 0.0f;
 
+    // The head's yaw when V.A.T.S. began, while it runs
+    bool         m_vatsRunning = false;
+    float        m_vatsHeadYaw = 0.0f;
+
     // What the last player update wrote, while the head drives the look
     bool         m_active         = false;
     float        m_writtenHeading = 0.0f;
     float        m_writtenPitch   = 0.0f;
     float        m_bodyHeading    = 0.0f;
+
+    bool         m_holdsBody      = false;
+    float        m_heldBody       = 0.0f;
+    bool         m_holdsLook      = false;
 
     bool         m_loggedActive   = false;
 

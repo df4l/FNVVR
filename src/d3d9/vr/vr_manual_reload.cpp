@@ -73,6 +73,10 @@ namespace dxvk {
 
     VrManualReload* g_manualReload = nullptr;
 
+    // What the player's reload entry held: xNVSE's hook when it is installed,
+    // which then still sees every reload
+    uintptr_t g_previousReload = VrGame::PlayerReloadWeapon;
+
     // StartAttack's clip reads were redirected: jams can be held
     bool g_holdsJams = false;
 
@@ -172,7 +176,7 @@ namespace dxvk {
       switch (returnAddress) {
         case VrGame::ReloadReturnControl:   return "reload control";
         case VrGame::ReloadReturnEmptyClip: return "empty clip";
-        default:                            return "game";
+        default:                            return VrGameMemory::isOtherModule(returnAddress) ? "other mod" : "game";
       }
     }
 
@@ -208,8 +212,8 @@ namespace dxvk {
     if (g_manualReload)
       return nullptr;
 
-    if (!VrGameMemory::redirectVirtual(VrGame::PlayerReloadWeaponSlot, VrGame::PlayerReloadWeapon,
-        reinterpret_cast<const void*>(&VrManualReload::reloadHook)))
+    if (!VrGameMemory::chainVirtual(VrGame::PlayerReloadWeaponSlot, VrGame::PlayerReloadWeapon,
+        reinterpret_cast<const void*>(&VrManualReload::reloadHook), &g_previousReload))
       return nullptr;
 
     if (!VrGameMemory::redirectCall(VrGame::JamAnimGroupCallSite, VrGame::ActorGetAnimGroup,
@@ -958,7 +962,7 @@ namespace dxvk {
 
     // No animation: the clip is filled through the equipment queue at the
     // next frame, and the action points are spent as in the game
-    uint32_t result = reinterpret_cast<ReloadWeaponFn>(VrGame::PlayerReloadWeapon)(
+    uint32_t result = reinterpret_cast<ReloadWeaponFn>(g_previousReload)(
       player, nullptr, weapon, 0, extended, 0);
 
     Logger::info(str::format("VR: The clip of '", weaponName(weapon), "' is filled (extended magazine ",
@@ -989,9 +993,12 @@ namespace dxvk {
     // The weapons reloaded by hand are not reloaded by the control or when
     // a shot empties the clip: an empty clip clicks. V.A.T.S. plays its
     // queued shots on its own and waits for the game's reload, so there
-    // the game reloads as it does without the hands.
+    // the game reloads as it does without the hands. lStewieAl's Tweaks calls
+    // this entry itself when an empty weapon is fired (bManualReload with
+    // bReloadWhenFiringWithEmptyClip); the mod's own fill never comes this way.
     bool byHand = g_manualReload && weapon && weapon == g_manualReload->m_handWeapon.load()
-      && (caller == VrGame::ReloadReturnControl || caller == VrGame::ReloadReturnEmptyClip)
+      && (caller == VrGame::ReloadReturnControl || caller == VrGame::ReloadReturnEmptyClip
+       || VrGameMemory::isOtherModule(caller))
       && !inVats();
 
     if (byHand) {
@@ -1000,7 +1007,7 @@ namespace dxvk {
       return 0;
     }
 
-    uint32_t result = reinterpret_cast<ReloadWeaponFn>(VrGame::PlayerReloadWeapon)(
+    uint32_t result = reinterpret_cast<ReloadWeaponFn>(g_previousReload)(
       player, nullptr, weapon, animation, useMod, fromInventory);
 
     int32_t after = clipCount(player);

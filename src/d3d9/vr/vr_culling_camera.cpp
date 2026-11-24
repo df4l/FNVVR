@@ -50,6 +50,20 @@ namespace dxvk {
   }
 
 
+  void VrCullingCamera::cullAgain() {
+    using ResetBoundsFn = void (__fastcall*)(void* tes, void* unused, uint32_t landscape, uint32_t rooms);
+    using WorldCameraFn = void* (__cdecl*)();
+
+    void* camera = reinterpret_cast<WorldCameraFn>(VrGame::GetWorldCamera)();
+    void* tes    = *reinterpret_cast<void**>(VrGame::TesSingleton);
+    void* scene  = *reinterpret_cast<void**>(VrGame::ShadowSceneNodes);
+
+    reinterpret_cast<ResetBoundsFn>(VrGame::ResetMultiBounds)(tes, nullptr, 1, 1);
+    occlusionPlaneHook(scene, nullptr, camera);
+    multiBoundHook(tes, nullptr, camera);
+  }
+
+
   void __fastcall VrCullingCamera::occlusionPlaneHook(
           void*                 sceneNode,
           void*                 unused,

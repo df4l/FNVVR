@@ -12,8 +12,12 @@ namespace dxvk {
     constexpr char SmoothTurnName[]      = "smoothturn";
     constexpr char SmoothTurnSpeedName[] = "smoothturnspeed";
     constexpr char PipBoyScaleName[]     = "pipboyscale";
+    constexpr char PipBoyAngleName[]     = "pipboyangle";
     constexpr char ManualReloadName[]    = "manualreload";
     constexpr char PhysicalSneakName[]   = "physicalsneak";
+    constexpr char RoomscaleName[]       = "roomscale";
+    constexpr char ScopeLensName[]       = "scopelens";
+    constexpr char FoveationName[]       = "eyetrackedfoveation";
 
     std::string trim(const std::string& text) {
       size_t begin = 0;
@@ -67,6 +71,22 @@ namespace dxvk {
     }
 
 
+    // Reads a number that may be 0, brought into [0, high]
+    bool parseAngle(const std::string& text, float high, float& value) {
+      if (text.empty())
+        return false;
+
+      char* end = nullptr;
+      double number = std::strtod(text.c_str(), &end);
+
+      if (*end || !(number >= 0.0))
+        return false;
+
+      value = std::min(float(number), high);
+      return true;
+    }
+
+
     // Position of a value on evenly spaced steps from min, the closest one
     uint32_t closestStep(float value, float min, float step, uint32_t count) {
       float position = (value - min) / step + 0.5f;
@@ -107,6 +127,16 @@ namespace dxvk {
   }
 
 
+  uint32_t vrPipBoyAngleToStep(float degrees) {
+    return closestStep(degrees, 0.0f, VrPipBoyAngleStep, VrPipBoyAngleSteps);
+  }
+
+
+  float vrPipBoyStepToAngle(uint32_t step) {
+    return float(std::min(step, VrPipBoyAngleSteps - 1)) * VrPipBoyAngleStep;
+  }
+
+
   void vrParseOptions(const std::string& text, VrOptions& options) {
     size_t position = 0;
 
@@ -136,10 +166,18 @@ namespace dxvk {
         parseFloat(value, VrSmoothTurnSpeedMin, vrSmoothTurnStepToSpeed(VrSmoothTurnSpeedSteps - 1), options.smoothTurnSpeed);
       else if (name == PipBoyScaleName)
         parseFloat(value, VrPipBoyScaleMin, vrPipBoyStepToScale(VrPipBoyScaleSteps - 1), options.pipBoyScale);
+      else if (name == PipBoyAngleName)
+        parseAngle(value, vrPipBoyStepToAngle(VrPipBoyAngleSteps - 1), options.pipBoyAngle);
       else if (name == ManualReloadName)
         parseBool(value, options.manualReload);
       else if (name == PhysicalSneakName)
         parseBool(value, options.physicalSneak);
+      else if (name == ScopeLensName)
+        parseBool(value, options.scopeLens);
+      else if (name == RoomscaleName)
+        parseBool(value, options.roomscale);
+      else if (name == FoveationName)
+        parseBool(value, options.foveation);
     }
   }
 
@@ -151,11 +189,21 @@ namespace dxvk {
     text += "\n";
     text += "SmoothTurnSpeed=" + formatFloat(options.smoothTurnSpeed) + "\n";
     text += "PipBoyScale=" + formatFloat(options.pipBoyScale) + "\n";
+    text += "PipBoyAngle=" + formatFloat(options.pipBoyAngle) + "\n";
     text += "ManualReload=";
     text += options.manualReload ? "1" : "0";
     text += "\n";
     text += "PhysicalSneak=";
     text += options.physicalSneak ? "1" : "0";
+    text += "\n";
+    text += "ScopeLens=";
+    text += options.scopeLens ? "1" : "0";
+    text += "\n";
+    text += "Roomscale=";
+    text += options.roomscale ? "1" : "0";
+    text += "\n";
+    text += "EyeTrackedFoveation=";
+    text += options.foveation ? "1" : "0";
     text += "\n";
     return text;
   }

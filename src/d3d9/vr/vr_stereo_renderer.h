@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <memory>
 
 #include "../d3d9_include.h"
@@ -10,13 +11,19 @@
 
 #include "vr_activate_target.h"
 #include "vr_backend.h"
+#include "vr_body_view.h"
 #include "vr_comfort_settings.h"
+#include "vr_fader_overlay.h"
+#include "vr_roomscale.h"
 #include "vr_controls.h"
 #include "vr_culling_camera.h"
 #include "vr_developer_mode.h"
 #include "vr_game_camera.h"
 #include "vr_game_state.h"
 #include "vr_game_timer.h"
+#include "vr_gpu_timer.h"
+#include "vr_spike_log.h"
+#include "vr_cpu_sampler.h"
 #include "vr_hand_activate_pick.h"
 #include "vr_hand_hud.h"
 #include "vr_hud_layers.h"
@@ -26,11 +33,16 @@
 #include "vr_hand_throw.h"
 #include "vr_holster.h"
 #include "vr_ammo_label.h"
+#include "vr_caravan_values.h"
 #include "vr_game_images.h"
 #include "vr_quick_wheel.h"
 #include "vr_melee_swing.h"
 #include "vr_menu_scenes.h"
+#include "vr_minigames.h"
 #include "vr_manual_reload.h"
+#include "vr_foveation.h"
+#include "vr_frame_submitter.h"
+#include "vr_occlusion_culling.h"
 #include "vr_part_highlight.h"
 #include "vr_npc_gaze.h"
 #include "vr_painter.h"
@@ -45,7 +57,11 @@
 #include "vr_preview_window.h"
 #include "vr_prompt_icon.h"
 #include "vr_render_passes.h"
+#include "vr_repeated_passes.h"
+#include "vr_scope_game.h"
+#include "vr_scope_render.h"
 #include "vr_sky_anchor.h"
+#include "vr_text_field_keyboard.h"
 #include "vr_tile_texture_retry.h"
 #include "vr_weapon_hand.h"
 
@@ -63,6 +79,8 @@ namespace dxvk {
     Immediate,
     /// Drop the present (first eye's frame)
     Drop,
+    /// The window is hidden: end the frame without presenting it
+    Hidden,
   };
 
   /**
@@ -160,7 +178,8 @@ namespace dxvk {
       const VrGameTimerConfig&    timer,
       const VrRenderPassConfig&   passes,
       const VrDeveloperConfig&    developer,
-      const VrSwingConfig&        swing);
+      const VrSwingConfig&        swing,
+      const VrTexts&              texts);
 
     /**
      * \brief Called when the game presents, before the image is shown
@@ -206,6 +225,26 @@ namespace dxvk {
     }
 
     /**
+     * \brief Changes how far the Pip-Boy is turned about the forearm
+     *
+     * Called from the game's options page, on the game's thread.
+     *
+     * \param [in] degrees Turn towards the thumb, 0 for the game's placement
+     */
+    void setPipBoyAngle(float degrees) {
+      m_pipBoyAngle = degrees;
+    }
+
+    /**
+     * \brief Turns the mini-games' scenes in the eye images on or off
+     *
+     * Off, they stay on the menu panel. See VrMinigames.
+     *
+     * \param [in] enabled Whether they stand in the room
+     */
+    void setMinigamesEnabled(bool enabled);
+
+    /**
      * \brief Turns the reload with the hands on or off
      *
      * \param [in] enabled Off, every weapon is reloaded as in the game
@@ -216,6 +255,26 @@ namespace dxvk {
     }
 
     /**
+     * \brief Turns the pushing spheres of the free hands on or off
+     *
+     * \param [in] enabled Off, the hands no longer push objects
+     */
+    void setHandPush(bool enabled) {
+      if (m_physicsGrab)
+        m_physicsGrab->setHandPush(enabled);
+    }
+
+    /**
+     * \brief Turns the capsule's following of the head on or off
+     *
+     * Called from the game's options page, on the game's thread.
+     */
+    void setRoomscale(bool enabled) {
+      if (m_roomscale)
+        m_roomscale->setEnabled(enabled);
+    }
+
+    /**
      * \brief Changes how the player sneaks
      *
      * Called from the game's options page, on the game's thread.
@@ -223,6 +282,39 @@ namespace dxvk {
     void setSneakConfig(const VrSneakConfig& config) {
       m_controls.setSneakConfig(config);
     }
+
+    /**
+     * \brief Turns the scopes' lenses on or off
+     *
+     * \param [in] enabled Whether scopes show the world on a lens
+     */
+    void setScopesEnabled(bool enabled);
+
+    /**
+     * \brief Tells whether eye-tracked foveation can be turned on
+     */
+    VrFoveationSupport foveationSupport();
+
+    /**
+     * \brief Turns eye-tracked foveation on or off
+     *
+     * Called from the game's options page, on the game's thread.
+     */
+    void setFoveationEnabled(bool enabled);
+
+    /**
+     * \brief Hands frames to the runtime from a thread of their own
+     *
+     * See VrFrameSubmitter (d3d9.vrAsyncSubmit).
+     */
+    void setAsyncSubmit(bool enabled);
+
+    /**
+     * \brief Turns occlusion culling on or off (d3d9.vrOcclusionCulling)
+     *
+     * See VrOcclusionCulling. Installed the first time it is turned on.
+     */
+    void setOcclusionCulling(bool enabled);
 
   private:
 
@@ -251,6 +343,17 @@ namespace dxvk {
 
     Com<IDirect3DTexture9> m_eyeTextures[VrEyeCount];
     std::unique_ptr<VrPreviewWindow> m_preview;
+
+    // Every panel and frame of the renderer goes to the backend through it
+    VrFrameSubmitter   m_submitter;
+
+    // Occlusion culling, installed the first time it is wanted
+    std::unique_ptr<VrOcclusionCulling> m_occlusion;
+    bool               m_occlusionTried    = false;
+    // Shown once in the world when the Occlusion Culling plugin is loaded,
+    // after NoticeDelayFrames frames there, then cleared
+    const char*        m_occlusionPluginNotice = nullptr;
+    uint32_t           m_noticeFrames      = 0;
 
     // The game composes its final 3D image into the backbuffer
     Com<IDirect3DSurface9> m_gameTarget;
@@ -281,6 +384,9 @@ namespace dxvk {
     Com<IDirect3DTexture9> m_hudTexture;
     Com<IDirect3DTexture9> m_hudPanelTexture;
     Com<IDirect3DTexture9> m_menuTexture;
+    // What the game draws its interface into when the target is narrower
+    // than the interface (see VrInterfaceShape), stretched into the above
+    Com<IDirect3DTexture9> m_interfaceDrawTexture;
     InterfaceLayer m_layer = InterfaceLayer::None;
 
     // Health bar, compass, action points, ammunition and interaction prompt,
@@ -300,6 +406,12 @@ namespace dxvk {
     bool   m_wristShown       = false;
     bool   m_promptShown      = false;
     bool   m_loggedHandHudCrops = false;
+    bool   m_handsHeldStill = false;
+    bool   m_loggedMeasuredPrompt = false;
+    bool   m_loggedHudTextPastGroup = false;
+    bool   m_loggedHudSplitLowered = false;
+    VrVector2 m_promptImageSize;
+    UINT   m_promptImageSourceWidth = 0;
     bool   m_loggedWrist      = false;
     bool   m_loggedPrompt     = false;
     bool   m_loggedLeftPrompt = false;
@@ -315,6 +427,11 @@ namespace dxvk {
     // left eye's pass finds one
     bool   m_overPipBoy    = false;
     bool   m_menuDrawn     = false;
+
+    // A terminal or the Reflectron was shown last frame, and the panel waits
+    // for a menu after it closed, see leftRenderedMenu
+    bool   m_renderedMenuShown   = false;
+    bool   m_leavingRenderedMenu = false;
     bool   m_interfaceFailed = false;
     bool   m_loggedHudFailure = false;
 
@@ -353,6 +470,7 @@ namespace dxvk {
     VrGameImages                        m_gameImages;
     std::unique_ptr<VrQuickWheel>       m_quickWheel;
     std::unique_ptr<VrAmmoLabel>        m_ammoLabel;
+    std::unique_ptr<VrCaravanValues>    m_caravanValues;
     // The left hand held ammunition at the last frame, and the reload
     // button was down
     bool                                m_ammoInHand     = false;
@@ -363,6 +481,14 @@ namespace dxvk {
 
     // The game's console, typed in on a terminal with the lasers
     std::unique_ptr<VrConsoleTerminal> m_terminal;
+
+    // The runtime's keyboard, for the field the game asks the player's name with
+    std::unique_ptr<VrTextFieldKeyboard> m_textFieldKeyboard;
+
+    // The scenes of the mini-games, in the eye images instead of the panel
+    std::unique_ptr<VrMinigames> m_minigames;
+    std::array<bool, VrEyeCount> m_minigameDrawn = { };
+    uint32_t            m_minigamePanelRevision = 0;
 
     // The activation target, picked along the hands instead of the view
     std::unique_ptr<VrHandActivatePick> m_handPick;
@@ -391,11 +517,32 @@ namespace dxvk {
     // The idle camera off and the kill camera in first person
     std::unique_ptr<VrComfortSettings> m_comfortSettings;
 
+    // The game's faders drawn over each eye, once their quads are gone
+    VrFaderOverlay      m_faderOverlay;
+    bool                m_fadersOverlaid = false;
+
+    // The capsule goes where the player walks in the room
+    std::unique_ptr<VrRoomscale> m_roomscale;
+
+    // The eyes in the body's head while it sits down or gets up
+    std::unique_ptr<VrBodyView> m_bodyView;
+    bool                        m_heldLook = false;
+
+    // The eyes' base camera is no longer on the game's camera
+    bool                m_viewMoved = false;
+
     // The other actors look at the head
     std::unique_ptr<VrNpcGaze> m_npcGaze;
 
     // Reloading with the hands
     std::unique_ptr<VrManualReload> m_manualReload;
+
+    // What a grabbed living actor does, used by m_physicsGrab
+    std::unique_ptr<VrNpcReaction> m_npcReaction;
+
+    // Melee hits on world objects, used by m_meleeSwing and run by
+    // m_physicsGrab
+    std::unique_ptr<VrMeleeObjectHit> m_meleeObjectHit;
 
     // World objects held with the hands
     std::unique_ptr<VrPhysicsGrab> m_physicsGrab;
@@ -414,7 +561,46 @@ namespace dxvk {
 
     // The game's frame timer, measured against real time
     std::unique_ptr<VrGameTimer> m_gameTimer;
+    // GPU time of the frame's parts (d3d9.vrGpuTimings), used by m_renderPasses
+    std::unique_ptr<VrGpuTimer> m_gpuTimer;
+    // Frames that miss their period (d3d9.vrSpikeLog), made at the first
+    // frame, once the period is known
+    std::unique_ptr<VrSpikeLog> m_spikeLog;
+    bool     m_spikeLogWanted = false;
+    // Where the game thread runs (d3d9.vrCpuSamples), started at the first
+    // frame on the game thread
+    std::unique_ptr<VrCpuSampler> m_cpuSampler;
+    bool     m_cpuSamplesWanted = false;
+    // Counts the waits for the runtime: the frame the next cycle belongs to
+    uint64_t m_frameId = 0;
+    double   m_spikeLogPeriodMs = 0.0;
     std::unique_ptr<VrRenderPasses> m_renderPasses;
+
+    // The world passes after the left eye's (right eye, scope lens) do not
+    // move time on or repeat work that does not depend on the view
+    std::unique_ptr<VrRepeatedPasses> m_repeatedPasses;
+
+    // Shading at full rate only where the eyes look, see vr_foveation.h
+    std::unique_ptr<VrFoveation> m_foveation;
+    VrGazeHold m_gazeHold;
+    bool m_foveationEnabled  = false;
+    bool m_foveationTestGaze = false;
+
+    // The game's flat scope is off with a headset, findings/optics.md §10
+    std::unique_ptr<VrScopeGame> m_scopeGame;
+    // The world seen through the scope, on its lens
+    std::unique_ptr<VrScopeRender> m_scopeRender;
+    bool m_scopesEnabled = true;
+    bool m_scopeVisible = false;
+    // The camera's screen: its picture every other frame, the shutter held by the trigger
+    bool m_screenShown = false;
+    bool m_screenTurn = false;
+    bool m_shutterHeld = false;
+    bool m_shutterWasHeld = false;
+    float m_shutterLeft = 0.0f;
+    std::chrono::steady_clock::time_point m_screenClock;
+    VrScopeLens m_scopeLens;
+    const VrGameCameraPose* m_scopeCamera = nullptr;
 
     VrVector3           m_screenShift;
     bool                m_screenPass = false;
@@ -438,6 +624,9 @@ namespace dxvk {
     // read it at the game's size
     VrPipBoyGrowth      m_pipBoyGrowth;
     float               m_pipBoyScale = 1.0f;
+    // Turn of the Pip-Boy about the forearm, so that its screen faces the
+    // eyes with less wrist roll (controllers lose tracking when rolled)
+    float               m_pipBoyAngle = 0.0f;
     bool                m_loggedPipBoyLight = false;
 
     // Thread that runs the game's main loop, and whether Main::Swap ran
@@ -537,10 +726,21 @@ namespace dxvk {
 
     bool createEyeTextures();
 
+    /// Puts the game's faders over both eye images
+    void drawFaders(IDirect3DTexture9* const* eyes);
+
     void renderEye(
             uint32_t              eye,
       const VrEyeView&            view,
             void*                 main);
+
+    void renderScope(VrGameStateKind state, void* main, const std::array<VrEyeView, VrEyeCount>& views);
+
+    bool updateScreenTurn(float& flash);
+
+    void drawScopeLens();
+
+    VrGameCameraPose eyeInGame(const VrEyeView& view) const;
 
     void applyEyePose();
 
@@ -554,6 +754,8 @@ namespace dxvk {
     void updateNpcGaze();
 
     void updateMeleeSwing(const VrInputState& input, VrGameStateKind state, float dt);
+
+    void updatePunches(const VrInputState& input, VrGameStateKind state, float dt);
 
     void updateHandThrow(const VrInputState& input, VrGameStateKind state, float dt);
 
@@ -593,6 +795,13 @@ namespace dxvk {
     /**
      * \brief Logs the frustum the game set for its camera when it changes
      */
+    /**
+     * \brief Sets the frame's shading rates from where the eyes look
+     */
+    void showOcclusionPluginNotice(VrGameStateKind state);
+
+    void updateFoveation(const std::array<VrEyeView, VrEyeCount>& views, float dt);
+
     void logGameFrustum();
 
     /**
@@ -603,7 +812,25 @@ namespace dxvk {
 
     void captureEye();
 
+    // Waits for the backend's next frame, as the sampler's wait phase
+    VrFrameTiming waitFrame();
+
+    // Starts a frame: hands the cycle the wait ended to the spike log
+    void countFrame(const VrFrameTiming& timing);
+
+    // Sections of the GPU timings, nothing without d3d9.vrGpuTimings
+    uint32_t gpuBegin(VrGpuSection section);
+
+    void gpuEnd(uint32_t token);
+
     bool copyRenderTarget(uint32_t eye);
+
+    /**
+     * \brief Whether the menu panel stays hidden after a rendered menu
+     *
+     * Called once per stereo frame, before the menu panel is submitted.
+     */
+    bool leftRenderedMenu(VrGameStateKind state);
 
     InterfaceLayer chooseLayer(VrGameStateKind state) const;
 
@@ -616,6 +843,8 @@ namespace dxvk {
 
     void renderMenuScenes();
 
+    void drawMinigame();
+
     void makeMenuSceneOpaque(bool depthTested);
 
     bool createMenuSceneResources();
@@ -623,6 +852,8 @@ namespace dxvk {
     void isolateHud();
 
     bool createInterfaceTextures();
+
+    IDirect3DTexture9* interfaceDrawTexture(IDirect3DTexture9* layer) const;
 
     bool composeHud();
 
@@ -650,9 +881,15 @@ namespace dxvk {
             size_t                count,
             float                 metresPerPixel,
       const VrPose&               pose,
-            Com<IDirect3DTexture9>& texture);
+            Com<IDirect3DTexture9>& texture,
+            UINT                  minWidth  = 0,
+            UINT                  minHeight = 0);
 
     void hideHandPanel(VrPanelId id, bool& shown);
+
+    void extendHudCorner(uintptr_t group, bool known, VrInterfaceRect& rect);
+
+    bool isHudMeterShown(uintptr_t group) const;
 
     void hideHandHud();
 

@@ -3,6 +3,8 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "vr_game_nodes.h"
@@ -11,6 +13,10 @@
 #include "vr_melee.h"
 #include "vr_pipboy_size.h"
 #include "vr_reload_animation.h"
+#include "vr_scope_game.h"
+#include "vr_scope_lens.h"
+#include "vr_scope_table.h"
+#include "vr_sleeve_cut.h"
 #include "vr_throw.h"
 #include "vr_throw_animation.h"
 #include "vr_weapon_aim.h"
@@ -242,6 +248,36 @@ namespace dxvk {
       const VrVector3&            eyePosition);
 
     /**
+     * \brief The scope on the weapon in the right hand, for the frame set
+     *    with beginFrame
+     *
+     * Measured when the model was last drawn, in the previous frame, and
+     * placed on this frame's hands, as the scope's view is drawn before the
+     * model is placed. What the game animates, such as recoil, follows by a
+     * frame.
+     *
+     * \param [out] lens The scope in the game world
+     * \returns \c false if the weapon has no scope the mod knows
+     */
+    bool scopeLens(VrScopeLens& lens) const;
+
+    /**
+     * \brief Turns the scopes on, or off
+     *
+     * \param [in] enabled Whether the weapons' scopes are looked for
+     */
+    void setScopesEnabled(bool enabled) {
+      m_scopesEnabled = enabled;
+    }
+
+    /**
+     * \brief The table of the scopes' places, to read corrections into
+     */
+    VrScopeTable& scopeTable() {
+      return m_scopeTable;
+    }
+
+    /**
      * \brief Whether the game's aim control should be pressed
      *
      * True while the other hand supports a one-handed weapon: the game
@@ -258,6 +294,16 @@ namespace dxvk {
      */
     bool leftHandOnWeapon() const {
       return m_twoHanded || m_braced;
+    }
+
+    /**
+     * \brief Whether the first-person model is culled by the VR layer
+     *
+     * True while the hands are hidden (menus, a script holding the player
+     * still). Decided when the model was last placed, in the previous frame.
+     */
+    bool hidesModel() const {
+      return m_hidesModel;
     }
 
     /**
@@ -300,6 +346,19 @@ namespace dxvk {
      */
     void setPipBoyScale(float factor) {
       m_pipBoyScale = factor;
+    }
+
+    /**
+     * \brief Turns the Pip-Boy about the forearm
+     *
+     * The Pip-Boy turns about the forearm's axis, its screen from the back
+     * of the wrist towards the thumb, so that it faces the eyes with less
+     * roll of the wrist. Applied when the model is next drawn.
+     *
+     * \param [in] degrees Angle, 0 for the game's placement
+     */
+    void setPipBoyAngle(float degrees) {
+      m_pipBoyAngle = degrees;
     }
 
     /**
@@ -729,18 +788,46 @@ namespace dxvk {
     VrVector3        m_pipBoyScreenNormal;
     bool             m_hasPipBoyScreen = false;
 
-    // Size asked for the Pip-Boy, and the model it was applied to with the
-    // model's own placement, compared but only dereferenced once found in
-    // the model again. The written placement tells whether the game has
-    // placed the model again since.
+    // Size and turn asked for the Pip-Boy, and the model they were applied
+    // to with the model's own placement, compared but only dereferenced once
+    // found in the model again. The written placement tells whether the game
+    // has placed the model again since.
     float            m_pipBoyScale = 1.0f;
+    float            m_pipBoyAngle = 0.0f;
     uint8_t*         m_pipBoyDevice = nullptr;
-    VrNodeScale      m_pipBoyOwnPlacement;
-    VrNodeScale      m_pipBoyWrittenPlacement;
+    VrNodePlacement  m_pipBoyOwnPlacement;
+    VrNodePlacement  m_pipBoyWrittenPlacement;
     float            m_pipBoyAppliedScale = 1.0f;
+    float            m_pipBoyAppliedAngle = 0.0f;
 
     // Muzzle relative to the first-person root, its rotation, and the
     // direction the hand pointed, when the weapon was last drawn in the hand
+    // The scope in the frame of the hand holding the weapon, see scopeLens
+    bool             m_hasScopeLens = false;
+    VrVector3        m_scopeEyepiece;
+    VrVector3        m_scopeOtherEyepiece;
+    VrOpticKind      m_scopeKind = VrOpticKind::Scope;
+    const uint8_t*   m_opticForm = nullptr;
+    VrOpticKind      m_opticKind = VrOpticKind::Scope;
+    VrVector3        m_scopeObjective;
+    VrGameRotation   m_scopeRotation;
+    float            m_scopeHalfWidth = 0.0f;
+    float            m_scopeHalfHeight = 0.0f;
+    bool             m_scopeRectangular = false;
+    bool             m_scopeNightVision = false;
+    bool             m_scopeTwoHanded = false;
+    VrVector3        m_scopeSupport;
+    bool             m_scopesEnabled = false;
+    VrScopeTable     m_scopeTable;
+    const uint8_t*   m_loggedScopeForm = nullptr;
+
+    struct FoundScope {
+      bool             found = false;
+      VrScopePlacement placement;
+    };
+
+    std::unordered_map<std::string, FoundScope> m_foundScopes;
+
     VrVector3        m_muzzleOffset;
     VrGameRotation   m_muzzleRotation;
     VrVector3        m_aimDirection;
@@ -822,6 +909,12 @@ namespace dxvk {
     bool             m_pinched = false;
     VrGameTransform  m_pinchInHand;
     bool             m_hasPinch = false;
+
+    // A magazine the reload animation never carries, turned upright in
+    // the left hand (vrUprightMagazineHold): in the hand bone's frame, in
+    // units of the hand's scale
+    VrGameTransform  m_uprightInHand;
+    bool             m_turnedUpright = false;
 
     // Rack part of the weapon in the hand: how the hand holds it, where it
     // is home in the right hand's frame, the way back and its length, and
@@ -986,6 +1079,33 @@ namespace dxvk {
     bool             m_loggedActive = false;
     bool             m_loggedFrame  = false;
     bool             m_loggedArms   = false;
+    bool             m_loggedSleeves = false;
+    bool             m_loggedSleeveCut = false;
+    // Whether the last placement cut the sleeves under the Pip-Boy's band
+    bool             m_cutsSleeves = false;
+
+    /**
+     * \brief Last measure of the Pip-Boy's band, see measurePipBoyCut
+     *
+     * The measure walks every vertex of the Pip-Boy, while its result only
+     * changes with the model, the forearm's length or the scale. It is
+     * reused while those stay, and taken again every RemeasureFrames.
+     */
+    struct PipBoyCutMeasure {
+      uint8_t*  device   = nullptr;
+      uint8_t*  forearm  = nullptr;
+      uint8_t*  hand     = nullptr;
+      uintptr_t models   = 0;
+      uint32_t  vertices = 0;
+      float     length   = 0.0f;
+      float     scale    = 0.0f;
+      float     distance = 0.0f;
+      uint32_t  age      = 0;
+      bool      valid    = false;
+    };
+
+    PipBoyCutMeasure m_pipBoyCut;
+    uint32_t         m_loggedBodyMeshes = 0;
     bool             m_loggedOtherHand = false;
     bool             m_loggedTwoHanded = false;
     bool             m_loggedTwoHandedMelee = false;
@@ -996,12 +1116,17 @@ namespace dxvk {
     bool             m_loggedFist = false;
     bool             m_loggedScreen = false;
     bool             m_loggedPipBoyScale = false;
+    bool             m_loggedPipBoyAngle = false;
     bool             m_loggedAutoAim = false;
 
     // Objects culled by the VR layer, compared but not dereferenced until
     // they are found in the model again, and whether the right hand and the
     // weapon are among them
     std::vector<uint8_t*> m_hiddenObjects;
+
+    // Draws the sleeves that reach above the forearms cut across them,
+    // null if the game's skinned draws were not found: they are hidden then
+    std::unique_ptr<VrSleeveCut> m_sleeveCut;
     bool             m_hidesRightHand = false;
     bool             m_hidesModel = false;
     bool             m_loggedHidden = false;
@@ -1089,6 +1214,35 @@ namespace dxvk {
 
     void placeModel(uint8_t* root, void* updateData);
 
+    VrOpticKind opticKind(const uint8_t* form);
+
+
+    void placeScope(
+            uint8_t*          weapon,
+            uint8_t*          muzzle,
+      const uint8_t*          form,
+      const VrGameCameraPose& hand,
+            bool              pointedByBothHands,
+      const VrVector3&        supportInHand);
+
+    /**
+     * \brief The scope of a model the table does not know, read from its geometry
+     *
+     * Searched once per model (findings/optics.md §16), when its scope is
+     * first looked for: the model's parts are then attached.
+     *
+     * \param [in] weapon The weapon's node
+     * \param [in] muzzle Its projectile node
+     * \param [in] model The model's path, the key of the search's result
+     * \param [out] placement The scope's eyepiece
+     * \returns \c false if the model shows no scope
+     */
+    bool findModelScope(
+            uint8_t*          weapon,
+            uint8_t*          muzzle,
+      const char*             model,
+            VrScopePlacement& placement);
+
     void placePipBoyArm(uint8_t* root, const VrVector3& shift, void* updateData);
 
     void readFingerRigs(uint8_t* root);
@@ -1099,7 +1253,7 @@ namespace dxvk {
 
     void measurePipBoyScreen(const PipBoyNodes& nodes);
 
-    void scalePipBoy(const PipBoyNodes& nodes);
+    void placePipBoy(const PipBoyNodes& nodes);
 
     void updateGrip(GripKind kind, bool canHold, const VrVector3& support);
 
@@ -1295,11 +1449,22 @@ namespace dxvk {
     void pinchRound(uint8_t* otherHand, const VrVector3& centre, float scale);
 
     /**
+     * \brief Where the left hand's thumb and index finger meet, in its
+     *    bone's frame, its fingers posed as in the reload animation
+     *
+     * \returns \c false if the hand has no such fingers
+     */
+    bool pinchPoint(uint8_t* otherHand, VrVector3& point);
+
+    /**
      * \brief The magazine, or round, in the left hand bone's frame while
      *    the hand holds it
      */
     const VrGameTransform& magazineInHand() const {
-      return m_pinched && m_hasPinch ? m_pinchInHand : m_reloadAnimation.magazineInHand;
+      if (m_pinched && m_hasPinch)
+        return m_pinchInHand;
+
+      return m_turnedUpright ? m_uprightInHand : m_reloadAnimation.magazineInHand;
     }
 
     /**
@@ -1399,6 +1564,32 @@ namespace dxvk {
 
     void hideArms(uint8_t* root, bool rightHand);
 
+    /**
+     * \brief Gives the sleeve cut the arms' bones and where they are cut
+     *
+     * \returns \c false if there is no Pip-Boy to cut the sleeves under:
+     *    they are hidden then
+     */
+    bool placeSleeveCuts(
+            uint8_t*              root,
+            uint8_t*              leftForearm,
+            uint8_t*              leftHand,
+            uint8_t*              rightForearm,
+            uint8_t*              rightHand);
+
+    /**
+     * \brief Distance from the left wrist at which the left sleeve is cut
+     *
+     * Under the Pip-Boy's band: from its edge on the elbow's side, measured
+     * on its vertices, a little towards the wrist so that the band covers
+     * the cut. \c false if there is no Pip-Boy or it cannot be measured.
+     */
+    bool measurePipBoyCut(
+            uint8_t*              root,
+            uint8_t*              forearm,
+            uint8_t*              hand,
+            float&                distance);
+
     void hideModel(uint8_t* root);
 
     /**
@@ -1418,7 +1609,12 @@ namespace dxvk {
       const VrVector3&            drawnWeapon,
       const VrGameRotation&       weaponRotation);
 
-    void hide(uint8_t* object, bool log);
+    /**
+     * \brief Culls an object of the model until showArms
+     *
+     * \returns \c true if the object was not hidden yet
+     */
+    bool hide(uint8_t* object, bool log);
 
     void show(uint8_t* object);
 

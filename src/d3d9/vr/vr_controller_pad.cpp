@@ -190,4 +190,30 @@ namespace dxvk {
     }
   }
 
+
+  void vrApplyMinigamePad(VrPadState& pad, const VrMinigamePad& minigame) {
+    if (minigame.noShoulders)
+      pad.buttons &= ~uint16_t(VrGamepadButton::LeftShoulder | VrGamepadButton::RightShoulder);
+
+    pad.buttons &= ~minigame.noButtons;
+    pad.buttons |= minigame.buttons;
+
+    if (minigame.driveLeftX)
+      pad.thumbLeftX = thumbValue(minigame.leftX);
+
+    if (minigame.driveRightX)
+      pad.thumbRightX = thumbValue(minigame.rightX);
+
+    if (minigame.noTriggers) {
+      pad.leftTrigger  = 0;
+      pad.rightTrigger = 0;
+    }
+
+    if (minigame.leftTrigger)
+      pad.leftTrigger = 0xFF;
+
+    if (minigame.rightTrigger)
+      pad.rightTrigger = 0xFF;
+  }
+
 }

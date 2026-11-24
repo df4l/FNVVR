@@ -518,6 +518,7 @@ namespace dxvk {
       renderingInfo.stencilAttachmentFormat = state.depthFormat;
 
     VkPipelineCreateFlags2CreateInfo pipelineFlags = { VK_STRUCTURE_TYPE_PIPELINE_CREATE_FLAGS_2_CREATE_INFO };
+    pipelineFlags.flags = getShadingRatePipelineFlags();
 
     if (canUseDescriptorHeap())
       pipelineFlags.flags |= VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT;
@@ -538,6 +539,9 @@ namespace dxvk {
     pipelineInfo.pDynamicState = &dyState;
     pipelineInfo.layout = layout->getPipelineLayout();
     pipelineInfo.basePipelineIndex = -1;
+
+    VkPipelineFragmentShadingRateStateCreateInfoKHR shadingRateState;
+    chainShadingRateState(pipelineInfo, shadingRateState);
 
     if (pipelineFlags.flags)
       pipelineFlags.pNext = std::exchange(pipelineInfo.pNext, &pipelineFlags);

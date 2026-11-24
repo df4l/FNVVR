@@ -71,7 +71,9 @@ namespace dxvk {
       m_sneak->update(input.isHeadTracked ? &input.headPose.position.y : nullptr, inGame, dt);
     }
 
-    if (m_terminalPanel && m_context == VrInputContext::Menu && input.hasActions)
+    if (m_systemKeyboardShown && m_context == VrInputContext::Menu)
+      updateSystemKeyboard(input);
+    else if (m_terminalPanel && m_context == VrInputContext::Menu && input.hasActions)
       updateTerminal(input, actions, dt);
     else
       updateGameInput(input, actions, menuPanel, dt);
@@ -114,6 +116,9 @@ namespace dxvk {
     if ((m_swingsWithHand || m_handsFree) && m_context == VrInputContext::Game)
       actions.setPressed(VrAction::Attack, false);
 
+    if (m_moveHeld && m_context == VrInputContext::Game)
+      actions.move = VrVector2();
+
     // The crouch sneaks instead of the button
     bool crouchSneaks = m_sneak && m_sneak->physical() && m_context == VrInputContext::Game;
 
@@ -125,17 +130,74 @@ namespace dxvk {
     if (m_context == VrInputContext::Menu && input.hasActions && VrMenuCursor::pointerAllowed())
       panel = menuPanel;
 
+    // In a dialogue and on the companion wheel X is the left laser's
+    // trigger, and on the wheel A is the right one's. X only reaches the
+    // game as that trigger while the left laser points at the panel; A
+    // stays the gamepad's A away from the wheel's options.
+    bool menu = m_context == VrInputContext::Menu;
+    bool leftTrigger  = actions.isPressed(VrAction::MenuLeftTrigger);
+    bool rightTrigger = actions.isPressed(VrAction::MenuRightTrigger);
+    bool xClicks = menu && (m_dialogueShown || m_companionWheelShown)
+      && actions.isPressed(VrAction::MenuAlternate);
+    bool aClicks = menu && m_companionWheelShown
+      && actions.isPressed(VrAction::MenuSelect);
+
+    if (xClicks) {
+      actions.setPressed(VrAction::MenuAlternate,   false);
+      actions.setPressed(VrAction::MenuLeftTrigger, true);
+    }
+
+    if (aClicks) {
+      actions.setPressed(VrAction::MenuSelect,       false);
+      actions.setPressed(VrAction::MenuRightTrigger, true);
+    }
+
+    bool minigame = m_context == VrInputContext::Menu && m_minigamePad.active;
+
+    // A trigger a mini-game's gesture holds is neither the laser's click
+    // nor the gamepad's
+    if (minigame && m_minigamePad.noLeftHandTrigger)
+      actions.setPressed(VrAction::MenuLeftTrigger, false);
+
+    if (minigame && m_minigamePad.noRightHandTrigger)
+      actions.setPressed(VrAction::MenuRightTrigger, false);
+
     bool padUsed = std::max(std::abs(actions.move.x), std::abs(actions.move.y)) >= NavigateThreshold;
 
     for (VrAction action : MenuButtons)
       padUsed |= actions.isPressed(action);
 
-    VrPointerState pointer = updatePointer(input, actions, panel, padUsed, dt);
+    // A mini-game's own controls are buttons of the gamepad
+    padUsed |= minigame && m_minigamePad.buttons;
+
+    const VrPanelPlacement* surface = m_context == VrInputContext::Menu ? m_pointerSurface : nullptr;
+
+    // Away from the game's buttons the triggers are the gamepad's, which
+    // some menus bind to buttons of their own (the slot machine's bets)
+    bool overTarget = !panel || VrMenuCursor::overTarget();
+
+    if (minigame && m_minigamePad.decidesTarget)
+      overTarget = !panel || m_minigamePad.overTarget;
+
+    VrPointerState pointer = updatePointer(input, actions, panel, surface, padUsed, overTarget, dt);
+    m_pointerSurfaceState = pointer.surface;
+
+    if (xClicks && !leftTrigger && !pointer.triggersTaken)
+      actions.setPressed(VrAction::MenuLeftTrigger, false);
+
+    if (aClicks && !rightTrigger && !pointer.triggersTaken) {
+      actions.setPressed(VrAction::MenuRightTrigger, false);
+      actions.setPressed(VrAction::MenuSelect,       true);
+    }
+
     VrGamepadHook::setCursorMode(pointer.cursorActive);
     VrMenuCursor::update(pointer);
 
     VrMenuNavigation navigation = m_hotKeyWheelShown ? VrMenuNavigation::HotKeyWheel : VrMenuNavigation::List;
     VrPadState pad = vrComputePadState(actions, m_context, gameBindings(), navigation);
+
+    if (minigame)
+      vrApplyMinigamePad(pad, m_minigamePad);
 
     if (m_gameAim && m_context == VrInputContext::Game)
       vrPressGameControl(pad, VrGameControl::Aim, gameBindings());
@@ -161,10 +223,25 @@ namespace dxvk {
     m_terminalBackDown = back;
 
     // The sticks and buttons never take the lasers off the terminal
-    m_terminalPointer = updatePointer(input, actions, m_terminalPanel, false, dt);
+    m_terminalPointer = updatePointer(input, actions, m_terminalPanel, nullptr, false, true, dt);
 
     // The console has the input: the game's cursor rests and the game's
     // menus see a gamepad at rest
+    VrGamepadHook::setCursorMode(false);
+    VrMenuCursor::update(VrPointerState());
+    VrGamepadHook::setControllerPad(input.hasActions, VrPadState());
+  }
+
+
+  void VrControls::updateSystemKeyboard(
+    const VrInputState&         input) {
+    // The runtime draws lasers of its own for its keyboard
+    for (uint32_t i = 0; i < VrHandCount; i++)
+      m_backend.hidePointer(VrHand(i));
+
+    m_terminalPointer  = VrPointerState();
+    m_terminalBack     = false;
+
     VrGamepadHook::setCursorMode(false);
     VrMenuCursor::update(VrPointerState());
     VrGamepadHook::setControllerPad(input.hasActions, VrPadState());
@@ -175,13 +252,17 @@ namespace dxvk {
     const VrInputState&         input,
           VrActionState&        actions,
     const VrPanelPlacement*     panel,
+    const VrPanelPlacement*     surface,
           bool                  padUsed,
+          bool                  overTarget,
           float                 dt) {
     VrPointerInput pointerInput;
     pointerInput.controllers = input.controllers;
     pointerInput.dt          = dt;
     pointerInput.panel       = panel;
+    pointerInput.surface     = surface;
     pointerInput.padUsed     = padUsed;
+    pointerInput.overTarget  = overTarget;
 
     pointerInput.triggers[uint32_t(VrHand::Left)]  = actions.isPressed(VrAction::MenuLeftTrigger);
     pointerInput.triggers[uint32_t(VrHand::Right)] = actions.isPressed(VrAction::MenuRightTrigger);
@@ -214,8 +295,22 @@ namespace dxvk {
   }
 
 
+  void VrControls::holdBodyHeading(const float* heading) {
+    if (m_headLook)
+      m_headLook->holdBodyHeading(heading);
+  }
+
+
+  void VrControls::holdLook(bool held) {
+    if (m_headLook)
+      m_headLook->holdLook(held);
+  }
+
+
   bool VrControls::updateCamera(VrGameCameraPose& pose, float dt) {
-    bool adjusted = m_headLook && m_headLook->adjustCamera(pose);
+    bool vats = m_headLook && m_headLook->adjustVatsCamera(pose);
+    bool adjusted = !vats && m_headLook && m_headLook->adjustCamera(pose);
+    m_cameraFollowsHead = adjusted;
 
     // Only a camera that follows the head is measured: not in V.A.T.S.,
     // on furniture or when dead, where it is not raised either
@@ -226,11 +321,14 @@ namespace dxvk {
         m_sneak->adjustCamera(pose);
     }
 
-    return adjusted;
+    return vats || adjusted;
   }
 
 
   bool VrControls::adjustCamera(VrGameCameraPose& pose) const {
+    if (m_headLook && m_headLook->adjustVatsCamera(pose))
+      return true;
+
     bool adjusted = m_headLook && m_headLook->adjustCamera(pose);
 
     if (adjusted && m_sneak)

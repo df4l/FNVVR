@@ -6,6 +6,7 @@
 
 #include "vr_console_screen.h"
 #include "vr_game_addresses.h"
+#include "vr_game_depth.h"
 #include "vr_game_memory.h"
 #include "vr_game_space.h"
 
@@ -56,6 +57,8 @@ namespace dxvk {
     constexpr float FarPlane  = 20.0f;
 
     VrConsoleScreen* g_screen = nullptr;
+
+    void (__cdecl* g_afterOffscreen)() = nullptr;
 
     template<typename T>
     T& field(void* object, uintptr_t offset) {
@@ -179,11 +182,9 @@ namespace dxvk {
         { VrGame::TileSetString,          VrGame::TileSetStringPrologue,          sizeof(VrGame::TileSetStringPrologue) },
         { VrGame::TileSetFloat,           VrGame::TileSetFloatPrologue,           sizeof(VrGame::TileSetFloatPrologue) },
         { VrGame::TileGetFloat,           VrGame::TileGetFloatPrologue,           sizeof(VrGame::TileGetFloatPrologue) },
-        { VrGame::HeapAllocate,           VrGame::HeapAllocatePrologue,           sizeof(VrGame::HeapAllocatePrologue) },
         { VrGame::GetTextureManager,      VrGame::GetTextureManagerBytes,         sizeof(VrGame::GetTextureManagerBytes) },
         { VrGame::BorrowRenderedTexture,  VrGame::BorrowRenderedTexturePrologue,  sizeof(VrGame::BorrowRenderedTexturePrologue) },
         { VrGame::ReturnRenderedTexture,  VrGame::ReturnRenderedTexturePrologue,  sizeof(VrGame::ReturnRenderedTexturePrologue) },
-        { VrGame::NiPointerAssign,        VrGame::NiPointerAssignPrologue,        sizeof(VrGame::NiPointerAssignPrologue) },
         { VrGame::DrawRenderedMenuParent, VrGame::DrawRenderedMenuParentPrologue, sizeof(VrGame::DrawRenderedMenuParentPrologue) },
         { VrGame::RenderPipBoy,           VrGame::RenderPipBoyPrologue,           sizeof(VrGame::RenderPipBoyPrologue) },
         { VrGame::ComputersHeaderUseSite, VrGame::ComputersHeaderUse,             sizeof(VrGame::ComputersHeaderUse) },
@@ -194,7 +195,11 @@ namespace dxvk {
           return false;
       }
 
-      return VrGameMemory::readable(VrGame::InterfaceManager, sizeof(uintptr_t))
+      return VrGameMemory::matchesUnlessRewritten(VrGame::HeapAllocate,
+            VrGame::HeapAllocatePrologue, sizeof(VrGame::HeapAllocatePrologue))
+          && VrGameMemory::matchesUnlessRewritten(VrGame::NiPointerAssign,
+            VrGame::NiPointerAssignPrologue, sizeof(VrGame::NiPointerAssignPrologue))
+          && VrGameMemory::readable(VrGame::InterfaceManager, sizeof(uintptr_t))
           && VrGameMemory::readable(VrGame::MainSingleton, sizeof(uintptr_t))
           && VrGameMemory::readable(VrGame::Renderer, sizeof(uintptr_t))
           && VrGameMemory::readable(VrGame::WorldSceneGraph, sizeof(uintptr_t))
@@ -404,7 +409,7 @@ namespace dxvk {
     // The terminal is nearer than the world, which never hides it. The
     // game's renderer is between its world and interface passes here, so
     // the device clears the depth buffer the eye is drawn with.
-    m_device->Clear(0, nullptr, D3DCLEAR_ZBUFFER, 0, 1.0f, 0);
+    m_device->Clear(0, nullptr, D3DCLEAR_ZBUFFER, 0, vrGameDepthClear(), 0);
     game<MainFn>(VrGame::DrawRenderedMenuParent)(main);
     game<ScreenFn>(VrGame::RenderPipBoy)(main, field<void*>(m_menu, VrGame::TerminalScreen), renderer);
 
@@ -424,6 +429,19 @@ namespace dxvk {
 
     if (g_screen)
       g_screen->renderScreen();
+
+    if (g_afterOffscreen)
+      g_afterOffscreen();
+  }
+
+
+  void VrConsoleScreen::setAfterOffscreen(void (__cdecl* callback)()) {
+    g_afterOffscreen = callback;
+  }
+
+
+  bool VrConsoleScreen::hooksOffscreen() {
+    return g_screen != nullptr;
   }
 
 
@@ -447,7 +465,21 @@ namespace dxvk {
     if (!parent || !storeXml())
       return false;
 
+    // A parser put there by a plugin may not look in the game's cache, and
+    // the game then reads a null result from it
+    uintptr_t parser = VrGame::TileParseFile;
+    bool past = VrGameMemory::callTarget(VrGame::TileParseFileCallSite, &parser)
+      && VrGameMemory::isOtherModule(parser)
+      && VrGameMemory::redirectCall(VrGame::TileParseFileCallSite, parser,
+           reinterpret_cast<const void*>(VrGame::TileParseFile));
+
     m_root = game<ReadFileFn>(VrGame::TileReadFile)(parent, XmlName);
+
+    if (past) {
+      VrGameMemory::redirectCall(VrGame::TileParseFileCallSite, VrGame::TileParseFile,
+        reinterpret_cast<const void*>(parser));
+      Logger::info("VR: The console's tiles were read past another mod's XML parser");
+    }
 
     game<CacheRemoveAtFn>(VrGame::XmlCacheRemoveAt)(reinterpret_cast<void*>(VrGame::XmlCache), XmlName);
 

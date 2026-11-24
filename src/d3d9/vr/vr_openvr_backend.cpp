@@ -10,6 +10,7 @@
 #include <sstream>
 
 #include "../../util/log/log.h"
+#include "../../util/util_env.h"
 #include "../../util/util_string.h"
 
 #ifdef __GNUC__
@@ -50,6 +51,17 @@ namespace dxvk {
       return (uint64_t(time.dwHighDateTime) << 32) | time.dwLowDateTime;
     }
 
+    // FILETIME units between 1601 and 1970
+    constexpr uint64_t FileTimeUnixEpoch = 116444736000000000ull;
+
+    // The wall clock (CLOCK_REALTIME under Wine), which perf can record its
+    // samples with, unlike the performance counter
+    double wallClockSeconds() {
+      FILETIME now;
+      GetSystemTimePreciseAsFileTime(&now);
+      return double(fileTimeValue(now) - FileTimeUnixEpoch) / (FileTimeUnitsPerMs * 1000.0);
+    }
+
     // CPU time used so far by the calling thread and by the whole process.
     // Windows counts it in clock ticks, so only a sum over many frames is
     // meaningful.
@@ -75,17 +87,22 @@ namespace dxvk {
     // terminal, nearer than the menu it is opened from, over all of them.
     constexpr std::array<const char*, VrPanelCount> PanelOverlayKeys  = {
       "fnvvr.panel", "fnvvr.hud.head", "fnvvr.hud.wrist", "fnvvr.hud.prompt", "fnvvr.hud.charge",
-      "fnvvr.hud.ammo", "fnvvr.quickwheel", "fnvvr.terminal" };
+      "fnvvr.hud.ammo", "fnvvr.quickwheel", "fnvvr.terminal",
+      "fnvvr.caravan.values" };
     constexpr std::array<const char*, VrPanelCount> PanelOverlayNames = {
       "Fallout: New Vegas", "Fallout: New Vegas HUD", "Fallout: New Vegas wrist HUD",
       "Fallout: New Vegas interaction prompt", "Fallout: New Vegas power attack charge",
-      "Fallout: New Vegas ammunition", "Fallout: New Vegas quick wheel", "Fallout: New Vegas console" };
+      "Fallout: New Vegas ammunition", "Fallout: New Vegas quick wheel", "Fallout: New Vegas console",
+      "Fallout: New Vegas Caravan values" };
 
     // Overlay key and name of each hand's laser, indexed by VrHand. Lasers
     // are drawn over the panels.
     constexpr std::array<const char*, VrHandCount> PointerOverlayKeys  = { "fnvvr.pointer.left", "fnvvr.pointer.right" };
     constexpr std::array<const char*, VrHandCount> PointerOverlayNames = { "Left laser", "Right laser" };
     constexpr uint32_t PointerSortOrder = VrPanelCount;
+
+    // Opaque value the runtime gives back with the keyboard's events
+    constexpr uint64_t KeyboardUserValue = 0x464E5652; // "FNVR"
 
     // The laser's image: a few texels across, with soft edges, in the
     // amber of the Pip-Boy's screen. Its height is stretched to the
@@ -334,6 +351,10 @@ namespace dxvk {
         yaw * DegreesPerRadian, " pitch ", pitch * DegreesPerRadian,
         " roll ", roll * DegreesPerRadian, " degrees"));
     }
+
+    Logger::info(str::format("VR: The headset ", m_runtime->system->GetBoolTrackedDeviceProperty(
+        vr::k_unTrackedDeviceIndex_Hmd, vr::Prop_SupportsXrEyeGazeInteraction_Bool) ? "reports" : "does not report",
+      " an eye tracker"));
   }
 
 
@@ -349,14 +370,19 @@ namespace dxvk {
 
       VrFrameCycle cycle = { };
       cycle[uint32_t(VrFrameStep::Interval)]   = ms(frame.posesReady,    posesReady);
-      cycle[uint32_t(VrFrameStep::Render)]     = ms(frame.posesReady,    frame.submitStart) - frame.syncMs;
+      cycle[uint32_t(VrFrameStep::Render)]     = ms(frame.posesReady,    frame.submitStart) - frame.syncMs - frame.panelMs;
       cycle[uint32_t(VrFrameStep::Sync)]       = frame.syncMs;
       cycle[uint32_t(VrFrameStep::Transition)] = ms(frame.submitStart,   frame.imagesReady);
       cycle[uint32_t(VrFrameStep::Submit)]     = ms(frame.imagesReady,   frame.eyesSubmitted);
-      cycle[uint32_t(VrFrameStep::HandOff)]    = ms(frame.eyesSubmitted, frame.submitted);
+      cycle[uint32_t(VrFrameStep::HandOff)]    = frame.handOffMs >= 0.0
+        ? frame.handOffMs : ms(frame.eyesSubmitted, frame.submitted);
       cycle[uint32_t(VrFrameStep::After)]      = ms(frame.submitted,     waitStart);
       cycle[uint32_t(VrFrameStep::Panels)]     = frame.panelMs;
       cycle[uint32_t(VrFrameStep::Wait)]       = ms(waitStart,           posesReady);
+
+      m_hasLastCycle = true;
+      m_lastCycle    = cycle;
+      m_lastCycleEnd = wallClockSeconds();
 
       if (m_stats.add(cycle))
         logFrameStats();
@@ -381,7 +407,29 @@ namespace dxvk {
     m_dropped      = stats.m_nNumDroppedFrames;
     m_statsRunning = true;
     m_stats.reset();
+    m_panelCosts   = { };
     m_statsCpu     = readCpuTimes();
+  }
+
+
+  void VrOpenVrBackend::logPanelCosts(uint32_t frames) {
+    std::ostringstream line;
+    line << std::fixed << std::setprecision(2);
+
+    for (uint32_t i = 0; i < VrPanelCount; i++) {
+      const PanelCost& cost = m_panelCosts[i];
+
+      if (!cost.submissions)
+        continue;
+
+      double n = double(cost.submissions);
+      line << (line.tellp() > 0 ? "; " : "") << PanelOverlayKeys[i] << " " << cost.submissions
+        << " times, DXVK sync " << cost.syncMs / n << ", placement " << cost.placementMs / n
+        << ", layout transition " << cost.transitionMs / n << ", SetOverlayTexture " << cost.textureMs / n;
+    }
+
+    if (line.tellp() > 0)
+      Logger::info(str::format("VR: Panels over ", frames, " frames, average ms per submission: ", line.str()));
   }
 
 
@@ -406,10 +454,11 @@ namespace dxvk {
       " s, ", seconds > 0.0 ? std::lround(double(m_stats.frames()) / seconds) : 0, " fps, ",
       m_stats.lateFrames(), " late by a display period or more, ", m_stats.busyFrames(),
       " busy for longer than a period. Average/longest ms: frame ", step(VrFrameStep::Interval),
-      ", eye rendering ", step(VrFrameStep::Render), ", DXVK sync ", step(VrFrameStep::Sync),
+      ", eye rendering ", step(VrFrameStep::Render), ", panels ", step(VrFrameStep::Panels),
+      ", DXVK sync ", step(VrFrameStep::Sync),
       ", layout transition ", step(VrFrameStep::Transition), ", submission ", step(VrFrameStep::Submit),
       ", hand-off ", step(VrFrameStep::HandOff), ", after submission ", step(VrFrameStep::After),
-      " (panels ", step(VrFrameStep::Panels), "), waiting for the runtime ", step(VrFrameStep::Wait)));
+      ", waiting for the runtime ", step(VrFrameStep::Wait)));
 
     // What the compositor did over the window. Its counts restart when
     // another process connects, so they are only compared within one.
@@ -475,6 +524,8 @@ namespace dxvk {
     }
 
     Logger::info(str::format("VR: Compositor: ", counts, " in the window; ", recent));
+
+    logPanelCosts(m_stats.frames());
 
     // Whether the game thread computes or waits during the time the steps
     // above attribute to it, and how much the other threads work
@@ -652,6 +703,25 @@ namespace dxvk {
       vr::VRCompositorTimingMode_Explicit_ApplicationPerformsPostPresentHandoff);
     m_frameStarted = false;
 
+    if (binding.asyncHandOff && binding.lockQueue && binding.releaseQueue)
+      startHandOffThread();
+
+    startSession();
+    return true;
+  }
+
+
+  bool VrOpenVrBackend::beginPanelSession() {
+    if (!initializeRuntime() || !m_runtime->compositor)
+      return false;
+
+    m_runtime->compositor->SetTrackingSpace(vr::TrackingUniverseStanding);
+    startSession();
+    return true;
+  }
+
+
+  void VrOpenVrBackend::startSession() {
     float rate = m_runtime->system->GetFloatTrackedDeviceProperty(
       vr::k_unTrackedDeviceIndex_Hmd, vr::Prop_DisplayFrequency_Float);
 
@@ -663,11 +733,11 @@ namespace dxvk {
     m_statsRunning = false;
     m_frameClock   = FrameClock();
     m_state    = VrSessionState::Running;
-    return true;
   }
 
 
   void VrOpenVrBackend::endSession() {
+    stopHandOffThread();
     destroyPanels();
     destroyPointers();
     m_transition = nullptr;
@@ -703,6 +773,28 @@ namespace dxvk {
 
       if (event.eventType == vr::VREvent_IpdChanged)
         Logger::info(str::format("VR: The IPD changed to ", event.data.ipd.ipdMeters * 1000.0f, " mm"));
+
+      // The keyboard's own events, not those of a keyboard shown for an overlay
+      bool ownKeyboard = m_keyboardShown && event.data.keyboard.overlayHandle == vr::k_ulOverlayHandleInvalid;
+
+      if (event.eventType == vr::VREvent_KeyboardCharInput && ownKeyboard) {
+        const char* input = event.data.keyboard.cNewInput;
+        m_keyboardTyped.append(input, strnlen(input, sizeof(event.data.keyboard.cNewInput)));
+      }
+
+      // Done closes the keyboard too, its close event follows
+      if (event.eventType == vr::VREvent_KeyboardDone && m_keyboardShown) {
+        m_keyboardShown = false;
+        m_keyboardEvent = VrKeyboardEvent::Done;
+      }
+
+      if (event.eventType == vr::VREvent_KeyboardClosed_Global && m_keyboardShown
+       && event.data.keyboard.overlayHandle == vr::k_ulOverlayHandleInvalid) {
+        m_keyboardShown = false;
+
+        if (m_keyboardEvent == VrKeyboardEvent::None)
+          m_keyboardEvent = VrKeyboardEvent::Closed;
+      }
     }
   }
 
@@ -724,6 +816,9 @@ namespace dxvk {
 
     auto waitStart = high_resolution_clock::now();
 
+    // WaitGetPoses must follow the previous frame's hand-off
+    finishHandOff();
+
     // Blocks until the compositor wants the next frame. The poses are
     // converted here and handed out by pollInput. In the explicit timing
     // mode the call does not use the queue, so it needs no lock.
@@ -742,8 +837,13 @@ namespace dxvk {
       return timing;
     }
 
+    m_hasLastCycle = false;
     measureFrame(waitStart, high_resolution_clock::now());
     m_frameStarted = true;
+
+    timing.hasPreviousCycle = m_hasLastCycle;
+    timing.previousCycle    = m_lastCycle;
+    timing.previousCycleEnd = m_lastCycleEnd;
     m_poses = VrInputState();
 
     const vr::TrackedDevicePose_t& head = poses[vr::k_unTrackedDeviceIndex_Hmd];
@@ -797,6 +897,84 @@ namespace dxvk {
   void VrOpenVrBackend::handOffFrame() {
     m_runtime->compositor->PostPresentHandoff();
     m_frameStarted = false;
+  }
+
+
+  void VrOpenVrBackend::handOffSubmittedFrame() {
+    if (!m_handOffThread.joinable()) {
+      m_frameClock.handOffMs = -1.0;
+      handOffFrame();
+      return;
+    }
+
+    std::unique_lock<dxvk::mutex> lock(m_handOffMutex);
+    m_handOffPending = true;
+    m_frameStarted   = false;
+    m_handOffCond.notify_all();
+  }
+
+
+  void VrOpenVrBackend::finishHandOff() {
+    if (!m_handOffThread.joinable())
+      return;
+
+    std::unique_lock<dxvk::mutex> lock(m_handOffMutex);
+    m_handOffCond.wait(lock, [this] { return !m_handOffPending; });
+    m_frameClock.handOffMs = m_handOffMs;
+  }
+
+
+  void VrOpenVrBackend::startHandOffThread() {
+    if (m_handOffThread.joinable())
+      return;
+
+    m_handOffStop    = false;
+    m_handOffPending = false;
+    m_handOffThread  = dxvk::thread([this] { runHandOffThread(); });
+    Logger::info("VR: Frames are handed off to the compositor on a thread of their own");
+  }
+
+
+  void VrOpenVrBackend::stopHandOffThread() {
+    if (!m_handOffThread.joinable())
+      return;
+
+    { std::unique_lock<dxvk::mutex> lock(m_handOffMutex);
+      m_handOffStop = true;
+      m_handOffCond.notify_all();
+    }
+
+    m_handOffThread.join();
+  }
+
+
+  void VrOpenVrBackend::runHandOffThread() {
+    env::setThreadName("vr-handoff");
+
+    std::unique_lock<dxvk::mutex> lock(m_handOffMutex);
+
+    while (true) {
+      m_handOffCond.wait(lock, [this] { return m_handOffPending || m_handOffStop; });
+
+      // A pending frame is handed off before stopping, WaitGetPoses or the
+      // end of the session expects it
+      if (!m_handOffPending)
+        return;
+
+      lock.unlock();
+
+      // The runtime may use the game's queue, which DXVK shares between threads
+      m_binding.lockQueue();
+      auto start = high_resolution_clock::now();
+      m_runtime->compositor->PostPresentHandoff();
+      auto end = high_resolution_clock::now();
+      m_binding.releaseQueue();
+
+      lock.lock();
+      m_handOffMs      = std::chrono::duration<double, std::milli>(end - start).count();
+      m_handOffPending = false;
+      m_handOffCond.notify_all();
+    }
   }
 
 
@@ -937,6 +1115,39 @@ namespace dxvk {
   }
 
 
+  bool VrOpenVrBackend::supportsEyeTracking() {
+    std::array<VrGaze, VrEyeCount> gaze;
+    return m_gazeSeen || locateGaze(gaze);
+  }
+
+
+  bool VrOpenVrBackend::locateGaze(std::array<VrGaze, VrEyeCount>& gaze) {
+    if (!m_runtime || !m_runtime->system)
+      return false;
+
+    vr::HmdVector2_t centres[VrEyeCount] = { };
+
+    if (!m_runtime->system->GetEyeTrackedFoveationCenter(&centres[0], &centres[1]))
+      return false;
+
+    for (uint32_t i = 0; i < VrEyeCount; i++) {
+      vr::EVREye eye = i == uint32_t(VrEye::Left) ? vr::Eye_Left : vr::Eye_Right;
+
+      float left = 0.0f, right = 0.0f, top = 0.0f, bottom = 0.0f;
+      m_runtime->system->GetProjectionRaw(eye, &left, &right, &top, &bottom);
+      gaze[i] = vrGazeFromFoveationCenter(left, right, top, bottom, centres[i].v[0], centres[i].v[1]);
+    }
+
+    if (!m_gazeSeen) {
+      m_gazeSeen = true;
+      Logger::info(str::format("VR: The headset gives the gaze: left eye ", gaze[0].tanX, ", ", gaze[0].tanY,
+        ", right eye ", gaze[1].tanX, ", ", gaze[1].tanY, " (tangents right and up)"));
+    }
+
+    return true;
+  }
+
+
   bool VrOpenVrBackend::submitFrame(const VrFrameSubmission& frame) {
     if (m_state != VrSessionState::Running || !m_transition)
       return false;
@@ -985,7 +1196,7 @@ namespace dxvk {
     m_frameClock.eyesSubmitted = high_resolution_clock::now();
 
     // Both eyes are in, the compositor may start on the frame
-    handOffFrame();
+    handOffSubmittedFrame();
 
     m_frameClock.submitted   = high_resolution_clock::now();
     m_frameClock.isSubmitted = true;
@@ -1034,6 +1245,9 @@ namespace dxvk {
     vr::IVROverlay* overlay = m_runtime->overlay;
     Panel& state = m_panels[uint32_t(id)];
 
+    PanelCost& cost = m_panelCosts[uint32_t(id)];
+    auto placementStart = high_resolution_clock::now();
+
     vr::HmdMatrix34_t transform = { };
     vrPoseToMatrix34(panel.pose, transform.m);
 
@@ -1054,14 +1268,26 @@ namespace dxvk {
     if (!m_transition->toTransferSource(&panel.image, 1))
       return false;
 
+    auto transitioned = high_resolution_clock::now();
+
     vr::VRVulkanTextureData_t data = { };
     fillTextureData(panel.image, data);
 
     vr::Texture_t texture = { &data, vr::TextureType_Vulkan, vr::ColorSpace_Gamma };
     vr::EVROverlayError error = overlay->SetOverlayTexture(state.handle, &texture);
 
-    m_frameClock.panelMs += panel.syncMs
-      + std::chrono::duration<double, std::milli>(high_resolution_clock::now() - start).count();
+    auto end = high_resolution_clock::now();
+    auto ms = [] (high_resolution_clock::time_point from, high_resolution_clock::time_point to) {
+      return std::chrono::duration<double, std::milli>(to - from).count();
+    };
+
+    m_frameClock.panelMs += panel.syncMs + ms(start, end);
+
+    cost.submissions  += 1;
+    cost.syncMs       += panel.syncMs;
+    cost.placementMs  += ms(placementStart, start);
+    cost.transitionMs += ms(start, transitioned);
+    cost.textureMs    += ms(transitioned, end);
 
     if (error == vr::VROverlayError_None && !state.visible) {
       error = overlay->ShowOverlay(state.handle);
@@ -1092,6 +1318,36 @@ namespace dxvk {
 
     m_runtime->overlay->HideOverlay(state.handle);
     state.visible = false;
+  }
+
+
+  bool VrOpenVrBackend::submitPanelPixels(VrPanelId id, const VrPanelPixels& panel) {
+    if (m_state != VrSessionState::Running || !panel.rgba || !createPanel(id))
+      return false;
+
+    vr::IVROverlay* overlay = m_runtime->overlay;
+    Panel& state = m_panels[uint32_t(id)];
+
+    vr::HmdMatrix34_t transform = { };
+    vrPoseToMatrix34(panel.pose, transform.m);
+
+    overlay->SetOverlayTransformAbsolute(state.handle, vr::TrackingUniverseStanding, &transform);
+    overlay->SetOverlayWidthInMeters(state.handle, panel.metres);
+
+    // SteamVR's interface takes a non-const pointer, and only reads the pixels
+    vr::EVROverlayError error = overlay->SetOverlayRaw(state.handle,
+      const_cast<uint8_t*>(panel.rgba), panel.width, panel.height, 4);
+
+    if (error == vr::VROverlayError_None && !state.visible) {
+      error = overlay->ShowOverlay(state.handle);
+      state.visible = error == vr::VROverlayError_None;
+    }
+
+    if (error != vr::VROverlayError_None)
+      Logger::err(str::format("VR: The image of the panel ", PanelOverlayKeys[uint32_t(id)],
+        " was refused, error ", int32_t(error)));
+
+    return error == vr::VROverlayError_None;
   }
 
 
@@ -1248,6 +1504,58 @@ namespace dxvk {
     if (seconds > 0.0f && strength > 0.0f)
       m_runtime->input->TriggerHapticVibrationAction(m_actions.haptic[uint32_t(hand)], 0.0f, seconds, FrequencyHz, strength,
         vr::k_ulInvalidInputValueHandle);
+  }
+
+
+  void VrOpenVrBackend::fadeView(float seconds, float opacity) {
+    if (m_state != VrSessionState::Running || !m_runtime || !m_runtime->compositor)
+      return;
+
+    m_runtime->compositor->FadeToColor(std::max(0.0f, seconds), 0.0f, 0.0f, 0.0f,
+      std::max(0.0f, std::min(1.0f, opacity)));
+  }
+
+
+  bool VrOpenVrBackend::showKeyboard(const VrKeyboardRequest& request) {
+    if (m_state != VrSessionState::Running || !m_runtime || !m_runtime->overlay)
+      return false;
+
+    // Minimal: each key is sent as it is pressed, and the application's
+    // field shows the text. Not modal, so that a click beside it does not
+    // close it.
+    vr::EVROverlayError error = m_runtime->overlay->ShowKeyboard(
+      vr::k_EGamepadTextInputModeNormal, vr::k_EGamepadTextInputLineModeSingleLine, vr::KeyboardFlag_Minimal,
+      request.description.c_str(), request.maxLength, "", KeyboardUserValue);
+
+    if (error != vr::VROverlayError_None) {
+      Logger::warn(str::format("VR: SteamVR could not show its keyboard, error ", int32_t(error)));
+      return false;
+    }
+
+    m_keyboardShown = true;
+    m_keyboardEvent = VrKeyboardEvent::None;
+    m_keyboardTyped.clear();
+    return true;
+  }
+
+
+  void VrOpenVrBackend::hideKeyboard() {
+    if (!m_keyboardShown)
+      return;
+
+    m_keyboardShown = false;
+    m_keyboardEvent = VrKeyboardEvent::None;
+    m_runtime->overlay->HideKeyboard();
+  }
+
+
+  VrKeyboardEvent VrOpenVrBackend::takeKeyboardEvent(std::string& typed) {
+    VrKeyboardEvent event = m_keyboardEvent;
+    m_keyboardEvent = VrKeyboardEvent::None;
+
+    typed = std::move(m_keyboardTyped);
+    m_keyboardTyped.clear();
+    return event;
   }
 
 }

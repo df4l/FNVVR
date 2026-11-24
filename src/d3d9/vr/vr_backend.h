@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -22,6 +23,12 @@ namespace dxvk {
     VkQueue          queue            = VK_NULL_HANDLE;
     uint32_t         queueFamilyIndex = 0;
     uint32_t         queueIndex       = 0;
+    /// Takes and releases DXVK's lock on the queue, for a backend that
+    /// uses the queue from a thread of its own
+    std::function<void()> lockQueue;
+    std::function<void()> releaseQueue;
+    /// Hand each frame off from a thread of the backend (d3d9.vrAsyncHandOff)
+    bool             asyncHandOff     = false;
   };
 
   /**
@@ -84,9 +91,11 @@ namespace dxvk {
     QuickWheel,
     /// The console's terminal and keyboard, in front of the player
     Terminal,
+    /// The values of Caravan's tracks, lying on the mat
+    CaravanValues,
   };
 
-  constexpr uint32_t VrPanelCount = 8;
+  constexpr uint32_t VrPanelCount = 9;
 
   /**
    * \brief What a panel's pose is relative to
@@ -120,6 +129,22 @@ namespace dxvk {
   };
 
   /**
+   * \brief Image of a panel held in system memory
+   *
+   * For a panel with no graphics device behind it. The panel stays in the
+   * room, see VrPanelAnchor::Room.
+   */
+  struct VrPanelPixels {
+    /// RGBA8 pixels, top row first, not premultiplied
+    const uint8_t* rgba   = nullptr;
+    uint32_t       width  = 0;
+    uint32_t       height = 0;
+    VrPose         pose;
+    /// Width in the room, in metres
+    float          metres = 0.0f;
+  };
+
+  /**
    * \brief Laser drawn from a controller
    *
    * The laser starts at \c origin and goes along its -Z axis for \c length
@@ -129,6 +154,18 @@ namespace dxvk {
     VrPose origin;
     float  length = 0.0f;
     bool   active = false;
+  };
+
+  /**
+   * \brief Text keyboard the runtime shows for a text field
+   *
+   * Texts are UTF-8.
+   */
+  struct VrKeyboardRequest {
+    /// What the text is for, shown above it
+    std::string description;
+    /// Characters the text may hold at most
+    uint32_t    maxLength = 0;
   };
 
   /**
@@ -149,7 +186,11 @@ namespace dxvk {
    * beginFrame, submitFrame, submitEmptyFrame and submitPanel are called with
    * the device queue locked, so they may use it.
    *
-   * Methods are called from the render/game thread only.
+   * Methods are called from the render/game thread, except a stereo
+   * frame's submitFrame and the submitPanel and hidePanel calls of its
+   * panels, which may come from the renderer's submission thread (see
+   * VrFrameSubmitter) while the game thread runs the game's update. Those
+   * calls are made with the device queue locked, like any submitPanel.
    */
   class IVRBackend {
 
@@ -189,6 +230,18 @@ namespace dxvk {
     virtual bool beginSession(const VrGraphicsBinding& binding) = 0;
 
     virtual void endSession() = 0;
+
+    /**
+     * \brief Starts a session without a graphics device
+     *
+     * For a process that only shows panels and lasers. It renders no eyes:
+     * the runtime shows its own surroundings behind the panels. Only
+     * waitFrame, pollInput, setInputContext, submitPanelPixels, hidePanel,
+     * showPointer, hidePointer and endSession may be used.
+     *
+     * \returns \c true if the session is running
+     */
+    virtual bool beginPanelSession() = 0;
 
     virtual VrSessionState sessionState() const = 0;
 
@@ -237,6 +290,25 @@ namespace dxvk {
     virtual std::array<VrEyeView, VrEyeCount> locateViews(int64_t displayTime) = 0;
 
     /**
+     * \brief Tells whether the headset gives where the eyes look
+     *
+     * May only become true once the eye tracker has seen the eyes.
+     */
+    virtual bool supportsEyeTracking() = 0;
+
+    /**
+     * \brief Where the eyes look for the frame being drawn
+     *
+     * Valid after locateViews, for the views it returned. Fails without an
+     * eye tracker and while the tracker does not see the eyes, for example
+     * during a blink.
+     *
+     * \param [out] gaze Where each eye looks, in its own view
+     * \returns \c true if the gaze of both eyes is known
+     */
+    virtual bool locateGaze(std::array<VrGaze, VrEyeCount>& gaze) = 0;
+
+    /**
      * \brief Presents a rendered stereo frame
      *
      * Only valid for frames where waitFrame returned shouldRender.
@@ -262,6 +334,15 @@ namespace dxvk {
     virtual void hidePanel(VrPanelId id) = 0;
 
     /**
+     * \brief Shows a panel from an image in system memory
+     *
+     * Slower than submitPanel: meant for images that rarely change.
+     *
+     * \returns \c true if the panel was updated
+     */
+    virtual bool submitPanelPixels(VrPanelId id, const VrPanelPixels& panel) = 0;
+
+    /**
      * \brief Shows the laser of a hand, or moves it if it is shown
      *
      * Like panels, the laser is drawn over the stereo frames until
@@ -278,6 +359,40 @@ namespace dxvk {
      * \param [in] durationNs Duration in nanoseconds
      */
     virtual void applyHaptic(VrHand hand, float amplitude, int64_t durationNs) = 0;
+
+    /**
+     * \brief Fades the whole view to black or back
+     *
+     * The fade goes from the opacity shown now to the given one.
+     * \param [in] seconds Duration of the fade, 0 for at once
+     * \param [in] opacity Opacity of the black in [0, 1], 0 shows the view
+     */
+    virtual void fadeView(float seconds, float opacity) = 0;
+
+    /**
+     * \brief Shows the runtime's own text keyboard
+     *
+     * The keyboard is typed on with the runtime's lasers, over the frames
+     * and panels, until it is confirmed, closed by the user or hidden with
+     * hideKeyboard. It holds no text of its own: each key is given as it
+     * is pressed, for the application to show. See takeKeyboardEvent.
+     *
+     * \returns \c false if the runtime has no keyboard or could not show it
+     */
+    virtual bool showKeyboard(const VrKeyboardRequest& request) = 0;
+
+    virtual void hideKeyboard() = 0;
+
+    /**
+     * \brief Takes what happened to the keyboard since the last call
+     *
+     * Events are read while waiting for a frame. A confirmation wins over a
+     * close seen in the same wait.
+     *
+     * \param [out] typed The keys pressed since the last call, in order, as
+     *    UTF-8: characters, \c '\b' for Backspace and \c '\n' for Enter
+     */
+    virtual VrKeyboardEvent takeKeyboardEvent(std::string& typed) = 0;
 
   };
 

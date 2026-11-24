@@ -7,6 +7,7 @@
 #include "vr_dds.h"
 #include "vr_paint.h"
 #include "vr_terminal_keyboard.h"
+#include "vr_texts.h"
 
 namespace dxvk {
 
@@ -57,9 +58,10 @@ namespace dxvk {
      * \param [in] texture The terminal texture (terminal01.dds)
      * \param [in] font The terminal font's metrics
      * \param [in] glyphs The terminal font's texture, glyphs in its alpha
+     * \param [in] texts The names printed on the keys
      * \returns \c false if the texture is too small to hold the plate
      */
-    bool initialize(const VrImage& texture, const VrBitmapFont& font, const VrImage& glyphs);
+    bool initialize(const VrImage& texture, const VrBitmapFont& font, const VrImage& glyphs, const VrTexts& texts);
 
     /**
      * \brief The plate's texels, premultiplied by their alpha
@@ -92,6 +94,8 @@ namespace dxvk {
 
     VrImage     m_plate;
     VrPaintFont m_font;
+    /// What is printed on each named key, in the order of the keys
+    std::vector<std::string> m_labels;
 
     void buildPlate(const VrImage& texture);
 

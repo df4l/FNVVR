@@ -33,6 +33,7 @@ namespace dxvk {
       }
     }
 
+    m_last    = m_current;
     m_current = { };
     m_frames += 1;
     return m_frames >= m_windowFrames;

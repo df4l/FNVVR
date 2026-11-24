@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdint>
+#include <vector>
+
 namespace dxvk {
 
   /**
@@ -19,7 +22,7 @@ namespace dxvk {
    * that ignores the head, so they would stick to the face in both eyes.
    * Their draw in the eye images is skipped, the model and then its screen
    * with the menu and the face, and they are drawn with the menu scenes
-   * instead.
+   * instead, unless VrMinigames draws them in the eyes.
    *
    * Only used on the game's main thread, while the game draws a frame.
    */
@@ -58,10 +61,44 @@ namespace dxvk {
      */
     static bool movesRenderedMenu();
 
+    /**
+     * \brief Leaves a menu's scene to the eye images
+     *
+     * See VrMinigames. That scene is no longer drawn into the menu panel.
+     *
+     * \param [in] menuId The menu, or 0 for none
+     * \param [in] renderedMenu Whether the rendered menu (a terminal or the
+     *   Reflectron) is left out as well
+     */
+    void leaveToEyes(uint32_t menuId, bool renderedMenu) {
+      m_eyeMenuId       = menuId;
+      m_eyeRenderedMenu = renderedMenu;
+    }
+
+    /**
+     * \brief Hides the dark disc of the lock model
+     *
+     * \param [out] hidden Flags to pass to showHidden after the draw
+     */
+    static void hideLockBackdrop(std::vector<uint32_t*>& hidden);
+
+    static void showHidden(const std::vector<uint32_t*>& hidden);
+
+    /**
+     * \brief Hides the objects of a name below an object
+     *
+     * \param [in] root The object it starts from
+     * \param [in] name Name of the objects
+     * \param [out] hidden Flags to pass to showHidden
+     */
+    static void hideObject(uintptr_t root, const char* name, std::vector<uint32_t*>& hidden);
+
   private:
 
     bool m_available         = false;
     bool m_renderedMenuMoved = false;
+    uint32_t m_eyeMenuId     = 0;
+    bool m_eyeRenderedMenu   = false;
 
     static void __fastcall renderedMenuHook(
             void*                 main,

@@ -112,6 +112,9 @@ namespace dxvk {
     /// How far the magazine's centre is from the left hand bone then, in
     /// metres: the hand of some animations never carries it
     float                   handDistance = 0.0f;
+    /// The hand carries the magazine (vrFindMagazineHold); otherwise it is
+    /// held as the hand pushes it into the weapon
+    bool                    carried = false;
     /// Rotations of the bones below the left hand in their parents while
     /// it holds the new magazine
     std::vector<VrBonePose> fingers;

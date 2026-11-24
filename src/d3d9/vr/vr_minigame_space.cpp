@@ -1,0 +1,774 @@
+#include <algorithm>
+#include <cmath>
+
+#include "vr_math.h"
+#include "vr_minigame_space.h"
+
+namespace dxvk {
+
+  namespace {
+
+    constexpr float DegreesPerRadian = 57.2957795f;
+
+    // Closer to the keyhole than this, the pin's direction is not known
+    constexpr float MinPinReach = 0.03f;
+
+    // The game's pin: the slider moves by v^3 * PinStep per frame, and it
+    // ignores a stick under its dead zone (LockPickMenu::RotateLockpick)
+    constexpr float PinStep = 80.0f;
+    constexpr float PinStickMin = 7900.0f / 32767.0f;
+
+    // The screwdriver's dead zone is wider (LockPickMenu::DoIdle)
+    constexpr float TensionStickMin = 8800.0f / 32767.0f;
+
+    VrVector3 cross(const VrVector3& a, const VrVector3& b) {
+      return VrVector3 {
+        a.y * b.z - a.z * b.y,
+        a.z * b.x - a.x * b.z,
+        a.x * b.y - a.y * b.x };
+    }
+
+    VrVector3 toScene(const VrSceneSpace& space, const VrVector3& v) {
+      return space.right * v.x + space.up * v.y + space.back * v.z;
+    }
+
+    VrVector3 fromScene(const VrSceneSpace& space, const VrVector3& v) {
+      return VrVector3 { vrDot(v, space.right), vrDot(v, space.up), vrDot(v, space.back) };
+    }
+
+    // Rotation whose columns are the given orthonormal axes
+    VrQuaternion fromAxes(const VrVector3& x, const VrVector3& y, const VrVector3& z) {
+      float trace = x.x + y.y + z.z;
+      VrQuaternion q;
+
+      if (trace > 0.0f) {
+        float s = 0.5f / std::sqrt(trace + 1.0f);
+        q.w = 0.25f / s;
+        q.x = (y.z - z.y) * s;
+        q.y = (z.x - x.z) * s;
+        q.z = (x.y - y.x) * s;
+      } else if (x.x > y.y && x.x > z.z) {
+        float s = 2.0f * std::sqrt(1.0f + x.x - y.y - z.z);
+        q.w = (y.z - z.y) / s;
+        q.x = 0.25f * s;
+        q.y = (y.x + x.y) / s;
+        q.z = (z.x + x.z) / s;
+      } else if (y.y > z.z) {
+        float s = 2.0f * std::sqrt(1.0f + y.y - x.x - z.z);
+        q.w = (z.x - x.z) / s;
+        q.x = (y.x + x.y) / s;
+        q.y = 0.25f * s;
+        q.z = (z.y + y.z) / s;
+      } else {
+        float s = 2.0f * std::sqrt(1.0f + z.z - x.x - y.y);
+        q.w = (x.y - y.x) / s;
+        q.x = (z.x + x.z) / s;
+        q.y = (z.y + y.z) / s;
+        q.z = 0.25f * s;
+      }
+
+      return vrNormalize(q);
+    }
+
+    // A direction of a model in the world
+    // Around a body's middle, in the units of the models, all at the world's
+    // scale. A dealer in place stands 13 units beyond this from a table.
+    constexpr float BodyRadius   = 6.0f;
+    // A head this close to the player's goes through the view
+    constexpr float SeatClearing = 25.0f;
+    // Bodies on another floor are not in the way
+    constexpr float BodyLowest   = -40.0f;
+    constexpr float BodyHighest  = 140.0f;
+
+    VrVector3 modelToWorld(const VrWorldObject& object, const VrVector3& v) {
+      return object.x * v.x + object.y * v.y + object.z * v.z;
+    }
+
+  }
+
+
+  bool vrTableBetween(
+    const VrVector3&        player,
+    const VrVector3&        other,
+          float             farEdge,
+          float             gap,
+          float             top,
+          VrWorldObject&    table) {
+    VrVector3 towards = { other.x - player.x, other.y - player.y, 0.0f };
+    float length = vrLength(towards);
+
+    if (length < 1e-3f)
+      return false;
+
+    towards = towards * (1.0f / length);
+
+    table.y        = towards;
+    table.z        = { 0.0f, 0.0f, 1.0f };
+    table.x        = { towards.y, -towards.x, 0.0f };
+    table.position = { other.x, other.y, top };
+    table.position = table.position - towards * (gap + farEdge);
+    table.scale    = 1.0f;
+    return true;
+  }
+
+
+  VrSceneFit vrSceneFitOfModel(const VrWorldObject& model) {
+    // The inverse of the model's pose: its rotation's rows, its translation
+    // brought back into the model
+    VrSceneFit fit;
+    fit.sceneX = { model.x.x, model.y.x, model.z.x };
+    fit.sceneY = { model.x.y, model.y.y, model.z.y };
+    fit.sceneZ = { model.x.z, model.y.z, model.z.z };
+    fit.origin = vrPointInObject(model, VrVector3 { 0.0f, 0.0f, 0.0f });
+    fit.scale  = 1.0f / model.scale;
+    return fit;
+  }
+
+
+  VrWorldObject vrObjectInObject(
+    const VrWorldObject&    frame,
+    const VrWorldObject&    object) {
+    auto direction = [&] (const VrVector3& v) {
+      return VrVector3 { vrDot(v, frame.x), vrDot(v, frame.y), vrDot(v, frame.z) };
+    };
+
+    VrWorldObject result;
+    result.x        = direction(object.x);
+    result.y        = direction(object.y);
+    result.z        = direction(object.z);
+    result.position = vrPointInObject(frame, object.position);
+    result.scale    = object.scale / frame.scale;
+    return result;
+  }
+
+
+  VrSceneFit vrSceneFitOnScreen(
+    const VrWorldObject&    sceneScreen,
+    const VrScreenGlass&    sceneGlass,
+    const VrWorldObject&    modelScreen,
+    const VrScreenGlass&    modelGlass,
+          float             fill) {
+    // The glass's centre and axes in the space its object stands in
+    struct Glass {
+      VrVector3 centre;
+      VrVector3 right;
+      VrVector3 up;
+      VrVector3 out;
+      float     width;
+      float     height;
+    };
+
+    auto place = [] (const VrWorldObject& object, const VrScreenGlass& glass) {
+      Glass result;
+      result.centre = object.position + modelToWorld(object, glass.centre) * object.scale;
+      result.right  = modelToWorld(object, glass.right);
+      result.right  = result.right * (1.0f / vrLength(result.right));
+      result.up     = modelToWorld(object, glass.up);
+      result.up     = result.up - result.right * vrDot(result.up, result.right);
+      result.up     = result.up * (1.0f / vrLength(result.up));
+      result.out    = cross(result.right, result.up);
+      result.width  = glass.width  * object.scale;
+      result.height = glass.height * object.scale;
+      return result;
+    };
+
+    Glass scene = place(sceneScreen, sceneGlass);
+    Glass model = place(modelScreen, modelGlass);
+
+    // Each axis of the scene's glass on the same axis of the model's
+    auto turn = [&] (const VrVector3& v) {
+      return model.right * vrDot(v, scene.right)
+           + model.up    * vrDot(v, scene.up)
+           + model.out   * vrDot(v, scene.out);
+    };
+
+    VrSceneFit fit;
+    fit.scale  = fill * std::min(model.width / scene.width, model.height / scene.height);
+    fit.sceneX = turn(VrVector3 { 1.0f, 0.0f, 0.0f });
+    fit.sceneY = turn(VrVector3 { 0.0f, 1.0f, 0.0f });
+    fit.sceneZ = turn(VrVector3 { 0.0f, 0.0f, 1.0f });
+    fit.origin = model.centre - turn(scene.centre) * fit.scale;
+    return fit;
+  }
+
+
+  VrGameCameraPose vrSeatCamera(
+    const VrWorldObject&    object,
+    const VrSceneFit&       fit,
+    const VrPose&           headInReference,
+          float             cameraHeight,
+          float             unitsPerMetre) {
+    VrVector3 seat   = object.position + modelToWorld(object, fit.seat) * object.scale;
+    VrVector3 facing = modelToWorld(object, fit.facing);
+
+    // The head may be turned from the reference: the camera is turned as
+    // much the other way, for the head to look where it has to
+    VrVector3 look = vrRotate(headInReference.orientation, VrVector3 { 0.0f, 0.0f, -1.0f });
+    float turn = std::abs(look.x) + std::abs(look.z) > 1e-6f ? std::atan2(look.x, -look.z) : 0.0f;
+    float c = std::cos(turn);
+    float s = std::sin(turn);
+
+    VrGameCameraPose camera;
+    camera.forward = { facing.x * c - facing.y * s, facing.x * s + facing.y * c, 0.0f };
+    camera.up      = { 0.0f, 0.0f, 1.0f };
+    camera.right   = { camera.forward.y, -camera.forward.x, 0.0f };
+
+    VrVector3 head = camera.right * headInReference.position.x
+                   + camera.forward * -headInReference.position.z;
+
+    camera.position = seat - head * unitsPerMetre;
+    camera.position.z = fit.eyeHeight > 0.0f
+      ? object.position.z + modelToWorld(object, VrVector3 { 0.0f, 0.0f, fit.eyeHeight }).z * object.scale
+        - headInReference.position.y * unitsPerMetre
+      : cameraHeight;
+    return camera;
+  }
+
+
+  VrSceneSpace vrSceneSpaceOnObject(
+    const VrPose&           reference,
+    const VrGameCameraPose& camera,
+    const VrWorldObject&    object,
+    const VrSceneFit&       fit,
+          float             unitsPerMetre) {
+    VrVector3 sceneX = modelToWorld(object, fit.sceneX);
+    VrVector3 sceneY = modelToWorld(object, fit.sceneY);
+    VrVector3 sceneZ = modelToWorld(object, fit.sceneZ);
+
+    // The camera's axes, which are the reference's, in the scene
+    auto inScene = [&] (const VrVector3& v) {
+      return VrVector3 { vrDot(v, sceneX), vrDot(v, sceneY), vrDot(v, sceneZ) };
+    };
+
+    VrVector3 origin = object.position + modelToWorld(object, fit.origin) * object.scale;
+
+    VrSceneSpace space;
+    space.anchor.position    = vrTransformPoint(reference, vrComputeGamePointInReference(camera, origin, unitsPerMetre));
+    space.anchor.orientation = reference.orientation;
+    space.origin             = { 0.0f, 0.0f, 0.0f };
+    space.right              = inScene(camera.right);
+    space.up                 = inScene(camera.up);
+    space.back               = inScene(camera.forward * -1.0f);
+    space.unitsPerMetre      = unitsPerMetre / (fit.scale * object.scale);
+    return space;
+  }
+
+
+  VrVector3 vrPointInObject(
+    const VrWorldObject&    object,
+    const VrVector3&        point) {
+    VrVector3 offset = (point - object.position) * (1.0f / object.scale);
+    return { vrDot(offset, object.x), vrDot(offset, object.y), vrDot(offset, object.z) };
+  }
+
+
+  bool vrBodyInTheWay(
+    const VrSceneFit&       fit,
+    const VrVector3&        body) {
+    if (body.z < BodyLowest || body.z > BodyHighest)
+      return false;
+
+    float seatX = body.x - fit.seat.x;
+    float seatY = body.y - fit.seat.y;
+
+    if (seatX * seatX + seatY * seatY < SeatClearing * SeatClearing)
+      return true;
+
+    for (uint32_t i = 0; i < fit.areaCount; i++) {
+      const VrModelArea& area = fit.areas[i];
+
+      if (body.x > area.minX - BodyRadius && body.x < area.maxX + BodyRadius
+       && body.y > area.minY - BodyRadius && body.y < area.maxY + BodyRadius)
+        return true;
+    }
+
+    return false;
+  }
+
+
+  VrSceneSpace vrSceneSpaceAroundHead(
+    const VrPose&           head,
+    const VrVector3&        camera,
+    const VrVector3&        forward,
+          float             unitsPerMetre) {
+    VrSceneSpace space;
+    space.anchor        = vrMakeRecenterReference(head);
+    space.origin        = camera;
+    space.unitsPerMetre = unitsPerMetre;
+    space.up            = { 0.0f, 0.0f, 1.0f };
+
+    float length = std::hypot(forward.x, forward.y);
+
+    // A camera looking straight down: the scene's +Y is ahead
+    space.back = length > 1e-4f
+      ? VrVector3 { -forward.x / length, -forward.y / length, 0.0f }
+      : VrVector3 { 0.0f, -1.0f, 0.0f };
+
+    space.right = cross(space.up, space.back);
+    return space;
+  }
+
+
+  VrSceneSpace vrSceneSpaceInFront(
+    const VrPose&           head,
+    const VrVector3&        target,
+          float             distance,
+          float             drop,
+          float             unitsPerMetre) {
+    VrSceneSpace space;
+    space.anchor          = vrMakeRecenterReference(head);
+    space.anchor.position = vrTransformPoint(space.anchor, VrVector3 { 0.0f, -drop, -distance });
+    space.origin          = target;
+    space.unitsPerMetre   = unitsPerMetre;
+    space.right           = { 0.0f, 0.0f, 1.0f };
+    space.up              = { 0.0f, 1.0f, 0.0f };
+    space.back            = { -1.0f, 0.0f, 0.0f };
+    return space;
+  }
+
+
+  VrVector3 vrSceneToRoom(const VrSceneSpace& space, const VrVector3& point) {
+    return vrTransformPoint(space.anchor,
+      fromScene(space, point - space.origin) * (1.0f / space.unitsPerMetre));
+  }
+
+
+  VrVector3 vrRoomToScene(const VrSceneSpace& space, const VrVector3& point) {
+    VrVector3 local = vrTransformPoint(vrInverse(space.anchor), point);
+    return space.origin + toScene(space, local) * space.unitsPerMetre;
+  }
+
+
+  VrGameCameraPose vrSceneCameraPose(const VrSceneSpace& space, const VrPose& eye) {
+    VrPose local = vrCompose(vrInverse(space.anchor), eye);
+
+    VrGameCameraPose pose;
+    pose.forward  = toScene(space, vrRotate(local.orientation, VrVector3 { 0.0f, 0.0f, -1.0f }));
+    pose.up       = toScene(space, vrRotate(local.orientation, VrVector3 { 0.0f, 1.0f,  0.0f }));
+    pose.right    = toScene(space, vrRotate(local.orientation, VrVector3 { 1.0f, 0.0f,  0.0f }));
+    pose.position = space.origin + toScene(space, local.position) * space.unitsPerMetre;
+    return pose;
+  }
+
+
+  VrPanelPlacement vrSceneSurface(
+    const VrSceneSpace&     space,
+    const VrVector3&        centre,
+          float             sizeX,
+          float             sizeY) {
+    // The scene's axes as the anchor sees them
+    VrVector3 x = fromScene(space, VrVector3 { 1.0f, 0.0f, 0.0f });
+    VrVector3 y = fromScene(space, VrVector3 { 0.0f, 1.0f, 0.0f });
+    VrVector3 z = fromScene(space, VrVector3 { 0.0f, 0.0f, 1.0f });
+
+    VrPanelPlacement placement;
+    placement.pose.position    = vrSceneToRoom(space, centre);
+    placement.pose.orientation = vrNormalize(space.anchor.orientation * fromAxes(x, y, z));
+    placement.width            = sizeX / space.unitsPerMetre;
+    placement.height           = sizeY / space.unitsPerMetre;
+    return placement;
+  }
+
+
+  VrVector3 vrSurfacePoint(
+    const VrVector3&        centre,
+          float             sizeX,
+          float             sizeY,
+    const VrVector2&        uv) {
+    return VrVector3 {
+      centre.x + (uv.x - 0.5f) * sizeX,
+      centre.y + (0.5f - uv.y) * sizeY,
+      centre.z };
+  }
+
+
+  VrPanelPlacement vrSceneViewRectangle(
+    const VrSceneSpace&     space,
+          float             distance,
+    const VrGameFrustum&    frustum) {
+    VrGameCameraPose camera;
+    camera.forward = { 1.0f, 0.0f, 0.0f };
+    camera.up      = { 0.0f, 1.0f, 0.0f };
+    camera.right   = { 0.0f, 0.0f, 1.0f };
+    return vrCameraViewRectangle(space, camera, distance, frustum);
+  }
+
+
+  VrPanelPlacement vrCameraViewRectangle(
+    const VrSceneSpace&     space,
+    const VrGameCameraPose& camera,
+          float             distance,
+    const VrGameFrustum&    frustum) {
+    VrVector3 centre = camera.position + (camera.forward
+      + camera.up    * (0.5f * (frustum.top + frustum.bottom))
+      + camera.right * (0.5f * (frustum.left + frustum.right))) * distance;
+
+    // The camera's axes as the anchor sees them: the panel faces the camera
+    VrVector3 x = fromScene(space, camera.right);
+    VrVector3 y = fromScene(space, camera.up);
+    VrVector3 z = fromScene(space, camera.forward * -1.0f);
+
+    VrPanelPlacement placement;
+    placement.pose.position    = vrSceneToRoom(space, centre);
+    placement.pose.orientation = vrNormalize(space.anchor.orientation * fromAxes(x, y, z));
+    placement.width            = (frustum.right - frustum.left) * distance / space.unitsPerMetre;
+    placement.height           = (frustum.top - frustum.bottom) * distance / space.unitsPerMetre;
+    return placement;
+  }
+
+
+  bool vrRayMeetsSphere(
+    const VrVector3&        origin,
+    const VrVector3&        direction,
+    const VrVector3&        centre,
+          float             radius) {
+    VrVector3 ahead  = direction * (1.0f / vrLength(direction));
+    VrVector3 offset = centre - origin;
+    float along = vrDot(offset, ahead);
+
+    // A sphere around the origin is met whichever way the ray goes
+    if (vrDot(offset, offset) <= radius * radius)
+      return true;
+
+    if (along <= 0.0f)
+      return false;
+
+    VrVector3 across = offset - ahead * along;
+    return vrDot(across, across) <= radius * radius;
+  }
+
+
+  VrGameCameraPose vrCameraAlongRay(
+    const VrGameCameraPose& camera,
+    const VrGameFrustum&    frustum,
+    const VrVector2&        uv,
+    const VrVector3&        origin,
+    const VrVector3&        direction) {
+    VrVector3 view = camera.forward
+      + camera.right * (frustum.left + uv.x * (frustum.right - frustum.left))
+      + camera.up    * (frustum.top  - uv.y * (frustum.top - frustum.bottom));
+
+    VrVector3 from = view * (1.0f / vrLength(view));
+    VrVector3 to   = direction * (1.0f / vrLength(direction));
+
+    // The turn from the view to the ray, about the axis across both
+    VrVector3 axis = cross(from, to);
+    float sine   = vrLength(axis);
+    float cosine = vrDot(from, to);
+
+    if (sine > 1e-6f) {
+      axis = axis * (1.0f / sine);
+    } else if (cosine > 0.0f) {
+      axis = camera.up;
+      sine = 0.0f;
+    } else {
+      // Half a turn about any axis across the view
+      VrVector3 side = std::abs(from.x) < 0.9f ? VrVector3 { 1.0f, 0.0f, 0.0f } : VrVector3 { 0.0f, 1.0f, 0.0f };
+      axis = cross(from, side);
+      axis = axis * (1.0f / vrLength(axis));
+      sine = 0.0f;
+    }
+
+    auto turn = [&] (const VrVector3& v) {
+      return v * cosine + cross(axis, v) * sine + axis * (vrDot(axis, v) * (1.0f - cosine));
+    };
+
+    VrGameCameraPose pose;
+    pose.forward  = turn(camera.forward);
+    pose.up       = turn(camera.up);
+    pose.right    = turn(camera.right);
+    pose.position = origin;
+    return pose;
+  }
+
+
+  float vrLockPinAngle(const VrPose& lock, const VrVector3& hand, float previous) {
+    VrVector3 local = vrTransformPoint(vrInverse(lock), hand);
+
+    if (std::hypot(local.x, local.y) < MinPinReach)
+      return previous;
+
+    float angle = std::atan2(local.x, local.y) * DegreesPerRadian;
+    return std::min(std::max(angle, -90.0f), 90.0f);
+  }
+
+
+  float vrLockPinSlider(float angle, float width) {
+    return (angle / 180.0f + 0.5f) * width;
+  }
+
+
+  float vrLockPinStick(float slider, float target) {
+    float delta = target - slider;
+    float size  = std::abs(delta) / PinStep;
+
+    if (size < PinStickMin * PinStickMin * PinStickMin)
+      return 0.0f;
+
+    float stick = std::min(std::cbrt(size), 1.0f);
+    return delta < 0.0f ? -stick : stick;
+  }
+
+
+  float vrLockTensionStick(float tension) {
+    if (tension <= 0.0f)
+      return 0.0f;
+
+    return -(TensionStickMin + (1.0f - TensionStickMin) * std::min(tension, 1.0f));
+  }
+
+
+  float VrLockTension::update(bool trigger, bool grip, const VrQuaternion& hand) {
+    if (grip && !m_held)
+      m_taken = hand;
+
+    m_held = grip;
+
+    if (trigger)
+      return 1.0f;
+
+    if (!grip)
+      return 0.0f;
+
+    // The angle of the rotation since the grip took it, about any axis: a
+    // wrist's twist is the bulk of what a held hand can turn
+    VrQuaternion turn = vrConjugate(m_taken) * hand;
+    float twist = 2.0f * std::atan2(std::sqrt(turn.x * turn.x + turn.y * turn.y + turn.z * turn.z), std::abs(turn.w));
+
+    return std::min(std::max((twist - DeadTwist) / (FullTwist - DeadTwist), 0.0f), 1.0f);
+  }
+
+
+  namespace {
+
+    constexpr float Pi = 3.14159265f;
+
+  }
+
+
+  VrSlotLever::VrSlotLever(const VrVector3& top)
+  : m_top(top) {
+
+  }
+
+
+  VrVector3 VrSlotLever::turn(const VrVector3& point, float angle) {
+    float c = std::cos(angle);
+    float s = std::sin(angle);
+
+    return VrVector3 { point.x, point.y * c - point.z * s, point.y * s + point.z * c };
+  }
+
+
+  float VrSlotLever::angleOf(const VrVector3& point) {
+    return std::atan2(-point.y, point.z);
+  }
+
+
+  void VrSlotLever::follow(float angle) {
+    if (!driven())
+      m_angle = std::min(std::max(angle, 0.0f), MaxAngle);
+  }
+
+
+  float VrSlotLever::distanceToLever(const VrVector3& point, VrVector3& closest) const {
+    // The part of the lever a hand can close on, at rest: the point is
+    // brought back by the lever's angle
+    VrVector3 local = turn(point, -m_angle);
+    VrVector3 from  = m_top * HoldFrom;
+    VrVector3 along = m_top - from;
+
+    float length = vrDot(along, along);
+    float t = length > 0.0f ? vrDot(local - from, along) / length : 1.0f;
+    t = std::min(std::max(t, 0.0f), 1.0f);
+
+    closest = from + along * t;
+    return vrLength(local - closest);
+  }
+
+
+  VrSlotLeverEvents VrSlotLever::update(
+    const std::array<VrSlotLeverHand, VrHandCount>& hands,
+          float                                     unitsPerMetre,
+          float                                     dt) {
+    VrSlotLeverEvents events;
+
+    if (m_holder >= 0 && (!hands[m_holder].active || !hands[m_holder].grip)) {
+      m_holder = -1;
+      events.released = true;
+    }
+
+    // A grip closing near the lever takes it, from the other hand too
+    int32_t taker = -1;
+    float   nearest = Reach * unitsPerMetre;
+    VrVector3 heldAt;
+
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      bool grip = hands[i].active && hands[i].grip;
+
+      if (grip && !m_gripWas[i] && int32_t(i) != m_holder) {
+        VrVector3 closest;
+        float distance = distanceToLever(hands[i].position, closest);
+
+        if (distance <= nearest) {
+          nearest = distance;
+          taker   = int32_t(i);
+          heldAt  = closest;
+        }
+      }
+
+      m_gripWas[i] = grip;
+    }
+
+    if (taker >= 0) {
+      m_holder     = taker;
+      m_heldAt     = heldAt;
+      m_takenHand  = angleOf(hands[taker].position);
+      m_takenAngle = m_angle;
+      m_speed      = 0.0f;
+      events.taken = taker;
+    }
+
+    float before = m_angle;
+
+    if (m_holder >= 0) {
+      const VrVector3& hand = hands[m_holder].position;
+
+      // Near the axis the hand's angle means nothing: the lever stays
+      if (std::sqrt(hand.y * hand.y + hand.z * hand.z) > AxisDistance * unitsPerMetre) {
+        float turned = angleOf(hand) - m_takenHand;
+
+        if (turned >  Pi) turned -= 2.0f * Pi;
+        if (turned < -Pi) turned += 2.0f * Pi;
+
+        m_angle = std::min(std::max(m_takenAngle + turned, 0.0f), MaxAngle);
+      }
+
+      // Pulled away from where it holds the lever, the hand lets go: the
+      // lever stays where the hand left it and springs back
+      if (vrLength(hand - heldPoint()) > BreakDistance * unitsPerMetre) {
+        m_holder = -1;
+        events.released = true;
+      }
+
+      if (m_angle >= MaxAngle && before < MaxAngle)
+        events.stop = true;
+
+      if (std::floor(m_angle / NotchAngle) != std::floor(before / NotchAngle))
+        events.notch = true;
+    } else if (m_angle > 0.0f || m_speed != 0.0f) {
+      m_speed += (-Stiffness * m_angle - Damping * m_speed) * dt;
+      m_angle += m_speed * dt;
+
+      if (m_angle > MaxAngle) {
+        m_angle = MaxAngle;
+        m_speed = 0.0f;
+      }
+
+      if (m_angle <= 0.0f) {
+        m_angle = 0.0f;
+        m_speed = -m_speed * Bounce;
+
+        if (m_speed < RestSpeed)
+          m_speed = 0.0f;
+      }
+    }
+
+    m_spinTime = std::max(m_spinTime - dt, 0.0f);
+
+    if (m_angle <= ReturnAngle)
+      m_armed = true;
+
+    if (m_holder >= 0 && m_armed && m_angle >= PullAngle) {
+      m_armed    = false;
+      m_spinTime = SpinTime;
+      events.pulled = true;
+    }
+
+    // A trigger closing with the hand on the lever, before or after its
+    // grip, stays the lever's until it opens
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      bool trigger = hands[i].active && hands[i].trigger;
+      bool onLever = int32_t(i) == m_holder;
+
+      if (!onLever && hands[i].active) {
+        VrVector3 closest;
+        onLever = distanceToLever(hands[i].position, closest) <= Reach * unitsPerMetre;
+      }
+
+      m_triggerKept[i] = trigger && (m_triggerKept[i] || (!m_triggerWas[i] && onLever));
+      m_triggerWas[i]  = trigger;
+    }
+
+    return events;
+  }
+
+
+  VrTableSignal VrTableSignals::update(const std::array<VrTableHand, VrHandCount>& hands, float dt) {
+    m_cooldown = std::max(m_cooldown - dt, 0.0f);
+
+    VrTableSignal signal = VrTableSignal::None;
+
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      const VrTableHand& hand = hands[i];
+      HandTrack& track = m_hands[i];
+
+      if (!hand.active || dt <= 0.0f) {
+        track = HandTrack();
+        continue;
+      }
+
+      if (track.known) {
+        float down = (track.height - hand.height) / dt;
+
+        if (hand.over && track.height > TapHeight && hand.height <= TapHeight && down >= TapSpeed)
+          signal = VrTableSignal::Tap;
+
+        float side = (hand.side - track.side) / dt;
+        int32_t direction = std::abs(side) < WaveSpeed ? 0 : (side > 0.0f ? 1 : -1);
+
+        track.sinceTurn += dt;
+
+        if (track.sinceTurn > WaveWindow) {
+          track.turns     = 0;
+          track.direction = 0;
+        }
+
+        bool waves = hand.over && hand.height > TapHeight && hand.height < WaveHeight;
+
+        if (!waves) {
+          track.turns     = 0;
+          track.direction = 0;
+        } else if (direction && direction != track.direction) {
+          if (track.direction)
+            track.turns++;
+
+          track.direction = direction;
+          track.sinceTurn = 0.0f;
+
+          if (track.turns >= WaveTurns && signal == VrTableSignal::None)
+            signal = VrTableSignal::Wave;
+        }
+      }
+
+      track.known  = true;
+      track.height = hand.height;
+      track.side   = hand.side;
+    }
+
+    if (signal == VrTableSignal::None)
+      return signal;
+
+    for (auto& track : m_hands) {
+      track.turns     = 0;
+      track.direction = 0;
+    }
+
+    if (m_cooldown > 0.0f)
+      return VrTableSignal::None;
+
+    m_cooldown = Cooldown;
+    return signal;
+  }
+
+}

@@ -4,6 +4,7 @@
 #include <memory>
 #include <vector>
 
+#include "../../util/thread.h"
 #include "../../util/util_time.h"
 
 #include "vr_backend.h"
@@ -80,6 +81,8 @@ namespace dxvk {
 
     void endSession() override;
 
+    bool beginPanelSession() override;
+
     VrSessionState sessionState() const override;
 
     VrExtent recommendedEyeExtent() const override;
@@ -94,6 +97,10 @@ namespace dxvk {
 
     std::array<VrEyeView, VrEyeCount> locateViews(int64_t displayTime) override;
 
+    bool supportsEyeTracking() override;
+
+    bool locateGaze(std::array<VrGaze, VrEyeCount>& gaze) override;
+
     bool submitFrame(const VrFrameSubmission& frame) override;
 
     void submitEmptyFrame(int64_t displayTime) override;
@@ -102,17 +109,29 @@ namespace dxvk {
 
     void hidePanel(VrPanelId id) override;
 
+    bool submitPanelPixels(VrPanelId id, const VrPanelPixels& panel) override;
+
     void showPointer(VrHand hand, const VrPointerSubmission& pointer) override;
 
     void hidePointer(VrHand hand) override;
 
     void applyHaptic(VrHand hand, float amplitude, int64_t durationNs) override;
 
+    void fadeView(float seconds, float opacity) override;
+
+    bool showKeyboard(const VrKeyboardRequest& request) override;
+
+    void hideKeyboard() override;
+
+    VrKeyboardEvent takeKeyboardEvent(std::string& typed) override;
+
   private:
 
     struct Runtime;
 
     bool initializeRuntime();
+
+    void startSession();
 
     void shutdownRuntime();
 
@@ -176,6 +195,19 @@ namespace dxvk {
       bool     premultiplied = false;
     };
 
+    // Where a panel's submissions spend their time over a statistics window
+    struct PanelCost {
+      uint32_t submissions = 0;
+      double   syncMs      = 0.0;
+      double   placementMs = 0.0;
+      double   transitionMs = 0.0;
+      double   textureMs   = 0.0;
+    };
+
+    std::array<PanelCost, VrPanelCount> m_panelCosts = { };
+
+    void logPanelCosts(uint32_t frames);
+
     bool createPanel(VrPanelId id);
 
     void destroyPanels();
@@ -194,6 +226,35 @@ namespace dxvk {
      * \brief Tells the compositor that the frame's rendering is done
      */
     void handOffFrame();
+
+    /**
+     * \brief Hands the frame off now, or on the hand-off thread
+     *
+     * Called with the queue locked. The thread takes the lock itself, so it
+     * runs once the caller has released it.
+     */
+    void handOffSubmittedFrame();
+
+    /**
+     * \brief Waits until the hand-off thread is done with the last frame
+     */
+    void finishHandOff();
+
+    void startHandOffThread();
+
+    void stopHandOffThread();
+
+    void runHandOffThread();
+
+    /// Hand-off thread (d3d9.vrAsyncHandOff): PostPresentHandoff takes about
+    /// 2 ms in the runtime without using the CPU, see findings/render.md.
+    /// The game logic of the next frame runs meanwhile.
+    dxvk::thread                      m_handOffThread;
+    dxvk::mutex                       m_handOffMutex;
+    dxvk::condition_variable          m_handOffCond;
+    bool                              m_handOffPending = false;
+    bool                              m_handOffStop    = false;
+    double                            m_handOffMs      = 0.0;
 
     /**
      * \brief Time from now until the next frame reaches the eyes, in seconds
@@ -223,10 +284,16 @@ namespace dxvk {
       high_resolution_clock::time_point submitted;
       double                            syncMs      = 0.0;
       double                            panelMs     = 0.0;
+      /// Hand-off measured on the hand-off thread, negative when done inline
+      double                            handOffMs   = -1.0;
       bool                              isSubmitted = false;
     };
 
     FrameClock                        m_frameClock;
+    // The cycle the last wait ended, handed out with the next frame's timing
+    bool                              m_hasLastCycle = false;
+    VrFrameCycle                      m_lastCycle    = { };
+    double                            m_lastCycleEnd = 0.0;
     VrFrameStats                      m_stats        = VrFrameStats(1, 0.0);
     bool                              m_statsRunning = false;
 
@@ -265,10 +332,17 @@ namespace dxvk {
     std::array<Pointer, VrHandCount>  m_pointers;
     std::vector<uint8_t>              m_pointerImage;
 
+    // The runtime's keyboard, while this backend shows it
+    bool                              m_keyboardShown = false;
+    VrKeyboardEvent                   m_keyboardEvent = VrKeyboardEvent::None;
+    std::string                       m_keyboardTyped;
+
     // Each step of the first frame is logged once, so that a failure
     // inside the runtime can be located from the log
     bool                              m_loggedWait   = false;
     bool                              m_loggedSubmit = false;
+    // The eye tracker has given a gaze once
+    bool                              m_gazeSeen     = false;
     bool                              m_loggedTiming = false;
 
   };

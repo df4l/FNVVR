@@ -202,7 +202,8 @@ namespace dxvk {
     auto& descriptor = m_views.emplace(std::piecewise_construct,
       std::tuple(key), std::tuple()).first->second;
 
-    VkImageUsageFlags renderTargetUsage = key.usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    VkImageUsageFlags renderTargetUsage = key.usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
+      | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR);
     VkImageUsageFlags shaderResourceUsage = key.usage & (VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
 
     VkImageViewUsageCreateInfo usage = { VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO };

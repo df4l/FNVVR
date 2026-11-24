@@ -1,5 +1,374 @@
 # Changelog
 
+## Unreleased
+
+### Performance
+
+- **Performance mode removed**, with the right eye drawn from the left eye's work: on the Steam Frame, every GPU crash (device lost) of v0.21 came from sessions where it had run. Settings > VR no longer has it, the distances, water, grass, shadows and resolution are always the game's own, and `fnvvr\performance.ini` is no longer read.
+- **Occlusion culling for everyone** (`d3d9.vrOcclusionCulling`, now `True` or `False`, on by default): objects, actors, doors, trees and land hidden behind buildings are left out of each eye's view, without changing what you see. The Occlusion Culling plugin of flat screens still turns it off and is still reported once in game.
+- The submission thread (`d3d9.vrAsyncSubmit`) is back to an option off by default.
+
+## v0.21.0 (2026-11-22, since v0.20.0 `fee4949`)
+
+### Performance
+
+- **Performance mode** (Settings > VR, off by default): meant for headsets and rates where the game cannot keep up, such as the Steam Frame, to avoid reprojection. It watches the game thread and the runtime's GPU time and lowers what costs most until the frames fit, then raises it back when there is room: the distances at which objects, actors, lights and grass fade, water reflections, then shadow and specular fades, then the resolution the world is drawn at, in steps of 5 % down to 70 %. The scaled world is sharpened, and 4x MSAA is never touched. Where it settled is kept per headset and rate in `fnvvr\performance.ini`, so the next session starts there. The mode off changes nothing.
+- **Right eye drawn from the left eye's work** (performance mode): the first thing the mode does when the game thread is the limit, before any distance is cut. The right eye reuses the commands of the left eye instead of running the game's rendering a second time. While it runs, water reflections, water depth maps and refractions and specular highlights are off in both eyes (they cannot be reused between eyes); the game's settings are given back when it saves its INI and when the mode stops, so your own choices are kept.
+- **Occlusion culling per eye** (performance mode, `d3d9.vrOcclusionCulling`): large objects, actors, doors, trees and land behind buildings are left out of an eye's view when the eye has just been seen not to see them, with a margin while you move. Meant for towns. The Occlusion Culling plugin of flat screens gives both eyes the same answers: the mode warns once if it is installed and leaves its own culling off while it is.
+- **Frames handed to the runtime on a thread** (performance mode, `d3d9.vrAsyncSubmit`): the game thread no longer waits for the eyes and panels to be handed over; it runs the game's update meanwhile.
+- **Profiling logs**: once a minute in the world, the mode's levels, its time at each, how often the right eye was replayed and what the occlusion culling left out.
+
+### Fixes
+
+- **World kept live behind the wait menu**: waiting or sleeping for several hours froze the world into a blurred still image from the first hour on. The sky and the light now keep changing behind the menu.
+
+### Hands and controls
+
+- **Hands after the casino sends you away**: running out of chips at a slot machine made the game stand you up by itself, and the hands stayed hidden afterwards. The first-person model is now put back in that case too.
+- **Hands while swimming**: the game puts the weapon away in the water and animated the arms out of sight, so the hands vanished. Both hands now follow the controllers while swimming, as with a holstered weapon; they still grab objects, but cannot punch or attack, as in the game.
+
+### Scopes
+
+- **Scope reticles in mod lists with decompressed archives**: lists whose vanilla archives were decompressed by a tool (TTW lists such as The Best of Times) showed no crosshair in the scope lens, because the file read came up a few bytes short and was refused. Such files are now read as the game reads them, which also covers the fonts, terminal pictures and interface images the mod reads. More DDS layouts are decoded, and the log tells a missing reticle from one in a format not read.
+
+## v0.20.0 (2026-11-18, since v0.19.1 `90dd1b8`)
+
+### Water and performance
+
+- **Water reflections lined up with the headset**: the reflections were read about 4.5 degrees too high with the eye's asymmetric view, so distant water reflected the hazy sky instead of the shore, turned grey beyond a fixed distance and moved with the head. They now match what is above the water.
+- **Water animated once per frame**: the water moved twice as fast as on a flat screen, and each eye saw a different step of it. It now advances once per frame.
+- **Work no longer repeated in the right eye and in scopes**: object fades, light and shadow fades, the eyes' adaptation to light, the loading screen's fader and the water's time-based work ran two or three times per frame (right eye, scope lens). They run once. The right eye also skips work that does not depend on the view (wading actors, the wading stencil effect, water sounds, the water noise map).
+- **Foveation keeps its shading rate map**: the map of the eye-tracked foveation was rebuilt whenever the eye's view moved even slightly (43772 times in a 20-minute session on the Steam Frame). It is now kept through small view drifts and rebuilt only when the view really changes (2 times in the same session), which makes the option clearly smoother.
+- **Profiling options for testers** (off by default): `d3d9.vrGpuTimings` logs the GPU time of each render pass, `d3d9.vrSpikeLog` logs the breakdown of each frame that misses its display period, and `d3d9.vrCpuSamples` samples where the game thread spends its time into `fnvvr\cpu_samples.txt`.
+- **Model loader idle cost**: every frame the game walked its 5039-slot queue of delayed models even when it was empty. The walk is now skipped when the queue holds nothing (same result, a little less time on the game thread).
+
+### Hands and controls
+
+- **No more weapon changes after menus**: closing a dialogue, the inventory or a container with the left stick still pushed could unequip the weapon or equip another hotkey item, because the game's own hotkey wheel read the menu's list navigation as a D-pad press. That wheel no longer reads the D-pad with the VR controllers; the quick wheel is unchanged.
+- **Settings > VR > Pip-Boy angle**: turns the Pip-Boy about your forearm (Normal, 15 to 90 degrees, `d3d9.vrPipBoyAngle`), so the screen faces your eyes with less wrist roll. Meant for controllers without tracking rings (Quest 3), which lose tracking when the wrist is rolled. The gaze and the light reach follow the drawn screen.
+
+### Menus
+
+- **Breath meter under water**: the oxygen gauge was never shown, so the air left while swimming could not be seen. It now fades in in front of your head, a little below the line of sight, when your head is under water.
+- **Companion wheel with the lasers**: the laser now hovers the slice it points at, and the triggers, A and X pick an order (X under the left laser, A under the right one, as in dialogues). A press the pointer does not take stays the gamepad's A, so the stick still works.
+
+### Other mods
+
+- **Titans of the New West**: the left arm's pose, the twist bone and the Pip-Boy are found again, the mod's extra "SC Hand" node no longer being taken for the forearm. Not checked in power armour yet.
+
+### Gameplay
+
+- **Cannibal in third person**: eating a corpse is seen again from behind your character, the view from the body's head being too rough. Moving no longer skips the animation: the stick and room-scale walking are held until it ends.
+
+### Mini-games
+
+- **Hands at the slot machines with a stool**: sitting down at a slot machine (the Tops' among others) hid both hands, so the lever could not be seen in the hand. They are drawn again while seated.
+- **Hands back after getting up from a seat**: getting up from a stool or a chair right after using it could leave the hands hidden until the next time you sat down. The game's first-person model is now put back.
+
+## v0.19.1 (2026-11-15, since v0.19.0 `bbce83a`)
+
+### Performance
+
+- **Eye-tracked foveation no longer crashes on the Steam Frame**: turning the option on closed the game as soon as the headset gave the gaze. The mod called one SteamVR function with the wrong calling convention, which crashes on any headset with eye tracking; the Frame was the first one to try it. The mod no longer makes that call. Thanks to JaminaPanAm for going to the trouble of getting the Proton log that led to the cause.
+
+## v0.19.0 (2026-11-15, since v0.18.0 `156dd53`)
+
+### Performance
+
+- **Eye-tracked foveated rendering** (Settings > VR, off by default): on a headset that tracks your eyes, such as the Steam Frame, the world keeps every pixel's detail where you look and is shaded more coarsely further away, which you do not see, for less work for the graphics card. Edges stay sharp. When the headset or the graphics card cannot do it, the option goes back to Off and a message tells why. `d3d9.vrFoveationFullAngle` and `d3d9.vrFoveationHalfAngle` (20 and 35 degrees) set the zones.
+
+### Scopes
+
+- **Scopes of modded weapons found on the model**: for a weapon the mod does not know, the lens is now placed on the eyepiece of the scope found in the weapon's own 3D model, instead of a fixed guess that could end up inside the gun, hidden by the scope (issue #14). Checked on the vanilla weapons and on The Frontier's scoped weapons. `fnvvr\scopes.ini` still overrides it.
+
+## v0.18.0 (2026-11-14, since v0.17.0 `c301f6d`)
+
+### Performance
+
+- **World at the eye's shape**: the game now renders at the headset eye's own size (2244x2352) instead of a wider 4:3 image cut down afterwards, about 28 % fewer pixels in every world pass. Menus, HUD, terminals and saves keep their usual layout. `d3d9.vrEyeAspect = False` restores the old target.
+- **Heap of the mod**: the game's small memory blocks (up to 4096 bytes) come from an allocator of the mod, to cut stutters from the game's own heap. `d3d9.vrGameHeap = False` turns it off.
+
+### Mini-games
+
+- **Slot machine lever with the whole hand**: grabbing the lever with grip and trigger together no longer changes the bet or clicks the button under the laser. Away from the lever, the triggers still change the bet.
+
+### Hands and controls
+
+- **Unarmed right hand grabs**: with no weapon or a hand-to-hand weapon drawn, the right grip now takes objects, as the left one does.
+
+## v0.17.0 (2026-11-13, since v0.16.0 `277231a`)
+
+### Mini-games
+
+- **Slot machine lever by hand**: your hands show at the slot machine. Close a grip on the lever and pull it towards you: it follows your hand, clicks in your palm on the way down and starts the spin near the bottom, then springs back when you let go. A still works.
+
+### Scopes
+
+- **A scope always has a reticle**: when a mod replaces a scope's model or reticle with a file the mod could not read, the lens now shows the game's duplex reticle instead of none. Reticles saved by newer tools (DX10 header, alpha-only or grey images) are read too.
+
+### Terminals
+
+- **No crash when closing a terminal**: closing a desk terminal, also after hacking, could crash the game.
+- **No cursor flash**: closing a terminal no longer shows the game's cursor for a moment on its screen or on the menu panel.
+
+### HUD
+
+- **Several objectives read whole**: when several objectives show at once, their lines are no longer torn, part of them shifted away from the rest.
+
+### Performance
+
+- **Panels before the eyes**: menus, HUD and other panels are handed to the headset before the eye images, so they no longer wait about 2.5 ms per frame behind the eyes' hand-off.
+
+## v0.16.0 (2026-11-12, since v0.15.0 `6390fd0`)
+
+### Performance
+
+- **Faster game engine**: hundreds of small, slow functions of the game are replaced by faster versions giving exactly the same results (inline patches, unoptimised accessors, the math, culling and bound functions). A function a plugin already rewrote is left to that plugin. `d3d9.vrEnginePatches = False` and `d3d9.vrFastMath = False` turn them off.
+- **Frames handed to the headset on their own thread**: the game no longer waits about 2 ms per frame for the compositor. `d3d9.vrAsyncHandOff = False` brings the old behaviour back.
+- **No actor shadows**: they cost a lot in the headset for little gain, and are turned off as in Viva New Vegas.
+- **Pip-Boy band measured once**: the sleeve cut under the Pip-Boy no longer walks the whole model every frame.
+
+### Caravan
+
+- **Counters**: when a counter stands between you and your opponent, the mat lies on it, sized to its depth, instead of on the game's diner table.
+- **No board under the cards**: the mat's wooden planks are gone and the cards, sign and coins rest directly on the table or counter.
+- **Cards left in the piles**: the number of cards left in each draw pile lies on the mat beside its pile instead of on the panel.
+
+### World
+
+- **Leaves stay put**: tree and bush leaves no longer turn and roll with your head.
+- **Fades cover your whole view**: a fade to black darkens each eye entirely, instead of a black rectangle with the world around it.
+
+### Hands and controls
+
+- **Punching a held actor**: a fist thrown at an actor held in your other hand punches it instead of grabbing it.
+- **X picks a dialogue topic**: with the left laser on a topic, X chooses it, as A does with the right laser (Touch controllers).
+- **Melee hit rate** ([#3](https://github.com/df4l/FNVVR/issues/3)): `d3d9.vrMeleeHitsPerSecond` in `dxvk.conf` sets how many hits per second a melee weapon or a fist can deal to the same target (3 by default, 1 to 30), and `d3d9.vrMeleeHitSpeed` how fast a swing must be to hit (2 m/s by default); both are now described in `dxvk.conf`.
+
+### Other mods
+
+- **Manual reload with xNVSE**: reloading by hand works again when xNVSE hooks the player's reload.
+
+## v0.15.0 (2026-11-08, since v0.14.0 `8aa00fd`)
+
+### Caravan
+
+- **The table sits in the world**: between you and your opponent, on a real table or counter, with cards the size of real ones. It no longer slides around between the bet, the deck and the game.
+- **Cards in your hand**: your hand is a fan of cards in your left hand. Point with the right laser and pull the trigger to take a card, then again to place it. Deck building works with the laser too. B discards (hold it for a caravan), Y cancels.
+- **Real time**: the world goes on during a game, and your opponent stays at the table, holds their cards and plays them by hand. `d3d9.vrRealTimeCaravan = False` brings the pause back.
+- **Fixes**: no more wooden planks, floating coins or stray rows of cards around the table; caravan values lie on the mat; a face card's cursor lands on the right opponent card.
+
+### Terminals
+
+- **Terminals show on their own screen**: the text of a desk or wall terminal, hacking included, now lights up the terminal's own glass in the world instead of a monitor floating in front of you, and the view no longer moves when you activate it. Other terminals stand in the room as before.
+
+### HUD
+
+- **Long quest names are no longer cut**: a quest added or completed with a long name shows whole in the top left corner, even while the XP meter is shown.
+
+### NVSE
+
+- **NVSE loads by itself on Linux**: when NVSE is installed and the game runs through Proton, the main menu offers once to make the game load NVSE by itself, as the FNV 4GB Patcher does, so it starts normally from Steam without `nvse_loader.exe`. The original `FalloutNV.exe` is kept as `FalloutNV_backup.exe`; the change takes effect at the next start.
+
+## v0.14.0 (2026-11-06, since v0.13.0 `d232764`)
+
+### Doc Mitchell's house
+
+- **The Vit-o-matic Vigor Tester leaves the flat panel**: the machine where you spend your S.P.E.C.I.A.L. points is in 3D on the machine in Doc Mitchell's house, with the view brought in front of it. Point at its buttons with a laser and pull the trigger; off the buttons, the triggers turn the pages. The world goes on around you meanwhile, and Doc still reacts to your stats once you are done. `d3d9.vrRealTimeVigorTester = False` brings the pause back.
+- **The Reflectron leaves the flat panel**: the projector where you shape your face stands in 3D in front of you, your face on its screen, and its buttons and lists are clicked with the lasers. The barber's and the surgeon's work the same way.
+- **The brahmin skull can be grabbed**: the intro's tutorial asks you to pick up the skull while fighting is turned off; your hands now take it, without being able to hit Doc Mitchell.
+- **Waking up follows your head**: lying in Doc Mitchell's bed you look at the ceiling, and getting up the view follows the animation as you sit up and stand, tilt included; nodding no longer swings the view up and down.
+- **No hands before you can move in the intro**: they appear when Doc lets you walk, consistent with the tutorial that then asks you to grab something with them.
+- **Type your name in VR**: when Doc Mitchell asks your name, SteamVR's keyboard opens. Type with its lasers: each key appears in the game's name field at once, the first one replacing the current name, and Done enters it. If the game refuses it (empty, or a character its font lacks) or the keyboard is closed, it comes back.
+
+### Hands
+
+- **Sleeves reach the hands again**: outfits whose sleeve runs from the shoulder to the wrist were hidden from the elbow up, leaving a gap between the left hand and the Pip-Boy and an empty right wrist. The sleeves are now drawn along both forearms and cut cleanly: the left one under the Pip-Boy's band, the right one as far from its wrist. Works with any outfit, nothing to set. Before Doc gives you the Pip-Boy, only the hands are drawn, as before.
+- **The right wrist is no longer twisted after holstering a weapon**: the free right hand takes the same relaxed pose as the left.
+
+### Menus
+
+- **The controller's triggers work in menus while a laser points at the panel**: a trigger pressed over nothing to click acts as the gamepad's trigger (the slot machine's bets, for example), and only clicks when the laser is on a button.
+
+### HUD
+
+- **Long prompts and messages are no longer cut**: the prompt above your fingertip and the messages on the head panel are cut out of the HUD from the text the game actually draws, so a long action or a long location name fits.
+
+### Scopes
+
+- **No more glass through the scope image**: on the anti-materiel rifle, the marksman carbine, the scoped varmint rifle, Lincoln's repeater, the scoped .44 and the trail carbine, the tip of the eyepiece glass no longer shows in the middle of the view.
+
+### Other mods
+
+- **LOD Flicker Fix**: the Reflectron in character creation, the menus with a 3D scene, the console terminal, the mini-games and the scope lenses are drawn right with it, instead of black or with a square screen.
+- **Depth Resolve starts on Nvidia cards**: it no longer closes the game with "Incompatible DXVK version".
+- Both fixes only act while that mod is installed; without it, nothing changes.
+
+## v0.13.0 (2026-11-05, since v0.12.0 `24a1b26`)
+
+### Mini-games in the room
+
+- **The mini-games leave the flat panel**: the lock, the slot machine, blackjack, roulette, Caravan and the terminals (hacking included) are now in 3D in the world around you, played as on a gamepad. Casino tables and slot machines sit on the world's objects, with the view brought to the seat while you play; the lock, Caravan and the terminals stand in front of you. `d3d9.vrImmersiveMinigames = False` brings the flat panel back.
+- **The casino runs in real time**: the world goes on around you at the blackjack and roulette tables and the slot machines, and dealers may walk away. It stops in combat, the pause menu, a message or the console. `d3d9.vrRealTimeCasino = False` brings the pause back.
+
+### Sitting down
+
+- **Sitting down and getting up no longer leave your head**: the animation plays on your body and your eyes follow the head of that body, instead of a camera behind you. You see your own body sit, your head is hidden and the headset stays free to look around. The view turns with the body, wherever you stand in your room. The Sandman and Cannibal kills do the same. A seat also no longer keeps the view tilted at the angle your head had when you sat down.
+
+### Room-scale walking
+
+- **Your character follows you when you walk in your room**, an option off by default: `Settings > VR > Room-scale walking`. Your head no longer goes through walls and hills, and door frames no longer catch a body left behind. Against a wall, the view stops a short distance from the body. Leaning and looking down do not move the character.
+
+### Tutorials and languages
+
+- **The game's tutorials and help speak of the VR controls**: ammunition, hotkeys, the Pip-Boy and its light, aiming, grabbing and the Movement and Combat help page describe the controllers and gestures, in English and French, and the game's other sentences name the real buttons (the right stick for V.A.T.S., no more right bumper). The keyboard versions of these messages no longer appear when a laser is in use. Other languages show these texts and button names in English: a `fnvvr\texts_<language>.txt` file translates them. `d3d9.vrTutorials = False` brings the game's text back.
+- **The mod speaks the game's language**: the Settings > VR page, the 4 GB memory prompt and the keys of the console's keyboard are in French on a French game, and a `fnvvr\texts_<language>.txt` file translates them for other languages. The action names in SteamVR's bindings have a French version too, which follows SteamVR's own language.
+
+### Other mods
+
+- **Compatibility pass on xNVSE and its plugins**: xNVSE and 23 plugins were checked one by one against the mod, with about 20 patches so that they work together. The mod needs none of them, and behaves as before without them.
+- **Checked**: xNVSE, JIP LN, JohnnyGuitar, kNVSE, lStewieAl's Tweaks, NVTF, ShowOff, yUI, CrashLogger, UI Organizer, ITR, hNVSE, ROOGNVSE, Shader Loader, Alpha Rendering Tweaks, HighResWaterDepth, External Emittance Fix, Muzzle Flash Fix, Fast Weapon Lag Fix, VATS Lag Fix, Mod Limit Fix, Cell Offset Generator, ActorCause Save Bloat Fix and SUP, and Engine Optimizations for the functions it rewrites.
+- **The log names the other mod**: when another mod already patched a place in the game that the mod needs, the log says which file holds it (`is already patched`).
+
+### Menus
+
+- **The menus keep showing the controller's buttons when you point with a laser**, instead of switching to keyboard shortcuts.
+
+### Fists
+
+- **A punch with a weapon equipped no longer throws the weapon's impact**: no more lightning from your fists with a Gauss rifle equipped.
+
+## v0.12.0 (2026-11-04, since v0.11.0 `6a0ad2e`)
+
+### Scopes
+
+- **Real scopes**: the scopes of the game's weapons are now lenses on the weapon, showing a magnified view of the world with the weapon's own reticle.
+  Bring the rifle to your eye, about 13 cm away, to see the whole reticle; off the axis the view closes in, as in a real scope, and the other eye sees a dark
+  lens. Your hand and the scope's body hide the lens. The centre of the reticle is where the shots go, at any range. Works on all scoped weapons of the game and
+  its DLCs, and on scope mods, except the K9000 and FIDO, which have nothing to look through. Night scopes show the dark in the lens only.
+  `Settings > VR > Scope lens` turns the lens off, for a slower GPU: the scope then keeps the model's own glass. `d3d9.vrScopeResolution` sets the image's size (768 by default).
+  The game's flat scope, its blur and its full-screen night vision are gone. A scoped weapon of another mod gets a guessed place: `fnvvr\\scopes.ini` corrects it.
+- **Binoculars**: held in the fist as in the game's own animation. Bring them to your eyes, like a bottle to your mouth: both eyepieces open into one round magnified view, which then follows your head.
+- **Camera**: its back has a small pre-war picture tube showing the view from the lens, in green phosphor with scanlines, static and afterglow, readable from any angle. The trigger flashes and holds the picture.
+- **Two hands are steadier**: a weapon held with both hands has the precision of the game's aim, without its slower walk.
+- **Gauss rifles' reticle**: the Gauss rifle, the YCS/186 and the Faderator show their own graduated reticle, not a stretched sheet of its parts.
+- **Left hand on every pistol**: on pistols that skip the game's aim animations (Hunting Revolver, laser pistol, alien blaster, ...) or with a fitted scope mod, the left hand now comes onto the weapon as soon as it supports it, not only after a shot.
+- **No more view jumps with a braced scope**: the game's scope sway no longer makes the view jump back and forth on scoped pistols, binoculars and the camera.
+
+### Launcher and desktop
+
+- **The launcher in the headset**: with the `openvr` backend, the game's launcher appears on a panel in front of the
+  player, and the lasers click its buttons, lists and dialogs (the trigger clicks, the right stick scrolls). It replaces
+  the flat copy of the window that SteamVR shows for a non-VR application. The launcher stays usable with the mouse on
+  the desktop, and stays there alone when no VR session can start. `d3d9.vrLauncherOverlay = False` turns this off. A
+  `dxvk.conf` from an earlier version that holds `d3d9.vrBackend = off` under `[FalloutNVLauncher.exe]` keeps the flat
+  launcher: remove that section. The panel and the lasers follow the headset's rate.
+- **No more giant window**: with a headset, the game's window is hidden from the desktop, and the game no longer copies
+  each frame to it. The game also keeps running when another window takes the focus. `d3d9.vrHideGameWindow = False`
+  brings the window back.
+
+### Performance
+
+- **Game settings for VR**: with a headset, the mod replaces some game settings in memory at startup, with the values of the
+  Viva New Vegas guide: no full scene water reflections, threaded audio with a larger cache, background lip files, faster
+  cell unloading, the 3.0 grass vertex shader, HDR on, and the Pip-Boy light fade. Actor shadows, grass distance and
+  texture quality stay the player's choice. `d3d9.vrForceGameSettings = False` turns this off. The game's own bug that
+  freezes it on exit with threaded audio is fixed along with it.
+
+### Fixes
+
+- **Crash when opening a menu**: a menu tile without a name no longer crashes the game when the laser pointer takes over
+  the menu cursor.
+
+### Steam Frame
+
+- **Trigger and grip response**: the Frame profile now presses the triggers and grips at set points of their analog
+  travel, as Valve's own Frame bindings do, instead of relying on the click of the input. A held left grip stays held
+  with a light squeeze (press at 40%, release at 15%), which also applies to the right grip; the triggers press at 55%
+  and release at 40%. Copy the new `bindings_frame_controller.json` into `fnvvr/`; a personal binding must be reset to
+  the default one to get these values.
+
+## v0.11.0 (2026-11-01, since v0.10.0 `ce0c0a9`)
+
+### Holding living NPCs
+
+- **Hold a living actor by a limb**: a free hand that closes its grip on an NPC or a creature holds the limb it touches,
+  seated and sleeping actors included. The limb follows the hand and goes back to its animation when let go.
+- **Strength decides**: while your Strength is above the actor's, it stays where you hold it and you can drag it, walking
+  or running in its own animation, and turn it. Both hands count as one more point of Strength, and a greater margin moves
+  it faster; seated actors only stay in place. A stronger actor walks away and the grip breaks.
+- **Holding has a cost**: it drains action points, more in combat, and the hands let go at 0. You cannot walk faster
+  than the actor you hold, and you pass through it.
+- **Knock down and shove**: letting go with a fast move knocks the actor down (30 action points, 50 in combat) if you are
+  the stronger; its limbs stay in your hands until it gets up. A fast open hand with no weapon out shoves an actor
+  (40 action points).
+- **Actors react**: a grabbed actor says one of its recorded lines for a weapon aimed at it or a shot fired near it, at
+  most once every 10 seconds. A hot-tempered actor with no
+  such line attacks at once, unless one of its factions idolizes you. Handled for too long or too roughly, any actor
+  ends up assaulting you, which is a crime, except companions and factions that idolize you.
+
+### Unarmed combat and melee
+
+- **Unarmed combat, punch with your fists**: a free bare hand closed in a fist (or with its grip held, without finger tracking) punches
+  the actors it reaches at the melee hit speed, with the game's unarmed damage. The left fist punches with a pistol or
+  a machete in the right hand, the right fist with the weapon holstered. Only the hand wearing a hand-to-hand weapon
+  (Power Fist, ...) deals that weapon's hit.
+- **Unarmed trigger**: when unarmed, the trigger closes the index finger instead of charging a power attack. Punches are
+  never power attacks.
+- **Hit world objects**: melee weapons and fists swung at bottles, clutter and other objects push them, play the impact
+  sound of the material, leave a mark and run the objects' OnHit scripts.
+
+### 4 GB of memory
+
+- **4 GB patch offered in the main menu**: on Windows, when the game is limited to 2 GB of memory and
+  `FalloutNV.exe` is an unmodified Steam executable, the main menu asks once per start whether to let it use 4 GB.
+  "Use 4 GB" changes `FalloutNV.exe` exactly as the FNV 4GB Patcher does (the original is kept as
+  `FalloutNV_backup.exe`) and takes effect at the next start; "Don't ask again" stops the question (delete
+  `fnvvr\no_large_address_prompt.txt` to get it back). Players who already used the 4GB Patcher, GOG players and
+  Linux (Proton) players see nothing.
+
+### Steam Frame
+
+- **Native Steam Frame controller bindings** (by Madison, from [astromaddie/FNVVR](https://github.com/astromaddie/FNVVR)):
+  SteamVR no longer remaps the Touch bindings to the Frame controllers, which put X and Y on the left D-pad. The
+  same actions are bound to the Frame's own buttons: X (reload, alternate) and Y (pause, wait, option) are on the
+  right controller with A and B. The controls are listed in [docs/FRAME_CONTROLS.md](docs/FRAME_CONTROLS.md). Copy
+  the new `bindings_frame_controller.json` into `fnvvr/` with the other JSON files.
+
+### Fixes
+
+- **Crash entering buildings**: v0.10.0 could crash about one time in two when entering or leaving a building. The
+  invisible spheres that let the hands push objects were added to the new place while the game was still loading it,
+  and stayed in the old one after the game unloaded it; held objects are now let go of and the spheres taken out when
+  the player moves to another place, and none is made while it loads.
+- **V.A.T.S. looking the wrong way** ([#9](https://github.com/df4l/FNVVR/issues/9)): V.A.T.S. could point away from
+  the target, up to the opposite direction, depending on how the player stood in the room. The target is now in
+  front of the head when V.A.T.S. starts, and the horizon stays level: look up or down at the target with the head.
+- **No sound with the window in the background** ([#8](https://github.com/df4l/FNVVR/issues/8)): sound effects and
+  voices keep playing when the game's window does not have the focus, as when it is started from the headset.
+- **Varmint rifle magazine**: the new magazine is held between the fingers, feed end up, and no longer upside down
+  beside the hand.
+- **Armour pieces beside the player**: with the NCR armours (and other outfits that add pieces of their own to the
+  first-person body), legs, belts and pouches no longer float next to the player.
+
+### Options and diagnostics
+
+- **`d3d9.vrHandPush`** (on by default): set it to `False` in `dxvk.conf` to turn off the hands pushing objects, for
+  a player whose game still crashes with them.
+- **Crash details in the log**: when the game crashes, the d3d9 log ends with the exception, the module and offset
+  where it happened, the registers and the return addresses on the stack. The game and any crash logger still handle
+  the crash as before. Please attach this log to crash reports.
+
+### Windows testers wanted
+
+The 4 GB patch and the sound fix cannot be checked on the developer's Linux machine: please report whether they work
+for you on Windows.
+
+### Known issues
+
+- What a grabbed NPC says can be off-topic: these lines were recorded for a weapon aimed at it or a shot fired near it,
+  and some mention weapons even when none is drawn.
+
 ## v0.10.0 (2026-10-29, since v0.9.0 `a617e18`)
 
 ### Physics grab

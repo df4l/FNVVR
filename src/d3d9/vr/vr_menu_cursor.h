@@ -38,6 +38,22 @@ namespace dxvk {
     static bool pointerAllowed();
 
     /**
+     * \brief Whether the game's cursor is over a tile that takes clicks
+     *
+     * As the interface last picked it, in mouse mode. \c true when the
+     * hooks are not installed, so that the trigger keeps clicking.
+     */
+    static bool overTarget();
+
+    /**
+     * \brief Whether the companion wheel is shown
+     *
+     * Its options are clicked with a laser, A and X as well as the
+     * triggers, as in a dialogue.
+     */
+    static bool companionWheelShown();
+
+    /**
      * \brief Sets the pointer's state for the next game frame
      *
      * Called once per frame, on the game's thread.

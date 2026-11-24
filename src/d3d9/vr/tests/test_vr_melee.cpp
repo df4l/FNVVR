@@ -203,7 +203,7 @@ TEST_CASE(melee_swing_needs_hit_speed) {
 TEST_CASE(melee_swing_hits_each_target_once) {
   VrSwingConfig config;
   VrSwingTracker swing(config);
-  constexpr float T = VrSwingTracker::RehitTime;
+  const float T = swing.rehitTime();
   int a = 0;
   int b = 0;
 
@@ -243,6 +243,26 @@ TEST_CASE(melee_swing_hits_each_target_once) {
   swing.reset();
   CHECK(!swing.hasHit(&b));
   CHECK(!swing.swinging());
+}
+
+
+TEST_CASE(melee_swing_hit_rate_is_configurable) {
+  VrSwingConfig config;
+  config.hitsPerSecond = 10.0f;
+  VrSwingTracker swing(config);
+  int a = 0;
+
+  // A swing hits, stops, and the next one comes 0.15 s later
+  float x = 0.0f;
+  swing.update({ x, 0.0f, 0.0f }, 0.01f);
+  swing.update({ x += 0.03f * M, 0.0f, 0.0f }, 0.01f);
+  swing.addHit(&a);
+  swing.update({ x, 0.0f, 0.0f }, 0.15f);
+  swing.update({ x -= 0.03f * M, 0.0f, 0.0f }, 0.01f);
+  CHECK(swing.swinging());
+
+  // At ten hits per second it lands; at the default three it would not
+  CHECK(!swing.hasHit(&a));
 }
 
 
@@ -298,4 +318,21 @@ TEST_CASE(melee_guard_holds_through_short_exits) {
   guard.update(true, false, 0.01f);
   guard.update(true, true, 0.01f);
   CHECK(!guard.guarding());
+}
+
+
+TEST_CASE(melee_fist_needs_four_closed_fingers) {
+  CHECK(vrIsFist({ 0.0f, 0.9f, 1.0f, 1.0f, 1.0f }));
+  CHECK(vrIsFist({ 1.0f, 0.7f, 0.7f, 0.7f, 0.7f }));
+  CHECK(!vrIsFist({ 1.0f, 0.0f, 1.0f, 1.0f, 1.0f }));
+  CHECK(!vrIsFist({ 1.0f, 1.0f, 1.0f, 0.3f, 1.0f }));
+}
+
+
+TEST_CASE(melee_fist_strikes_ahead_of_the_grip) {
+  VrGameCameraPose hand = northFacing({ 0.0f, 0.0f, 0.0f });
+  VrSegment fist = vrBladeInWorld(hand, vrFistBlade());
+
+  checkVector(fist.a, 0.0f, 0.0f, 0.0f);
+  CHECK(fist.b.y > 0.05f * M && fist.b.y < 0.15f * M);
 }

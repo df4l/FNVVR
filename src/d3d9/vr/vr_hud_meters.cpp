@@ -46,7 +46,11 @@ namespace dxvk {
       && VrGameMemory::matches(VrGame::HudSneakMeterStoreSite,
         VrGame::HudSneakMeterStore, sizeof(VrGame::HudSneakMeterStore));
 
-    return m_radiationAvailable || m_xpAvailable || m_sneakAvailable;
+    m_breathAvailable = shared
+      && VrGameMemory::matches(VrGame::HudBreathMeterStoreSite,
+        VrGame::HudBreathMeterStore, sizeof(VrGame::HudBreathMeterStore));
+
+    return m_radiationAvailable || m_xpAvailable || m_sneakAvailable || m_breathAvailable;
   }
 
 
@@ -59,7 +63,7 @@ namespace dxvk {
       return placed;
 
     placeColumn(hud, placed);
-    placeSneakMeter(hud, interfaceHeight, placed);
+    placeBelowMiddle(hud, interfaceHeight, placed);
     return placed;
   }
 
@@ -120,29 +124,37 @@ namespace dxvk {
   }
 
 
-  void VrHudMeters::placeSneakMeter(uintptr_t hud, float interfaceHeight, VrHudMetersPlaced& placed) {
-    uintptr_t sneak = m_sneakAvailable ? readField<uintptr_t>(hud, VrGame::HudSneakMeter) : 0;
+  void VrHudMeters::placeBelowMiddle(uintptr_t hud, float interfaceHeight, VrHudMetersPlaced& placed) {
+    uintptr_t sneak  = m_sneakAvailable ? readField<uintptr_t>(hud, VrGame::HudSneakMeter) : 0;
+    uintptr_t breath = m_breathAvailable ? readField<uintptr_t>(hud, VrGame::HudBreathMeter) : 0;
 
-    if (!sneak)
-      return;
+    float target = std::floor(0.5f * interfaceHeight) + VrSneakMeterBelowMiddle;
 
+    if (sneak)
+      placed.sneak = placeAt(sneak, target, m_loggedSneak, "sneak meter");
+
+    if (breath)
+      placed.breath = placeAt(breath, target, m_loggedBreath, "breath meter");
+  }
+
+
+  bool VrHudMeters::placeAt(uintptr_t tile, float y, bool& logged, const char* name) {
     auto getFloat = reinterpret_cast<TileGetFloatFn>(VrGame::TileGetFloat);
     auto setFloat = reinterpret_cast<TileSetFloatFn>(VrGame::TileSetFloat);
 
-    float target = std::floor(0.5f * interfaceHeight) + VrSneakMeterBelowMiddle;
-    float y      = getFloat(sneak, VrGame::TileTraitY);
+    float current = getFloat(tile, VrGame::TileTraitY);
 
-    if (y != target) {
-      setFloat(sneak, VrGame::TileTraitY, target, true);
+    if (current != y) {
+      setFloat(tile, VrGame::TileTraitY, y, true);
 
-      if (!m_loggedSneak) {
-        Logger::info(str::format("VR: The sneak meter is moved from height ", y, " to ", target,
+      if (!logged) {
+        Logger::info(str::format("VR: The ", name, " is moved from height ", current, " to ", y,
           ", below the middle of the HUD panel in front of the head"));
-        m_loggedSneak = true;
+        logged = true;
       }
     }
 
-    placed.sneak = true;
+    return true;
   }
 
 }

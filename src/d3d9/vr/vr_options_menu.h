@@ -2,7 +2,9 @@
 
 #include <functional>
 
+#include "vr_foveation_map.h"
 #include "vr_options.h"
+#include "vr_texts.h"
 
 namespace dxvk {
 
@@ -16,10 +18,13 @@ namespace dxvk {
    * looks and works like the game's own pages, including the cursor
    * driven by the controllers' lasers. See findings/options-menu.md.
    *
-   * The page has five options: snap or smooth turning, the speed of
-   * smooth turning, how large the Pip-Boy grows while it is open,
-   * whether the weapons are reloaded with the hands, and whether the
-   * player sneaks with the stick click or by crouching.
+   * The page's options: snap or smooth turning, the speed of smooth
+   * turning, how large the Pip-Boy grows while it is open, whether the
+   * weapons are reloaded with the hands, whether the player sneaks with the
+   * stick click or by crouching, the scopes' lenses, room-scale walking and
+   * eye-tracked foveation. Foveation is only turned on if the headset and
+   * the GPU can draw it: otherwise it goes back to Off and a message box
+   * tells why.
    * After the VR entry, a Console entry opens the game's console; it is
    * only in the pause menu's Settings list, not in the main menu's.
    *
@@ -35,6 +40,9 @@ namespace dxvk {
     /// Called when the player chooses the Console entry
     using ConsoleFn = std::function<void()>;
 
+    /// Tells whether eye-tracked foveation can be turned on
+    using FoveationCheckFn = std::function<VrFoveationSupport()>;
+
     /**
      * \brief Hooks the creation of the start menu's options
      *
@@ -44,10 +52,13 @@ namespace dxvk {
      *
      * \param [in] options Current values of the options
      * \param [in] onChanged Called after each change
+     * \param [in] texts The labels of the page, copied
      * \param [in] onConsole Called when the Console entry is chosen
+     * \param [in] checkFoveation Called when the player turns foveation on
      * \returns \c false if the executable is not the supported version
      */
-    static bool install(const VrOptions& options, ChangedFn onChanged, ConsoleFn onConsole);
+    static bool install(const VrOptions& options, const VrTexts& texts, ChangedFn onChanged, ConsoleFn onConsole,
+      FoveationCheckFn checkFoveation);
 
   };
 

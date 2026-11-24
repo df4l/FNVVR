@@ -17,11 +17,17 @@ namespace dxvk {
     using PassFn  = uintptr_t (__fastcall*)(void* main, void* unused);
     using Pass4Fn = uintptr_t (__fastcall*)(void* main, void* unused,
       uintptr_t a, uintptr_t b, uintptr_t c, uintptr_t d);
+    using EnableScissorFn  = void (__cdecl*)(int32_t left, int32_t top, int32_t right, int32_t bottom);
+    using DisableScissorFn = void (__cdecl*)();
 
     // Stereo frames covered by each logged window
     constexpr uint32_t WindowFrames = 900;
 
     VrRenderPasses* g_renderPasses = nullptr;
+
+    // The function the first-person depth clear called: the game's, or
+    // another mod's hook
+    uintptr_t g_clearBuffer = VrGame::RendererClearBuffer;
 
     template<typename Fn>
     Fn game(uintptr_t address) {
@@ -112,8 +118,10 @@ namespace dxvk {
       reinterpret_cast<const void*>(&VrRenderPasses::imageSpaceHook), "image space");
 
     if (used.handsDepthTest) {
-      used.handsDepthTest = VrGameMemory::redirectCall(VrGame::FirstPersonDepthClearSite,
-        VrGame::RendererClearBuffer, reinterpret_cast<const void*>(&VrRenderPasses::firstPersonClearHook));
+      // JIP LN holds this call for its ToggleDepthClear command
+      used.handsDepthTest = VrGameMemory::chainCall(VrGame::FirstPersonDepthClearSite,
+        VrGame::RendererClearBuffer, reinterpret_cast<const void*>(&VrRenderPasses::firstPersonClearHook),
+        &g_clearBuffer);
 
       Logger::info(used.handsDepthTest
         ? "VR: The hands and the weapon are hidden by the world in front of them"
@@ -124,6 +132,8 @@ namespace dxvk {
       Logger::info("VR: Shadow maps are drawn once per frame for both eyes");
 
     std::unique_ptr<VrRenderPasses> passes(new VrRenderPasses(used, std::move(view)));
+    passes->m_scissorFound = VrGameMemory::callsTo(VrGame::EnableScissorCallSite, VrGame::EnableFullScreenScissor)
+                          && VrGameMemory::callsTo(VrGame::DisableScissorCallSite, VrGame::DisableFullScreenScissor);
     g_renderPasses = passes.get();
     return passes;
   }
@@ -132,6 +142,12 @@ namespace dxvk {
   void VrRenderPasses::beginEye(uint32_t eye) {
     m_eye      = eye;
     m_eyeStart = high_resolution_clock::now();
+
+    if (m_gpuTimer)
+      m_eyeGpuToken = m_gpuTimer->begin(VrGpuSection::pass(eye, VrRenderPass::Eye));
+
+    if (m_cpuSampler)
+      m_phaseBeforeEye = m_cpuSampler->setPhase(vrCpuEyePhase(eye, VrRenderPass::Eye));
 
     if (eye == 0)
       m_shadowsDrawnForLeft = false;
@@ -142,6 +158,14 @@ namespace dxvk {
     if (m_eye == NoEye)
       return;
 
+    endWorld();
+
+    if (m_gpuTimer)
+      m_gpuTimer->end(m_eyeGpuToken);
+
+    if (m_cpuSampler)
+      m_cpuSampler->setPhase(m_phaseBeforeEye);
+
     auto ms = std::chrono::duration<double, std::milli>(high_resolution_clock::now() - m_eyeStart).count();
     m_profile.add(m_eye, VrRenderPass::Eye, ms);
     m_eye = NoEye;
@@ -149,11 +173,19 @@ namespace dxvk {
 
 
   void VrRenderPasses::endFrame() {
-    if (m_profile.endFrame()) {
+    bool full = m_profile.endFrame();
+    m_lastFrame = m_profile.lastFrame();
+
+    if (full) {
       logWindow();
       m_profile.reset();
       m_shadowsReused = 0;
     }
+  }
+
+
+  void VrRenderPasses::setSceneScissor(const VrScopeArea* area) {
+    m_sceneScissor = area;
   }
 
 
@@ -163,8 +195,19 @@ namespace dxvk {
       return fn();
 
     uint32_t eye = m_eye;
+    uint32_t gpuToken = m_gpuTimer
+      ? m_gpuTimer->begin(VrGpuSection::pass(eye, pass))
+      : VrGpuTimer::NoToken;
+
     auto start = high_resolution_clock::now();
-    uintptr_t result = fn();
+    uintptr_t result;
+
+    { VrCpuPhaseScope phase(m_cpuSampler, vrCpuEyePhase(eye, pass));
+      result = fn();
+    }
+
+    if (m_gpuTimer)
+      m_gpuTimer->end(gpuToken);
 
     m_profile.add(eye, pass,
       std::chrono::duration<double, std::milli>(high_resolution_clock::now() - start).count());
@@ -206,6 +249,44 @@ namespace dxvk {
       m_shadowsDrawnForLeft = true;
 
     return result;
+  }
+
+
+  template<typename Fn>
+  uintptr_t VrRenderPasses::runScene(Fn&& fn) {
+    if (!m_sceneScissor || !m_scissorFound)
+      return runPass(VrRenderPass::Scene, std::forward<Fn>(fn));
+
+    game<EnableScissorFn>(VrGame::EnableFullScreenScissor)(
+      int32_t(m_sceneScissor->left),  int32_t(m_sceneScissor->top),
+      int32_t(m_sceneScissor->right), int32_t(m_sceneScissor->bottom));
+
+    uintptr_t result = runPass(VrRenderPass::Scene, std::forward<Fn>(fn));
+
+    game<DisableScissorFn>(VrGame::DisableFullScreenScissor)();
+    return result;
+  }
+
+
+  void VrRenderPasses::beginWorld() {
+    if (m_eye == NoEye || m_inWorld)
+      return;
+
+    m_inWorld = true;
+
+    if (m_beginWorld)
+      m_beginWorld(m_eye);
+  }
+
+
+  void VrRenderPasses::endWorld() {
+    if (!m_inWorld)
+      return;
+
+    m_inWorld = false;
+
+    if (m_endWorld)
+      m_endWorld();
   }
 
 
@@ -262,8 +343,17 @@ namespace dxvk {
     if (!g_renderPasses)
       return original(main, nullptr, a, b, c, d);
 
-    return g_renderPasses->runPass(VrRenderPass::Scene,
+    g_renderPasses->beginWorld();
+
+    uintptr_t result = g_renderPasses->runScene(
       [&] { return original(main, nullptr, a, b, c, d); });
+
+    // The second argument is the game's bRenderHands, a bool. Without it,
+    // the first-person pass does not run.
+    if (!(b & 0xFF) && g_renderPasses->m_beforeFirstPerson)
+      g_renderPasses->m_beforeFirstPerson();
+
+    return result;
   }
 
 
@@ -274,8 +364,16 @@ namespace dxvk {
     if (!g_renderPasses)
       return original(main, nullptr, a, b, c, d);
 
-    return g_renderPasses->runPass(VrRenderPass::FirstPerson,
+    if (g_renderPasses->m_beforeFirstPerson)
+      g_renderPasses->m_beforeFirstPerson();
+
+    uintptr_t result = g_renderPasses->runPass(VrRenderPass::FirstPerson,
       [&] { return original(main, nullptr, a, b, c, d); });
+
+    if (g_renderPasses->m_afterFirstPerson)
+      g_renderPasses->m_afterFirstPerson();
+
+    return result;
   }
 
 
@@ -285,6 +383,8 @@ namespace dxvk {
 
     if (!g_renderPasses)
       return original(main, nullptr, a, b, c, d);
+
+    g_renderPasses->endWorld();
 
     return g_renderPasses->runPass(VrRenderPass::ImageSpace,
       [&] { return original(main, nullptr, a, b, c, d); });
@@ -298,7 +398,7 @@ namespace dxvk {
       flags &= ~VrGame::ClearDepthBuffer;
 
     if (flags)
-      game<ClearFn>(VrGame::RendererClearBuffer)(renderer, nullptr, rect, flags);
+      game<ClearFn>(g_clearBuffer)(renderer, nullptr, rect, flags);
   }
 
 }

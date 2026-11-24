@@ -11,6 +11,7 @@ namespace dxvk {
     bool radiation = false;
     bool xp        = false;
     bool sneak     = false;
+    bool breath    = false;
   };
 
   /**
@@ -47,6 +48,11 @@ namespace dxvk {
    * line of sight. Only HUDMainMenu::Create sets its height. See
    * findings/sneak.md.
    *
+   * The breath meter, which the game shows under water 80 units below the
+   * sneak meter, takes the sneak meter's place: the game hides the sneak
+   * meter while the player swims, so the two are never seen together.
+   * Only HUDMainMenu::Create sets its height. See findings/hud.md §18.
+   *
    * Only used on the game's main thread.
    */
   class VrHudMeters {
@@ -75,13 +81,17 @@ namespace dxvk {
     bool m_radiationAvailable = false;
     bool m_xpAvailable        = false;
     bool m_sneakAvailable     = false;
+    bool m_breathAvailable    = false;
     bool m_loggedRadiation    = false;
     bool m_loggedXp           = false;
     bool m_loggedSneak        = false;
+    bool m_loggedBreath       = false;
 
     void placeColumn(uintptr_t hud, VrHudMetersPlaced& placed);
 
-    void placeSneakMeter(uintptr_t hud, float interfaceHeight, VrHudMetersPlaced& placed);
+    void placeBelowMiddle(uintptr_t hud, float interfaceHeight, VrHudMetersPlaced& placed);
+
+    static bool placeAt(uintptr_t tile, float y, bool& logged, const char* name);
 
   };
 

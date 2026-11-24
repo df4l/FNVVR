@@ -62,9 +62,7 @@ namespace dxvk {
      * \brief Blocks the game's own Pip-Boy control from opening it
      * \param [in] blocked Whether the control's requests are dropped
      */
-    void blockGameOpen(bool blocked) {
-      m_gameOpenBlocked = blocked;
-    }
+    void blockGameOpen(bool blocked);
 
   private:
 
@@ -72,6 +70,8 @@ namespace dxvk {
     bool m_lightAvailable = false;
     bool m_gameOpenBlocked = false;
     bool m_loggedBlockedOpen = false;
+
+    static bool chainGameOpen();
 
     static void __fastcall gameOpenHook(
             void*                 interfaceManager,

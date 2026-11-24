@@ -49,6 +49,7 @@ namespace dxvk {
     HANDLE_EXT(khrDynamicRenderingLocalRead);      \
     HANDLE_EXT(khrExternalMemoryWin32);            \
     HANDLE_EXT(khrExternalSemaphoreWin32);         \
+    HANDLE_EXT(khrFragmentShadingRate);            \
     HANDLE_EXT(khrIncrementalPresent);             \
     HANDLE_EXT(khrLoadStoreOpNone);                \
     HANDLE_EXT(khrMaintenance5);                   \
@@ -93,6 +94,7 @@ namespace dxvk {
     HANDLE_EXT(extTransformFeedback);              \
     HANDLE_EXT(extVertexAttributeDivisor);         \
     HANDLE_EXT(khrDeviceFault);                    \
+    HANDLE_EXT(khrFragmentShadingRate);            \
     HANDLE_EXT(khrMaintenance5);                   \
     HANDLE_EXT(khrMaintenance6);                   \
     HANDLE_EXT(khrMaintenance7);                   \
@@ -656,6 +658,14 @@ namespace dxvk {
      && !m_featuresSupported.khrPresentId2.presentId2)
       m_featuresSupported.nvLowLatency2 = VK_FALSE;
 
+    // Shading rate attachments are only drawn with by VR's eye-tracked
+    // foveation, and the pipeline rate only comes with them
+    if (!DxvkInstance::hasRegisteredProviders())
+      m_featuresSupported.khrFragmentShadingRate.attachmentFragmentShadingRate = VK_FALSE;
+
+    if (!m_featuresSupported.khrFragmentShadingRate.attachmentFragmentShadingRate)
+      m_featuresSupported.khrFragmentShadingRate.pipelineFragmentShadingRate = VK_FALSE;
+
     // Disable debug extensions if hang debugging is disabled
     if (!instance.debugFlags().test(DxvkDebugFlag::Hang)) {
       m_featuresSupported.khrDeviceFault.deviceFault = VK_FALSE;
@@ -1073,6 +1083,10 @@ namespace dxvk {
       /* External memory features for wine */
       ENABLE_EXT(khrExternalMemoryWin32, false),
       ENABLE_EXT(khrExternalSemaphoreWin32, false),
+
+      /* Shading rate attachments for VR's eye-tracked foveation */
+      ENABLE_EXT_FEATURE(khrFragmentShadingRate, pipelineFragmentShadingRate, false),
+      ENABLE_EXT_FEATURE(khrFragmentShadingRate, attachmentFragmentShadingRate, false),
 
       /* Dirty rects for presentation */
       ENABLE_EXT(khrIncrementalPresent, false),

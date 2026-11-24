@@ -26,24 +26,17 @@ namespace dxvk {
     // with long value names
     constexpr uint32_t ArrowSpacing = 0x55;
 
-    // The game keeps these pointers and never frees them
-    constexpr char PageText[]       = "VR";
-    constexpr char ConsoleText[]    = "Console";
-    constexpr char TurnText[]       = "Turning";
-    constexpr char TurnSnapText[]   = "Snap";
-    constexpr char TurnSmoothText[] = "Smooth";
-    constexpr char SpeedText[]      = "Smooth turn speed";
-    constexpr char PipBoySizeText[] = "Pip-Boy size";
-    constexpr char ReloadText[]     = "Manual reload";
-    constexpr char ReloadOffText[]  = "Off";
-    constexpr char ReloadOnText[]   = "On";
-    constexpr char SneakText[]      = "Sneak";
-    constexpr char SneakButtonText[] = "Stick click";
-    constexpr char SneakCrouchText[] = "Real crouch";
-
     // One name per size of VrPipBoyScaleSteps, from the game's size up
     constexpr const char* PipBoySizeNames[VrPipBoyScaleSteps] = {
       "Normal", "125%", "150%", "175%", "200%" };
+
+    // One name per angle of VrPipBoyAngleSteps, in degrees, from the game's
+    // placement up
+    constexpr const char* PipBoyAngleNames[VrPipBoyAngleSteps] = {
+      "Normal", "15", "30", "45", "60", "75", "90" };
+
+    // The game keeps the pointers to the texts and never frees them
+    VrTexts                      g_texts;
 
     using AppendFn   = int   (__fastcall*)(void* array, void* unused, void** option);
     using HeapFn     = void* (__cdecl*)(size_t size);
@@ -60,10 +53,14 @@ namespace dxvk {
     using ListInitFn = void* (__thiscall*)(void* list, void* tile, const char* itemTemplate);
     using IsForModesFn = bool (__thiscall*)(void* option, uint32_t modes);
     using IsInStartMenuFn = bool (__cdecl*)();
+    using DisplayOptionFn = void (__thiscall*)(void* menu, void* option, void* tile);
+    using MessageBoxFn = bool (__cdecl*)(const char* text, const char* icon, const char* title,
+      void (__cdecl* callback)(), uint32_t firstButton, uint32_t type, float alpha, float width, ...);
 
     VrOptions                    g_options;
     VrOptionsMenu::ChangedFn     g_onChanged;
     VrOptionsMenu::ConsoleFn     g_onConsole;
+    VrOptionsMenu::FoveationCheckFn g_checkFoveation;
     void*                        g_consoleOption = nullptr;
 
     uint8_t* startMenu() {
@@ -190,6 +187,22 @@ namespace dxvk {
     }
 
 
+    void __cdecl onPipBoyAngleChanged(void* option) {
+      if (!optionsInitialised()) {
+        optionValue(option)   = vrPipBoyAngleToStep(g_options.pipBoyAngle);
+        optionDefault(option) = 0u;
+        return;
+      }
+
+      // As with the size, an angle between two names stays until changed
+      if (vrPipBoyAngleToStep(g_options.pipBoyAngle) == optionValue(option))
+        return;
+
+      g_options.pipBoyAngle = vrPipBoyStepToAngle(optionValue(option));
+      notifyChanged();
+    }
+
+
     void __cdecl onReloadChanged(void* option) {
       if (!optionsInitialised()) {
         optionValue(option)   = g_options.manualReload ? 1u : 0u;
@@ -224,6 +237,97 @@ namespace dxvk {
     }
 
 
+    void __cdecl onScopeChanged(void* option) {
+      if (!optionsInitialised()) {
+        optionValue(option)   = g_options.scopeLens ? 1u : 0u;
+        optionDefault(option) = 1u;
+        return;
+      }
+
+      bool lens = optionValue(option) != 0;
+
+      if (lens == g_options.scopeLens)
+        return;
+
+      g_options.scopeLens = lens;
+      notifyChanged();
+    }
+
+
+    void __cdecl onRoomscaleChanged(void* option) {
+      if (!optionsInitialised()) {
+        optionValue(option)   = g_options.roomscale ? 1u : 0u;
+        optionDefault(option) = 0u;
+        return;
+      }
+
+      bool roomscale = optionValue(option) != 0;
+
+      if (roomscale == g_options.roomscale)
+        return;
+
+      g_options.roomscale = roomscale;
+      notifyChanged();
+    }
+
+
+    // A toggle the player may not turn on goes back to Off in its row, and
+    // a message box says why. The game showed the new value before calling
+    // the option's callback, which runs this.
+    void refuseOption(void* option, const char* message) {
+      optionValue(option) = 0u;
+
+      uint8_t* menu = startMenu();
+
+      if (menu && VrGameMemory::matches(VrGame::DisplayOption,
+          VrGame::DisplayOptionPrologue, sizeof(VrGame::DisplayOptionPrologue)))
+        reinterpret_cast<DisplayOptionFn>(VrGame::DisplayOption)(menu, option, nullptr);
+
+      if (VrGameMemory::matches(VrGame::ShowMessageBox,
+          VrGame::ShowMessageBoxPrologue, sizeof(VrGame::ShowMessageBoxPrologue))) {
+        reinterpret_cast<MessageBoxFn>(VrGame::ShowMessageBox)(message, nullptr, nullptr, nullptr,
+          1u, VrGame::MessageBoxStartMenuType, 0.0f, 0.0f, g_texts.text("option.ok", "OK"), nullptr);
+      }
+    }
+
+
+    void __cdecl onFoveationChanged(void* option) {
+      if (!optionsInitialised()) {
+        optionValue(option)   = g_options.foveation ? 1u : 0u;
+        optionDefault(option) = 0u;
+        return;
+      }
+
+      bool foveation = optionValue(option) != 0;
+
+      if (foveation == g_options.foveation)
+        return;
+
+      if (foveation) {
+        VrFoveationSupport support = g_checkFoveation
+          ? g_checkFoveation()
+          : VrFoveationSupport::NoGpuSupport;
+
+        if (support == VrFoveationSupport::NoGpuSupport) {
+          Logger::info("VR: Eye-tracked foveation stays off: the GPU cannot draw it");
+          refuseOption(option, g_texts.text("option.foveation.nogpu",
+            "Your graphics card or its driver cannot draw eye-tracked foveated rendering. It stays off."));
+          return;
+        }
+
+        if (support == VrFoveationSupport::NoEyeTracking) {
+          Logger::info("VR: Eye-tracked foveation stays off: the headset gives no gaze");
+          refuseOption(option, g_texts.text("option.foveation.noeyes",
+            "Your headset does not tell where your eyes look, which eye-tracked foveated rendering needs. It stays off."));
+          return;
+        }
+      }
+
+      g_options.foveation = foveation;
+      notifyChanged();
+    }
+
+
     // Creates a user option and adds it to the game's list
     template<typename... Names>
     void* appendUserOption(const char* text, UserOptionCallback callback, int32_t type,
@@ -252,7 +356,7 @@ namespace dxvk {
         return;
 
       void* option = reinterpret_cast<OptionCtorFn>(VrGame::OptionConstruct)(
-        optionMemory, PageText, &choosePage, VrGame::OptionMaskSettingsList);
+        optionMemory, g_texts.text("option.page", "VR"), &choosePage, VrGame::OptionMaskSettingsList);
 
       append(optionArray, nullptr, &option);
 
@@ -260,22 +364,39 @@ namespace dxvk {
 
       if (consoleMemory) {
         void* console = reinterpret_cast<OptionCtorFn>(VrGame::OptionConstruct)(
-          consoleMemory, ConsoleText, &chooseConsole, VrGame::OptionMaskSettingsList);
+          consoleMemory, g_texts.text("option.console", "Console"), &chooseConsole, VrGame::OptionMaskSettingsList);
 
         append(optionArray, nullptr, &console);
         g_consoleOption = console;
       }
 
       // The page lists its options in the order they are added
-      appendUserOption(TurnText, &onTurnChanged, ToggleType, ToggleValues, ArrowSpacing,
-        TurnSnapText, TurnSmoothText);
-      appendUserOption(SpeedText, &onSpeedChanged, SliderType, VrSmoothTurnSpeedSteps, 0);
-      appendUserOption(PipBoySizeText, &onPipBoySizeChanged, ToggleType, VrPipBoyScaleSteps, ArrowSpacing,
-        PipBoySizeNames[0], PipBoySizeNames[1], PipBoySizeNames[2], PipBoySizeNames[3], PipBoySizeNames[4]);
-      appendUserOption(ReloadText, &onReloadChanged, ToggleType, ToggleValues, ArrowSpacing,
-        ReloadOffText, ReloadOnText);
-      appendUserOption(SneakText, &onSneakChanged, ToggleType, ToggleValues, ArrowSpacing,
-        SneakButtonText, SneakCrouchText);
+      const char* off = g_texts.text("option.off", "Off");
+      const char* on  = g_texts.text("option.on", "On");
+
+      appendUserOption(g_texts.text("option.turn", "Turning"), &onTurnChanged, ToggleType, ToggleValues, ArrowSpacing,
+        g_texts.text("option.turn.snap", "Snap"), g_texts.text("option.turn.smooth", "Smooth"));
+      appendUserOption(g_texts.text("option.turn.speed", "Smooth turn speed"), &onSpeedChanged,
+        SliderType, VrSmoothTurnSpeedSteps, 0);
+      appendUserOption(g_texts.text("option.pipboy", "Pip-Boy size"), &onPipBoySizeChanged,
+        ToggleType, VrPipBoyScaleSteps, ArrowSpacing,
+        g_texts.text("option.pipboy.normal", PipBoySizeNames[0]),
+        PipBoySizeNames[1], PipBoySizeNames[2], PipBoySizeNames[3], PipBoySizeNames[4]);
+      appendUserOption(g_texts.text("option.pipboy.angle", "Pip-Boy angle"), &onPipBoyAngleChanged,
+        ToggleType, VrPipBoyAngleSteps, ArrowSpacing,
+        g_texts.text("option.pipboy.angle.normal", PipBoyAngleNames[0]),
+        PipBoyAngleNames[1], PipBoyAngleNames[2], PipBoyAngleNames[3],
+        PipBoyAngleNames[4], PipBoyAngleNames[5], PipBoyAngleNames[6]);
+      appendUserOption(g_texts.text("option.reload", "Manual reload"), &onReloadChanged,
+        ToggleType, ToggleValues, ArrowSpacing, off, on);
+      appendUserOption(g_texts.text("option.sneak", "Sneak"), &onSneakChanged, ToggleType, ToggleValues, ArrowSpacing,
+        g_texts.text("option.sneak.button", "Stick click"), g_texts.text("option.sneak.crouch", "Real crouch"));
+      appendUserOption(g_texts.text("option.scope", "Scope lens"), &onScopeChanged,
+        ToggleType, ToggleValues, ArrowSpacing, off, on);
+      appendUserOption(g_texts.text("option.roomscale", "Room-scale walking"), &onRoomscaleChanged,
+        ToggleType, ToggleValues, ArrowSpacing, off, on);
+      appendUserOption(g_texts.text("option.foveation", "Eye-tracked foveation"), &onFoveationChanged,
+        ToggleType, ToggleValues, ArrowSpacing, off, on);
     }
 
 
@@ -355,7 +476,7 @@ namespace dxvk {
           VrGame::UserOptionConstructPrologue, sizeof(VrGame::UserOptionConstructPrologue))
         && VrGameMemory::matches(VrGame::PopulateOptions,
           VrGame::PopulateOptionsPrologue, sizeof(VrGame::PopulateOptionsPrologue))
-        && VrGameMemory::matches(VrGame::OptionArrayAppend,
+        && VrGameMemory::matchesUnlessRewritten(VrGame::OptionArrayAppend,
           VrGame::OptionArrayAppendPrologue, sizeof(VrGame::OptionArrayAppendPrologue))
         && VrGameMemory::matches(VrGame::SetListEnabled,
           VrGame::SetListEnabledPrologue, sizeof(VrGame::SetListEnabledPrologue))
@@ -365,7 +486,7 @@ namespace dxvk {
           VrGame::TileSetFloatPrologue, sizeof(VrGame::TileSetFloatPrologue))
         && VrGameMemory::matches(VrGame::AddUserTrait,
           VrGame::AddUserTraitPrologue, sizeof(VrGame::AddUserTraitPrologue))
-        && VrGameMemory::matches(VrGame::HeapAllocate,
+        && VrGameMemory::matchesUnlessRewritten(VrGame::HeapAllocate,
           VrGame::HeapAllocatePrologue, sizeof(VrGame::HeapAllocatePrologue))
         && VrGameMemory::matches(VrGame::ListBoxInitialize,
           VrGame::ListBoxInitializePrologue, sizeof(VrGame::ListBoxInitializePrologue))
@@ -379,15 +500,18 @@ namespace dxvk {
   }
 
 
-  bool VrOptionsMenu::install(const VrOptions& options, ChangedFn onChanged, ConsoleFn onConsole) {
+  bool VrOptionsMenu::install(const VrOptions& options, const VrTexts& texts, ChangedFn onChanged, ConsoleFn onConsole,
+      FoveationCheckFn checkFoveation) {
     if (!supported()) {
       Logger::warn("VR: The options page is not available, the executable is not the supported version");
       return false;
     }
 
     g_options   = options;
+    g_texts     = texts;
     g_onChanged = std::move(onChanged);
     g_onConsole = std::move(onConsole);
+    g_checkFoveation = std::move(checkFoveation);
 
     if (!VrGameMemory::redirectCall(VrGame::ControlsOptionAppendCallSite,
         VrGame::OptionArrayAppend, reinterpret_cast<const void*>(&appendControlsEntry))) {

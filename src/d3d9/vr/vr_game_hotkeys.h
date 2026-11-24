@@ -78,6 +78,20 @@ namespace dxvk {
      */
     static bool inventoryWheelShown();
 
+    /**
+     * \brief Keeps the HUD's hotkey wheel from reading the D-pad
+     *
+     * The VR controllers press the D-pad only in menus, to move through
+     * lists. The frame a menu closes the game can still see that press
+     * outside menu mode, and the HUD's wheel then equips or unequips the
+     * hotkey of that direction when it is released. The quick wheel uses
+     * the hotkeys on its own, so the HUD's wheel always sees the D-pad at
+     * rest. Installed once, with the VR controllers acting as the gamepad.
+     *
+     * \returns \c false if the game's call was not the expected one
+     */
+    static bool muteHudGamepadWheel();
+
   };
 
 }

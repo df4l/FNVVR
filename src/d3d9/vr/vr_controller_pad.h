@@ -20,6 +20,42 @@ namespace dxvk {
   };
 
   /**
+   * \brief A mini-game's physical controls, as gamepad input
+   *
+   * See VrMinigames. What is driven replaces what the sticks and triggers of
+   * the controllers would give; buttons are added.
+   */
+  struct VrMinigamePad {
+    bool     active      = false;
+    /// Buttons pressed by a gesture
+    uint16_t buttons     = 0;
+    /// Buttons of the controllers kept from the game, which the mini-game
+    /// reads itself
+    uint16_t noButtons   = 0;
+    /// Left and right stick X, in [-1, 1]
+    bool     driveLeftX  = false;
+    float    leftX       = 0.0f;
+    bool     driveRightX = false;
+    float    rightX      = 0.0f;
+    /// Keeps the triggers from the game, which some of these menus bind to
+    /// debug tiles
+    bool     noTriggers  = false;
+    /// Same for the shoulder buttons, which are the grips
+    bool     noShoulders = false;
+    /// Keeps one controller's trigger from the game and from its laser,
+    /// as long as a gesture holds it
+    bool     noLeftHandTrigger  = false;
+    bool     noRightHandTrigger = false;
+    /// Triggers pressed by a gesture, also with \c noTriggers
+    bool     leftTrigger  = false;
+    bool     rightTrigger = false;
+    /// The mini-game knows whether the laser is over something to click,
+    /// where the interface sees a target everywhere
+    bool     decidesTarget = false;
+    bool     overTarget    = true;
+  };
+
+  /**
    * \brief Game controls the VR actions stand for
    *
    * Values of the game's ControlCode, see findings/input.md. The game keeps
@@ -45,6 +81,7 @@ namespace dxvk {
    * \brief Gamepad input codes of the game's bindings, see findings/input.md
    */
   namespace VrGamepadInput {
+    constexpr uint8_t B = 0x0B;
     constexpr uint8_t X = 0x0C;
   }
 
@@ -120,5 +157,10 @@ namespace dxvk {
    * \returns The image, or 0 if the game shows none for that input
    */
   uint32_t vrButtonIconForInput(uint8_t input);
+
+  /**
+   * \brief Adds a mini-game's controls to a gamepad state
+   */
+  void vrApplyMinigamePad(VrPadState& pad, const VrMinigamePad& minigame);
 
 }

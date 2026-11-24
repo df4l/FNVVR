@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include "vr_options.h"
 
 namespace dxvk {
@@ -30,6 +32,15 @@ namespace dxvk {
      * \returns \c true if the file was written
      */
     static bool save(const VrOptions& options);
+
+    /**
+     * \brief Reads a text file of the options' folder
+     *
+     * \param [in] name The file's name
+     * \param [out] text The file's text
+     * \returns \c false if there is no such file
+     */
+    static bool readText(const wchar_t* name, std::string& text);
 
   };
 

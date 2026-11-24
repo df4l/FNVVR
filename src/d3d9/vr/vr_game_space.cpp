@@ -46,6 +46,19 @@ namespace dxvk {
   }
 
 
+  VrPose vrShiftReference(
+    const VrPose&           reference,
+    const VrGameCameraPose& base,
+    const VrVector3&        shift,
+          float             unitsPerMetre) {
+    VrVector3 inReference = vrComputeGamePointInReference(base, base.position + shift, unitsPerMetre);
+
+    VrPose result = reference;
+    result.position = reference.position + vrRotate(reference.orientation, inReference);
+    return result;
+  }
+
+
   VrHeadAngles vrComputeHeadAngles(const VrPose& headInReference) {
     // Forward is -Z, right is +X and up is +Y in the reference frame
     VrVector3 forward = vrRotate(headInReference.orientation, { 0.0f, 0.0f, -1.0f });
@@ -71,6 +84,146 @@ namespace dxvk {
     pose.right    = { c, -s, 0.0f };
     pose.position = position;
     return pose;
+  }
+
+
+  VrGameCameraPose vrComputeTiltedCameraPose(float heading, float pitch, const VrVector3& position) {
+    float s  = std::sin(heading);
+    float c  = std::cos(heading);
+    float sp = std::sin(pitch);
+    float cp = std::cos(pitch);
+
+    VrGameCameraPose pose;
+    pose.forward  = { s * cp, c * cp, sp };
+    pose.up       = { -s * sp, -c * sp, cp };
+    pose.right    = { c, -s, 0.0f };
+    pose.position = position;
+    return pose;
+  }
+
+
+  float vrComputeCameraHeading(const VrGameCameraPose& pose) {
+    // Tilting forward by the pitch back to level: forward * cos - up * sin,
+    // where the up's and the forward's heights are the cosine and the sine
+    VrVector3 level = pose.forward * pose.up.z - pose.up * pose.forward.z;
+    return std::atan2(level.x, level.y);
+  }
+
+
+  VrVector3 vrComputeHeadViewPosition(const VrVector3& head, const float* rotation, float scale) {
+    // From the head bone, at the base of the skull, to between the eyes
+    constexpr float EyesAbove   = 6.0f;
+    constexpr float EyesInFront = 8.0f;
+
+    VrVector3 top   = { rotation[0], rotation[3], rotation[6] };
+    VrVector3 front = { rotation[1], rotation[4], rotation[7] };
+
+    return head + (top * EyesAbove + front * EyesInFront) * scale;
+  }
+
+
+  bool vrComputeHeadHeading(const float* rotation, float& heading) {
+    constexpr float MinLevel = 0.2f;
+
+    // Column 1 of the bone's rotation is where the face looks
+    float x = rotation[1];
+    float y = rotation[4];
+
+    if (x * x + y * y < MinLevel * MinLevel)
+      return false;
+
+    heading = std::atan2(x, y);
+    return true;
+  }
+
+
+  bool vrComputeCameraTilt(const VrGameCameraPose& pose, float& heading, float& pitch) {
+    constexpr float MinLevel = 0.2f;
+
+    VrVector3 level = pose.forward * pose.up.z - pose.up * pose.forward.z;
+
+    if (level.x * level.x + level.y * level.y < MinLevel * MinLevel)
+      return false;
+
+    heading = std::atan2(level.x, level.y);
+    pitch   = std::atan2(pose.forward.z, pose.up.z);
+    return true;
+  }
+
+
+  void VrViewHeading::start(float source, float view) {
+    m_source = source;
+    keep(view);
+  }
+
+
+  float VrViewHeading::update(float source, float softness, float dt) {
+    constexpr float FullTurn = 6.2831853f;
+
+    float left = softness > 0.0f ? std::exp(-dt / softness) : 0.0f;
+    m_source += std::remainder(source - m_source, FullTurn) * (1.0f - left);
+    return m_source + m_offset;
+  }
+
+
+  void VrViewHeading::keep(float view) {
+    m_offset = view - m_source;
+  }
+
+
+  VrGameCameraPose VrCameraBlend::update(const VrGameCameraPose& target, bool changed, float dt) {
+    // Time for what is left of the difference to fall to about a third
+    constexpr float Softness    = 0.15f;
+    // In game units, about three metres
+    constexpr float MaxDistance = 200.0f;
+    constexpr float Settled     = 1e-3f;
+
+    if (changed && m_hasLast) {
+      m_position = m_last.position - target.position;
+      m_heading  = std::remainder(vrComputeCameraHeading(m_last) - vrComputeCameraHeading(target), 6.2831853f);
+
+      if (vrLength(m_position) > MaxDistance) {
+        m_position = { 0.0f, 0.0f, 0.0f };
+        m_heading  = 0.0f;
+      }
+    }
+
+    float left = std::exp(-dt / Softness);
+    m_position = m_position * left;
+    m_heading *= left;
+
+    if (vrLength(m_position) < Settled && std::abs(m_heading) < Settled) {
+      m_position = { 0.0f, 0.0f, 0.0f };
+      m_heading  = 0.0f;
+    }
+
+    // Clockwise seen from above, as vrTurnAroundPivot
+    float s = std::sin(m_heading);
+    float c = std::cos(m_heading);
+
+    auto turn = [s, c] (const VrVector3& v) {
+      return VrVector3 { v.x * c + v.y * s, v.y * c - v.x * s, v.z };
+    };
+
+    VrGameCameraPose result;
+    result.forward  = turn(target.forward);
+    result.up       = turn(target.up);
+    result.right    = turn(target.right);
+    result.position = target.position + m_position;
+
+    m_last    = result;
+    m_hasLast = true;
+    return result;
+  }
+
+
+  VrGameCameraPose vrComputeVatsCameraPose(const VrGameCameraPose& game, float headYaw) {
+    // Looking straight up or down, the camera's up tells the heading
+    VrVector3 facing = std::abs(game.forward.x) + std::abs(game.forward.y) > 1e-3f
+      ? game.forward
+      : game.up * (game.forward.z > 0.0f ? -1.0f : 1.0f);
+
+    return vrComputeBodyCameraPose(std::atan2(facing.x, facing.y) - headYaw, game.position);
   }
 
 
@@ -106,6 +259,14 @@ namespace dxvk {
     frustum.top    = std::tan(fov.angleUp);
     frustum.bottom = std::tan(fov.angleDown);
     return frustum;
+  }
+
+
+  VrGameFrustum vrComputeReflectionFrustum(const VrGameFrustum& frustum) {
+    VrGameFrustum mirrored = frustum;
+    mirrored.top    = -frustum.bottom;
+    mirrored.bottom = -frustum.top;
+    return mirrored;
   }
 
 
@@ -159,15 +320,52 @@ namespace dxvk {
   }
 
 
-  VrExtent vrComputeGameResolution(const VrExtent& eye, float minAspect) {
-    // The tolerance keeps an exact ratio such as 1920 * 4/3 from being
-    // rounded up by the float error of minAspect
-    uint32_t minWidth = uint32_t(std::ceil(double(eye.height) * double(minAspect) - 0.01));
+  namespace {
 
+    uint32_t widthForAspect(uint32_t height, float aspect) {
+      // The tolerance keeps an exact ratio such as 1920 * 4/3 from being
+      // rounded up by the float error of the aspect
+      return uint32_t(std::ceil(double(height) * double(aspect) - 0.01));
+    }
+
+  }
+
+
+  VrExtent vrComputeGameResolution(const VrExtent& eye, float minAspect) {
     VrExtent result;
-    result.width  = std::max(eye.width, minWidth);
+    result.width  = std::max(eye.width, widthForAspect(eye.height, minAspect));
     result.height = eye.height;
     result.width += result.width & 1;
+    return result;
+  }
+
+
+  double vrComputeInterfaceAspect(uint32_t width, uint32_t height) {
+    if (!width || !height)
+      return VrInterfaceMinAspect;
+
+    return std::max(double(width) / double(height), double(VrInterfaceMinAspect));
+  }
+
+
+  double vrComputeRenderedMenuPickAspect(uint32_t width, uint32_t height) {
+    if (!width || !height)
+      return VrInterfaceMinAspect;
+
+    return std::min(double(width) / double(height), double(VrInterfaceMinAspect));
+  }
+
+
+  double vrComputeRadialPickScaleY(uint32_t width, uint32_t height) {
+    // Window aspect over interface aspect: 1 on a window 4:3 or wider
+    return vrComputeRenderedMenuPickAspect(width, height) / double(VrInterfaceMinAspect);
+  }
+
+
+  VrExtent vrComputeInterfaceExtent(const VrExtent& target) {
+    VrExtent result;
+    result.width  = std::max(target.width, widthForAspect(target.height, VrInterfaceMinAspect));
+    result.height = target.height;
     return result;
   }
 

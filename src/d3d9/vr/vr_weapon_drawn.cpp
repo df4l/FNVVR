@@ -13,6 +13,7 @@ namespace dxvk {
     using SetWantDrawnFn   = void (__fastcall*)(uint8_t* actor, void* unused, bool drawn);
     using GetWantDrawnFn   = bool (__fastcall*)(uint8_t* actor, void* unused);
     using SitStateFn       = int32_t (__fastcall*)(uint8_t* actor, void* unused);
+    using IsSwimmingFn     = bool (__fastcall*)(const uint8_t* actor, void* unused);
     using WeaponEntryFn    = uint8_t* (__fastcall*)(uint8_t* process, void* unused);
     using PickUpSoundFn    = void (__fastcall*)(uint8_t* actor, void* unused, const uint8_t* item,
       uint32_t pickUp, uint32_t use);
@@ -68,6 +69,11 @@ namespace dxvk {
       return nullptr;
 
     std::unique_ptr<VrWeaponDrawn> weaponDrawn(new VrWeaponDrawn());
+    weaponDrawn->m_readsSwimming = VrGameMemory::canChainCall(VrGame::ActorIsSwimmingCallSite, VrGame::ActorIsSwimming);
+
+    if (!weaponDrawn->m_readsSwimming)
+      Logger::warn("VR: Actor::IsSwimming was not found, the hands stay as the game animates them while swimming");
+
     g_weaponDrawn = weaponDrawn.get();
     return weaponDrawn;
   }
@@ -104,7 +110,7 @@ namespace dxvk {
       return;
 
     // The game holsters the weapon on purpose in these cases
-    if (field<uint8_t>(actor, VrGame::PlayerDisabledControls) & VrGame::ControlFighting)
+    if (fightingDisabled())
       return;
 
     if (field<uint32_t>(actor, VrGame::ActorLifeState) != 0)
@@ -167,6 +173,23 @@ namespace dxvk {
 
     m_playerHolstered = false;
     Logger::info("VR: The player drew the weapon");
+  }
+
+
+  bool VrWeaponDrawn::handsFree() const {
+    return m_playerHolstered || fightingDisabled() || swimming();
+  }
+
+
+  bool VrWeaponDrawn::swimming() const {
+    const uint8_t* actor = player();
+    return m_readsSwimming && actor && reinterpret_cast<IsSwimmingFn>(VrGame::ActorIsSwimming)(actor, nullptr);
+  }
+
+
+  bool VrWeaponDrawn::fightingDisabled() {
+    const uint8_t* actor = player();
+    return actor && (field<uint8_t>(actor, VrGame::PlayerDisabledControls) & VrGame::ControlFighting);
   }
 
 

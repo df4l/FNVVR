@@ -36,6 +36,30 @@ namespace dxvk {
   VrFov vrFovFromProjectionRaw(float left, float right, float top, float bottom);
 
   /**
+   * \brief Converts a foveation centre to a gaze
+   *
+   * IVRSystem::GetEyeTrackedFoveationCenter gives where an eye looks as a
+   * point in the normalised device coordinates of the eye's projection
+   * matrix, which OpenVR composes from the tangents of
+   * IVRSystem::GetProjectionRaw: -1 to 1 maps \c left to \c right and
+   * \c top to \c bottom (\c bottom being the upward tangent, see
+   * vrFovFromProjectionRaw).
+   *
+   * The tangents are used instead of IVRSystem::GetProjectionMatrix, which
+   * returns a struct: called directly from 32-bit GCC code, it gets \c this
+   * and the return address swapped (see getEyeToHeadTransform in
+   * vr_openvr_backend.cpp) and the runtime aborts the game.
+   *
+   * \param [in] left Left tangent from GetProjectionRaw
+   * \param [in] right Right tangent from GetProjectionRaw
+   * \param [in] top Top tangent from GetProjectionRaw
+   * \param [in] bottom Bottom tangent from GetProjectionRaw
+   * \param [in] ndcX Horizontal coordinate of the centre
+   * \param [in] ndcY Vertical coordinate of the centre
+   */
+  VrGaze vrGazeFromFoveationCenter(float left, float right, float top, float bottom, float ndcX, float ndcY);
+
+  /**
    * \brief Paths of the OpenVR action sets, indexed by VrInputContext
    */
   constexpr const char* VrOpenVrActionSets[] = {

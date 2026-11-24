@@ -151,6 +151,7 @@ namespace dxvk {
     constexpr uintptr_t RefLocation       = 0x30;
     constexpr uintptr_t ActorLifeState    = 0x108;
     constexpr uintptr_t PlayerDisabledControls = 0x680;
+    constexpr uint8_t   ControlMovement   = 0x1;
     constexpr uint8_t   ControlLook       = 0x2;
     constexpr uint8_t   ControlSneak      = 0x40;
 
@@ -325,6 +326,33 @@ namespace dxvk {
     constexpr uintptr_t ProcessWeaponInfoSlot = 0x148;
     constexpr uintptr_t InventoryEntryForm    = 0x08;
     constexpr uintptr_t WeaponAnimationType   = 0xF4;
+    constexpr int32_t   WeaponTypeHandToHand       = 0;
+
+    /**
+     * The player's process is a HighProcess. Its table, and the function in
+     * the slot above (ProcessWeaponInfoSlot): Actor::CombatHit (call at
+     * 0x00899D94) and Actor::ObjectHit (0x008AE705) take the attacker's
+     * weapon from it, and use the game's fists when it gives none
+     * (findings/melee.md §15).
+     */
+    constexpr uintptr_t HighProcessVtable           = 0x01087864;
+    constexpr uintptr_t HighProcessCurrentWeapon    = 0x008D81E0;
+
+    /**
+     * Blood and impact of a hit, Actor::CreateBlood (__thiscall, damage and
+     * HitData on the stack, ret 8) and Actor::CreateBloodOnWeapon (damage,
+     * HitData and target, ret 0xC). Both read the attacker's current weapon,
+     * not the hit's: CreateBlood takes the impact data set from it. When
+     * Actor::HitMe cannot create 3D at once (ShouldQueue3DTask), it queues
+     * them, and TaskQueueInterface::TaskUnpackFunc makes these two calls
+     * later, after the hit (findings/melee.md §15.1). The game's fists are
+     * the weapon form at FistsForm.
+     */
+    constexpr uintptr_t ActorCreateBlood            = 0x0088E8D0;
+    constexpr uintptr_t ActorCreateBloodOnWeapon    = 0x0088FB00;
+    constexpr uintptr_t QueuedCreateBloodSite       = 0x0087C105;
+    constexpr uintptr_t QueuedCreateBloodOnWeaponSite = 0x0087C138;
+    constexpr uintptr_t FistsForm                   = 0x011CA278;
 
     /**
      * Animation sequences, see findings/weapon.md. Every sequence an actor
@@ -352,6 +380,11 @@ namespace dxvk {
     /** Hand bones of the first-person skeleton (strings 0x010C4C40 and 0x010C4C20) */
     constexpr char LeftHandNodeName[]         = "Bip01 L Hand";
     constexpr char RightHandNodeName[]        = "Bip01 R Hand";
+    /** Arm bones of an actor's skeleton, above the hands (strings 0x010203C4, 0x010203B4, 0x010203A0) */
+    constexpr char LeftUpperArmNodeName[]     = "Bip01 L UpperArm";
+    constexpr char LeftForearmNodeName[]      = "Bip01 L Forearm";
+    constexpr char RightUpperArmNodeName[]    = "Bip01 R UpperArm";
+    constexpr char RightForearmNodeName[]     = "Bip01 R Forearm";
 
     /**
      * The left forearm's twist bone, which carries the Pip-Boy, and the
@@ -361,6 +394,7 @@ namespace dxvk {
      * and radius.
      */
     constexpr char LeftForeTwistNodeName[]    = "Bip01 L ForeTwist";
+    constexpr char RightForeTwistNodeName[]   = "Bip01 R ForeTwist";
     constexpr char PipBoyScreenNodeName[]     = "pipboyscreen";
     constexpr char PipBoyScreenNodeAltName[]  = "pipboyscreen:0";
     constexpr uintptr_t ObjectWorldBound      = 0x20;
@@ -376,6 +410,61 @@ namespace dxvk {
     constexpr uintptr_t SkinInstanceData      = 0x08;
     constexpr uintptr_t SkinInstanceBones     = 0x14;
     constexpr uintptr_t SkinDataBoneCount     = 0x44;
+
+    /**
+     * Skinned draws (findings/weapon.md §5.3, GOG database). The only call to
+     * BSBatchRenderer::RenderPassImmediately_Skinned (__cdecl: render pass,
+     * alpha test, alpha blend, draw mode; the pass's geometry at +0x00) is
+     * in RenderPassImmediately 0x00B994F0. It sets each partition's bone
+     * palette through the shader's SetupBoneMatrices, which calls
+     * NiDX9Renderer::CalculateBoneMatrices 0x00E6FE30, and draws the
+     * partition with NiDX9Renderer::Do_DrawPartition (__thiscall: buffer
+     * data, partition, model data) at two sites. The palette is computed
+     * from the bones' world transforms again only when the skin instance's
+     * frame id differs from the renderer's.
+     */
+    constexpr uintptr_t RenderSkinnedPass         = 0x00B99110;
+    constexpr uintptr_t RenderSkinnedPassCallSite = 0x00B99598;
+    constexpr uintptr_t RenderPassGeometry        = 0x00;
+    constexpr uintptr_t DrawPartition             = 0x00E6D310;
+    constexpr uintptr_t DrawPartitionCallSites[]  = { 0x00B992E3, 0x00B99339 };
+    constexpr uintptr_t SkinInstanceFrameId       = 0x18;
+
+    /**
+     * Dismemberment caps (GOG database, RenderPassImmediately_Skinned): the
+     * skin instance's NiSkinPartition (+0x0C) holds the partition count and
+     * array (44 bytes each). When the skin instance's GetRTTI (vtable slot
+     * 0x08) gives BSDismemberSkinInstance's, its DismemberPartition array
+     * (+0x38, 4 bytes each: enabled, state change, body part u16) runs
+     * along it, and the game draws only enabled partitions. Body parts from
+     * 100 on are the meat caps and the sections of a severed limb (NifTools
+     * BSDismemberBodyPartType), which the cut would open the sleeves onto.
+     */
+    constexpr uintptr_t ObjectGetRttiSlot          = 0x08;
+    constexpr uintptr_t DismemberSkinInstanceRtti  = 0x011F49D8;
+    constexpr uintptr_t SkinInstancePartition      = 0x0C;
+    constexpr uintptr_t SkinPartitionCount         = 0x08;
+    constexpr uintptr_t SkinPartitionArray         = 0x0C;
+    constexpr uintptr_t SkinPartitionSize          = 44;
+    constexpr uintptr_t DismemberPartitions        = 0x38;
+    constexpr uintptr_t DismemberPartitionSize     = 4;
+    constexpr uintptr_t DismemberPartitionBodyPart = 0x02;
+    constexpr uint16_t  FirstCapBodyPart           = 100;
+
+    /**
+     * NiDX9Renderer: its Direct3D device and m_kViewProj (D3DMATRIX), the
+     * product of the view and projection Do_SetCameraData (0x00E6C780)
+     * builds for the camera. The view is relative to NiRenderer::kPosAdjust,
+     * the camera's position, which the positions drawn are relative to too
+     * (CalculateBoneMatrices subtracts it from the bone palette).
+     */
+    constexpr uintptr_t RendererDevice            = 0x288;
+    constexpr uintptr_t RendererViewProj          = 0xA00;
+    constexpr uintptr_t RendererPosAdjust         = 0x011F474C;
+
+    /** NiGeometryData: vertex count (u16) and model-space positions (NiPoint3) */
+    constexpr uintptr_t GeometryDataVertexCount   = 0x08;
+    constexpr uintptr_t GeometryDataVertices      = 0x20;
 
     /**
      * NiAVObject transforms: parent, local rotation (row-major 3x3),
@@ -397,6 +486,227 @@ namespace dxvk {
      */
     constexpr size_t    ObjectWorldTransformSize = 0x34;
     constexpr size_t    BoundSize             = 0x10;
+
+    /**
+     * The instructions that end the buffer flags of every game sound before
+     * IDirectSound8::CreateSoundBuffer: `or reg, 2A0h` (CTRLFX, CTRLVOLUME,
+     * CTRLFREQUENCY) in BSWin32GameSound::Open, OpenOgg, Copy and
+     * PrepareReverb. Their flags hold no focus flag, so DirectSound silences
+     * the sounds while another window has the focus. See findings/audio.md §4.
+     */
+    constexpr uintptr_t SoundFlagsOpen          = 0x00AEB943;
+    constexpr uintptr_t SoundFlagsOpenOgg       = 0x00AEC4B0;
+    constexpr uintptr_t SoundFlagsCopy          = 0x00AF08C6;
+    constexpr uintptr_t SoundFlagsPrepareReverb = 0x00AF1643;
+
+    constexpr uint8_t SoundFlagsOrEcx[] = { 0x81, 0xC9, 0xA0, 0x02, 0x00, 0x00 };
+    constexpr uint8_t SoundFlagsOrEdx[] = { 0x81, 0xCA, 0xA0, 0x02, 0x00, 0x00 };
+
+    /**
+     * BSWin32Audio::Shutdown (0x00AEA4D0) clears bInitialized, then
+     * BSAudio::Shutdown asks the audio thread to end and waits for it without
+     * a limit. BSAudioManager::ComposeMessage drops every message once
+     * bInitialized is clear, so with bMultiThreadAudio the game never exits.
+     * BSAudio::Shutdown clears the flag itself after the wait.
+     */
+    constexpr uintptr_t AudioShutdownClearInitialized = 0x00AEA4DC;
+    constexpr uint8_t   AudioShutdownClearInitializedCode[] = { 0xC6, 0x40, 0x05, 0x00 };
+
+    /**
+     * FaderManager::CreateFader (0x00700990) scales the screen's width and
+     * height by 0.5 for the fader quad's half extents:
+     * fmul qword ptr [0x01011588] after GetScreenWidth and GetScreenHeight
+     */
+    constexpr uintptr_t FaderHalfWidth  = 0x00700AB2;
+    constexpr uintptr_t FaderHalfHeight = 0x00700ACC;
+    constexpr uint8_t   FaderHalfExtentCode[] = { 0xDC, 0x0D, 0x88, 0x15, 0x01, 0x01 };
+
+    /**
+     * BSUtilities::ReflectCameraAboutArbitraryPlane (__cdecl: camera, plane,
+     * reflected camera) mirrors a camera about a water plane for the water
+     * reflections. It negates the up axis and copies the camera's frustum.
+     * Called by TESWaterSystem::MTSetupSelectiveReflectionTexture,
+     * MTSetupWorldReflectionTexture and MTSetupSkyReflectionTexture.
+     */
+    constexpr uintptr_t ReflectCameraAboutPlane = 0x00C4BF40;
+    constexpr uintptr_t ReflectCameraCallSites[] = { 0x004E9E2D, 0x004EAB27, 0x004EB098 };
+
+    /**
+     * BSShaderManager::fTimers: the shader timers, set once per frame by
+     * BSShaderManager::UpdateTimers (0x0086F330, from OnIdle). Entry 1 is
+     * the frame's time step, which BSShaderManager::GetTimer(true) returns:
+     * the water noise scroll, the water displacement simulation and the
+     * ripple timer of the water pass add it each time they run.
+     */
+    constexpr uintptr_t ShaderTimeStep    = 0x011F9410;
+    constexpr uintptr_t ShaderGetTimer    = 0x00452E70;
+    constexpr uint8_t   ShaderGetTimerCode[] = {
+      0x55, 0x8B, 0xEC, 0x0F, 0xB6, 0x45, 0x08, 0xF7, 0xD8, 0x1B, 0xC0,
+      0xF7, 0xD8, 0xD9, 0x04, 0x85, 0x0C, 0x94, 0x1F, 0x01, 0x5D, 0xC3 };
+
+    /**
+     * Work of the world render that follows the frame's time or does not
+     * depend on the view, see findings/stereo-passes.md. The world is drawn
+     * for each eye and for a scope's lens; the passes after the left eye's
+     * see no time passing and skip that work:
+     * - BSFadeNode::OnVisible (0x00B4E490) fades a node in or out by the game
+     *   timer's step (float at AppTimer + TimerStepAfterMultiplier), read by
+     *   the 6-byte fld instructions at FadeStepReadSites;
+     * - Main::Swap adds BSTimer::GetRealTimeSeconds (__thiscall on the timer,
+     *   returns a float) to the time the black loading fader has been shown,
+     *   at SwapFaderTimeCallSite, and takes a screenshot when its key is
+     *   pressed (ScreenShot::TakeScreenShot, __cdecl: name) at
+     *   SwapScreenshotCallSite;
+     * - TESWaterSystem::UpdateWaterSystem (0x004E1BC0) calls
+     *   UpdateActorsInWater, which keeps each wading actor's last position,
+     *   and UpdateWaterSounds (both __thiscall on the water system);
+     * - TESWaterSystem::UpdateWaterDisplacementSimulation (0x004E8EC0) draws
+     *   the wading stencil (RenderDisplacementWaterStencil, __thiscall), adds
+     *   each wading actor's offsets to two arrays (BSSimpleArray::Add,
+     *   __thiscall: item) and runs the displacement effect, which applies
+     *   the wading force and empties the arrays (ImageSpaceManager::
+     *   RenderEffect, __thiscall: effect, renderer, two textures, parameter,
+     *   flag);
+     * - TESWaterSystem::UpdateWaterNoise (0x004E3D60) draws each water type's
+     *   noise normal map with ImageSpaceManager::RenderEffect_2 (same
+     *   arguments).
+     */
+    constexpr uintptr_t TimerStepAfterMultiplier      = 0x0C;
+    constexpr uintptr_t FadeStepReadSites[]           = { 0x00B4E4DB, 0x00B4E85E, 0x00B4E945 };
+    constexpr uint8_t   FadeStepRead[]                = { 0xD9, 0x05, 0xA0, 0x63, 0x1F, 0x01 };
+    constexpr uintptr_t SwapFaderTimeCallSite         = 0x008700D2;
+    constexpr uintptr_t TimerRealTimeSeconds          = 0x007013E0;
+    constexpr uintptr_t SwapScreenshotCallSite        = 0x00870545;
+    constexpr uintptr_t TakeScreenshot                = 0x00878860;
+    constexpr uintptr_t WaterActorsCallSite           = 0x004E1FEC;
+    constexpr uintptr_t WaterUpdateActors             = 0x004E8A00;
+    constexpr uintptr_t WaterSoundsCallSite           = 0x004E1FFC;
+    constexpr uintptr_t WaterUpdateSounds             = 0x004E6A80;
+    constexpr uintptr_t WaterDisplaceStencilCallSite  = 0x004E8F49;
+    constexpr uintptr_t WaterDisplaceStencil          = 0x004E9550;
+    constexpr uintptr_t WaterDisplaceAddCallSites[]   = { 0x004E93AC, 0x004E93BD };
+    constexpr uintptr_t SimpleArrayAdd                = 0x006DB840;
+    constexpr uintptr_t WaterDisplaceRenderCallSite   = 0x004E9424;
+    constexpr uintptr_t ImageSpaceRenderEffect        = 0x00B97550;
+    constexpr uintptr_t WaterNoiseRenderCallSite      = 0x004E43FD;
+    constexpr uintptr_t ImageSpaceRenderEffect2       = 0x00B975F0;
+
+    /**
+     * FaderManager::kFaders: three entries of 0x1C bytes, the black fader
+     * below the menus, the black one above them and the white one. An entry
+     * is shown while its root node (+0x10) is set; the alpha (float) is at
+     * +0x14. See findings/render.md, faders.
+     */
+    constexpr uintptr_t FaderTable       = 0x011D8828;
+    constexpr uint32_t  FaderCount       = 3;
+    constexpr uint32_t  FaderStride      = 0x1C;
+    constexpr uint32_t  FaderRoot        = 0x10;
+    constexpr uint32_t  FaderAlpha       = 0x14;
+    constexpr uint32_t  FaderWhite       = 2;
+
+    /**
+     * The game's heap, MemoryManager (singleton 0x011F6238 through
+     * MemoryManager::GetSingleton), see findings/performance.md (D7).
+     * Every function is __thiscall on the manager, 16-byte aligned, and
+     * starts with push ebp; mov ebp, esp; sub esp, imm8 (6 bytes, no
+     * relative address), then stores ECX. Allocate(size) takes pools of up
+     * to 596 bytes, then the heap of the thread's memory context.
+     * Deallocate(block) and Size(block) find the owner from the address
+     * (pool by the address's top byte, then heap, then the C runtime).
+     * Both Reallocate functions (0x00AA4150, 0x00AA4200) and the aligned
+     * allocator (0x00C74EA0) go through these three by direct calls;
+     * MemoryPool::Free and GetHeapForPointer have no other callers.
+     */
+    constexpr uintptr_t HeapAllocateBlock          = 0x00AA3E40;
+    constexpr uint8_t   HeapAllocateBlockStart[]   = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x3C, 0x89, 0x4D };
+    constexpr uintptr_t HeapFreeBlock              = 0x00AA4060;
+    constexpr uint8_t   HeapFreeBlockStart[]       = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x14, 0x89, 0x4D };
+    constexpr uintptr_t HeapBlockSize              = 0x00AA44C0;
+    constexpr uint8_t   HeapBlockSizeStart[]       = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x18, 0x89, 0x4D };
+    constexpr size_t    HeapFunctionFrameLength    = 6;
+
+    /**
+     * C runtime double fabs (_fabs): sets the x87 control word with
+     * __ctrlfp before and after masking the sign. The profile names it the
+     * caller of __ctrlfp (0x00ED5ABB); _floor and _ceil never reach it.
+     */
+    constexpr uintptr_t CrtFabs = 0x00EC6CDE;
+    constexpr uint8_t   CrtFabsStart[] = { 0x8B, 0xFF, 0x55, 0x8B, 0xEC, 0x51, 0x51 };
+
+    /**
+     * Small math functions of the game, replaced by VrFastMath (names from
+     * the GOG database, findings/engine-optimizations.md section 10). Each
+     * is a plain MSVC function that starts with push ebp / mov ebp, esp, so
+     * the first eight bytes tell a plugin's rewrite from the original.
+     */
+    constexpr uintptr_t PointConstruct     = 0x00416870;
+    constexpr uintptr_t PointAdd           = 0x00439E90;
+    constexpr uintptr_t PointSubtract      = 0x00439EF0;
+    constexpr uintptr_t PointScale         = 0x004A3760;
+    constexpr uintptr_t MatrixPoint        = 0x004B4500;
+    constexpr uintptr_t MatrixMatrix       = 0x0043F8D0;
+    constexpr uintptr_t TransformTransform = 0x0062C250;
+
+    constexpr uint8_t   PointConstructStart[]     = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B };
+    constexpr uint8_t   PointAddStart[]           = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x10, 0x89, 0x4D };
+    constexpr uint8_t   PointSubtractStart[]      = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x10, 0x89, 0x4D };
+    constexpr uint8_t   PointScaleStart[]         = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C, 0xD9, 0x45 };
+    constexpr uint8_t   MatrixPointStart[]        = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x10, 0x89, 0x4D };
+    constexpr uint8_t   MatrixMatrixStart[]       = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x28, 0x56, 0x57 };
+    constexpr uint8_t   TransformTransformStart[] = { 0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x80, 0x00, 0x00 };
+
+    /**
+     * Also replaced by VrFastMath: ShadowSceneLight::BoundWithinLightFrustum
+     * (thiscall, bound, retn 4; planes at this + 0x144, mask at + 0x1A4),
+     * and the C runtime's __CIsqrt (st0) and _sqrt (cdecl). The C runtime
+     * functions do not start with a frame; their first eight bytes hold a
+     * call, which pins the code as well.
+     */
+    constexpr uintptr_t LightFrustumBound  = 0x00B9BBB0;
+    constexpr uintptr_t CrtCiSqrt          = 0x00EC6040;
+    constexpr uintptr_t CrtSqrt            = 0x00EC6054;
+
+    constexpr uint8_t   LightFrustumBoundStart[]  = { 0x53, 0x55, 0x8B, 0x6C, 0x24, 0x0C, 0x56, 0x57 };
+    constexpr uint8_t   CrtCiSqrtStart[]          = { 0x83, 0xEC, 0x0C, 0xDD, 0x14, 0x24, 0xE8, 0xBD };
+    constexpr uint8_t   CrtSqrtStart[]            = { 0x8D, 0x54, 0x24, 0x04, 0xE8, 0x68, 0xC7, 0x00 };
+
+    /**
+     * NiPoint3::operator*(NiPoint3) (dot product, 247 callers),
+     * NiPlane::Distance(point) and NiBound::WhichSide(plane), all thiscall
+     * with one stack argument and the float result in st0 (WhichSide: 0
+     * across, 1 positive side, 2 negative side, in eax).
+     */
+    constexpr uintptr_t PointDot           = 0x004B6190;
+    constexpr uintptr_t PlaneDistance      = 0x004B6160;
+    constexpr uintptr_t BoundWhichSide     = 0x004B6100;
+
+    constexpr uint8_t   PointDotStart[]           = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0x89, 0x4D };
+    constexpr uint8_t   PlaneDistanceStart[]      = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0x89, 0x4D };
+    constexpr uint8_t   BoundWhichSideStart[]     = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0x89, 0x4D };
+
+    /** NiBound::Merge(other), thiscall, retn 4 */
+    constexpr uintptr_t BoundMerge         = 0x00A7F3F0;
+    constexpr uint8_t   BoundMergeStart[]         = { 0x83, 0xEC, 0x20, 0x56, 0x8B, 0xF1, 0xD9, 0x06 };
+
+    /**
+     * Two one-field getters the profiles show among the hottest blocks
+     * (MobileObject::GetCurrentAIProcess returns [this+0x68],
+     * BaseProcess::GetProcessLevel returns [this+0x28]). Both are the
+     * unoptimised MSVC form: frame, ecx stored to the stack and reloaded.
+     * The 13 bytes are the whole body up to the field's load.
+     */
+    constexpr uintptr_t CurrentProcessGetter = 0x008D8520;
+    constexpr uintptr_t ProcessLevelGetter   = 0x0045CD60;
+
+    /**
+     * NiPointer::operator-> (6,744 callers): returns [this], same unoptimised
+     * form as the getters above; the 12 bytes reach the load.
+     */
+    constexpr uintptr_t PointerDereference = 0x00559450;
+    constexpr uint8_t   PointerDereferenceStart[] = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x45, 0xFC, 0x8B, 0x00 };
+
+    constexpr uint8_t   CurrentProcessGetterStart[] = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x45, 0xFC, 0x8B, 0x40, 0x68 };
+    constexpr uint8_t   ProcessLevelGetterStart[]   = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x45, 0xFC, 0x8B, 0x40, 0x28 };
 
     /** State of the VATS camera, 0 when VATS is not running */
     constexpr uintptr_t VatsCameraState = 0x011F2258;
@@ -455,6 +765,34 @@ namespace dxvk {
     constexpr uintptr_t ShowMessageBox                 = 0x00703E80;
     constexpr uintptr_t PadLostMessageCallSite         = 0x0070C5AA;
     constexpr uintptr_t PadConnectedMessageCallSite    = 0x0070C5E2;
+
+    /**
+     * After a change of that flag, InterfaceManager::Update walks every menu
+     * tile (FUN_00719580, reached through FUN_00719630) and compares each
+     * tile's name with "xbox_button" and "PCShortcutLabel" through a __cdecl
+     * strcmp wrapper. The name of a tile without one is a null pointer, which
+     * the game never checks.
+     */
+    constexpr uintptr_t StringCompare                  = 0x00408B20;
+    constexpr uintptr_t TileNameButtonCompareCallSite  = 0x007195D1;
+    constexpr uintptr_t TileNameLabelCompareCallSite   = 0x007195EB;
+
+    /**
+     * InterfaceManager::Has360Controller, __cdecl without arguments: the
+     * interface's gamepad flag, unless bDisable360Controller is set. These
+     * calls only choose what the player reads, the others also choose how a
+     * menu reacts to its input: the _Has360Controller trait (button icons or
+     * keyboard shortcuts), the _360Controller trait of those tiles, the names
+     * of the controls in messages, the help pages of the Xbox or the PC
+     * manual (help menu, tutorial menu) and the label of the Stats limb mode.
+     */
+    constexpr uintptr_t Has360Controller               = 0x004B71D0;
+    constexpr uintptr_t GamepadTraitCallSite           = 0x0071966F;
+    constexpr uintptr_t GamepadTileTraitCallSite       = 0x007195FC;
+    constexpr uintptr_t ControlNameCallSite            = 0x007039F3;
+    constexpr uintptr_t HelpManualCallSite             = 0x007D090E;
+    constexpr uintptr_t TutorialManualCallSite         = 0x007E8A05;
+    constexpr uintptr_t StatsLimbLabelCallSite         = 0x007DF6CD;
 
     /**
      * isInStartMenu, __cdecl without arguments: true while the main menu is
@@ -649,10 +987,28 @@ namespace dxvk {
      * are __cdecl without arguments and return a FORenderedMenu*.
      */
     constexpr uintptr_t MainSingleton              = 0x011DEA0C;
+    constexpr uintptr_t MainWindow                 = 0x8;
     constexpr uintptr_t RenderedMenuParentCallSite = 0x00870967;
     constexpr uintptr_t DrawRenderedMenuParent     = 0x00875BF0;
     constexpr uintptr_t GetCurrentRenderedMenu     = 0x00707AD0;
     constexpr uintptr_t GetPipBoy                  = 0x00705990;
+
+    /**
+     * UpdateOffscreenInterface (0x00871A50) calls the rendered menu's Draw
+     * only when IsPipBoyOpen (in a rendered menu, call at 0x00871B92) and
+     * either the rendered menu's own menu is the top menu
+     * (IsRenderedMenuOnTop, __cdecl, read only, call at 0x00871B3D) or a
+     * message, quantity or computers menu has a tile (GetMenuTile, __cdecl
+     * menu id, calls at 0x00871B4E, 0x00871B5F, 0x00871B70). Closing a
+     * terminal frees the computers menu's tiles while the rendered menu is
+     * still current: that gate keeps them from being drawn. Read in the GOG
+     * executable, whose code addresses are the Steam build's.
+     */
+    constexpr uintptr_t IsRenderedMenuOnTop        = 0x00707B30;
+    constexpr uintptr_t GetMenuTile                = 0x00A09030;
+    constexpr uint32_t  MessageMenuId              = 0x3E9;
+    constexpr uint32_t  QuantityMenuId             = 0x3F8;
+    constexpr uint32_t  ComputersMenuId            = 0x423;
 
     /**
      * The rendered-menu render then draws the menu's screen, such as the
@@ -664,7 +1020,358 @@ namespace dxvk {
     constexpr uintptr_t GetScreenGeometry          = 0x007FA950;
     constexpr uintptr_t Renderer                   = 0x011F4748;
 
+    /**
+     * NiDX9Renderer::m_fZClear, the value the game clears depth to
+     * (NiDX9Renderer::SetDepthClear 0x00E75820, set to 1.0 by InitToDefault
+     * at 0x00E6B9B3). LOD Flicker Fix patches that load to 0.0, reverses
+     * the projections and swaps the depth tests, so it tells which way
+     * depth goes.
+     */
+    constexpr uintptr_t RendererDepthClear         = 0x5E4;
+
     constexpr uint32_t  LockPickMenuId    = 0x3F6;
+
+    /**
+     * CompanionWheelMenu, the companion's orders. Its id is the class that
+     * CompanionWheelMenu::Create (0x00754DE0) checks the menu against
+     * (return_1075, 0x00755260).
+     */
+    constexpr uint32_t  CompanionWheelMenuId = 0x433;
+
+    /**
+     * The mini-games' scenes shown in the eye images, see
+     * findings/minigames.md: each menu's instance, its camera (NiCamera*,
+     * from the model of the casino tables) and the state field of each.
+     */
+    constexpr uintptr_t LockPickInstance     = 0x011DA204;
+    constexpr uintptr_t LockPickCamera       = 0x011DA224;
+    constexpr uintptr_t SlotMachineInstance  = 0x011DA9A4;
+    constexpr uintptr_t SlotMachineCamera    = 0x011DA9D0;
+    constexpr uintptr_t SlotMachineSceneRoot = 0x011DA9FC;
+    constexpr uintptr_t BlackJackInstance    = 0x011D9050;
+    constexpr uintptr_t BlackJackCamera      = 0x011D90BC;
+    constexpr uintptr_t RouletteInstance     = 0x011DA878;
+    constexpr uintptr_t RouletteCamera       = 0x011DA8D0;
+    constexpr uintptr_t CaravanCamera        = 0x011D91A8;
+
+    /**
+     * CaravanMenu::pMe and its challenger (Actor*, null when the script runs
+     * on an object that is not a character), set by CaravanMenu::Create
+     * 0x00741060 from the reference ShowCaravanMenu runs on
+     * (findings/caravan.md §1.1).
+     */
+    constexpr uintptr_t CaravanInstance      = 0x011D917C;
+    constexpr uintptr_t CaravanChallenger    = 0x100;
+
+    /**
+     * What the lasers read and write in CaravanMenu (findings/caravan.md
+     * §1.1, §3.3), checked in CaravanMenu::DoIdle 0x00741500,
+     * HandleTrackSelection 0x0074F360, SelectDeckCard 0x0074E480 and
+     * SelectTrackCard 0x0074E6D0. eActiveMenu 2 is the game, eGameState 0
+     * the only state that takes input. The hand cards are the nodes
+     * "Player-Deck_0{i+1}:{i}" of the player's hand model, the slots the
+     * nodes "Select{row+1}_01:0" of each track's grid (tracks 0-2 the
+     * player's, 3-5 the opponent's, 7 rows each). kCardTracks holds a
+     * BSSimpleArray (0x10 bytes) per track and row: the cards on that row.
+     * The pending key is read and cleared by DoIdle in state 0, game menu,
+     * as one stick step, once fTimeDelta (a global) is more than
+     * CaravanStepDelay past fSelectionDelay.
+     */
+    /**
+     * CaravanMenu::pTableGeometry (+0x184), NV_Caravan-Table.NIF: its shape
+     * "Table:0" is the wooden planks under the cloth (texture
+     * NV_Caravan-Table01.dds, x -28 to 28.9, y -21 to 14.7, z 0 to 1.1),
+     * the rest the bet area's sign, the deck's tray and the camera.
+     */
+    constexpr uintptr_t CaravanTableModel    = 0x184;
+    constexpr char      CaravanPlanksShape[] = "Table:0";
+    /**
+     * CaravanMenu::kCoinObjects (+0x134), a BSSimpleArray of the bet's coins
+     * (clones of Currency-Coin_{1-3}.NIF, children of the scene's root),
+     * filled by AddCurrencyCoinNif 0x0074FC00. UpdateBettingUI 0x0074A9C0
+     * sets each new coin's translation to the centre of a Coin-Placement_NN
+     * shape of Currency-Coin_Grid.NIF (z 2.5 to 3.35); the coin's own
+     * sequence then drops it from 10.94 to 0.95 above that point.
+     */
+    constexpr uintptr_t CaravanCoinObjects   = 0x134;
+
+    constexpr uintptr_t CaravanActiveMenu    = 0x28;
+    constexpr uintptr_t CaravanGameState     = 0x2C;
+    // eGameState 0x16, the game is over (its result shown), and 0x17, the
+    // menu closes (findings/caravan.md §1)
+    constexpr uint32_t  CaravanStateOver     = 0x16;
+    constexpr uint32_t  CaravanStateClosing  = 0x17;
+    constexpr uintptr_t CaravanPlayerHandModel = 0x190;
+    /**
+     * CaravanMenu::pHandGeometries[1] (Opponent_Deck.NIF) and kNPCHand, the
+     * opponent's hand, read at 0x0074D7C7 and 0x0074D788 in
+     * UpdateGameHandTextures 0x0074D730. The cards in hand are the subtrees
+     * "Opponent-Deck_0{i+1}" below the hand's size; their shapes
+     * "Opponent-Deck_0{i+1}:{i}" get the card back's texture on +Z.
+     */
+    constexpr uintptr_t CaravanOpponentHandModel = 0x194;
+    constexpr uintptr_t CaravanOpponentHand      = 0xB34;
+    constexpr uintptr_t CaravanCardTracks    = 0xB44;
+    constexpr uintptr_t CaravanPlayerHand    = 0xB24;
+    constexpr uintptr_t CaravanSelectedCard  = 0xE2C;
+    constexpr uintptr_t CaravanSelectedTrack = 0xE30;
+    constexpr uintptr_t CaravanSelectedRow   = 0xE34;
+    constexpr uintptr_t CaravanSelectionDelay = 0xE3C;
+    constexpr uintptr_t CaravanTrackGrids    = 0xE54;
+    /**
+     * CaravanMenu::pCursors[2] (+0xE6C): Select_Add.NIF (a green card where
+     * the taken card will go) and Select_Remove.NIF (red, not allowed),
+     * children of CaravanSceneRoot. SelectTrackCard (0x0074E6D0) sets the
+     * shown one's translation to the world bound centre of the grid's
+     * "Select{row+1}_0{column+1}:0", column the cards on the row (at most
+     * 3), counted from the left on the opponent's rows too, which fill from
+     * the right; the other goes to (0, 0, -50), both to -100 in
+     * DeselectTrackCard (0x0074EDD0).
+     */
+    constexpr uintptr_t CaravanCursors       = 0xE6C;
+    constexpr uint32_t  CaravanCursorCount   = 2;
+    constexpr uintptr_t CaravanFlags         = 0xE74;
+    constexpr uintptr_t CaravanPendingKey    = 0xE80;
+    constexpr uintptr_t CaravanTimeDelta     = 0x011D9208;
+    constexpr float     CaravanStepDelay     = 0.25f;
+    constexpr uint32_t  CaravanGameMenu      = 2;
+    constexpr uint32_t  CaravanResultsMenu   = 3;
+    constexpr uint32_t  CaravanTrackCount    = 6;
+    constexpr uint32_t  CaravanRowCount      = 7;
+    constexpr uint32_t  CaravanHandSize      = 8;
+    constexpr uintptr_t CaravanCardListSize  = 0x10;
+    /**
+     * CaravanMenu::pTrackGeometries[6][7] (+0x198), one row model per track
+     * and row (Player_{t}_0{r}.NIF, Opponent_{t}_0{r}.NIF), each holding
+     * the nodes "Card_0N:{column}", N = column + 1 on the player's rows and
+     * 4 - column on the opponent's (UpdateTrackCardTexture 0x0074E220, and
+     * "Card{column+1}_In" moves that node). The cards wait at their bind pose until
+     * their "Card{column+1}_In" sequence brings them to the row: past the
+     * player's edge, or in three piles past the opponent's tracks.
+     * iSelectedColumn (+0xE38) is the column a card is being placed in
+     * during eGameState 0x0B to 0x0E (DoIdle 0x00741500, case 0xD:
+     * pTrackAnimations[iSelectedTrack][iSelectedRow][iSelectedColumn][0]).
+     * The constructor leaves pTrackGeometries uninitialised: only
+     * CaravanMenu::PrepareGameMenu fills it, and sets eActiveMenu to 2
+     * afterwards (0x00740683), so it is read only in the game menu.
+     */
+    constexpr uintptr_t CaravanTrackModels   = 0x198;
+    constexpr uintptr_t CaravanSelectedColumn = 0xE38;
+    constexpr uint32_t  CaravanRowCards      = 4;
+    constexpr uint32_t  CaravanStatePlaceFirst = 0x0B;
+    constexpr uint32_t  CaravanStatePlaceLast  = 0x0E;
+    /** uiFlags: a hand card is taken, the first three cards, a track discard */
+    constexpr uint32_t  CaravanFlagSelectTrack  = 0x1000;
+    constexpr uint32_t  CaravanFlagTrackSetup   = 0x800;
+    constexpr uint32_t  CaravanFlagDestroyTrack = 0x2000;
+    /**
+     * uiFlags 0x4000: the AI plays (set by DoIdle's state 0x15). It places
+     * its card in state 0x0B (the first three) or 0x0D, as the player's,
+     * from iSelectedTrack/Row/Column, which ProcessAI's move filled
+     */
+    constexpr uint32_t  CaravanFlagOpponent     = 0x4000;
+    constexpr uint32_t  CaravanStateStartTrack  = 0x0B;
+    constexpr uint32_t  CaravanStateAddToTrack  = 0x0D;
+    /** Pending keys, as DoKey writes them */
+    constexpr uint32_t  CaravanKeyLeft       = 0x80000001;
+    constexpr uint32_t  CaravanKeyRight      = 0x80000002;
+    constexpr uint32_t  CaravanKeyUp         = 0x80000003;
+    /**
+     * The values of the tracks (findings/caravan.md §3.4): kTrackInfos holds
+     * 12 bytes per track, the value at +8 (CaravanMenu::UpdateTrackValue
+     * 0x0074EE70). The game's tiles of the values are in the rectangles
+     * CGM_PlayerTrackRect and CGM_NPCTrackRect of the tile set pTiles[2]
+     * (caravan_game_menu.xml): their visible is a constant the game sets
+     * once, at the move to the game, and the values copy it. They are found
+     * with Tile::GetTileByName (__cdecl, tile, name).
+     */
+    constexpr uintptr_t CaravanTrackInfos    = 0xDE4;
+    constexpr uintptr_t CaravanTrackInfoSize = 12;
+    constexpr uintptr_t CaravanTrackValue    = 8;
+    constexpr uintptr_t CaravanGameTiles     = 0x38;
+    constexpr char      CaravanPlayerValuesTile[] = "CGM_PlayerTrackRect";
+    constexpr char      CaravanOpponentValuesTile[] = "CGM_NPCTrackRect";
+    /**
+     * The cards left in the draw piles: kPlayerDeck (+0xB04) and kNPCDeck
+     * (+0xB14), BSSimpleArrays whose size DoIdle writes to the "_Value" of
+     * pTiles[29] and [30] (e.g. at 0x00743CB4-0x00743D19).
+     * Those tiles, CGM_PlayerCardNum and CGM_NPCCardNum, are children of
+     * CGM_CardNumRect (caravan_game_menu.xml), whose visible copies its
+     * parent's.
+     */
+    constexpr uintptr_t CaravanPlayerPile    = 0xB04;
+    constexpr uintptr_t CaravanOpponentPile  = 0xB14;
+    constexpr char      CaravanPilesTile[]   = "CGM_CardNumRect";
+    constexpr uintptr_t TileGetByName        = 0x00A08B20;
+    constexpr uint8_t   TileGetByNamePrologue[] = { 0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x88, 0x08, 0x00, 0x00 };
+
+    /**
+     * Caravan's deck building (eActiveMenu 1), checked in CaravanMenu::DoIdle
+     * 0x00741500, DoGamepad 0x00747D30 and SwapDeckBuildingTextures
+     * 0x0074B700. The deck meter is pTiles[15] (+0x6C); its value (the trait
+     * in the global CaravanMenu::iUT_CurrentValue) is the collection's card
+     * in the middle. Slot i (0-23) of both rows shows the card at that value
+     * minus 11 + i: shapes "Deck_{i+1:02}:{i}" of pActiveDeckGeometry (the
+     * deck's row) and "Available_{i+1:02}:{i}" of pInactiveDeckGeometry,
+     * NV_Caravan-Deck.NIF and -Available.NIF. With a gamepad DoIdle moves the
+     * value one card per animation (states 5 and 6) while the left stick is
+     * off its dead zone; A adds kDeck[value] to the deck and X takes it out,
+     * the byte +0x98 of the kDeck entry saying whether it is in.
+     */
+    constexpr uint32_t  CaravanDeckBuildingMenu  = 1;
+    constexpr uintptr_t CaravanDeckMeterTile     = 0x6C;
+    constexpr uintptr_t CaravanCurrentValueTrait = 0x011D9170;
+    constexpr uintptr_t CaravanAvailableModel    = 0x188;
+    constexpr uintptr_t CaravanDeckModel         = 0x18C;
+    constexpr uintptr_t CaravanCollection        = 0xA6C;
+    constexpr uintptr_t CaravanCollectionSize    = 0xAF0;
+    constexpr uintptr_t CaravanCardInDeck        = 0x98;
+    /**
+     * The game menu's prompts "discard card" and "discard caravan",
+     * pTiles[20] and [21] (CGM_DiscardCardButton, CGM_DiscardTrackButton of
+     * caravan_game_menu.xml): their "_xbox_button" is the LT and RT image,
+     * set once by the menu file.
+     */
+    constexpr uintptr_t CaravanDiscardCardPrompt  = 0x80;
+    constexpr uintptr_t CaravanDiscardTrackPrompt = 0x84;
+
+    constexpr uint32_t  SlotMachineMenuId    = 0x438;
+    constexpr uint32_t  BlackJackMenuId      = 0x439;
+    constexpr uint32_t  RouletteMenuId       = 0x43A;
+    constexpr uint32_t  CaravanMenuId        = 0x43B;
+
+    /** Every one of these menus keeps its stage at this offset */
+    constexpr uintptr_t MinigameState        = 0x28;
+    constexpr uint32_t  LockStateTurning     = 3;
+    constexpr uint32_t  LockStateTension     = 4;
+    constexpr uint32_t  SlotMachineStateBet  = 6;
+    constexpr uint32_t  SlotMachineStatePayoutIn  = 4;
+    constexpr uint32_t  SlotMachineStatePayoutOut = 5;
+    constexpr char      SlotMachinePayoutScreen[] = "Payout_Screen";
+    /** The lever's node: it turns about its own X axis, its translation is
+     *  the pivot (NV_SlotMachine-Minigame*.nif, findings/minigames.md §13) */
+    constexpr char      SlotMachineLever[]        = "Slot-Machine_Arm";
+    constexpr uint32_t  BlackJackStateTurn   = 4;
+    constexpr uint32_t  RouletteStateBet     = 4;
+
+    /**
+     * The calls to NiRenderer::ClearBuffer (RendererClearBuffer) that clear
+     * the depth buffer at the start of the scenes that can lie on an object
+     * of the world: BlackJackMenu, SlotMachineMenu, RouletteMenu and
+     * CaravanMenu::DrawScene (0x00740F30 for Caravan's).
+     */
+    constexpr uintptr_t BlackJackDepthClearSite   = 0x00733530;
+    constexpr uintptr_t SlotMachineDepthClearSite = 0x007C19F0;
+    constexpr uintptr_t RouletteDepthClearSite    = 0x007BBD20;
+    constexpr uintptr_t CaravanDepthClearSite     = 0x00740F60;
+
+    /**
+     * The vigor tester of character creation (LoveTesterMenu, findings/
+     * minigames.md §10). Its scene, Draw3DElements 0x007948D0, holds the
+     * world's machine itself: the Activate and Cabinet models (BSFadeNode*
+     * fields of the instance at 0x5C and LoveTesterCabinetModel, children of
+     * the menu's shadow scene node, so that their world transform is their
+     * place in the scene), in the frame of the model of the world's
+     * VCG01VigorTester activator. Mouse clicks go to
+     * the full-screen hot rectangle, then the menu picks its buttons with
+     * NiCamera::WindowPointToRay of its camera at the cursor.
+     * LoveTesterDepthClearSite is its call to RendererClearBuffer.
+     */
+    constexpr uint32_t  LoveTesterMenuId          = 0x432;
+    constexpr uintptr_t LoveTesterInstance        = 0x011DA2C8;
+    constexpr uintptr_t LoveTesterCamera          = 0x011DA2F4;
+    constexpr uintptr_t LoveTesterCabinetModel    = 0x60;
+
+    /**
+     * The buttons the menu's click picks (HandleClick, case 5): those of the
+     * current page, LoveTesterPages + LoveTesterPageSize * the page at
+     * LoveTesterPage (pages up to LoveTesterLastPage), then those of the whole
+     * machine, LoveTesterCommonButtons. Each is a BSSimpleArray (base
+     * pointer at +4, size at +8) of buttons whose node (NiAVObject*) is at
+     * LoveTesterButtonNode; the pick is on that node's geometry.
+     */
+    constexpr uintptr_t LoveTesterPage            = 0x48;
+    constexpr uint32_t  LoveTesterLastPage        = 8;
+    constexpr uintptr_t LoveTesterPages           = 0x84;
+    constexpr uintptr_t LoveTesterPageSize        = 0x20;
+    constexpr uintptr_t LoveTesterCommonButtons   = 0x1A4;
+    constexpr uintptr_t SimpleArrayBase           = 0x4;
+    constexpr uintptr_t SimpleArraySize           = 0x8;
+    constexpr uintptr_t LoveTesterButtonNode      = 0x8;
+    constexpr uintptr_t LoveTesterDepthClearSite  = 0x0079491C;
+
+    /**
+     * ShadowSceneNode::kLightingOffset, on the world's shadow scene node
+     * (ShadowSceneNodes[0]). The shaders add it to the position of every
+     * point light and to the eye, whatever scene they draw.
+     * DrawWorld_Setup1stPerson sets it to minus the player's position for
+     * the first-person pass, so that nothing else lit by a point light can
+     * be drawn with it: see findings/minigames.md §5.
+     */
+    constexpr uintptr_t ShadowSceneLightingOffset = 0x1E4;
+
+    /**
+     * TESObjectACTI: its form type and the path of its model
+     * (TESModelTextureSwap at +0x3C, then TESModel::strModel, whose
+     * BSStringT starts with the characters' pointer).
+     */
+    constexpr uint8_t   FormTypeActivator    = 0x15;
+    constexpr uintptr_t ActivatorModelPath   = 0x40;
+
+    /**
+     * TESObjectREFR::Get3D, not the player's override: __thiscall without
+     * arguments, it gives the third-person model of the player
+     * (PlayerCharacter::Get3D(false), 0x00950BB0, calls it). Checked against
+     * its first bytes.
+     */
+    constexpr uintptr_t RefGet3D             = 0x0043FCD0;
+    constexpr uint8_t   RefGet3DPrologue[]   = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C, 0x89, 0x4D, 0xFC, 0xA1 };
+
+    /// A character's body, where the skeleton has one
+    constexpr char      PelvisNodeName[]     = "Bip01 Pelvis";
+
+    /**
+     * LockPickMenu: the pin's slider (tile, with the trait id held at
+     * LockPickSliderTrait for its position) and the tile whose width is its
+     * range.
+     */
+    constexpr uintptr_t LockPickSlider       = 0x68;
+    constexpr uintptr_t LockPickSliderRange  = 0x64;
+    constexpr uintptr_t LockPickSliderTrait  = 0x011DA1FC;
+
+    /**
+     * RouletteMenu: the bet selector's position on the felt, written by the
+     * menu while a stick or the mouse moves, within the limits of the
+     * RouletteSelector constants; the bets placed (BSSimpleList of
+     * RouletteBet*, the bet's id at +4); ComputeHoveredTileID (__thiscall on
+     * the menu, returns the bet under the selector, RouletteNoBet or more if
+     * none).
+     */
+    constexpr uintptr_t RouletteSelectorX    = 0x3FD4;
+    constexpr uintptr_t RouletteSelectorY    = 0x3FD8;
+    constexpr uintptr_t RouletteBetList      = 0x3E78;
+    constexpr uintptr_t RouletteBetId        = 0x04;
+    constexpr uintptr_t RouletteHoveredBet   = 0x007BF390;
+    constexpr uint8_t   RouletteHoveredBetPrologue[] = { 0x55, 0x8B, 0xEC };
+    constexpr uint32_t  RouletteNoBet        = 159;
+    constexpr float     RouletteSelectorMinX = -27.5f;
+    constexpr float     RouletteSelectorMaxX = 28.0f;
+    constexpr float     RouletteSelectorMinY = -13.3f;
+    constexpr float     RouletteSelectorMaxY = 13.1f;
+
+    /** The vtable that tells a world's terminal among the rendered menus */
+    constexpr uintptr_t TerminalVtable       = 0x0106EBE4;
+    /**
+     * FORenderedMenuRaceSex, the rendered menu of RaceSexMenu (0x40C): the
+     * Reflectron of the character creation, the barber's and the surgeon's
+     * projectors. Same FORenderedMenu layout as the terminal (screen, model,
+     * camera, initialised flag); its Draw renders the face into a texture of
+     * its own and then the tiles into the given texture, and its Pick casts
+     * the menu camera's ray through the cursor at the projector's buttons.
+     * See findings/menu-scenes.md.
+     */
+    constexpr uintptr_t RaceSexRenderedVtable = 0x010759EC;
+    constexpr uint32_t  RaceSexMenuId         = 0x40C;
     constexpr uintptr_t LockPickSceneRoot = 0x011DA24C;
     constexpr char      LockPickBackdrop[] = "shadow";
 
@@ -689,6 +1396,59 @@ namespace dxvk {
     constexpr uintptr_t SettingSizeWidth      = 0x011C73DC;
     constexpr uintptr_t SettingSizeHeight     = 0x011C718C;
     constexpr uintptr_t SettingFullScreen     = 0x011C77B4;
+    /** Name of a setting, "name:section": a pointer in the Setting object */
+    constexpr uintptr_t SettingName           = 0x8;
+
+    /**
+     * Text of the game's messages, see findings/tutorials.md.
+     *
+     * TESDescription::GetDescription (__thiscall, form or null, chunk) is
+     * reached through a virtual table; MessageDescriptionSlot is the entry of
+     * BGSMessage's, which changes messages only and not books or perks.
+     * MessageDescription is the TESDescription's place in a BGSMessage.
+     *
+     * ControlPushText (GetControlPushTextFor, __cdecl, action, buffer, with
+     * the prefix) gives the name of a control in a text's &sUActn...; tag, and
+     * has a single caller. Its prefixes are string settings ("press", and
+     * "pull" for a trigger), action ControlActionAttack being the trigger's.
+     * SettingLanguage is the string setting sLanguage:General.
+     */
+    constexpr uintptr_t DescriptionGetText          = 0x00482E90;
+    constexpr uintptr_t MessageDescriptionSlot      = 0x010337A4;
+    constexpr uintptr_t MessageDescription          = 0x24;
+    constexpr uintptr_t ControlPushText             = 0x007039B0;
+    constexpr uintptr_t ControlTextCallSite         = 0x00707118;
+    constexpr uint32_t  ControlActionAttack         = 4;
+    constexpr uintptr_t SettingControlTextPrefix    = 0x011D3FC4;
+    constexpr uintptr_t SettingControlTriggerPrefix = 0x011D4A08;
+    constexpr uintptr_t SettingLanguage             = 0x011C3CB4;
+
+    /**
+     * Settings the VR layer replaces on the first D3D9 interface, see
+     * findings/game-settings.md. WinMain has read the INI files by then; the
+     * audio setup (TESMain::TESMain), TESRenderer::Init and the run-time
+     * readers come after it.
+     */
+    constexpr uintptr_t SettingForceHighDetailReflections = 0x011C7C00;
+    constexpr uintptr_t SettingMultiThreadAudio           = 0x011F6DFC;
+    constexpr uintptr_t SettingUseAudioDebugInformation   = 0x011F6E5C;
+    constexpr uintptr_t SettingAudioCacheSize             = 0x011F6EC8;
+    constexpr uintptr_t SettingMaxSizeForCachedSound      = 0x011F6ED4;
+    constexpr uintptr_t SettingSelectivePurgeOnFastTravel = 0x011C3C10;
+    constexpr uintptr_t SettingBackgroundLoadLipFiles     = 0x011E05EC;
+    constexpr uintptr_t SettingPreemptivelyUnloadCells    = 0x011C3D40;
+    constexpr uintptr_t Setting30GrassVS                  = 0x011C7308;
+    constexpr uintptr_t SettingDoHighDynamicRange         = 0x011C76C0;
+    constexpr uintptr_t SettingUseBlurShader              = 0x011C7768;
+    constexpr uintptr_t SettingLightEffectFadeDuration    = 0x011DB2BC;
+    /// Display settings named by JIP LN and JohnnyGuitar NVSE (same addresses)
+    constexpr uintptr_t SettingDrawShadows                = 0x011C74D4;
+    constexpr uintptr_t SettingActorShadowCountInt        = 0x011C72D8;
+    constexpr uintptr_t SettingActorShadowCountExt        = 0x011C72E4;
+    /// bAlwaysActive:General, TESMain::SetActive (0x00871C90) keeps the game
+    /// running when its window is deactivated
+    constexpr uintptr_t SettingAlwaysActive               = 0x011DEED8;
+
     constexpr uintptr_t RendererSizeReadSite  = 0x004DA730;
     constexpr uint8_t   RendererSizeRead[] = {
       0xB9, 0xDC, 0x73, 0x1C, 0x01, 0xE8, 0xB6, 0x5C, 0xF7, 0xFF, 0xA3, 0x7C, 0x94, 0x18, 0x01,
@@ -702,11 +1462,15 @@ namespace dxvk {
      * counts the time without input and turns the third-person camera
      * around the player past fVanityModeAutoDelay, unless the
      * bDisableAutoVanityMode:General setting (bool value at SettingValue)
-     * is set. The checked site is where it reads the setting.
+     * is set. The checked site is where it reads the setting, the call is
+     * SettingT::operator! (lStewieAl's Tweaks replaces it, and reads the same
+     * setting first).
      */
     constexpr uintptr_t DisableAutoVanitySetting = 0x011E09E0;
     constexpr uintptr_t AutoVanityCheckSite      = 0x0094358E;
-    constexpr uint8_t   AutoVanityCheck[] = { 0xB9, 0xE0, 0x09, 0x1E, 0x01, 0xE8, 0x98, 0x63, 0xB7, 0xFF };
+    constexpr uint8_t   AutoVanityCheck[] = { 0xB9, 0xE0, 0x09, 0x1E, 0x01 };
+    constexpr uintptr_t AutoVanityCallSite       = 0x00943593;
+    constexpr uintptr_t SettingIsOff             = 0x004B9930;
 
     /**
      * The kill camera, see findings/camera.md §7. The player's mode
@@ -751,14 +1515,191 @@ namespace dxvk {
      * movzx ecx, byte [eax+0x64D], checks the offset.
      */
     constexpr uintptr_t PlayerTempThirdPerson     = 0x64D;
+
+    /**
+     * PlayerCharacter::GetCannibal (__thiscall, bool, vtable slot read by
+     * the GetIsInCannibalAction console command): the player is under AI
+     * control and its process's current package (BaseProcess vtable +0x22C)
+     * is of type 38, PACKAGE_TYPE_CANNIBAL (TESPackage::GetPackType, movsx
+     * [+0x20]). PlayerCharacter::InitiateCannibalPackage (0x009694D0) sets
+     * that control and the temporary third person; HighProcess::
+     * ProcessCannibal (0x00904DA0) clears the control once the idle is done.
+     * GOG database, findings/camera.md §8.8.
+     */
+    constexpr uintptr_t PlayerGetCannibal         = 0x00969760;
+    constexpr uint8_t   PlayerGetCannibalPrologue[] = {
+      0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C, 0x89, 0x4D, 0xF8, 0x8B, 0x4D, 0xF8,
+    };
+
+    /**
+     * PlayerCharacter::Show1stPerson (__thiscall, bool first), which culls
+     * one of the player's two roots and shows the other, and stores which
+     * one is shown in bActually3rdPerson (PlayerThirdPerson, +0x64B). It
+     * refuses the first person while bTemp3rdPerson is set, and the camera
+     * update (UpdateFirstPersonZoom 0x00950290) calls it only once, when
+     * b3rdPerson goes back to 0: see findings/camera.md §8.7. The vanity
+     * camera flag (PlayerCharacter::bIsVanityMode) holds that call back too.
+     */
+    constexpr uintptr_t Show1stPerson         = 0x00951A10;
+    constexpr uint8_t   Show1stPersonPrologue[] = {
+      0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x0B, 0x82, 0xF1, 0x00,
+      0x64, 0xA1, 0x00, 0x00, 0x00, 0x00, 0x50, 0x81, 0xEC, 0xB8, 0x00, 0x00, 0x00,
+    };
+    constexpr uintptr_t VanityModeActive      = 0x011E07B8;
+
+    /**
+     * PlayerCharacter::p1stPersonAnimation, the first-person skeleton's
+     * animation data, which PlayerCharacter::GetAnimation (0x00950A10, the
+     * Actor vtable slot +0x1E4) gives in first person: scripts play their
+     * idles on it then (Script::PlayIdle 0x005CB2D0 and Cmd_IsIdlePlaying
+     * test that animation), such as waking up and getting out of bed at a
+     * new game, and the camera follows its camera node. Its read there,
+     * cmp dword [ecx+0x690], 0, checks the offset.
+     *
+     * Animation::SpecialIdlePlaying (__thiscall, bool: the idle at +0x124,
+     * an AnimIdle, is in its playing state, 2, its state at +0x8). See
+     * findings/camera.md §8.6.
+     */
+    constexpr uintptr_t PlayerFirstPersonAnimation = 0x690;
+    constexpr uintptr_t PlayerGetAnimationReadSite = 0x00950A3F;
+    constexpr uint8_t   PlayerGetAnimationRead[]   = { 0x83, 0xB9, 0x90, 0x06, 0x00, 0x00, 0x00 };
+    constexpr uintptr_t AnimationSpecialIdlePlaying = 0x004985B0;
+    constexpr uint8_t   AnimationSpecialIdlePlayingPrologue[] = {
+      0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x4D, 0xFC, 0x81, 0xC1, 0x24, 0x01, 0x00, 0x00 };
+    constexpr uintptr_t AnimationIdle             = 0x124;
+    constexpr uintptr_t AnimIdleState             = 0x8;
     constexpr uintptr_t TempThirdPersonReadSite   = 0x009503DA;
     constexpr uint8_t   TempThirdPersonRead[]     = { 0x0F, 0xB6, 0x88, 0x4D, 0x06, 0x00, 0x00 };
+
+    /**
+     * BaseProcess::GetKnockedState, a vtable slot (__thiscall, 0 if the
+     * actor is not knocked down), read in PlayerCharacter::UpdateTemp3rdPerson:
+     * mov eax, [edx+0x40C].
+     */
+    constexpr uintptr_t ProcessGetKnockedStateSlot = 0x40C;
+    constexpr uintptr_t ProcessGetKnockedStateSite = 0x0095040E;
+    constexpr uint8_t   ProcessGetKnockedStateRead[] = { 0x8B, 0x82, 0x0C, 0x04, 0x00, 0x00 };
 
     /** LoadingMenu*, not null while a loading screen is shown */
     constexpr uintptr_t LoadingMenu = 0x011DA0C0;
 
     /** Main::bInMenuMode, a bool set while any menu (Pip-Boy included) pauses the game */
     constexpr uintptr_t MenuMode = 0x011DEA2B;
+
+    /**
+     * Interface::IsInMenuMode (__cdecl), what MenuMode is made from. It stays
+     * true while a casino game runs in real time, when MenuMode does not.
+     */
+    constexpr uintptr_t IsInMenuMode = 0x00702360;
+    constexpr uint8_t   IsInMenuModePrologue[] = { 0x55, 0x8B, 0xEC, 0xE8 };
+
+    /**
+     * What keeps the world running behind a casino game, findings/minigames.md
+     * §9. TESMain::OnIdle reads the menu mode twice. The first read decides
+     * on the player's update, and stays. The second decides on everything else
+     * (timer, animations, AI threads); LiveMenuModeFrameSite is that one.
+     * LiveMenuModeSites: the other tests that hold the world still (shader
+     * time, footsteps and jumps, sky sounds, actors' breath, the memory sort).
+     * With the AI threads running, the interface's idle runs on them
+     * (InterfaceIdleThreadSites); the menu has to stay on the main thread, so
+     * it runs before they start, at SetMainRenderingSite (__cdecl, one argument).
+     * Sounds: PreIdleStuff counts its pauses (SoundPauses and VoicePauses of
+     * InterfaceManager, read through its pointer), and only undoes those
+     * counted; BSAudio's four functions are __thiscall on the AudioSingleton.
+     */
+    constexpr uintptr_t LiveMenuModeFrameSite = 0x0086E79E;
+    constexpr uintptr_t LiveMenuModeSites[] = {
+      0x0063E0F8, 0x00837D05, 0x008387C5, 0x0086A4A1, 0x0086A4DE, 0x0086EEAF, 0x008898BD };
+    constexpr uintptr_t SetMainRendering      = 0x008C80E0;
+    constexpr uintptr_t SetMainRenderingSite  = 0x0086EC78;
+    constexpr uintptr_t InterfaceIdle         = 0x0086FD70;
+    constexpr uintptr_t InterfaceIdleThreadSites[] = { 0x008C7BE9, 0x008C7DB9 };
+    constexpr uintptr_t InterfaceLastMinuteUpdate = 0x007058E0;
+    constexpr uintptr_t InConsole             = 0x011DEA2E;
+    constexpr uintptr_t InterfaceManagerInstance = 0x011D8A80;
+    constexpr uintptr_t InterfaceSoundPauses  = 0x20;
+    constexpr uintptr_t InterfaceVoicePauses  = 0x21;
+    constexpr uintptr_t AudioPauseAnimationSounds   = 0x0070BBA0;
+    constexpr uintptr_t AudioUnpauseAnimationSounds = 0x0070BBC0;
+    constexpr uintptr_t AudioPauseWorldVoices       = 0x0070BBE0;
+    constexpr uintptr_t AudioUnpauseWorldVoices     = 0x0070BC00;
+    constexpr uintptr_t PlayerInCombat        = 0xDF0;
+
+    /**
+     * What holds the Caravan challenger in place while the world runs behind
+     * the game (findings/caravan.md §3.5), as the script command SetRestrained
+     * 1 does: Actor::SetRestrained (__thiscall, bool) sets the life state
+     * Actor::uiLifeState to Restrained and stops the actor, then
+     * Actor::EndMovement (__thiscall) ends their path. A restrained actor
+     * cannot move (Actor::CanMove) and gets no idle from its AI
+     * (HighProcess::SetupSpecialIdle), only those asked for by name.
+     * SetRestrained 0 sets it back to Alive only while it is Restrained.
+     */
+    constexpr uintptr_t ActorSetRestrained    = 0x008ACE50;
+    constexpr uint8_t   ActorSetRestrainedPrologue[] = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x0F, 0xB6, 0x45, 0x08 };
+    constexpr uintptr_t ActorEndMovement      = 0x0087FAA0;
+    constexpr uint8_t   ActorEndMovementPrologue[] = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x45, 0xFC };
+    constexpr uint32_t  ActorLifeAlive        = 0;
+    constexpr uint32_t  ActorLifeRestrained   = 5;
+
+    /**
+     * What has the Caravan challenger hold up a hand as if it held cards
+     * (findings/caravan.md §3.8), as the script command PlayIdle does
+     * (Script::PlayIdle 0x005CB2D0): the actor's virtual GetAnimation
+     * (__thiscall, the Animation or null), then, once
+     * AnimationSpecialIdlePlaying is false and Animation::spAnimIdleQueued
+     * is null, the process's virtual SetCurrentProcessIdle (__thiscall, the
+     * TESIdleForm) and AddPostAnimationAction (__thiscall,
+     * POSTANIM_ACTION_PICK_IDLE_CALL). Read from the instructions at
+     * 0x005CB3A0, 0x005CB3E4, 0x005CB4DB and 0x005CB504. Both process slots
+     * are empty but in HighProcess (0x008D9410, 0x00903180), the process of
+     * a character close to the player. The idle is LooseReadPaperOnHandA
+     * (FalloutNV.esm, a sheet read in a raised left hand, no conditions,
+     * loop of 1.7 s played 5 times), form type TESIdleForm.
+     */
+    constexpr uintptr_t ActorGetAnimationSlot       = 0x1E4;
+    constexpr uintptr_t AnimationIdleQueued         = 0x128;
+    constexpr uintptr_t ProcessSetCurrentIdleSlot   = 0x71C;
+    constexpr uintptr_t ProcessAddPostAnimationSlot = 0x614;
+    constexpr uint32_t  PostAnimationPickIdle       = 0x80;
+    constexpr uint32_t  CaravanHoldCardsIdle        = 0x0005DB21;
+    constexpr uint8_t   FormTypeIdle                = 0x48;
+
+    /**
+     * Keeping that idle up, then ending it. Animation::uiLoopCounts (+0x7C,
+     * an int per animation section) counts the loops a section has left:
+     * Animation::Update (0x00491180) decrements it at each loop unless it
+     * is -1, which loops for ever (the counter JohnnyGuitar's StopIdleLoop
+     * zeroes). The AnimIdle at Animation::spAnimIdle holds its section at
+     * +0x14, its two add-on objects (the TESObjectANIO models the idle
+     * brings, here the sheet aoExamPaperA 0x5DB23, attached by the game to
+     * the bone its NIF names) at +0x24 and its TESIdleForm at +0x2C. The
+     * process's virtual FreeUpSpecialIdle (__thiscall, the actor; slot
+     * 0xD8, HighProcess 0x008DAF20, empty in the other processes) ends the
+     * idle through Animation::SpecialIdleFree (0x00498910), as JIP LN's
+     * StopIdle does.
+     */
+    constexpr uintptr_t AnimationLoopCounts         = 0x7C;
+    constexpr int32_t   AnimationLoopForever        = -1;
+    constexpr uint32_t  AnimationSections           = 8;
+    constexpr uintptr_t AnimIdleSection             = 0x14;
+    constexpr uintptr_t AnimIdleAddOns              = 0x24;
+    constexpr uint32_t  AnimIdleAddOnCount          = 2;
+    constexpr uintptr_t AnimIdleForm                = 0x2C;
+    constexpr uintptr_t ProcessFreeSpecialIdleSlot  = 0xD8;
+
+    /**
+     * What has the held Caravan challenger look at the player, as a
+     * script's head tracking would: the process's virtual
+     * SetScriptHeadTrackTarget (__thiscall, the reference; slot 0x62C,
+     * HighProcess 0x00900F50) and ClearScriptHeadTrackTarget (__thiscall,
+     * bool: false gives the head back to the other targets at once; slot
+     * 0x648, HighProcess 0x00901190), both empty in the other processes.
+     * Actor::ProcessTracking then aims the head at the target's
+     * GetLookingAtLocation (findings/npc-gaze.md).
+     */
+    constexpr uintptr_t ProcessSetScriptHeadTrackSlot   = 0x62C;
+    constexpr uintptr_t ProcessClearScriptHeadTrackSlot = 0x648;
 
     /**
      * HUDMainMenu*, the HUD. Its top-level element groups are Tile* fields,
@@ -845,6 +1786,18 @@ namespace dxvk {
     constexpr uint8_t   HudSneakMeterStore[]   = { 0x8B, 0x0D, 0xC0, 0x96, 0x1D, 0x01, 0x89, 0x81, 0x30, 0x01, 0x00, 0x00 };
 
     /**
+     * BreathMeter group: a 64 x 64 model tile (Interface\HUD\AirTimer01.NIF)
+     * that HUDMainMenu::UpdateBreathMeter (0x0077E4F0) fades in while the
+     * player's head is under water and winds down with the breath left.
+     * HUDMainMenu::Create stores it at the given site and puts it 80 units
+     * below the sneak meter, in the middle of the screen; nothing else
+     * moves it. See findings/hud.md §18.
+     */
+    constexpr uintptr_t HudBreathMeter = 0x148;
+    constexpr uintptr_t HudBreathMeterStoreSite = 0x0076E485;
+    constexpr uint8_t   HudBreathMeterStore[]   = { 0x8B, 0x15, 0xC0, 0x96, 0x1D, 0x01, 0x89, 0x82, 0x48, 0x01, 0x00, 0x00 };
+
+    /**
      * HUDMainMenu fields holding the HUD groups shown on the hands: HitPoints
      * (health bar and compass), ActionPoints (action points, ammunition and
      * weapon condition), with AmmoTypeLabel and CNDArrows, which are placed
@@ -867,6 +1820,23 @@ namespace dxvk {
     constexpr uint32_t  TileTraitY      = 0xFA2;
     constexpr uint32_t  TileTraitHeight = 0xFB0;
     constexpr uint32_t  TileTraitWidth  = 0xFB1;
+
+    /**
+     * What a HUD group actually draws (VrHudLayers::groupContent), see
+     * findings/hud.md §15. Tile::GetRealX/Y (0x00A013D0/0x00A01440) add to
+     * a tile's x and y those of each ancestor whose locus trait is set.
+     * TileText::MakeNode (0x00A21AF0) stores the size of the laid out text
+     * in the width and height traits, and Font::GetLineOffsets (0x00A12370)
+     * centres a line on x when (justify & 0xF) == 2 and ends it there when
+     * it is 4. GetType (vtable slot TileGetTypeSlot): 0x386 image, 0x387 text.
+     */
+    constexpr uint32_t  TileTraitLocus        = 0xFA8;
+    constexpr uint32_t  TileTraitAlpha        = 0xFA9;
+    constexpr uint32_t  TileTraitJustify      = 0xFB7;
+    constexpr uint32_t  TileJustifyMask       = 0xF;
+    constexpr uint32_t  TileJustifyCentre     = 2;
+    constexpr uint32_t  TileJustifyRight      = 4;
+    constexpr uint32_t  TileTypeText          = 0x387;
 
     /**
      * Interface::GetActivateREFR, __cdecl without arguments: the reference
@@ -976,6 +1946,15 @@ namespace dxvk {
     constexpr uintptr_t InputMouseSwapped    = 0x1B4C;
 
     /**
+     * Controls::GetMouseAxis (__thiscall, axis, ret 4) returns the movement
+     * of one mouse axis from the fields above, 3 being the wheel, and
+     * InterfaceManager::Idle reads the wheel with it for the menus. yUI's
+     * touchpad fix takes this call.
+     */
+    constexpr uintptr_t MouseWheelCallSite   = 0x0070CE9E;
+    constexpr uintptr_t MouseAxis            = 0x00A239E0;
+
+    /**
      * InterfaceManager::UpdateCursor (__thiscall, no arguments), called by
      * InterfaceManager::Update while the interface is in mouse mode. It
      * moves the cursor tile's node by the mouse movement, clamps it to the
@@ -985,16 +1964,133 @@ namespace dxvk {
     constexpr uintptr_t UpdateCursorCallSite = 0x0070CD31;
     constexpr uintptr_t UpdateCursor         = 0x007118D0;
     constexpr uintptr_t InterfaceCursorTile  = 0x28;
+
+    /**
+     * InterfaceManager+0xCC, the tile under the cursor (pOverTileTarget):
+     * set by Update in mouse mode from PickMenus 0x007126C0, which only
+     * returns tiles with the target trait, so null over nothing to click.
+     */
+    constexpr uintptr_t InterfaceOverTile    = 0xCC;
     constexpr uintptr_t NodeLocalTranslate   = 0x58;
 
     /**
      * Size of the interface in its own units (__cdecl, returns a float):
      * 960 high and as wide as the screen's aspect makes it, or 1280 wide
-     * and taller on a portrait screen.
+     * and taller on a portrait screen. VrInterfaceShape replaces both.
      */
     constexpr uintptr_t InterfaceWidth  = 0x00715D40;
     constexpr uintptr_t InterfaceHeight = 0x00715DA0;
     constexpr uint8_t   InterfaceSizePrologue[] = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x14, 0xE8 };
+
+    /**
+     * CalculateScaledHeight (__cdecl, returns a double): 1280 times the
+     * height over the width of the default render target, the height in
+     * units of the tiles that fade out (Tile::UpdateTile 0x00A04640 and
+     * Tile::ReClipChildren 0x00A07A40 scale their scissor rectangles with
+     * it). ida-gog.
+     */
+    constexpr uintptr_t InterfaceScaledHeight = 0x00706E90;
+    constexpr uint8_t   InterfaceScaledHeightPrologue[] = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x30, 0xE8 };
+
+    /**
+     * Call of NiRenderer::GetScreenWidth (__thiscall, returns the width in
+     * pixels) in InterfaceManager::InitSceneGraph (0x00712E90), which builds
+     * the interface's orthographic camera: fAspectRatioRatio = width /
+     * height / (4/3), frustum 1280 * fAspectRatioRatio units wide and always
+     * 960 high. On a portrait screen it shows the middle of the 1280 units
+     * the menus are laid out on. ida-gog.
+     */
+    constexpr uintptr_t InterfaceCameraWidthCallSite  = 0x00712FBB;
+    constexpr uintptr_t InterfaceCameraHeightCallSite = 0x00712FDF;
+    constexpr uintptr_t RendererScreenWidth          = 0x004DEE10;
+    constexpr uintptr_t RendererScreenHeight         = 0x004DEE70;
+
+    /** TESRenderer::GetScreenWidth and GetScreenHeight (__cdecl, return the window's size as int) */
+    constexpr uintptr_t GameScreenWidth  = 0x004DC1F0;
+    constexpr uintptr_t GameScreenHeight = 0x004DC200;
+
+    /**
+     * fmul qword ptr [dbl_01078128] (4/3) in FORenderedMenu::Pick (0x007FB790)
+     * and FOPipboyManager::CheckOrangeButtonsClicked (0x007F8720): the point
+     * picked on a rendered menu's screen (terminal, hacking, Reflectron, the
+     * Pip-Boy) becomes fPipBoyMouseX = u * height * 4/3 pixels, i.e. the
+     * 1280 units of a landscape window. InterfaceManager::PickMenus
+     * (0x007126C0) casts it through the window (NiCamera::WindowPointToRay
+     * divides by the target's width) and GetPipboyMouseX (0x007697F0) turns
+     * it into units with the window's width: on a window narrower than 4:3
+     * the pick lands to the right of the pointed point. ida-gog.
+     */
+    constexpr uintptr_t RenderedMenuPickAspectSite = 0x007FB9B0;
+    constexpr uintptr_t PipBoyPickAspectSite       = 0x007F88EE;
+    constexpr uint8_t   PickAspectInstruction[]    = { 0xDC, 0x0D, 0x28, 0x81, 0x07, 0x01 };
+
+    /**
+     * Calls of TESRenderer::GetScreenWidth (GameScreenWidth) where the game
+     * derives a shape from the window, for a 4:3 or wider window. ida-gog.
+     * - ScreenShot::TakeSaveGameScreenShot (0x00878F60, every save through
+     *   TESSaveLoadGame::SaveHeader 0x00861130): it reads height * H / W rows
+     *   of a capture that is height rows high, past its end on a window
+     *   taller than wide;
+     * - BGSSaveLoadHeader::SaveHeader (0x0084D4B0, two calls): the size of
+     *   the same capture;
+     * - the cameras of the menus' 3D scenes, frustum height from H / W:
+     *   HUDMainMenu::Create3DCamera (0x0077EE50, scope overlay),
+     *   LockPickMenu::Create3DCamera (0x0078E900), LoveTesterMenu::SetupCamera
+     *   (0x007945F0), BlackJackMenu::SetupCamera (0x007C2180),
+     *   SPECIALBookMenu::InitCamera (0x007C99C0),
+     *   FORenderedMenuRaceSex::Initialize (0x007FC970) and
+     *   FORenderedTerminal::Initialize (0x007FEEB0);
+     * - CreditsMenu::Create (0x0075F2A0): moves a tile when H / W is not 0.75.
+     */
+    constexpr uintptr_t WindowShapeScreenWidthCallSites[] = {
+      0x008790ED, 0x0084D58B, 0x0084D6D9,
+      0x0077EF9A, 0x0078EA1D, 0x00794743, 0x007C22A6, 0x007C9B13, 0x007FD200, 0x007FF342,
+      0x0075F51D,
+    };
+
+    /**
+     * Calls of NiRenderer::GetScreenWidth (RendererScreenWidth) where the game
+     * builds a camera from the window's aspect. ida-gog.
+     * - TESTerrainLODManager::UpdateGrassForCell (0x0057D4F0): the frustum
+     *   that chooses the grass to update, width times 0.75 / (H / W);
+     * - BGSCameraShot::Update (0x0058CF60): the frustum of a camera shot,
+     *   width times W / H / (4/3).
+     */
+    constexpr uintptr_t WindowShapeRendererWidthCallSites[] = { 0x0057D669, 0x0058D3F5 };
+
+    /**
+     * Interface::GetRealScreenWidth (__cdecl, returns a double) and its call
+     * in LoadingMenu::_Create (0x007890E0), which gives the loading menu's
+     * tile the window's W / H as user0. ida-gog.
+     */
+    constexpr uintptr_t InterfaceRealScreenWidth       = 0x00706E40;
+    constexpr uintptr_t LoadingMenuScreenWidthCallSite = 0x0078965F;
+
+    /**
+     * RadialTile's hit test (vtable 0x01095750, slot 5 = Tile::Unk_05,
+     * __thiscall (float x, float y) in window pixels, returns bool, retn 8),
+     * called by InterfaceManager::PickMenus (0x007126C0) for the tile under
+     * the cursor. It scales both coordinates by the menus root's width over
+     * Interface::GetRealScreenWidth, then tests the angle and distance from
+     * the centre in user0..user5. Only the companion wheel's slices are
+     * radial tiles. ida-gog.
+     */
+    constexpr uintptr_t RadialTileContainsSlot = 0x01095764;
+    constexpr uintptr_t RadialTileContains     = 0x00A216B0;
+
+    /**
+     * BSTextureManager::LookupTextureParameters (0x00B6C2C0), cases
+     * TEX_INTERFACE_FIRST / TEX_INTERFACE_TEMP and TEX_INTERFACE_RACESEXMENU:
+     * the rendered menus' textures (terminal and Pip-Boy screens, the
+     * Reflectron's face) are 1280 wide and 1280 * H / W high, from the
+     * default render target group's size. At each site the edi = group,
+     * `mov eax, [edx+GetWidth]; push 0; mov ecx, edi; call eax`. ida-gog.
+     */
+    constexpr uintptr_t InterfaceTextureWidthSites[] = { 0x00B6CD75, 0x00B6CF0C };
+    constexpr uint8_t   InterfaceTextureWidthCall[]  = {
+      0x8B, 0x82, 0x8C, 0x00, 0x00, 0x00, 0x6A, 0x00, 0x8B, 0xCF, 0xFF, 0xD0 };
+    constexpr uintptr_t RenderTargetGroupGetWidth  = 0x8C;
+    constexpr uintptr_t RenderTargetGroupGetHeight = 0x90;
 
     /** Menus driven by the sticks, where the pointer is off */
     constexpr uint32_t  VatsMenuId = 0x420;
@@ -1024,6 +2120,13 @@ namespace dxvk {
      * creation opens. See findings/menu-scenes.md.
      */
     constexpr uintptr_t RaceSexBackgroundCallSite  = 0x007FD6F6;
+
+    /**
+     * TESMain::OnIdle captures the same frozen background each time an hour
+     * passes in the sleep and wait menu (SleepWaitMenu::UpdateSleeping
+     * returned true), with Main in ECX. See findings/menu-scenes.md.
+     */
+    constexpr uintptr_t SleepWaitBackgroundCallSite = 0x0086ED86;
     constexpr uintptr_t PipBoyBackground           = 0x00871DC0;
     constexpr uintptr_t WorldRenderCallSite        = 0x00870244;
     constexpr uintptr_t Render                     = 0x008706B0;
@@ -1169,6 +2272,22 @@ namespace dxvk {
     constexpr uint16_t  BillboardAlwaysFaceCenter = 3;
 
     /**
+     * SpeedTree leaf cards, see findings/render.md. The leaf shader's
+     * SetupTransformations (0x00BB25D0) calls UpdateScaleAdjustment, which
+     * copies the columns 2 (right) and 1 (up) of BSShaderManager::pCamera's
+     * world rotation into the BillboardRight and BillboardUp vertex constants
+     * (float4, part of SpeedTreeLeafShader::Const::GroupedConstants, register
+     * c11 onwards). Its only call. The leaf geometry being drawn is the first
+     * member of BSShaderManager::pCurrentRenderPass (SetupGeometryConstants
+     * 0x00BB2760).
+     */
+    constexpr uintptr_t LeafScaleAdjustment         = 0x00BB1A90;
+    constexpr uintptr_t LeafScaleAdjustmentCallSite = 0x00BB26B0;
+    constexpr uintptr_t LeafBillboardRight          = 0x01200638;
+    constexpr uintptr_t LeafBillboardUp             = 0x01200648;
+    constexpr uintptr_t ShaderCurrentRenderPass     = 0x011F91E0;
+
+    /**
      * Settings pages of the start menu, see findings/options-menu.md. The
      * menu builds its pages from two global arrays of option objects, filled
      * by CreateMenuElements; an option's mask selects the page it shows on.
@@ -1203,7 +2322,13 @@ namespace dxvk {
      * - StartMenu::_Create sets the menu's in-game flag, then sorts the
      *   options into its lists with Option::IsForModes (__thiscall on the
      *   option with the modes, returns a bool in AL); the Settings list's
-     *   call is at SettingsEntryModesCallSite (findings/options-menu.md §5).
+     *   call is at SettingsEntryModesCallSite (findings/options-menu.md §5);
+     * - StartMenu::DisplayOption (__thiscall on the menu with the user
+     *   option and its tile, null to look it up in the options list) writes
+     *   the option's value into its row. StartMenu::DoIdle calls it after a
+     *   click changes the value and before the option's callback, so the
+     *   callback can set the value back and show it again
+     *   (findings/options-menu.md §6).
      */
     constexpr uintptr_t StartMenuGlobal              = 0x011DAAC0;
     constexpr uintptr_t OptionArray                  = 0x011DAB88;
@@ -1214,6 +2339,7 @@ namespace dxvk {
     constexpr uintptr_t UserOptionConstruct          = 0x007D6350;
     constexpr uintptr_t HeapAllocate                 = 0x00401000;
     constexpr uintptr_t PopulateOptions              = 0x007D42B0;
+    constexpr uintptr_t DisplayOption                = 0x007D4CE0;
     constexpr uintptr_t SetListEnabled               = 0x007D74F0;
     constexpr uintptr_t TileGetFloat                 = 0x00A011B0;
     constexpr uintptr_t TileSetFloat                 = 0x00A012D0;
@@ -1242,6 +2368,7 @@ namespace dxvk {
     constexpr uint8_t   OptionConstructPrologue[]     = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B };
     constexpr uint8_t   UserOptionConstructPrologue[] = { 0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x18, 0xEA };
     constexpr uint8_t   PopulateOptionsPrologue[]     = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x44, 0x89, 0x4D };
+    constexpr uint8_t   DisplayOptionPrologue[]       = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0x89, 0x4D, 0xF8, 0x83, 0x7D, 0x08, 0x00 };
     constexpr uint8_t   OptionArrayAppendPrologue[]   = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0x89, 0x4D };
     constexpr uint8_t   TileGetFloatPrologue[]        = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C, 0x89, 0x4D };
     constexpr uint8_t   TileSetFloatPrologue[]        = { 0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x62, 0xCD };
@@ -1300,6 +2427,28 @@ namespace dxvk {
     constexpr uint8_t   GetDebugTextPrologue[]       = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x3C, 0x89, 0x4D };
 
     /**
+     * The text field the game asks the player's name with (TextEditMenu,
+     * menu 0x41B, opened by PlayerNameEntryMenu), see findings/name-entry.md.
+     * Read in the GOG database (code addresses equal the Steam build's).
+     *
+     * - TextEditGlobal: TextEditMenu::pInstance, null unless the field is
+     *   open (TextEditMenu::Close clears it before the menu fades out);
+     * - TextEditTitle: the TileText of the question, its text in the trait
+     *   TileTraitString (Tile::GetValue, see TileGetValue);
+     * - TextEditText: the field's text, a BSStringT (characters, then a
+     *   16-bit length), Windows-1252;
+     * - TextEditActive: byte, the field takes keys.
+     * InterfaceManager::Idle gives the key it reads at ConsoleKeyCallSite to
+     * the frontmost menu's HandleKeyboardInput when the console does not
+     * take it: the field inserts characters, handles the VrConsoleKey
+     * editing codes, and Enter clicks OK when the game accepts the text.
+     */
+    constexpr uintptr_t TextEditGlobal           = 0x011DAEC4;
+    constexpr uintptr_t TextEditTitle            = 0x30;
+    constexpr uintptr_t TextEditText             = 0x34;
+    constexpr uintptr_t TextEditActive           = 0x55;
+
+    /**
      * The game's rendered terminal, which shows the console in 3D, see
      * findings/console.md §6. All checked in Ghidra on the Steam executable.
      *
@@ -1316,7 +2465,10 @@ namespace dxvk {
      *   (__cdecl: name, text) and XmlCacheSetAt (__thiscall on XmlCache:
      *   name, storage), then read by TileReadFile (__thiscall on the parent
      *   tile: name), which frees the storage, and taken out of the cache
-     *   again with XmlCacheRemoveAt (__thiscall on XmlCache: name); TileGetChildByName (__thiscall: name), TileSetString
+     *   again with XmlCacheRemoveAt (__thiscall on XmlCache: name). It finds
+     *   the text in Tile::ParseFile (__cdecl: name, buffer, size), called at
+     *   TileParseFileCallSite, which UI Organizer replaces by a parser that
+     *   only reads files; TileGetChildByName (__thiscall: name), TileSetString
      *   (__thiscall: trait, text, propagate), traits below, a tile's
      *   destructor is vtable slot 0 (__thiscall, 1 frees);
      * - OffscreenInterfaceCallSite: DrawWorld_UpdateOffscreenBuffers calls
@@ -1363,6 +2515,8 @@ namespace dxvk {
     constexpr uintptr_t XmlCache                   = 0x011F34E0;
     constexpr uintptr_t XmlCacheRemoveAt           = 0x00A1E240;
     constexpr uintptr_t TileReadFile               = 0x00A01B00;
+    constexpr uintptr_t TileParseFileCallSite      = 0x00A01B87;
+    constexpr uintptr_t TileParseFile              = 0x00A01E20;
     constexpr uintptr_t TileGetChildByName         = 0x00A03DA0;
     constexpr uintptr_t TileSetString              = 0x00A01350;
     constexpr uint32_t  TileTraitVisible           = 0xFA3;
@@ -1487,6 +2641,17 @@ namespace dxvk {
     constexpr uintptr_t ShadowSceneNodeAddObject      = 0x00B5EEB0;
     constexpr uintptr_t ShadowSceneNodeRemoveObject   = 0x00B5B1C0;
     constexpr uint32_t  MenuShadowSceneNode           = 1;
+
+    /** BSFadeNode's virtual function table, to tell a model's root is one */
+    constexpr uintptr_t FadeNodeVtable                = 0x010A8F90;
+
+    /**
+     * CaravanMenu::spModel, the root of the table's scene, a child of the
+     * menu's shadow scene node (BSSM_SSN_MENU_OBJECT_3D, index 1, read in
+     * CaravanMenu::DrawScene). CaravanMenu::PrepareGameMenu detaches the last
+     * two children of spModel: nothing may be attached under it.
+     */
+    constexpr uintptr_t CaravanSceneRoot              = 0x011D91E4;
     constexpr uint32_t  ShadePropertyType             = 3;
     constexpr uintptr_t ShaderPropertyTextures        = 0xAC;
     constexpr uintptr_t TextureRendererData           = 0x24;
@@ -1522,6 +2687,7 @@ namespace dxvk {
     constexpr uintptr_t FileFinderGetFile    = 0x00AFDF20;
     constexpr uint32_t  FileReadOnly         = 0;
     constexpr uint32_t  FileBufferSize       = 0x4000;
+    constexpr uint32_t  ArchiveMeshes        = 0x1;
     constexpr uint32_t  ArchiveTextures      = 0x2;
     constexpr uintptr_t FileGetSize          = 0x28;
     constexpr uintptr_t FileRead             = 0x08;
@@ -1704,6 +2870,7 @@ namespace dxvk {
     /// HitData fields
     constexpr uintptr_t HitAggressor            = 0x00;
     constexpr uintptr_t HitTarget               = 0x04;
+    constexpr uintptr_t HitProjectile           = 0x08;
     constexpr uintptr_t HitDamageLimb           = 0x10;
     constexpr uintptr_t HitHealthDamage         = 0x14;
     constexpr uintptr_t HitLimbDamage           = 0x20;
@@ -2172,6 +3339,15 @@ namespace dxvk {
     constexpr uintptr_t HudHotKeyWheel             = 0x1C8;
 
     /**
+     * HUDMainMenu::UpdateHotkeysWheel (0x0077DA60) reads the D-pad in
+     * gamepad mode through HotKeyWheel::HandleHotkeyInput(-1) (__thiscall,
+     * slot, ret 4): a direction held arms the wheel, its release equips or
+     * unequips the slot's item. See findings/quick-menu.md §2.
+     */
+    constexpr uintptr_t HotKeyWheelHandleInput     = 0x00701BD0;
+    constexpr uintptr_t HudHotKeyInputCallSite     = 0x0077DAE9;
+
+    /**
      * The Pip-Boy's inventory, see findings/quick-menu.md §3: whether a menu
      * is the top one (__cdecl, menu id), the InventoryMenu and its hotkey
      * wheel, shown while the gamepad's hotkey button (RB) is held.
@@ -2464,6 +3640,585 @@ namespace dxvk {
      */
     constexpr uintptr_t NotInControlCallSite       = 0x0093F954;
     constexpr uintptr_t ForceGrenadeHold           = 0x009481D0;
+
+    /**
+     * bhkWorld::IsBatchingAdds (__thiscall, findings/grab.md §18.5): while
+     * a cell loads, the world queues the bodies added to it and adds them
+     * later, so a body just added is not in the world yet.
+     */
+    constexpr uintptr_t WorldIsBatchingAdds        = 0x00930C50;
+    constexpr uint8_t   WorldIsBatchingAddsBytes[] = {
+      0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x45, 0xFC, 0x33, 0xC9, 0x3B, 0x48, 0x18 };
+
+    /**
+     * PlayerCharacter::SetParentCell(TESObjectCELL*) (__thiscall, virtual):
+     * the player moves to another cell, possibly with another bhkWorld; the
+     * game moves its camera sphere there (findings/grab.md §18.5).
+     */
+    constexpr uintptr_t PlayerSetParentCellSlot    = 0x0108AC64;
+    constexpr uintptr_t PlayerSetParentCell        = 0x0094CAE0;
+
+    /**
+     * Message box on the main menu (findings/laa.md "In-game prompt"):
+     * - StartMenu::DoIdle calls StartMenu::MainMenuIdle (__thiscall, returns
+     *   false in the pause menu) on every frame at MainMenuIdleCallSite;
+     * - StartMenu flags (StartMenuFlags): the initial load's pre-fade, the
+     *   fade-in of the main menu and the "loading content" message;
+     * - MessageMenuGlobal: MessageMenu*, null while no message box is open;
+     * - ShowMessageBox (above): __cdecl (text, icon, title, callback, value
+     *   of the first button, type, alpha, width, buttons..., null). A button
+     *   click stores the first button's value plus the button's index, then
+     *   calls the callback (__cdecl, no argument);
+     * - GetMessageMenuResult: __cdecl, returns that value and clears it.
+     */
+    constexpr uintptr_t MainMenuIdleCallSite         = 0x007CFA8C;
+    constexpr uintptr_t MainMenuIdle                 = 0x007D5830;
+    constexpr uint32_t  StartMenuFadeIn              = 0x10;
+    constexpr uint32_t  StartMenuContentMessage      = 0x400;
+    constexpr uint32_t  StartMenuPreFade             = 0x80000;
+    constexpr uintptr_t MessageMenuGlobal            = 0x011DA4F0;
+    constexpr uint32_t  MessageBoxStartMenuType      = 0x12;
+    constexpr uintptr_t GetMessageMenuResult         = 0x00703FA0;
+    constexpr uint8_t   GetMessageMenuResultPrologue[] = {
+      0x55, 0x8B, 0xEC, 0x51, 0xE8, 0x67, 0x32, 0xDB, 0xFF, 0x8A, 0x80, 0xE4, 0x00, 0x00, 0x00 };
+    constexpr uint8_t   ShowMessageBoxPrologue[]     = {
+      0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0xE8, 0x85, 0x33, 0xDB, 0xFF };
+
+    /**
+     * A living actor's limb held by a hand (findings/grab.md §19): the
+     * actor's bhkRagdollController (Actor +0xAC) and its hit reaction
+     * ("ragdoll feedback"), which Actor::HitMe starts with
+     * SetRagdollFeedbackActive(true) (__thiscall, one byte argument): the
+     * bones of the race's feedback list become dynamic bodies driven
+     * towards the animation, for fFeedbackTimeMS (3000) from the last call.
+     * HitMe only starts it when the ragdoll's animation (+0x41) and the
+     * feedback (+0x28D) are enabled, the actor is conscious and its
+     * process's sit state is 0. +0x28E tells whether it runs.
+     * It asks Havok for MOTION_DYNAMIC (1), which a body never keeps: it
+     * becomes MOTION_SPHERE_INERTIA (2), MOTION_BOX_INERTIA (3) or
+     * MOTION_THIN_BOX_INERTIA (6), the types bhkRigidBody::IsMotionTypeDynamic
+     * (0x00C8CCE0) accepts.
+     */
+    constexpr uintptr_t ActorRagdollController       = 0xAC;
+    constexpr uintptr_t RagdollAnimEnabled           = 0x41;
+    constexpr uintptr_t RagdollFeedbackEnabled       = 0x28D;
+    constexpr uintptr_t RagdollFeedbackActive        = 0x28E;
+    constexpr uintptr_t RagdollSetFeedbackActive     = 0x00C7B6A0;
+    constexpr uintptr_t RagdollSetFeedbackActiveCallSite = 0x0089CB0B;
+    constexpr uintptr_t ActorIsUnconscious           = 0x00437BD0;
+    constexpr uintptr_t ActorIsUnconsciousCallSite   = 0x0089CA82;
+    constexpr uint8_t   MotionDynamic                = 1;
+    constexpr uint8_t   MotionBoxInertia             = 3;
+    constexpr uint8_t   MotionThinBoxInertia         = 6;
+
+    /**
+     * The reaction's work while it runs (findings/grab.md §19.4):
+     * bhkRagdollController::DoRagdollAnim calls DoRagdollFeedback
+     * (__thiscall, no argument; it draws the feedback bones between the
+     * ragdoll's pose and the animation's and ends the reaction once its timer
+     * expires) only when the INI setting bRagdollFeedback:RagdollAnim is
+     * set (Setting object, bool at SettingValue), which Fallout_default.ini
+     * turns off. The call right after it, UpdateDebugLines(2) (__thiscall,
+     * one argument), always runs, before SetSGPoseLocalSpace.
+     */
+    constexpr uintptr_t RagdollDoFeedback            = 0x00C7C870;
+    constexpr uintptr_t RagdollDoFeedbackCallSite    = 0x00C7D7CE;
+    constexpr uintptr_t RagdollUpdateDebugLines      = 0x00C7CB50;
+    constexpr uintptr_t RagdollFeedbackPoseCallSite  = 0x00C7D7D7;
+    constexpr uintptr_t RagdollFeedbackSetting       = 0x01267C54;
+
+    /**
+     * What ties a reaction's dynamic bodies to the animation (findings/grab.md
+     * §19.11). UpdateRagdollRigidBodies calls
+     * hkaRagdollRigidBodyController::driveToPose (bhkRagdollController +0x4C)
+     * once per frame, which sets each body's velocity from
+     * hkaKeyFrameHierarchyUtility::ControlData, scaled per body by
+     * BodyData::m_boneWeights (controller +0x18 + 0x10, null by default);
+     * a weight of 0 leaves the body's velocity alone. DoRagdollFeedback draws
+     * each feedback bone with the slerp of the ragdoll's rotation (0) to the
+     * animation's (1) by fCurrFeedbackInterp (+0x290), which ResetDriveGains
+     * sets to the race's blend amount (share data +0x2A4, feedback +0x18,
+     * +0x04). UpdateDebugLines(0) (__thiscall) comes before both, on the
+     * thread that animates the actor.
+     */
+    constexpr uintptr_t RagdollDriveStageCallSite    = 0x00C7D6F7;
+    constexpr uintptr_t RagdollRbController          = 0x4C;
+    constexpr uintptr_t RagdollFeedbackInterp        = 0x290;
+    constexpr uintptr_t RagdollShareData             = 0x2A4;
+    constexpr uintptr_t RagdollShareFeedback         = 0x18;
+    constexpr uintptr_t RagdollFeedbackBlend         = 0x04;
+    constexpr uintptr_t RbControllerBodyCount        = 0x18;
+    constexpr uintptr_t RbControllerBodies           = 0x1C;
+    constexpr uintptr_t RbControllerParents          = 0x20;
+    constexpr uintptr_t RbControllerBoneWeights      = 0x28;
+
+    /**
+     * NPC reactions to the player (findings/grab.md §19.3):
+     * ProcessLists::CommentOnPlayerAction (0x00977CB0) makes the actor the
+     * player aims at say the topic TESTopic::GetTopic(DT_TOPIC, 8) (__cdecl)
+     * through Actor::StartGreetingPlayer(topic) (__thiscall), after
+     * Actor::CanSpeak, IsInCombat, ShouldSkipFallOutBehavior(4) and
+     * IsPlayerTeammate (__thiscall), and sets the shared comment timer
+     * (ProcessLists +0x154) to fCommentOnPlayerActionsTimer. The call sites
+     * are those of CommentOnPlayerAction. StartGreetingPlayer only speaks while
+     * PlayerCharacter::fLastHelloTime (+0xE24) is negative: it holds the tick
+     * of the last greeting for fHelloCooldownTime (findings/grab.md §19.12).
+     * Actor::IsTalking and PlayerCharacter::GetLastAction are __thiscall.
+     * A grabbed actor says the topic of a weapon aimed at it (index 8) or of
+     * a shot fired near it (index 3, PLAYERFIREWEAPON, findings/grab.md §19.15).
+     */
+    constexpr uintptr_t TopicGetTopic                = 0x0061A2D0;
+    constexpr uintptr_t TopicGetTopicCallSite        = 0x00978137;
+    constexpr uintptr_t ActorStartGreetingPlayer     = 0x008BC3D0;
+    constexpr uintptr_t ActorStartGreetingPlayerCallSite = 0x00978149;
+    constexpr uintptr_t ActorCanSpeak                = 0x00884480;
+    constexpr uintptr_t ActorCanSpeakCallSite        = 0x00977D4B;
+    constexpr uintptr_t ActorIsInCombat              = 0x00493BB0;
+    constexpr uintptr_t ActorIsInCombatCallSite      = 0x00977D73;
+    constexpr uintptr_t ActorSkipsBehavior           = 0x008A78F0;
+    constexpr uintptr_t ActorSkipsBehaviorCallSite   = 0x00977D84;
+    constexpr uintptr_t ActorIsPlayerTeammate        = 0x00566950;
+    constexpr uintptr_t ActorIsPlayerTeammateCallSite = 0x00977D93;
+    constexpr uintptr_t ActorIsTalking               = 0x008A67F0;
+    constexpr uintptr_t ActorIsTalkingCallSite       = 0x00977DCA;
+    constexpr uintptr_t PlayerHasNoLastHelloTime     = 0x008BC520;
+    constexpr uintptr_t PlayerHasNoLastHelloTimeCallSite = 0x008BC43F;
+    constexpr uintptr_t PlayerLastHelloTime          = 0xE24;
+    constexpr uintptr_t PlayerGetLastAction          = 0x00964060;
+    constexpr uintptr_t PlayerGetLastActionCallSite  = 0x0096D90F;
+    constexpr uintptr_t ProcessListsSingleton        = 0x011E0E80;
+    constexpr uintptr_t ProcessListsCommentTimer     = 0x154;
+    constexpr uintptr_t CommentOnPlayerActionsTimerSetting = 0x011D0174;
+    constexpr uint32_t  DialogueTypeTopic            = 0;
+    constexpr uint32_t  TopicPlayerFiring            = 3;
+    constexpr uint32_t  TopicPlayerAiming            = 8;
+    constexpr uint32_t  BehaviorReactToPlayerActions = 4;
+    constexpr uint32_t  SitSleepSleeping             = 9;
+
+    /**
+     * Going into combat with the player as the script command StartCombat
+     * does (Script::StartCombatFunction, 0x005C1750): Actor::IsGuard
+     * (virtual) gives the aggressor flag, then BaseProcess::EnterCombat
+     * (virtual, __thiscall, 13 stack arguments: actor, target, then the
+     * flags 1, 1, 0, 0, 0, aggressor, 0, 1, 0, 1, 0). Aggression and
+     * Confidence are actor values 0 and 1 (ACTOR_AGGRESSION,
+     * ACTOR_CONFIDENCE: Aggressive 1, Foolhardy 4).
+     */
+    constexpr uintptr_t ActorIsGuardSlot             = 0x304;
+    constexpr uintptr_t ProcessEnterCombatSlot       = 0x33C;
+    constexpr uint32_t  AvAggression                 = 0;
+    constexpr uint32_t  AvConfidence                 = 1;
+    constexpr uint32_t  AvStrength                   = 5;
+
+    /**
+     * Whether an actor has a recorded line for a topic
+     * (findings/grab.md §19.8). TESTopic::GetMatchingInfo_1(speaker, target)
+     * (__thiscall) picks a line by its conditions, at random among the
+     * random ones, whether its audio exists or not.
+     * TESTopicInfo::LoadResponseList(wrapper) (__thiscall, returns wrapper)
+     * reads the line's responses into a ResponseListWrapper, one pointer to
+     * the first TESResponse, freed by its destructor (__thiscall).
+     * TESResponse::GetAudioFullPath(speaker, quest, topic, info, BSStringT*)
+     * (__thiscall) writes the voice file's path for the speaker's voice
+     * type; a BSStringT is 8 bytes, its characters first, with a constructor
+     * and a destructor (__thiscall). FileFinder::Locate(name, null, 0, -1)
+     * (__cdecl) looks in the archives and the folders, as the lip files'
+     * loading does.
+     */
+    constexpr uintptr_t TopicGetMatchingInfo         = 0x0061A720;
+    constexpr uintptr_t TopicGetMatchingInfoCallSite = 0x008D60A7;
+    constexpr uintptr_t TopicInfoLoadResponses       = 0x0061E760;
+    constexpr uintptr_t TopicInfoLoadResponsesCallSite = 0x0083C5C0;
+    constexpr uintptr_t ResponseListDestroy          = 0x0061F440;
+    constexpr uintptr_t ResponseListDestroyCallSite  = 0x0083C645;
+    constexpr uintptr_t ResponseGetAudioFullPath     = 0x00616F40;
+    constexpr uintptr_t ResponseGetAudioFullPathCallSite = 0x0083D35F;
+    constexpr uintptr_t BSStringConstruct            = 0x004037B0;
+    constexpr uintptr_t BSStringConstructCallSite    = 0x0083D2D3;
+    constexpr uintptr_t BSStringDestroy              = 0x004037D0;
+    constexpr uintptr_t BSStringDestroyCallSite      = 0x0083D3B1;
+    constexpr uintptr_t FileFinderLocate             = 0x00456A20;
+    constexpr uintptr_t FileFinderLocateCallSite     = 0x004D530B;
+    constexpr uintptr_t TopicInfoQuest               = 0x48;
+    constexpr uint32_t  BSStringSize                 = 8;
+
+    /**
+     * An actor's factions and the player's reputation with them, as
+     * Actor::GetFactionRank (0x008B8290) lists them:
+     * Actor::GetActorBase (__thiscall), the base's list of factions,
+     * ExtraDataList::GetFactionChangesExtra (__thiscall, list at +0xC or
+     * null), then Actor::IntegrateFactionLists(out, size, list, changes)
+     * (__thiscall, returns the count, a faction taken away leaves null).
+     * TESFaction::pReputation may be null.
+     * TESReputation::GetReputationLevel(axis) (__thiscall): level 0 to 3 of
+     * fame (axis 1) or infamy (axis 0). The title "Idolized" is fame 3
+     * without infamy (TESReputation::GetReputationTitle, 0x00616710).
+     */
+    constexpr uintptr_t ActorGetActorBase            = 0x004181E0;
+    constexpr uintptr_t ActorGetActorBaseCallSite    = 0x008B82AC;
+    constexpr uintptr_t ExtraGetFactionChanges       = 0x0042E800;
+    constexpr uintptr_t ExtraGetFactionChangesCallSite = 0x008B82CB;
+    constexpr uintptr_t ActorIntegrateFactionLists   = 0x008B8CA0;
+    constexpr uintptr_t ActorIntegrateFactionListsCallSite = 0x008B830E;
+    constexpr uintptr_t ReputationGetLevel           = 0x00616950;
+    constexpr uintptr_t ReputationGetLevelCallSite   = 0x00616A9E;
+    constexpr uintptr_t ActorBaseFactions            = 0x5C;
+    constexpr uintptr_t FactionChangesList           = 0x0C;
+    constexpr uintptr_t FactionReputation            = 0x38;
+    constexpr uint32_t  MaxFactions                  = 0x80;
+    constexpr uint32_t  ReputationFame               = 1;
+    constexpr uint32_t  ReputationInfamy             = 0;
+    constexpr uint32_t  ReputationTopLevel           = 3;
+
+    /**
+     * Actor::Move (__thiscall: seconds, NiPoint3* move, flags; virtual, the
+     * same in the tables of Character and Creature; Actor::UpdateMovement
+     * calls it with the move of the frame, in the actor's frame). The move
+     * reaches the character controller as it is; gravity and the animation
+     * are the controller's and the process's own (findings/grab.md §19.8).
+     */
+    constexpr uintptr_t ActorMove                    = 0x008A62B0;
+    constexpr uintptr_t CharacterMoveSlot            = 0x01086CBC;
+    constexpr uintptr_t CreatureMoveSlot             = 0x010872FC;
+
+    /**
+     * ActorMover::GetMoveMode (__thiscall, virtual; PlayerMover has a table
+     * of its own). Actor::GetMoveMode asks it, and Actor::PickAnimations
+     * picks the walk or run animation and its direction from the result, as
+     * Actor::UpdateMovement gives it to Actor::Move as flags
+     * (findings/grab.md §19.9). ActorMover::pActor at ActorMoverActor.
+     */
+    constexpr uintptr_t ActorMoverGetMoveMode        = 0x009DDB70;
+    constexpr uintptr_t ActorMoverGetMoveModeSlot    = 0x0109225C;
+    constexpr uintptr_t ActorMoverActor              = 0x28;
+
+    /** Actor::IsImmobileCreature, virtual, no argument */
+    constexpr uintptr_t ActorIsImmobileSlot          = 0x4B4;
+
+    /**
+     * Knocking an actor down (findings/grab.md §19.10).
+     * BaseProcess::KnockExplosion (virtual, __thiscall: actor, NiPoint3 source
+     * by value, force; callee cleans up) gets the actor out of its furniture
+     * and makes its whole ragdoll dynamic, each limb gaining force (Havok units
+     * per second) away from the source. It does nothing unless
+     * Actor::CanKnockDown (__thiscall). Actor::IsKnockedOut is virtual, true
+     * from then until the actor stands again.
+     */
+    constexpr uintptr_t ProcessKnockExplosionSlot    = 0x418;
+    constexpr uintptr_t ActorCanKnockDown            = 0x008845A0;
+    constexpr uintptr_t ActorCanKnockDownCallSite    = 0x0091FF3E;
+    constexpr uintptr_t ActorIsKnockedOutSlot        = 0x230;
+
+    /**
+     * The script command SendAssaultAlarm on the actor itself: the crime of
+     * Actor::AttackAlarm(player, minor 0, 1) (__thiscall), then
+     * BaseProcess::EnterCombat with the arguments of the site's own call
+     * (flags 1, then eight 0, then 1, 0).
+     */
+    constexpr uintptr_t ActorAttackAlarm             = 0x008C0460;
+    constexpr uintptr_t ActorAttackAlarmCallSite     = 0x005DA328;
+
+    /**
+     * The player's Actor::Move: the same function in the PlayerCharacter
+     * table; the hook slows the player holding an actor down without
+     * touching an actor value, which a save would keep.
+     */
+    constexpr uintptr_t PlayerMoveSlot               = 0x0108AC8C;
+
+    /**
+     * MobileObject::Move (__thiscall: seconds, NiPoint3* move, flags), which
+     * the player's Actor::Move calls after the hook above, each frame the
+     * game runs (PlayerMover::Update): the move is in the actor's frame and
+     * goes to bhkCharacterController::Move, or stays out of it with the
+     * collisions off (findings/roomscale.md).
+     */
+    constexpr uintptr_t MobileObjectMove             = 0x0092F260;
+    constexpr uintptr_t ActorMoveMobileCallSite      = 0x008A6339;
+
+    /**
+     * The collision of the player's capsule with a held actor.
+     * bhkCollisionFilter's hkpCollidableCollidableFilter table holds
+     * isCollisionEnabled(bool* result, collidable a, collidable b) (__thiscall,
+     * returns result); it reads hkpCollidable's filter at CollidableFilter.
+     * Character controllers are caching phantoms, whose overlaps only ask the
+     * filter when they begin, so bhkPhantom::UpdateCollisionFilter (__thiscall)
+     * asks again for the phantom a change concerns.
+     * MobileObject::GetCharController (__thiscall), controller's phantom at
+     * ControllerShapePhantom.
+     */
+    constexpr uintptr_t CollidableFilterEnabled      = 0x00C84880;
+    constexpr uintptr_t CollidableFilterEnabledSlot  = 0x010C3C10;
+    constexpr uintptr_t CollidableFilterInfo         = 0x1C;
+    constexpr uintptr_t PhantomUpdateFilter          = 0x00C9F460;
+    constexpr uint8_t   PhantomUpdateFilterPrologue[] = { 0x56, 0x8B, 0xF1, 0x8B, 0x06, 0x8B, 0x90, 0x98, 0x00, 0x00, 0x00 };
+    constexpr uintptr_t GetCharController            = 0x009306D0;
+    constexpr uintptr_t GetCharControllerCallSite    = 0x00525036;
+    constexpr uintptr_t ControllerShapePhantom       = 0x594;
+    constexpr uint32_t  FilterLayerMask              = 0x7F;
+    constexpr uint32_t  LayerBiped                   = 0x08;
+    constexpr uint32_t  LayerDeadBiped               = 0x1D;
+    constexpr uint32_t  LayerCharController          = 0x1E;
+
+    /**
+     * Actor::SetWalkSpeed and SetRunSpeed (__thiscall, float, ret 4) set the
+     * process's cached speeds, from which Actor::PickAnimations takes the rate
+     * of the walk and run animations. BaseProcess::SetCachedValueDirty
+     * (__thiscall, flags, ret 4) has them worked out again.
+     */
+    constexpr uintptr_t ActorSetWalkSpeed            = 0x00884FC0;
+    constexpr uintptr_t ActorSetWalkSpeedCallSite    = 0x008E2504;
+    constexpr uintptr_t ActorSetRunSpeed             = 0x00884FF0;
+    constexpr uintptr_t ActorSetRunSpeedCallSite     = 0x008E24B7;
+    constexpr uintptr_t ProcessSetCachedDirty        = 0x00884940;
+    constexpr uintptr_t ProcessSetCachedDirtyCallSite = 0x0088490D;
+    constexpr uint32_t  CachedWalkAndRunSpeed        = 0x3000;
+
+    /**
+     * bhkCharacterController::SetVelocityModifier(NiPoint3* displacement,
+     * seconds) (__thiscall, ret 8): moves the character by the displacement,
+     * game units, on top of its own move, what KnockExplosion does to an
+     * actor with no ragdoll.
+     */
+    constexpr uintptr_t ControllerSetVelocityMod     = 0x00C6D4D0;
+    constexpr uintptr_t ControllerSetVelocityModCallSite = 0x0088A355;
+
+    /**
+     * Melee hits on objects (findings/melee.md §14): Actor::ObjectHit(bool
+     * power) (__thiscall, ret 4), which MeleeAttack calls for the player
+     * when no actor is in reach, casts a shape from Actor::GetEyeVector
+     * (call at ObjectHitEyeCallSite: __thiscall, position, direction,
+     * third person, ret 0xC) and pushes the body hit along the weapon's
+     * motion: from BaseProcess::GetWeaponLastPos (virtual, no argument)
+     * to Actor::GetWeaponPosition(NiPoint3* out, bool) (call at
+     * ObjectHitWeaponCallSite, __thiscall, ret 8, returns out), both in the
+     * frame of the actor's root node. Then impact sound, decal, particles
+     * and the OnHit / OnHitWith script blocks.
+     */
+    constexpr uintptr_t ActorObjectHit               = 0x008AE660;
+    constexpr uint8_t   ActorObjectHitPrologue[]     = {
+      0x53, 0x8B, 0xDC, 0x83, 0xEC, 0x08, 0x83, 0xE4, 0xF0, 0x83, 0xC4, 0x04, 0x55, 0x8B, 0x6B, 0x04 };
+    constexpr uintptr_t ActorGetEyeVector            = 0x008AFF80;
+    constexpr uintptr_t ObjectHitEyeCallSite         = 0x008AE7E2;
+    constexpr uintptr_t ActorGetWeaponPosition       = 0x008A5340;
+    constexpr uintptr_t ObjectHitWeaponCallSite      = 0x008AEBCD;
+    constexpr uintptr_t ProcessWeaponLastPosSlot     = 0x460;
+
+    /**
+     * The world drawn into a texture, as TESMain::RenderMenuBackground
+     * (0x00871DC0) does, findings/optics.md §7. Its calls are what install
+     * checks:
+     *
+     * - DrawWorld: __thiscall (destination, renderedMenuMode, skipFirstPerson);
+     * - BorrowRenderedTexture: __thiscall on the texture manager (renderer,
+     *   type, 0, 0, 0), ReturnRenderedTexture: __thiscall (texture);
+     * - RendererLock and RendererUnlock: __thiscall on the renderer;
+     * - ResetMultiBounds: TES::ResetAllMultiBoundNodes, __thiscall (landscape,
+     *   rooms), called before the visibility pass.
+     *
+     * Offsets: BSRenderedTexture spRenderedTextures[0], NiTexture renderer
+     * data, NiDX9TextureData's IDirect3DBaseTexture9. TESObjectWEAP fSightFOV is
+     * kData (+0xF4) + 0x1C.
+     */
+    constexpr uintptr_t DrawWorld                    = 0x008706B0;
+    constexpr uintptr_t RendererLock                 = 0x004A0370;
+    constexpr uintptr_t RendererUnlock               = 0x004A03C0;
+    constexpr uintptr_t ResetMultiBounds             = 0x0045BC80;
+    constexpr uintptr_t MenuBackgroundDrawWorldCall  = 0x008721A4;
+    constexpr uintptr_t MenuBackgroundBorrowCall     = 0x00871EBC;
+    constexpr uintptr_t MenuBackgroundReturnCall     = 0x00871EA2;
+    constexpr uintptr_t MenuBackgroundLockCall       = 0x00871E6C;
+    constexpr uintptr_t MenuBackgroundUnlockCall     = 0x0087232C;
+    constexpr uintptr_t ResetMultiBoundsCallSite     = 0x0086EBCC;
+    constexpr uintptr_t TesSingleton                 = 0x011DEA10;
+    constexpr uintptr_t TextureManager               = 0x011F91A8;
+    constexpr uintptr_t ImageSpaceEndOfFrameEnabled  = 0x011AD884;
+    constexpr uintptr_t MainRenderingMenuBackground  = 0x9C;
+    constexpr uint32_t  TextureMainMenuBackground    = 6;
+    constexpr uintptr_t RenderedTextureFirst         = 0x30;
+    constexpr uintptr_t WeaponSightFov               = 0x110;
+    /** Path of the weapon's scope model: TESModel at +0x1E8 (TESObjectWEAP::GetScopeModel 0x00504E60) */
+    constexpr uintptr_t WeaponScopeModelPath         = 0x1EC;
+
+    /**
+     * The scissor the game uses for its own scope (findings/optics.md §7):
+     * EnableFullScreenScissor is __cdecl (left, top, right, bottom), and locks
+     * the rectangle and the test until DisableFullScreenScissor, __cdecl ().
+     * The call sites are in TESMain::DrawWorldStandard.
+     */
+    constexpr uintptr_t EnableFullScreenScissor      = 0x00B4F540;
+    constexpr uintptr_t DisableFullScreenScissor     = 0x00B540D0;
+    constexpr uintptr_t EnableScissorCallSite        = 0x00870DFD;
+    constexpr uintptr_t DisableScissorCallSite       = 0x00871146;
+
+    /**
+     * ImageSpaceEffectHDR::kAdaptedLight, an ImageSpaceTexture replaced by
+     * each HDR render (ImageSpaceEffectHDR::Render 0x00BADB90). Its fields:
+     * bIsRenderedTexture, and spTexture, a BSRenderedTexture if that is set.
+     */
+    constexpr uintptr_t HdrAdaptedLight              = 0x012005A4;
+    constexpr uintptr_t ImageSpaceTextureIsRendered  = 0x1;
+    constexpr uintptr_t ImageSpaceTextureObject      = 0x4;
+
+    /**
+     * The game's flat scope while it aims, findings/optics.md §5 and §10:
+     *
+     * - SetGunScopeVisible: HUDMainMenu::SetGunScopeVisible, __cdecl (visible).
+     *   Called from Interface::SetGunScopeVisible and twice from
+     *   HUDMainMenu::SetMenuMode, its only callers.
+     * - NodeChildAt: NiNode::GetAtChecked, __thiscall (index), called in
+     *   SetMenuMode to tell that a scope model is loaded, which selects
+     *   HMM_SNIPER_RIFLE and hides the HUD.
+     * - ObjectSetAppCulled: NiAVObject::SetAppCulled, __thiscall (culled), the
+     *   call culling the first-person root in Actor::SetIronSights.
+     * - ImageSpaceIronSights: PlayerCharacter::UpdateImageSpaceIronsights,
+     *   __thiscall, depth of field and full-screen motion blur.
+     * - WeaponHasNightScope: TESObjectWEAP::HasNightScope, __thiscall, its only
+     *   caller in PlayerCharacter::Update turns on the night vision.
+     * - ActorGetIronSights: Actor::GetIronSights, __thiscall, the call giving
+     *   the aim state to CombatFormulas::GetGunSpread in Actor::GetGunSkill.
+     * - PlayerModLooking, PlayerModHeading: MobileObject::ModLooking and
+     *   ModHeading, __thiscall (angle), the calls of PlayerCharacter::AddGunWobble
+     *   swaying the player's view while it aims with a scope.
+     * - WeaponUseFirstPersonAimAnims: TESObjectWEAP::GetUse1PISAnims, __thiscall,
+     *   false with flags1 bit 0x40. The calls in Actor::AdjustGroupIDForAiming and
+     *   Actor::SetIronSights choose the first-person aim group, the only one of
+     *   the two that puts the left hand on a pistol. Both are for the player only.
+     * - WeaponHasModScope: TESObjectWEAP::HasModScope, __thiscall, the call in
+     *   Actor::SetIronSights that keeps the aim group of a fitted scope mod.
+     */
+    constexpr uintptr_t SetGunScopeVisible           = 0x0077F3C0;
+    constexpr uintptr_t GunScopeVisibleCallSite      = 0x00709C48;
+    constexpr uintptr_t GunScopeShowCallSite         = 0x00771C36;
+    constexpr uintptr_t GunScopeHideCallSite         = 0x00771C57;
+    constexpr uintptr_t NodeChildAt                  = 0x0045BC00;
+    constexpr uintptr_t ScopeModelChildCallSite      = 0x007718C6;
+    constexpr uintptr_t ObjectSetAppCulled           = 0x00450F90;
+    constexpr uintptr_t IronSightsCullCallSite       = 0x008BB923;
+    constexpr uintptr_t ImageSpaceIronSights         = 0x009650A0;
+    constexpr uintptr_t ImageSpaceIronSightsCallSite = 0x00965056;
+    constexpr uintptr_t WeaponHasNightScope          = 0x009442C0;
+    constexpr uintptr_t NightScopeCallSite           = 0x0093F098;
+    constexpr uintptr_t ActorGetIronSights           = 0x008BBC10;
+    constexpr uintptr_t GunSkillIronSightsCallSite   = 0x008B0FBF;
+    constexpr uintptr_t PlayerModLooking             = 0x00931E50;
+    constexpr uintptr_t ScopeWobbleLookingCallSite   = 0x009634A5;
+    constexpr uintptr_t PlayerModHeading             = 0x00931D30;
+    constexpr uintptr_t ScopeWobbleHeadingCallSite   = 0x009634C9;
+    constexpr uintptr_t WeaponUseFirstPersonAimAnims = 0x008B2BF0;
+    constexpr uintptr_t AimGroupAnimsCallSite        = 0x008B2BA2;
+    constexpr uintptr_t IronSightsAnimsCallSite      = 0x008BBB2E;
+    constexpr uintptr_t WeaponHasModScope            = 0x004AD030;
+    constexpr uintptr_t IronSightsModScopeCallSite   = 0x008BBB4A;
+
+    /**
+     * ItemChange::HasModEffectActive 0x004BD8D0, __thiscall (effect, value out,
+     * ret 8), WEAPON_MOD_IRON_SITES its effect for a scope mod. TESObjectWEAP
+     * kData (+0xF4) + 0x38: flags2, HasModScope and HasNightScope.
+     * fDefaultWorldFOV:Display, the reference of the scope's magnification.
+     */
+    constexpr uintptr_t ItemModEffectValue           = 0x004BD8D0;
+    constexpr uint32_t  ModEffectIronSights          = 14;
+    constexpr uintptr_t WeaponFlags2                 = 0x12C;
+    constexpr uint32_t  WeaponFlag2NightScope        = 0x1000;
+    constexpr uint32_t  WeaponFlag2ModScope          = 0x2000;
+    constexpr uintptr_t SettingDefaultWorldFov       = 0x0120315C;
+
+    /**
+     * The model loader's delayed reference queue, see findings/performance.md
+     * (B4). Found in the GOG database, code identical to the Steam build.
+     *
+     * - ModelLoaderUpdateReferences: ModelLoader::UpdateReferencesToQueue,
+     *   __thiscall, walks every bucket of pDelayedQueue (5039) and returns
+     *   true once the walk is finished. Called by the IO manager's secondary
+     *   queue callback (ModelLoader::UpdateSecondaryQueueCallback 0x00446E40)
+     *   at ModelLoaderUpdateReferencesCallSite.
+     * - ModelLoaderDelayedQueue: ModelLoader + 0x0C, a
+     *   LockFreeMap<TESObjectREFR*, NiPointer<QueuedReference>>.
+     * - LockFreeMapCount: uiCount (+0x18), incremented by every insertion
+     *   once the node is linked (SetAt 0x0044D070) and decremented by every
+     *   removal once it is unlinked (RemoveAt 0x00528CE0), reset by RemoveAll.
+     */
+    constexpr uintptr_t ModelLoaderUpdateReferences         = 0x00448CC0;
+    constexpr uintptr_t ModelLoaderUpdateReferencesCallSite = 0x00446E62;
+    constexpr uintptr_t ModelLoaderDelayedQueue             = 0x0C;
+    constexpr uintptr_t LockFreeMapCount                    = 0x18;
+    constexpr uint8_t   ModelLoaderUpdateReferencesPrologue[] = { 0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x40, 0xCD, 0xEE, 0x00 };
+
+    /**
+     * Occlusion culling, see findings/performance.md §17 (GOG database,
+     * checked 2026-11-22; the approach follows mrfury97's FNV Occlusion
+     * Culling, whose code is not used).
+     *
+     * - SceneAccumulateCallSite: TESMain::DrawScene's call of
+     *   BSShaderUtil::AccumulateScene (__cdecl: camera, scene graph, culling
+     *   process) that gathers the main view (the bMTRendering branch before
+     *   it uses AccumulateSceneList instead);
+     * - SceneOpaqueCallSite: its call of BSShaderUtil::
+     *   RenderScenePreResolveDepth (__cdecl: camera, accumulator, 1) right
+     *   after, which draws the opaque part: the depth buffer then holds the
+     *   finished scene (the game's VATS query follows);
+     * - the OnVisible slot (53) of BSFadeNode (every placed object's root),
+     *   BSTreeNode (SpeedTree trees and shrubs) and BSMultiBoundNode (land
+     *   quadrants, terrain LOD chunks, grass groups), __thiscall: culling
+     *   process. Skipping it is what the culler does with what lies outside
+     *   the view;
+     * - NiDX9Renderer: the view (relative to RendererPosAdjust) and
+     *   projection D3D matrices of the camera last set, its inverse view
+     *   (row 4: the camera's position minus RendererPosAdjust) and
+     *   m_bDeviceLost;
+     * - BSFadeNode::pLinkedObj, the object's reference; NiAVObject flag bit
+     *   0 (APP_CULLED) hides a node;
+     * - BSMultiBoundNode::spMultiBound, BSMultiBound::spShape and the AABB
+     *   shape's centre and half extents; BSMultiBoundShape::WithinFrustum
+     *   (vtable +0x9C, __thiscall: NiFrustumPlanes*) tested against the
+     *   culling process's planes (+0x2C);
+     * - NiRTTI: name (+0x00) and base (+0x04), from GetRTTI
+     *   (ObjectGetRttiSlot).
+     */
+    constexpr uintptr_t SceneAccumulateCallSite       = 0x0087415B;
+    constexpr uintptr_t SceneOpaqueCallSite           = 0x00874180;
+    constexpr uintptr_t RenderScenePreResolveDepth    = 0x00B6BA20;
+    constexpr uintptr_t FadeNodeOnVisibleSlot         = 0x010A9064;
+    constexpr uintptr_t FadeNodeOnVisible             = 0x00B4E490;
+    constexpr uintptr_t TreeNodeOnVisibleSlot         = 0x010669B8;
+    constexpr uintptr_t TreeNodeOnVisible             = 0x0066BF50;
+    constexpr uintptr_t MultiBoundNodeOnVisibleSlot   = 0x010C1DE8;
+    constexpr uintptr_t MultiBoundNodeOnVisible       = 0x00C46F60;
+    constexpr uintptr_t RendererD3DView               = 0x980;
+    constexpr uintptr_t RendererD3DProj               = 0x9C0;
+    constexpr uintptr_t RendererInvView               = 0xA40;
+    constexpr uintptr_t RendererDeviceLost            = 0x6FC;
+    constexpr uintptr_t FadeNodeLinkedRef             = 0xCC;
+    constexpr uint32_t  ObjectAppCulled               = 0x1;
+    constexpr uintptr_t MultiBoundNodeBound           = 0xAC;
+    constexpr uintptr_t MultiBoundShape               = 0x0C;
+    constexpr uintptr_t MultiBoundAabbVtable          = 0x0101E8E4;
+    constexpr uintptr_t MultiBoundAabbCentre          = 0x0C;
+    constexpr uintptr_t MultiBoundAabbHalfExtents     = 0x18;
+    constexpr uintptr_t MultiBoundWithinFrustumSlot   = 0x9C;
+    constexpr uintptr_t CullerPlanes                  = 0x2C;
+    constexpr uintptr_t NiNodeRtti                    = 0x011F4428;
+    constexpr uintptr_t NiGeometryRtti                = 0x011F4ACC;
+    constexpr uintptr_t RttiName                      = 0x00;
+    constexpr uintptr_t RttiBase                      = 0x04;
+
+    /** Form types (TESForm +0x04) of the references occlusion culling sorts */
+    constexpr uint8_t   FormTypeTalkingActivator      = 22;
+    constexpr uint8_t   FormTypeTerminal              = 23;
+    constexpr uint8_t   FormTypeDoor                  = 28;
+    constexpr uint8_t   FormTypeLight                 = 30;
+    constexpr uint8_t   FormTypePlaceableWater        = 35;
+    constexpr uint8_t   FormTypeCharacter             = 59;
+    constexpr uint8_t   FormTypeCreature              = 60;
+    constexpr uint8_t   FormTypeMissileProjectile     = 61;
+    constexpr uint8_t   FormTypeFlameProjectile       = 64;
+    constexpr uint8_t   FormTypeContinuousBeam        = 105;
+
+    /** ENUM_LOD_MULT values of BSFadeNode::eMultType (FadeNodeLodMultType) */
+    constexpr uint32_t  LodMultActors                 = 3;
+    constexpr uint32_t  LodMultDistantLod             = 6;
+    constexpr uint32_t  LodMultActorBodyPart          = 7;
+    constexpr uint32_t  LodMultInvisible              = 9;
 
   }
 

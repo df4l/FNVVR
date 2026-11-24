@@ -609,6 +609,8 @@ namespace dxvk {
     if (carried < inHand.size())
       timing.grip = inHandTimes[carried];
 
+    animation.carried = carried < inHand.size();
+
     // The magazine in the left hand's frame while the hand holds it
     VrSequencePose hand, held;
 

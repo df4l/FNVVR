@@ -4,6 +4,7 @@
 
 #include "vr_action_filter.h"
 #include "vr_backend.h"
+#include "vr_controller_pad.h"
 #include "vr_game_state.h"
 #include "vr_head_look.h"
 #include "vr_menu_pointer.h"
@@ -117,6 +118,40 @@ namespace dxvk {
     }
 
     /**
+     * \brief Keeps the left stick from moving the player in the game
+     *
+     * \param [in] held Whether an animation the move would end is playing
+     */
+    void setMoveHeld(bool held) {
+      m_moveHeld = held;
+    }
+
+    /**
+     * \brief Adds a mini-game's physical controls to the virtual gamepad
+     *
+     * Applied in menus from the next update on.
+     */
+    void setMinigamePad(const VrMinigamePad& pad) {
+      m_minigamePad = pad;
+    }
+
+    /**
+     * \brief Sets the surface of a 3D scene the lasers can point at
+     *
+     * \param [in] surface Stays valid until the next call, or \c nullptr
+     */
+    void setPointerSurface(const VrPanelPlacement* surface) {
+      m_pointerSurface = surface;
+    }
+
+    /**
+     * \brief Where the lasers point on that surface in the last update
+     */
+    const VrPointerSurfaceState& pointerSurfaceState() const {
+      return m_pointerSurfaceState;
+    }
+
+    /**
      * \brief Makes the navigation stick pick a hotkey on the game's wheel
      *
      * \param [in] shown Whether the Pip-Boy's inventory shows its hotkey
@@ -124,6 +159,27 @@ namespace dxvk {
      */
     void setHotKeyWheelShown(bool shown) {
       m_hotKeyWheelShown = shown;
+    }
+
+    /**
+     * \brief Makes X click with the left laser, as its trigger does
+     *
+     * \param [in] shown Whether a dialogue menu is shown, where X picks
+     *    the topic under the left laser instead of reaching the game
+     */
+    void setDialogueShown(bool shown) {
+      m_dialogueShown = shown;
+    }
+
+    /**
+     * \brief Makes A and X click with the right and left lasers
+     *
+     * \param [in] shown Whether the companion wheel is shown, where A
+     *    clicks under the right laser and X under the left one, as their
+     *    triggers do. Away from the wheel's options A stays the gamepad's.
+     */
+    void setCompanionWheelShown(bool shown) {
+      m_companionWheelShown = shown;
     }
 
     /**
@@ -199,6 +255,16 @@ namespace dxvk {
      * \param [in] panel Placement of the terminal in tracking space, or
      *    \c nullptr while it is hidden; it must stay valid until update
      */
+    /**
+     * \brief Notes whether the runtime's keyboard has the input
+     *
+     * While it does, in menus, the lasers are hidden and the game sees its
+     * cursor and gamepad at rest (see VrTextFieldKeyboard).
+     */
+    void setSystemKeyboardShown(bool shown) {
+      m_systemKeyboardShown = shown;
+    }
+
     void setTerminalPanel(const VrPanelPlacement* panel) {
       m_terminalPanel = panel;
     }
@@ -218,6 +284,16 @@ namespace dxvk {
     }
 
     /**
+     * \brief See VrHeadLook::holdBodyHeading
+     */
+    void holdBodyHeading(const float* heading);
+
+    /**
+     * \brief See VrHeadLook::holdLook
+     */
+    void holdLook(bool held);
+
+    /**
      * \brief Adjusts the camera the game computed for this frame
      *
      * See VrHeadLook::adjustCamera; while the head drives the camera, it
@@ -230,6 +306,15 @@ namespace dxvk {
      * \returns \c true if the pose was changed
      */
     bool updateCamera(VrGameCameraPose& pose, float dt);
+
+    /**
+     * \brief Whether the last updateCamera put the camera on the player's body
+     *
+     * Not in V.A.T.S., on furniture, when dead or in a dialogue camera.
+     */
+    bool cameraFollowsHead() const {
+      return m_cameraFollowsHead;
+    }
 
     /**
      * \brief Adjusts a camera pose as the last updateCamera did
@@ -254,16 +339,22 @@ namespace dxvk {
             VrActionState&        actions,
             float                 dt);
 
+    void updateSystemKeyboard(
+      const VrInputState&         input);
+
     VrPointerState updatePointer(
       const VrInputState&         input,
             VrActionState&        actions,
       const VrPanelPlacement*     panel,
+      const VrPanelPlacement*     surface,
             bool                  padUsed,
+            bool                  overTarget,
             float                 dt);
 
     IVRBackend&                 m_backend;
     std::unique_ptr<VrHeadLook> m_headLook;
     std::unique_ptr<VrSneak>    m_sneak;
+    bool                        m_cameraFollowsHead = false;
     VrActionFilter              m_filter;
     VrMenuPointer               m_pointer;
 
@@ -274,9 +365,17 @@ namespace dxvk {
     bool                        m_swingsWithHand = false;
     bool                        m_handsFree      = false;
     bool                        m_rightStickTaken = false;
+    bool                        m_moveHeld        = false;
+    VrMinigamePad               m_minigamePad;
+    const VrPanelPlacement*     m_pointerSurface = nullptr;
+    VrPointerSurfaceState       m_pointerSurfaceState;
     bool                        m_hotKeyWheelShown = false;
+    bool                        m_dialogueShown = false;
+    bool                        m_companionWheelShown = false;
     bool                        m_menuBack = false;
     bool                        m_menuBackDown = false;
+
+    bool                        m_systemKeyboardShown = false;
 
     const VrPanelPlacement*     m_terminalPanel = nullptr;
     VrPointerState              m_terminalPointer;

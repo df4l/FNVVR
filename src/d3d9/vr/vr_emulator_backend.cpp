@@ -55,6 +55,11 @@ namespace dxvk {
   }
 
 
+  bool VrEmulatorBackend::beginPanelSession() {
+    return beginSession(VrGraphicsBinding());
+  }
+
+
   void VrEmulatorBackend::endSession() {
     m_state = VrSessionState::Idle;
 
@@ -161,6 +166,17 @@ namespace dxvk {
   }
 
 
+  bool VrEmulatorBackend::supportsEyeTracking() {
+    return true;
+  }
+
+
+  bool VrEmulatorBackend::locateGaze(std::array<VrGaze, VrEyeCount>& gaze) {
+    gaze = { };
+    return true;
+  }
+
+
   bool VrEmulatorBackend::submitFrame(const VrFrameSubmission& frame) {
     if (m_state != VrSessionState::Running)
       return false;
@@ -198,6 +214,16 @@ namespace dxvk {
   }
 
 
+  bool VrEmulatorBackend::submitPanelPixels(VrPanelId id, const VrPanelPixels& panel) {
+    if (m_state != VrSessionState::Running || !panel.rgba)
+      return false;
+
+    m_submittedPanels++;
+    m_panelVisible[uint32_t(id)] = true;
+    return true;
+  }
+
+
   void VrEmulatorBackend::hidePanel(VrPanelId id) {
     m_panelVisible[uint32_t(id)] = false;
   }
@@ -215,6 +241,26 @@ namespace dxvk {
 
   void VrEmulatorBackend::applyHaptic(VrHand hand, float amplitude, int64_t durationNs) {
     m_haptic[uint32_t(hand)] = amplitude;
+  }
+
+
+  void VrEmulatorBackend::fadeView(float seconds, float opacity) {
+
+  }
+
+
+  bool VrEmulatorBackend::showKeyboard(const VrKeyboardRequest& request) {
+    return false;
+  }
+
+
+  void VrEmulatorBackend::hideKeyboard() {
+
+  }
+
+
+  VrKeyboardEvent VrEmulatorBackend::takeKeyboardEvent(std::string& typed) {
+    return VrKeyboardEvent::None;
   }
 
 

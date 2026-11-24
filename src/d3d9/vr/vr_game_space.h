@@ -89,6 +89,23 @@ namespace dxvk {
           float             unitsPerMetre);
 
   /**
+   * \brief Moves the recenter reference along the game's world
+   *
+   * For the same base camera, an eye is drawn by \c shift further back
+   * than before, with the base camera having moved by that much.
+   *
+   * \param [in] reference Result of vrMakeRecenterReference
+   * \param [in] base Pose the game computed for its camera this frame
+   * \param [in] shift Displacement in the game world, in game units
+   * \param [in] unitsPerMetre Scale from metres to game units
+   */
+  VrPose vrShiftReference(
+    const VrPose&           reference,
+    const VrGameCameraPose& base,
+    const VrVector3&        shift,
+          float             unitsPerMetre);
+
+  /**
    * \brief Heading and pitch of the head in the game's convention
    *
    * The yaw is clockwise seen from above, like the game's heading, and the
@@ -118,6 +135,144 @@ namespace dxvk {
   VrGameCameraPose vrComputeBodyCameraPose(float heading, const VrVector3& position);
 
   /**
+   * \brief Builds a camera pose facing a heading, tilted up or down
+   *
+   * Without roll: its right stays level.
+   *
+   * \param [in] heading Heading in radians, 0 north, clockwise
+   * \param [in] pitch Tilt in radians, positive looking up
+   * \param [in] position Camera position in game units
+   */
+  VrGameCameraPose vrComputeTiltedCameraPose(float heading, float pitch, const VrVector3& position);
+
+  /**
+   * \brief Finds the heading a camera faces
+   *
+   * Looking straight up or down, the camera's top tells it: the heading is
+   * the one the camera would face if it were tilted back to level.
+   *
+   * \param [in] pose A camera that is not rolled onto its side
+   * \returns Heading in radians, 0 north, clockwise
+   */
+  float vrComputeCameraHeading(const VrGameCameraPose& pose);
+
+  /**
+   * \brief Finds where the eyes are in a third-person body's head
+   *
+   * \param [in] head World position of the head bone
+   * \param [in] rotation World rotation of the bone, 9 floats by rows. In the
+   *    game's skeletons its first column points to the top of the head and
+   *    its second one to the front.
+   * \param [in] scale World scale of the body
+   */
+  VrVector3 vrComputeHeadViewPosition(const VrVector3& head, const float* rotation, float scale);
+
+  /**
+   * \brief Heading a head bone faces
+   *
+   * \param [in] rotation World rotation of the bone, nine floats by rows
+   * \param [out] heading The heading, unchanged without a result
+   * \returns \c false if the bone looks straight up or down
+   */
+  bool vrComputeHeadHeading(const float* rotation, float& heading);
+
+  /**
+   * \brief Heading and tilt of a camera, roll left out
+   *
+   * Looking straight up or down, the camera's top tells the heading, as for
+   * vrComputeCameraHeading.
+   *
+   * \param [in] pose The camera
+   * \param [out] heading The heading, unchanged without a result
+   * \param [out] pitch The tilt, positive looking up, unchanged without a result
+   * \returns \c false if the camera is rolled onto its side
+   */
+  bool vrComputeCameraTilt(const VrGameCameraPose& pose, float& heading, float& pitch);
+
+  /**
+   * \brief Turns the view as much as something else turns
+   *
+   * The eyes add the head's yaw to the camera they are placed on, and that yaw
+   * is measured in the room: it says nothing of where the player looks in the
+   * game. The view therefore keeps its heading when it starts following, then
+   * only takes the changes: whatever the player was looking at stays in front.
+   */
+  class VrViewHeading {
+
+  public:
+
+    /**
+     * \param [in] source Heading to follow from now on
+     * \param [in] view Heading the view has
+     */
+    void start(float source, float view);
+
+    /**
+     * \param [in] source Heading to follow
+     * \param [in] softness Time the difference takes to fall to about a third, in seconds
+     * \param [in] dt Time since the last frame, in seconds
+     * \returns Heading of the view
+     */
+    float update(float source, float softness, float dt);
+
+    /**
+     * \brief Takes the heading something else gave the view
+     */
+    void keep(float view);
+
+  private:
+
+    float m_source = 0.0f;
+    float m_offset = 0.0f;
+
+  };
+
+  /**
+   * \brief Softens the change between two ways of placing the camera
+   *
+   * The position and the heading continue from what the last frame showed and
+   * reach the new camera within a fraction of a second. Far apart, as after a
+   * loading screen, the camera is simply cut to.
+   */
+  class VrCameraBlend {
+
+  public:
+
+    /**
+     * \param [in] target The camera to show
+     * \param [in] changed Whether the target comes from somewhere else now
+     * \param [in] dt Time since the last frame, in seconds
+     * \returns The camera to show this frame
+     */
+    VrGameCameraPose update(const VrGameCameraPose& target, bool changed, float dt);
+
+  private:
+
+    VrGameCameraPose m_last;
+    bool             m_hasLast = false;
+    VrVector3        m_position = { 0.0f, 0.0f, 0.0f };
+    float            m_heading  = 0.0f;
+
+  };
+
+  /**
+   * \brief Levels the camera of V.A.T.S. for a head that keeps its yaw
+   *
+   * The eyes add the head's yaw and pitch to the camera they are placed on.
+   * V.A.T.S. turns the camera to its target, wherever the head is turned in
+   * the room: on its own, the target would be seen at the head's yaw away
+   * from where the player looks. Taking away the yaw the head had when
+   * V.A.T.S. began puts the target in front of that head, and the tilt
+   * of the game's camera is left to the player's own head.
+   *
+   * \param [in] game Camera pose the game computed
+   * \param [in] headYaw Yaw of the head when V.A.T.S. began, see
+   *    vrComputeHeadAngles
+   * \returns A level camera at the same position
+   */
+  VrGameCameraPose vrComputeVatsCameraPose(const VrGameCameraPose& game, float headYaw);
+
+  /**
    * \brief Moves a point as if a body standing on a pivot turned
    *
    * The game turns the player's whole skeleton around the player's position
@@ -141,6 +296,20 @@ namespace dxvk {
    * An asymmetric field of view gives an asymmetric frustum.
    */
   VrGameFrustum vrComputeGameFrustum(const VrFov& fov);
+
+  /**
+   * \brief Frustum of a camera mirrored about a water plane
+   *
+   * The game's mirrored camera negates the up axis and keeps the frustum
+   * of the camera it mirrors, while the water shader reads the reflection
+   * at the pixel's own screen position, flipped vertically. That only lines
+   * up when the frustum is symmetric vertically: with an eye's frustum the
+   * reflection is read several degrees too high. The mirrored camera needs
+   * the top and bottom of the original frustum swapped and negated.
+   *
+   * \param [in] frustum Frustum of the camera that was mirrored
+   */
+  VrGameFrustum vrComputeReflectionFrustum(const VrGameFrustum& frustum);
 
   /**
    * \brief Places the camera of a menu's own scene for a VR eye
@@ -212,12 +381,16 @@ namespace dxvk {
   constexpr float VrMaxCullingAngle = 1.3962634f;
 
   /**
-   * \brief Narrowest width to height ratio the game's interface is laid out for
+   * \brief Narrowest width to height ratio of the game's interface
    *
-   * The interface is designed for 4:3 and wider screens. A headset eye is
-   * usually narrower than that.
+   * The menus are laid out for 4:3 and wider screens. The game lays them
+   * out 1280 units wide on a narrower screen, but its interface camera
+   * always shows 960 units of height, so it only shows the middle of them.
+   * When the game renders at the eye's aspect, VrInterfaceShape makes the
+   * interface as wide as this and it is stretched over the narrower target
+   * (findings/resolution.md, eye aspect).
    */
-  constexpr float VrGameMinAspect = 4.0f / 3.0f;
+  constexpr float VrInterfaceMinAspect = 4.0f / 3.0f;
 
   /**
    * \brief Computes the resolution the game renders at for a headset
@@ -228,8 +401,56 @@ namespace dxvk {
    * frame is at least as wide as \c minAspect allows. The width is even.
    *
    * \param [in] eye Recommended size of one eye's image
-   * \param [in] minAspect Narrowest width to height ratio
+   * \param [in] minAspect Narrowest width to height ratio, 0 for the eye's
    */
   VrExtent vrComputeGameResolution(const VrExtent& eye, float minAspect);
+
+  /**
+   * \brief Width to height ratio of the interface on a screen
+   *
+   * The screen's, or \ref VrInterfaceMinAspect if it is narrower.
+   *
+   * \param [in] width Width of the screen, in pixels
+   * \param [in] height Height of the screen, in pixels
+   */
+  double vrComputeInterfaceAspect(uint32_t width, uint32_t height);
+
+  /**
+   * \brief Size of the images the interface's panels are made of
+   *
+   * The game's target, widened to \ref VrInterfaceMinAspect so that the
+   * interface's pixels are square in them. The target itself when it is
+   * wide enough.
+   *
+   * \param [in] target Size of the game's render target
+   */
+  VrExtent vrComputeInterfaceExtent(const VrExtent& target);
+
+  /**
+   * \brief Width per height of the 1280 interface units on a window
+   *
+   * The game turns a point picked on a rendered menu's screen into pixels
+   * as the window's height times 4/3, the width of 1280 units on a window
+   * 4:3 or wider. On a narrower window, where the interface is stretched to
+   * 1280 units over its width, that is the window's own aspect.
+   *
+   * \param [in] width Width of the window, in pixels
+   * \param [in] height Height of the window, in pixels
+   */
+  double vrComputeRenderedMenuPickAspect(uint32_t width, uint32_t height);
+
+  /**
+   * \brief Factor on a cursor height for the game's radial tile test
+   *
+   * The companion wheel's slices (RadialTile) turn the cursor's pixels into
+   * interface units with the width's ratio for both axes, which only holds
+   * while the interface has the window's shape. On a window narrower than
+   * 4:3 the interface is stretched to it, and a cursor height multiplied by
+   * this factor gives the right height once the game scales it.
+   *
+   * \param [in] width Width of the window, in pixels
+   * \param [in] height Height of the window, in pixels
+   */
+  double vrComputeRadialPickScaleY(uint32_t width, uint32_t height);
 
 }

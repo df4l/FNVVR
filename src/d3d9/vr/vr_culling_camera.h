@@ -45,6 +45,13 @@ namespace dxvk {
      */
     static std::unique_ptr<VrCullingCamera> install(ViewFn view);
 
+    /**
+     * \brief Culls for the head again, after another camera was culled
+     *
+     * Expects the world camera at the pose the game placed it at.
+     */
+    void cullAgain();
+
   private:
 
     explicit VrCullingCamera(ViewFn view);
