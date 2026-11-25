@@ -288,6 +288,21 @@ namespace dxvk {
     }
 
     /**
+     * \brief Has the free left hand hold an item, or nothing
+     *
+     * With the weapon holstered, the left hand stays at its controller with
+     * its fingers closed on the item as given.
+     *
+     * \param [in] inHand The item in the left hand bone's frame, in units
+     *    of the hand's scale, or \c nullptr for a free hand
+     * \param [in] fingers The rotations of the bones below the hand
+     */
+    void holdInLeftHand(const VrGameTransform* inHand, const std::vector<VrBonePose>* fingers) {
+      m_leftHoldInHand  = inHand;
+      m_leftHoldFingers = fingers;
+    }
+
+    /**
      * \brief Whether the left hand holds the weapon or supports it
      *
      * Decided when the model was last placed, in the previous frame.
@@ -752,6 +767,8 @@ namespace dxvk {
     VrGameCameraPose m_hand;
     bool             m_hasHand = false;
     VrGameCameraPose m_otherHand;
+    const VrGameTransform*         m_leftHoldInHand  = nullptr;
+    const std::vector<VrBonePose>* m_leftHoldFingers = nullptr;
     bool             m_hasOtherHand = false;
 
     std::array<VrFingerCurls, VrHandCount> m_fingerCurls = { };

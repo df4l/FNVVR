@@ -1854,8 +1854,26 @@ namespace dxvk {
     for (uint32_t i = 0; i < wristCount; i++)
       writeRotation(wristBones[i].bone, VrGame::ObjectLocalRotation, wristBones[i].rotate);
 
-    if (forearm && m_hasOtherHand)
-      placeOtherHand(root, otherHand, shift, updateData, nullptr);
+    // An item held in the free left hand stays at its controller, the
+    // hand closed on it
+    if (forearm && m_hasOtherHand) {
+      HeldPart held = { };
+
+      if (m_leftHoldInHand) {
+        VrGameCameraPose controller = m_otherHand;
+        controller.position = controller.position - shift;
+
+        VrGameTransform target = vrComputeHeldTransform(controller, FreeHandPose);
+        float handScale = field<float>(otherHand, VrGame::ObjectWorldScale);
+
+        held.pose.rotate    = target.rotate * m_leftHoldInHand->rotate;
+        held.pose.translate = target.translate + target.rotate * m_leftHoldInHand->translate * handScale;
+        held.inHand         = m_leftHoldInHand;
+        held.fingers        = m_leftHoldFingers;
+      }
+
+      placeOtherHand(root, otherHand, shift, updateData, held.inHand ? &held : nullptr);
+    }
 
     hideArms(root, false);
 

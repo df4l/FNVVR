@@ -174,6 +174,7 @@ vr_dxvk_src = files([
   'vr_game_hotkeys.cpp',
   'vr_game_ammo.cpp',
   'vr_quick_wheel.cpp',
+  'vr_consumables.cpp',
   'vr_ammo_label.cpp',
   'vr_caravan_values.cpp',
   'vr_physics_grab.cpp',

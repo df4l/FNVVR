@@ -190,6 +190,12 @@ namespace dxvk {
       return VrQuickWheelEvent::Used;
     }
 
+    if (!weapon && m_consume && m_consume(slot, item)) {
+      m_drawsWeapon = false;
+      Logger::info(str::format("VR: '", item.name, "' is chosen on the quick wheel, to be consumed by hand"));
+      return VrQuickWheelEvent::Used;
+    }
+
     if (!VrGameHotKeys::use(slot)) {
       Logger::info(str::format("VR: '", item.name, "' cannot be used now"));
       return VrQuickWheelEvent::Failed;

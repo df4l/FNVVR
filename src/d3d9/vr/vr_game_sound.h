@@ -60,6 +60,17 @@ namespace dxvk {
   bool vrPlayInterfaceSound(const char* editorId);
 
   /**
+   * \brief Plays a sound file once as the interface plays its sounds
+   *
+   * Not placed in the world (2D), as a system sound.
+   *
+   * \param [in] path The file, from the game's folder or, starting with
+   *    "fx\\", from the sound folder (which the game adds)
+   * \returns The sound's ID, -1 if it could not be played
+   */
+  int32_t vrPlaySoundFile(const char* path);
+
+  /**
    * \brief Whether a sound form loops
    *
    * A looping sound played once goes on until it is stopped.
