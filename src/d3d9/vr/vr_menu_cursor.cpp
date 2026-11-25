@@ -33,19 +33,43 @@ namespace dxvk {
       return *reinterpret_cast<T*>(reinterpret_cast<uintptr_t>(object) + offset);
     }
 
+    /// What the hook gave the game at the last poll it wrote, and whether it wrote
+    uint8_t g_lastButton = 0;
+    bool    g_wrote      = false;
+
     void __fastcall pollHook(void* input, void* unused) {
       reinterpret_cast<PollFn>(g_poll)(input, unused);
 
-      if (!g_state.cursorActive)
+      uint32_t left = field<int32_t>(input, VrGame::InputMouseSwapped) ? 1 : 0;
+
+      if (!g_state.cursorActive) {
+        // Without a mouse device the game leaves the mouse state alone: let
+        // go of the button and the wheel once, without a release the
+        // interface would take for a click
+        if (g_wrote) {
+          field<int32_t>(input, VrGame::InputMouseWheel) = 0;
+          field<uint8_t>(input, VrGame::InputMouseButtons + left)       = 0;
+          field<uint8_t>(input, VrGame::InputMouseButtonsBefore + left) = 0;
+          g_lastButton = 0;
+          g_wrote      = false;
+        }
         return;
+      }
 
       // The laser places the cursor, the real mouse would move it away
       field<int32_t>(input, VrGame::InputMouseX)     = 0;
       field<int32_t>(input, VrGame::InputMouseY)     = 0;
       field<int32_t>(input, VrGame::InputMouseWheel) = g_state.wheel;
 
-      uint32_t left = field<int32_t>(input, VrGame::InputMouseSwapped) ? 1 : 0;
-      field<uint8_t>(input, VrGame::InputMouseButtons + left) = g_state.button ? ButtonDown : 0;
+      // The button before is what we gave at the last poll. With a mouse
+      // device Poll has just copied it there; without one (no mouse attached
+      // when the game started) nothing does, and the interface, which clicks
+      // on a release, would never see the button come up
+      uint8_t button = g_state.button ? ButtonDown : 0;
+      field<uint8_t>(input, VrGame::InputMouseButtonsBefore + left) = g_lastButton;
+      field<uint8_t>(input, VrGame::InputMouseButtons + left)       = button;
+      g_lastButton = button;
+      g_wrote      = true;
     }
 
     void __fastcall updateCursorHook(void* interfaceManager, void* unused) {

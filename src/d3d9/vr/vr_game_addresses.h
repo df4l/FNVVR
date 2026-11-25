@@ -1956,6 +1956,15 @@ namespace dxvk {
     constexpr uintptr_t InputMouseSwapped    = 0x1B4C;
 
     /**
+     * The buttons of the poll before (OSInputGlobals+0x1B38 holds the whole
+     * mouse state before: movement, then the buttons). Poll copies the
+     * current state there first, but only while the game has a mouse device:
+     * with no mouse attached at start, it stays as it was. The interface
+     * clicks on a release, current up and before down (GetMouseState).
+     */
+    constexpr uintptr_t InputMouseButtonsBefore = 0x1B44;
+
+    /**
      * Controls::GetMouseAxis (__thiscall, axis, ret 4) returns the movement
      * of one mouse axis from the fields above, 3 being the wheel, and
      * InterfaceManager::Idle reads the wheel with it for the menus. yUI's
