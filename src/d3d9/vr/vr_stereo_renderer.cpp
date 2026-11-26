@@ -374,6 +374,16 @@ namespace dxvk {
     if (!renderer->m_weaponDrawn)
       Logger::info("VR: The weapon draw code was not found, the weapon is drawn and holstered as in the game");
 
+    // Items of the quick wheel with B42 Inject's animations are consumed
+    // by hand
+    renderer->m_consumables = VrConsumables::install(texts);
+
+    if (renderer->m_consumables) {
+      renderer->m_quickWheel->setConsumer([self] (uint32_t slot, const VrHotKeyItem& item) {
+        return self->m_consumables->begin(slot, item);
+      });
+    }
+
     renderer->m_comfortSettings = VrComfortSettings::install();
 
     if (!renderer->m_comfortSettings)
@@ -848,6 +858,7 @@ namespace dxvk {
     updateNpcGaze();
     updateHolster(input, state);
     updateQuickWheel(input, state);
+    updateConsumables(input, state, dt);
     updateWeaponHand(input, state, modelCamera, dt);
     updateManualReload(input, state, dt);
     updateAmmoChoice(input, state);
@@ -1627,7 +1638,8 @@ namespace dxvk {
     if (!m_quickWheel)
       return;
 
-    if (state != VrGameStateKind::InGame) {
+    // Not while an item is in the hand to be consumed
+    if (state != VrGameStateKind::InGame || (m_consumables && m_consumables->busy())) {
       m_quickWheel->close();
       return;
     }
@@ -1665,6 +1677,52 @@ namespace dxvk {
 
       case VrQuickWheelEvent::Closed:
       case VrQuickWheelEvent::None:
+        break;
+    }
+  }
+
+
+  void VrStereoRenderer::updateConsumables(const VrInputState& input, VrGameStateKind state, float dt) {
+    if (!m_consumables)
+      return;
+
+    const VrControllerState& right = input.controllers[uint32_t(VrHand::Right)];
+    const VrControllerState& left  = input.controllers[uint32_t(VrHand::Left)];
+
+    VrConsumablesInput consume;
+    consume.inGame = state == VrGameStateKind::InGame && m_hasReference && m_hasHeadPose
+      && input.hasActions && left.isActive && right.isActive;
+    consume.dt = dt;
+
+    if (consume.inGame) {
+      consume.head = vrComputeEyeCameraPose(m_gameCameraPose,
+        vrComputeEyeInReference(m_reference, m_headPose), VrGameUnitsPerMetre);
+      consume.otherHand = handInGame(right).position;
+      consume.otherGrip = input.actions.isPressed(VrAction::Grab);
+    }
+
+    switch (m_consumables->update(consume, m_weaponDrawn.get(), m_weaponHand.get())) {
+      case VrConsumablesEvent::Started:
+        m_backend.applyHaptic(VrHand::Left, QuickTickHaptic, QuickTickDuration);
+        break;
+
+      case VrConsumablesEvent::CapTaken:
+        m_backend.applyHaptic(VrHand::Right, QuickTickHaptic, QuickTickDuration);
+        break;
+
+      case VrConsumablesEvent::CapBitten:
+        m_backend.applyHaptic(VrHand::Left, QuickTickHaptic, QuickTickDuration);
+        break;
+
+      case VrConsumablesEvent::Consumed:
+        m_backend.applyHaptic(VrHand::Left, QuickUsedHaptic, QuickUsedDuration);
+        break;
+
+      case VrConsumablesEvent::Cancelled:
+        m_backend.applyHaptic(VrHand::Left, NoRoundsHaptic, NoRoundsHapticDuration);
+        break;
+
+      case VrConsumablesEvent::None:
         break;
     }
   }
@@ -1737,7 +1795,8 @@ namespace dxvk {
 
     VrHolsterInput holster;
     holster.active = state == VrGameStateKind::InGame && m_hasReference && m_hasHeadPose
-      && right.isActive && input.hasActions && !m_rightHandAtPipBoy && !VrWeaponDrawn::fightingDisabled();
+      && right.isActive && input.hasActions && !m_rightHandAtPipBoy && !VrWeaponDrawn::fightingDisabled()
+      && !(m_consumables && m_consumables->busy());
     holster.kind   = vrHolsterForWeaponType(type);
     holster.drawn  = !m_weaponDrawn->playerHolstered();
     holster.grip   = input.actions.isPressed(VrAction::Grab);
@@ -1798,6 +1857,12 @@ namespace dxvk {
     bool leftFree = !(m_weaponHand && m_weaponHand->leftHandOnWeapon())
       && !(m_handThrow && m_handThrow->throwsWithHand())
       && !(m_manualReload && m_manualReload->leftHandBusy());
+
+    // The hands are on an item being consumed
+    if (m_consumables && m_consumables->busy()) {
+      rightFree = rightFree && m_physicsGrab->holds(VrHand::Right);
+      leftFree  = leftFree && m_physicsGrab->holds(VrHand::Left);
+    }
 
     // A fist closing as it lands punches, it does not take what it hits;
     // an object already held stays held
@@ -2106,9 +2171,10 @@ namespace dxvk {
     // A hand busy elsewhere does not punch; one holding an object does
     // not either, the object is swung instead
     std::array<bool, VrHandCount> busy = { };
+    bool consuming = m_consumables && m_consumables->busy();
     busy[uint32_t(VrHand::Right)] = m_rightHandAtPipBoy || m_holster.atHolster()
-      || (m_quickWheel && m_quickWheel->isOpen());
-    busy[uint32_t(VrHand::Left)] = (m_handThrow && m_handThrow->throwsWithHand())
+      || (m_quickWheel && m_quickWheel->isOpen()) || consuming;
+    busy[uint32_t(VrHand::Left)] = consuming || (m_handThrow && m_handThrow->throwsWithHand())
       || (m_manualReload && m_manualReload->leftHandBusy())
       || (m_weaponHand && m_weaponHand->leftHandOnWeapon());
 
@@ -2245,10 +2311,12 @@ namespace dxvk {
     }
 
     // The left hand holding the weapon is not where the screen would be,
-    // nor is one bringing a magazine or a round to it, or arming a grenade
+    // nor is one bringing a magazine, a round or an item to consume to it,
+    // or arming a grenade
     bool gripped = input.hasActions && input.actions.isPressed(VrAction::TwoHandGrip);
     bool loading = (m_manualReload && m_manualReload->leftHandBusy())
-                || (m_handThrow && m_handThrow->leftHandBusy());
+                || (m_handThrow && m_handThrow->leftHandBusy())
+                || (m_consumables && m_consumables->busy());
 
     VrPipBoyGazeInput gaze;
     gaze.head     = input.isHeadTracked ? &input.headPose : nullptr;
@@ -2309,8 +2377,10 @@ namespace dxvk {
   bool VrStereoRenderer::isRightHandAtPipBoy(
     const VrInputState&         input,
           VrGameStateKind       state) {
+    // The right hand taking an item's cap off is near the left wrist too
     if (!m_pipBoyGazeAvailable || state != VrGameStateKind::InGame
-     || m_pipBoyControl.state() != VrPipBoyState::Closed)
+     || m_pipBoyControl.state() != VrPipBoyState::Closed
+     || (m_consumables && m_consumables->busy()))
       return false;
 
     const VrControllerState& left  = input.controllers[uint32_t(VrHand::Left)];

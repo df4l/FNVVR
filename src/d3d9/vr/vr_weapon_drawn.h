@@ -27,7 +27,8 @@ namespace dxvk {
    *   VrHolsterHand: once holstered by the player it stays holstered until
    *   the player draws it, or until something draws it (the game, a
    *   script, an item used from the quick wheel), or until no weapon that
-   *   can be holstered is equipped.
+   *   can be holstered is equipped. Put away for an item held in the hand,
+   *   it stays away even without a holster until drawn again.
    *
    * Only used on the game's main thread.
    */
@@ -52,8 +53,12 @@ namespace dxvk {
 
     /**
      * \brief Puts the player's weapon in its holster, with its put down sound
+     *
+     * \param [in] forItem The hands are put down to hold an item: the
+     *    weapon stays away even without a holster (fists, a weapon worn on
+     *    the fist) until draw is called
      */
-    void holster();
+    void holster(bool forItem = false);
 
     /**
      * \brief Takes the player's weapon out of its holster, with its pick up sound
@@ -109,6 +114,7 @@ namespace dxvk {
     bool m_loggedFurniture = false;
 
     bool m_playerHolstered = false;
+    bool m_forItem         = false;
     bool m_readsSwimming   = false;
 
     void playSound(bool pickUp) const;

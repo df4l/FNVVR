@@ -2,18 +2,20 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 
+#include "vr_game_sequence.h"
 #include "vr_game_space.h"
 
 namespace dxvk {
 
   /**
-   * \brief A model of the game's files shown in a menu's 3D scene
+   * \brief A copy of a model of the game's files, put in a scene
    *
-   * A copy of the model, without its collision, is put beside a node of the
-   * menu's scene (as a child of the same parent) and lit by the lights of
-   * the menu's shadow scene node. It stays where it is put: it is updated
-   * once, when it is shown.
+   * A copy of the model, without its collision, is either put beside a
+   * node of a menu's scene (as a child of the same parent) and lit by the
+   * lights of the menu's shadow scene node, or attached below a node of
+   * the world, as JIP's AttachModel attaches a model to a bone.
    */
   class VrSceneModel {
 
@@ -51,16 +53,49 @@ namespace dxvk {
      */
     void hide();
 
+    /**
+     * \brief Attaches the model below a node, at a place in its space
+     *
+     * The model is read the first time. It is updated with the node from
+     * then on, as a part of the model the node belongs to.
+     *
+     * \param [in] parent The node, of the world's scene
+     * \param [in] local The model's transform in the node's space
+     * \returns \c true if the model is attached
+     */
+    bool attach(void* parent, const VrSequencePose& local);
+
+    /**
+     * \brief A node of the copy by its name, \c nullptr if it has none or
+     *    it was not read
+     */
+    void* find(const char* name) const;
+
+    /**
+     * \brief The copy's root, \c nullptr before it was read
+     */
+    void* root() const {
+      return m_root;
+    }
+
+    /**
+     * \brief Whether the model is attached or shown
+     */
+    bool placed() const {
+      return m_parent != nullptr;
+    }
+
   private:
 
     explicit VrSceneModel(const char* path);
 
     bool load();
 
-    const char* m_path;
+    std::string m_path;
     void*       m_root   = nullptr;
     void*       m_parent = nullptr;
     bool        m_failed = false;
+    bool        m_inMenu = false;
 
   };
 

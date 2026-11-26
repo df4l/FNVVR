@@ -67,6 +67,9 @@ vr_src = files([
   'vr_block_heap.cpp',
   'vr_foveation_map.cpp',
   'vr_occlusion_rules.cpp',
+  'vr_kf_reader.cpp',
+  'vr_consumable_animation.cpp',
+  'vr_consumable_gesture.cpp',
 ])
 
 # Parts that depend on DXVK and Vulkan, only built into d3d9.dll
@@ -171,6 +174,7 @@ vr_dxvk_src = files([
   'vr_game_hotkeys.cpp',
   'vr_game_ammo.cpp',
   'vr_quick_wheel.cpp',
+  'vr_consumables.cpp',
   'vr_ammo_label.cpp',
   'vr_caravan_values.cpp',
   'vr_physics_grab.cpp',
@@ -252,6 +256,7 @@ if add_languages('cpp', native: true, required: false)
     'tests/test_vr_block_heap.cpp',
     'tests/test_vr_foveation.cpp',
     'tests/test_vr_occlusion.cpp',
+    'tests/test_vr_consumables.cpp',
   ])
 
   vr_test = executable('vr_tests', vr_test_sources, vr_src,

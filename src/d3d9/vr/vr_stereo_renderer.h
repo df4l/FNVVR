@@ -36,6 +36,7 @@
 #include "vr_caravan_values.h"
 #include "vr_game_images.h"
 #include "vr_quick_wheel.h"
+#include "vr_consumables.h"
 #include "vr_melee_swing.h"
 #include "vr_menu_scenes.h"
 #include "vr_minigames.h"
@@ -471,6 +472,7 @@ namespace dxvk {
     std::unique_ptr<VrChargeRing>       m_chargeRing;
     VrGameImages                        m_gameImages;
     std::unique_ptr<VrQuickWheel>       m_quickWheel;
+    std::unique_ptr<VrConsumables>      m_consumables;
     std::unique_ptr<VrAmmoLabel>        m_ammoLabel;
     std::unique_ptr<VrCaravanValues>    m_caravanValues;
     // The left hand held ammunition at the last frame, and the reload
@@ -773,6 +775,8 @@ namespace dxvk {
     bool leftGripOnWeapon(const VrInputState& input) const;
 
     void updateQuickWheel(const VrInputState& input, VrGameStateKind state);
+
+    void updateConsumables(const VrInputState& input, VrGameStateKind state, float dt);
 
     void updateAmmoChoice(const VrInputState& input, VrGameStateKind state);
 

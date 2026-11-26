@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 
 #include "vr_game_hotkeys.h"
 #include "vr_game_images.h"
@@ -75,6 +76,17 @@ namespace dxvk {
     }
 
     /**
+     * \brief Takes the items consumed by hand
+     *
+     * \param [in] consume Called with an item chosen on the wheel before
+     *    the game uses it; returns \c true if it took the item, which is not
+     *    used then
+     */
+    void setConsumer(std::function<bool (uint32_t slot, const VrHotKeyItem& item)> consume) {
+      m_consume = std::move(consume);
+    }
+
+    /**
      * \brief What the last closing on a cell asked of the weapon
      */
     bool drawsWeapon() const {
@@ -91,6 +103,8 @@ namespace dxvk {
     bool              m_held        = false;
     bool              m_failed      = false;
     bool              m_drawsWeapon = false;
+
+    std::function<bool (uint32_t, const VrHotKeyItem&)> m_consume;
 
     // Where the wheel stands, and the hotkeys it shows
     VrPose            m_pose;

@@ -141,6 +141,7 @@ namespace dxvk {
     if (void* scene = menuShadowSceneNode())
       game<SceneObjectFn>(VrGame::ShadowSceneNodeAddObject)(scene, m_root);
 
+    m_inMenu = true;
     return true;
   }
 
@@ -149,17 +150,53 @@ namespace dxvk {
     if (!m_parent)
       return;
 
-    if (void* scene = menuShadowSceneNode())
-      game<SceneObjectFn>(VrGame::ShadowSceneNodeRemoveObject)(scene, m_root);
+    if (m_inMenu) {
+      if (void* scene = menuShadowSceneNode())
+        game<SceneObjectFn>(VrGame::ShadowSceneNodeRemoveObject)(scene, m_root);
+    }
 
     method<DetachChildFn>(m_parent, VrGame::NodeDetachChildSlot)(m_parent, m_root);
     m_parent = nullptr;
+    m_inMenu = false;
+  }
+
+
+  bool VrSceneModel::attach(void* parent, const VrSequencePose& local) {
+    if (m_failed || !parent)
+      return false;
+
+    hide();
+
+    if (!m_root && !load()) {
+      Logger::err(str::format("VR: Failed to read ", m_path));
+      m_failed = true;
+      return false;
+    }
+
+    std::memcpy(static_cast<uint8_t*>(m_root) + VrGame::ObjectLocalRotation, local.rotate.m, sizeof(local.rotate.m));
+    field<VrVector3>(m_root, VrGame::ObjectLocalTranslation) = local.translate;
+    field<float>(m_root, VrGame::ObjectLocalScale) = local.scale;
+
+    m_parent = parent;
+    method<AttachChildFn>(parent, VrGame::NodeAttachChildSlot)(parent, m_root, 1);
+
+    uint8_t data[VrGame::UpdateDataSize] = { };
+    game<UpdateFn>(VrGame::ObjectUpdate)(m_root, data);
+    return true;
+  }
+
+
+  void* VrSceneModel::find(const char* name) const {
+    if (!m_root)
+      return nullptr;
+
+    return reinterpret_cast<void*>(vrFindGameObject(reinterpret_cast<uintptr_t>(m_root), name, MaxDepth));
   }
 
 
   bool VrSceneModel::load() {
     void* loader = *reinterpret_cast<void* const*>(VrGame::ModelLoaderSingleton);
-    void* cached = loader ? game<LoadFileFn>(VrGame::ModelLoaderLoadFile)(loader, m_path, 0, 1, 0, 0, 0) : nullptr;
+    void* cached = loader ? game<LoadFileFn>(VrGame::ModelLoaderLoadFile)(loader, m_path.c_str(), 0, 1, 0, 0, 0) : nullptr;
 
     if (!cached)
       return false;

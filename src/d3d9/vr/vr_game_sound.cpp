@@ -93,6 +93,24 @@ namespace dxvk {
   }
 
 
+  int32_t vrPlaySoundFile(const char* path) {
+    auto audio = *reinterpret_cast<void* const*>(VrGame::AudioSingleton);
+
+    if (!audio || !path || !*path)
+      return -1;
+
+    SoundHandle handle;
+    reinterpret_cast<GetSoundFn>(VrGame::AudioGetSoundByFilename)(audio, nullptr, &handle, path,
+      VrGame::SoundFlag2D | VrGame::SoundFlagSystem | VrGame::SoundFlagOneShot, nullptr);
+
+    if (handle.id == -1)
+      return -1;
+
+    reinterpret_cast<PlayFn>(VrGame::SoundHandlePlay)(&handle, nullptr, 0);
+    return handle.id;
+  }
+
+
   bool vrGameSoundLoops(const uint8_t* sound) {
     if (!sound)
       return false;

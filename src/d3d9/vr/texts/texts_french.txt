@@ -243,3 +243,10 @@ FIN
 # Message du HUD, une fois par partie, quand le plugin Occlusion Culling est installé.
 [text occlusion.plugin]
 Désinstallez le plugin Occlusion Culling : en VR il donne les mêmes réponses aux deux yeux. FNVVR a sa propre occlusion, faite pour la VR.
+
+# Message du HUD quand un objet de la roue rapide est consommé à la main.
+[text consumable.used]
+Consommé :
+
+[text consumable.read]
+Lu :

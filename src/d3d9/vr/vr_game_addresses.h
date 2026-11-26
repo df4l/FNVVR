@@ -4230,6 +4230,35 @@ namespace dxvk {
     constexpr uint32_t  LodMultActorBodyPart          = 7;
     constexpr uint32_t  LodMultInvisible              = 9;
 
+    /**
+     * Items consumed by hand (B42 Inject's animations), see
+     * findings/consumables.md §7. Found in the GOG database (code addresses
+     * equal the Steam build's), prologues compared there.
+     *
+     * - The quick wheel's use (HotKeyWheelUse) sends an ingestible to
+     *   Actor::EquipObject at once (Actor::QueueEquipObject queues only
+     *   weapons, armour and ammunition), which drinks it and plays the
+     *   item's consume sound by its editor ID (AlchemyConsumeSound, a
+     *   TESSound*; none plays when it is null, as for items without one).
+     * - A poison (EffectItemListCanBePoison, __thiscall on the item's
+     *   effect list at AlchemyEffectList, returns a bool in AL) is put on
+     *   the weapon instead.
+     * - The item's model path (TESModel::strModel's characters) is at
+     *   AlchemyModelPath, from the Meshes folder.
+     * - The item's file: its form ID's high byte is its load order index,
+     *   DataHandlerGetCompiledFile (__thiscall on the data handler: index,
+     *   up to 0xFE) gives the TESFile, whose name is at TesFileName.
+     */
+    constexpr uint8_t   FormTypeAlchemy               = 0x2F;
+    constexpr uintptr_t AlchemyEffectList             = 0x3C;
+    constexpr uintptr_t AlchemyModelPath              = 0x50;
+    constexpr uintptr_t AlchemyConsumeSound           = 0xC8;
+    constexpr uintptr_t EffectItemListCanBePoison     = 0x00405DA0;
+    constexpr uint8_t   EffectItemListCanBePoisonPrologue[] = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x14, 0x89, 0x4D, 0xF4, 0x8B, 0x45, 0xF4 };
+    constexpr uintptr_t DataHandlerGetCompiledFile    = 0x00465010;
+    constexpr uint8_t   DataHandlerGetCompiledFilePrologue[] = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x83, 0x7D, 0x08, 0x00, 0x7C };
+    constexpr uintptr_t TesFileName                   = 0x20;
+
   }
 
 }

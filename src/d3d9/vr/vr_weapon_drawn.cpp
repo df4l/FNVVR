@@ -92,11 +92,13 @@ namespace dxvk {
         Logger::info("VR: The holstered weapon was drawn by the game");
 
       m_playerHolstered = false;
+      m_forItem         = false;
       return;
     }
 
-    // A weapon worn on the fist, or none, has no holster
-    if (m_playerHolstered) {
+    // A weapon worn on the fist, or none, has no holster, unless the hands
+    // are put down for an item
+    if (m_playerHolstered && !m_forItem) {
       int32_t type = -1;
       equippedWeapon(type);
 
@@ -133,7 +135,7 @@ namespace dxvk {
   }
 
 
-  void VrWeaponDrawn::holster() {
+  void VrWeaponDrawn::holster(bool forItem) {
     uint8_t* actor = player();
 
     if (!actor || m_playerHolstered)
@@ -147,8 +149,11 @@ namespace dxvk {
     }
 
     m_playerHolstered = true;
+    m_forItem         = forItem;
     playSound(false);
-    Logger::info("VR: The player holstered the weapon");
+    Logger::info(forItem
+      ? "VR: The weapon or the fists are put away for an item held in the hand"
+      : "VR: The player holstered the weapon");
   }
 
 
@@ -172,6 +177,7 @@ namespace dxvk {
       playSound(true);
 
     m_playerHolstered = false;
+    m_forItem         = false;
     Logger::info("VR: The player drew the weapon");
   }
 
