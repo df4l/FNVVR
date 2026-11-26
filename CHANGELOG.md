@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- **Dead Money terminals readable**: the desk terminals of the Puesta del Sol switching station glowed so bright behind their text that it could not be read. Their screen now glows as the base game's while you use them.
+
 ## v1.0.0 (2026-11-24, since v0.21.0 `9cf30e7`)
 
 ### OpenXR
