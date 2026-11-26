@@ -161,6 +161,10 @@ namespace dxvk {
     VrVector3                         m_spitFrom;
     VrVector3                         m_spitVelocity;
     VrVector3                         m_capMesh;
+    /// The item's bound before the bite, in its root's frame: the flying
+    /// cork would stretch it
+    VrVector3                         m_spitBound;
+    float                             m_spitRadius  = 0.0f;
     std::vector<std::pair<void*, const VrConsumablePart*>> m_parts;
 
     std::vector<PendingSound>         m_pending;

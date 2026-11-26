@@ -280,7 +280,14 @@ namespace dxvk {
     gesture.otherGrip = input.otherGrip;
     gesture.dt        = input.dt;
 
-    if (const float* bound = m_prop && m_prop->root() ? field<const float*>(m_prop->root(), VrGame::ObjectWorldBound) : nullptr) {
+    void* propRoot = m_prop ? m_prop->root() : nullptr;
+
+    if (propRoot && m_spitting) {
+      VrVector3 centre = worldRotation(propRoot) * m_spitBound * field<float>(propRoot, VrGame::ObjectWorldScale)
+        + field<VrVector3>(propRoot, VrGame::ObjectWorldTranslation);
+      gesture.centre = toWorld.rotate * centre + toWorld.translate;
+      gesture.radius = m_spitRadius;
+    } else if (const float* bound = propRoot ? field<const float*>(propRoot, VrGame::ObjectWorldBound) : nullptr) {
       gesture.centre = toWorld.rotate * VrVector3 { bound[0], bound[1], bound[2] } + toWorld.translate;
       gesture.radius = bound[3];
     }
@@ -314,6 +321,13 @@ namespace dxvk {
 
         queueSounds(m_animation->capSounds, 0.0f);
         return VrConsumablesEvent::CapTaken;
+
+      case VrConsumeEvent::Arrived:
+      case VrConsumeEvent::Left:
+        Logger::info(str::format("VR: '", m_item.name, event == VrConsumeEvent::Arrived
+          ? "' is where it is consumed, the use clock runs from " : "' left where it is consumed, the use clock waits at ",
+          m_gesture.clock(), " s"));
+        break;
 
       case VrConsumeEvent::CapBitten:
         biteCap();
@@ -535,6 +549,20 @@ namespace dxvk {
           - field<VrVector3>(m_cap, VrGame::ObjectWorldTranslation)) * (1.0f / scale)
       : VrVector3();
 
+    // The item's bound keeps its place in the item while the cork flies
+    void* root = m_prop->root();
+    const float* itemBound = root ? field<const float*>(root, VrGame::ObjectWorldBound) : nullptr;
+    float rootScale = root ? field<float>(root, VrGame::ObjectWorldScale) : 0.0f;
+
+    m_spitBound  = VrVector3();
+    m_spitRadius = 0.0f;
+
+    if (itemBound && rootScale > 0.0f) {
+      m_spitBound  = vrTranspose(worldRotation(root)) * (VrVector3 { itemBound[0], itemBound[1], itemBound[2] }
+        - field<VrVector3>(root, VrGame::ObjectWorldTranslation)) * (1.0f / rootScale);
+      m_spitRadius = itemBound[3];
+    }
+
     setCulled(m_cap, true);
     queueSounds(m_animation->capSounds, 0.0f);
     queueSounds(m_animation->spitSounds, 0.0f);
@@ -565,7 +593,9 @@ namespace dxvk {
       setCulled(m_cap, false);
     }
 
+    // Hidden back on the item, out of its bound's way
     if (time > SpitFlightSeconds) {
+      setLocal(m_cap, m_animation->capOn);
       setCulled(m_cap, true);
       m_spitting = false;
       return;
