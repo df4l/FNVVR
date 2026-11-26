@@ -215,7 +215,7 @@ namespace dxvk {
     if (m_state == State::Holstering) {
       if (drawn && !drawn->handsFree()) {
         if (!m_holstered) {
-          drawn->holster();
+          drawn->holster(true);
           m_holstered = true;
         }
 
