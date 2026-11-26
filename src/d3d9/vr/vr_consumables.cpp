@@ -275,8 +275,15 @@ namespace dxvk {
       gesture.radius = bound[3];
     }
 
-    if (m_cap)
-      gesture.cap = toWorld.rotate * field<VrVector3>(m_cap, VrGame::ObjectWorldTranslation) + toWorld.translate;
+    // The cap's origin is the item's: its mesh sits away from it, at the
+    // neck, where its bound is
+    if (m_cap) {
+      const float* capBound = field<const float*>(m_cap, VrGame::ObjectWorldBound);
+      VrVector3 cap = capBound && capBound[3] > 0.0f
+        ? VrVector3 { capBound[0], capBound[1], capBound[2] }
+        : field<VrVector3>(m_cap, VrGame::ObjectWorldTranslation);
+      gesture.cap = toWorld.rotate * cap + toWorld.translate;
+    }
 
     bool otherPressed = input.otherGrip && !m_otherDown;
     m_otherDown = input.otherGrip;
