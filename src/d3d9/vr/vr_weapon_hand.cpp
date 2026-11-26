@@ -1891,6 +1891,17 @@ namespace dxvk {
   }
 
 
+  bool VrWeaponHand::freeHandBone(VrHand side, VrGameTransform& bone) const {
+    if (side == VrHand::Right ? !m_hasHand : !m_hasOtherHand)
+      return false;
+
+    bone = side == VrHand::Right
+      ? vrComputeHeldTransform(m_hand, vrMirrorHandPose(FreeHandPose))
+      : vrComputeHeldTransform(m_otherHand, FreeHandPose);
+    return true;
+  }
+
+
   bool VrWeaponHand::takeHighlight(uint8_t*& root, std::vector<uint8_t*>& parts, VrGameWorldTransforms& drawn) {
     if (!m_highlightRoot)
       return false;

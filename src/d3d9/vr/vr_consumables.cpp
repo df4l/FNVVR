@@ -84,6 +84,15 @@ namespace dxvk {
       return r;
     }
 
+    // Brings the nodes below a hand bone, as the game's update left them,
+    // to where the hand is drawn
+    VrGameTransform toDrawnHand(void* bone, const VrGameTransform& drawn) {
+      VrGameTransform transform;
+      transform.rotate    = drawn.rotate * vrTranspose(worldRotation(bone));
+      transform.translate = drawn.translate - transform.rotate * field<VrVector3>(bone, VrGame::ObjectWorldTranslation);
+      return transform;
+    }
+
     void setLocal(void* object, const VrSequencePose& pose) {
       std::memcpy(static_cast<uint8_t*>(object) + VrGame::ObjectLocalRotation, pose.rotate.m, sizeof(pose.rotate.m));
       field<VrVector3>(object, VrGame::ObjectLocalTranslation) = pose.translate;
@@ -244,6 +253,16 @@ namespace dxvk {
       return VrConsumablesEvent::Started;
     }
 
+    // The game updates the arms in its own pose, the hands reach their
+    // controllers only where they are drawn: the item is read where the
+    // left hand is drawn
+    VrGameTransform toWorld;
+    VrGameTransform leftDrawn;
+    void* leftBone = skeletonNode(VrGame::LeftHandNodeName);
+
+    if (hand && leftBone && hand->freeHandBone(VrHand::Left, leftDrawn))
+      toWorld = toDrawnHand(leftBone, leftDrawn);
+
     // The item's bound, and the cap where it is on the item
     VrConsumeInput gesture;
     gesture.head      = input.head;
@@ -252,12 +271,12 @@ namespace dxvk {
     gesture.dt        = input.dt;
 
     if (const float* bound = m_prop && m_prop->root() ? field<const float*>(m_prop->root(), VrGame::ObjectWorldBound) : nullptr) {
-      gesture.centre = { bound[0], bound[1], bound[2] };
+      gesture.centre = toWorld.rotate * VrVector3 { bound[0], bound[1], bound[2] } + toWorld.translate;
       gesture.radius = bound[3];
     }
 
     if (m_cap)
-      gesture.cap = field<VrVector3>(m_cap, VrGame::ObjectWorldTranslation);
+      gesture.cap = toWorld.rotate * field<VrVector3>(m_cap, VrGame::ObjectWorldTranslation) + toWorld.translate;
 
     bool otherPressed = input.otherGrip && !m_otherDown;
     m_otherDown = input.otherGrip;
@@ -273,7 +292,7 @@ namespace dxvk {
     switch (event) {
       case VrConsumeEvent::CapTaken:
         // The cap has to leave the item even if it cannot follow the hand
-        if (!takeCap())
+        if (!takeCap(hand, toWorld))
           setCulled(m_cap, true);
 
         queueSounds(m_animation->capSounds, 0.0f);
@@ -429,24 +448,25 @@ namespace dxvk {
   }
 
 
-  bool VrConsumables::takeCap() {
+  bool VrConsumables::takeCap(VrWeaponHand* hand, const VrGameTransform& toWorld) {
     void* rightHand = skeletonNode(VrGame::RightHandNodeName);
+    VrGameTransform drawn;
 
-    if (!m_cap || !m_capParent || !rightHand) {
+    if (!m_cap || !m_capParent || !rightHand || !hand || !hand->freeHandBone(VrHand::Right, drawn)) {
       Logger::warn(str::format("VR: The cap of '", m_item.name, "' cannot follow the right hand: ",
-        !m_cap ? "no cap" : !m_capParent ? "the cap has no parent" : "the right hand bone was not found",
-        ", it is hidden"));
+        !m_cap ? "no cap" : !m_capParent ? "the cap has no parent" : !rightHand ? "the right hand bone was not found"
+          : "the right hand is not drawn at its controller", ", it is hidden"));
       return false;
     }
 
-    // The cap keeps its place in the world, now below the right hand
-    VrGameRotation handRotation = worldRotation(rightHand);
-    VrVector3 handPosition      = field<VrVector3>(rightHand, VrGame::ObjectWorldTranslation);
-    float handScale             = field<float>(rightHand, VrGame::ObjectWorldScale);
+    // The cap keeps its place where both hands are drawn, now below the
+    // right hand
+    float handScale = field<float>(rightHand, VrGame::ObjectWorldScale);
+    VrVector3 cap   = toWorld.rotate * field<VrVector3>(m_cap, VrGame::ObjectWorldTranslation) + toWorld.translate;
 
     VrSequencePose local;
-    local.rotate    = vrTranspose(handRotation) * worldRotation(m_cap);
-    local.translate = vrTranspose(handRotation) * (field<VrVector3>(m_cap, VrGame::ObjectWorldTranslation) - handPosition);
+    local.rotate    = vrTranspose(drawn.rotate) * toWorld.rotate * worldRotation(m_cap);
+    local.translate = vrTranspose(drawn.rotate) * (cap - drawn.translate);
     local.translate = local.translate * (handScale > 0.0f ? 1.0f / handScale : 1.0f);
     local.scale     = handScale > 0.0f ? field<float>(m_cap, VrGame::ObjectWorldScale) / handScale : 1.0f;
 

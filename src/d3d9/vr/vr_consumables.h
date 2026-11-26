@@ -162,7 +162,7 @@ namespace dxvk {
 
     void detachProp(VrWeaponHand* hand);
 
-    bool takeCap();
+    bool takeCap(VrWeaponHand* hand, const VrGameTransform& toWorld);
 
     void dropCap();
 

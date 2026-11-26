@@ -303,6 +303,19 @@ namespace dxvk {
     }
 
     /**
+     * \brief Where a free hand's bone is drawn, around its controller
+     *
+     * With the weapon holstered, the game updates the arms in its own pose
+     * and the hand bones reach their controllers only where the model is
+     * drawn: nodes below a hand are brought to the game world through this.
+     *
+     * \param [in] side The hand
+     * \param [out] bone The hand bone's transform in the game world
+     * \returns \c false without that controller
+     */
+    bool freeHandBone(VrHand side, VrGameTransform& bone) const;
+
+    /**
      * \brief Whether the left hand holds the weapon or supports it
      *
      * Decided when the model was last placed, in the previous frame.
