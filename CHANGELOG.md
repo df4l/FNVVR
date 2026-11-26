@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.1.0 (2026-11-26, since v1.0.0 `011a5e11`)
 
 ### Hands
 

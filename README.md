@@ -22,6 +22,7 @@ Releases are pre-releases: see the [releases page](https://github.com/df4l/FNVVR
 - Manual reload for every kind of weapon (magazines, cells, slides, shotgun shells, revolvers, heavy weapons, launchers), holsters at the hip and shoulder, a quick wheel for hotkeys, ammunition types.
 - Melee: swing to hit, block across your face, charge power attacks. Unarmed: punch with your fists.
 - Grenades, mines and thrown weapons are armed by hand and thrown with the motion of your hand.
+- Aid items taken from the quick wheel are drunk, eaten, injected or read by hand, with the animations of the B42 Inject Anim Pack if you install it.
 - Hold and throw objects, push them, hold the limb of a living NPC, put items away at the chest.
 - Finger tracking on controllers that support it.
 
@@ -153,6 +154,7 @@ The rest of the DXVK documentation (HUD, device filters, shader cache, debugging
 - lStewieAl's Tweaks by lStewieAl and its contributors: the engine optimisations follow its inline patches.
 - NVTF and B42 Optics (lens placement measured from its INI files), studied as references.
 - FNV 4GB Patcher: the 4 GB offer changes the executable as it does.
+- B42 Inject by Bale (B42) and the B42 Inject Anim Pack - Season 1 by Hit: consumables by hand play the pack's animations, meshes and sounds (installed by the player, not shipped), and follow B42 Inject's design.
 - Steam Frame controller bindings and control reference: Madison ([astromaddie/FNVVR](https://github.com/astromaddie/FNVVR)).
 - The study of which menu mode tests hold the world still, for the real-time casino: [Real Time Menus by WallSoGB](https://github.com/WallSoGB/Fallout-Real-Time-Menus) (read as a reference, no code copied).
 - Testers: JaminaPanAm (Steam Frame: the foveation crash log, profiling builds), LOBO (Quest 3: Pip-Boy angle) and spinfusor_ (TTW: missing scope reticles).
