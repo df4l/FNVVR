@@ -59,6 +59,11 @@ namespace dxvk {
     float           angle = 0.0f;
     /// Axis it turns about to open, unit, in the weapon node's frame
     VrVector3       axis;
+    /// Axis the weapon is flicked about to open it, unit, in the weapon
+    /// node's frame: the turn's, or for a cylinder that swings out, the
+    /// barrel's, the way that rolls the top of the weapon towards the side
+    /// the cylinder goes to
+    VrVector3       flick;
     /// The action opening and closing
     VrAnimationSound openSound;
     VrAnimationSound closeSound;

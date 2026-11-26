@@ -626,6 +626,58 @@ namespace dxvk {
   }
 
 
+  namespace {
+
+    /**
+     * \brief Fills the timing of a round or speed loader in its place
+     *
+     * It comes from the direction it was in the last time before that it
+     * was about four centimetres out, less if it never went that far.
+     *
+     * \param [in] far How far from its place it was before at most
+     * \returns \c false if it never moved far enough to have come in
+     */
+    bool timeFromPlace(
+      const VrMagazineSample*     samples,
+            size_t                place,
+            float                 far,
+            VrMagazineTiming&     timing) {
+      // It must have come from this far
+      constexpr float Moved = 0.03f;
+      // It is held this far out of its place before it goes in
+      constexpr float Held  = 0.04f;
+
+      if (far < Moved)
+        return false;
+
+      const VrVector3& at = samples[place].offset;
+      float reach = std::min(Held, far * 0.75f);
+      size_t grip = place - 1;
+
+      while (grip > 0 && vrLength(samples[grip].offset - at) < reach)
+        grip -= 1;
+
+      VrVector3 from = samples[grip].offset - at;
+
+      timing.out  = samples[0].time;
+      timing.in   = samples[place].time;
+      timing.grip = samples[grip].time;
+      timing.axis = from * (1.0f / vrLength(from));
+      return true;
+    }
+
+    float farthestBefore(const VrMagazineSample* samples, size_t place) {
+      float far = 0.0f;
+
+      for (size_t j = 0; j < place; j++)
+        far = std::max(far, vrLength(samples[j].offset - samples[place].offset));
+
+      return far;
+    }
+
+  }
+
+
   bool vrFindRoundTiming(
     const VrMagazineSample*     samples,
           size_t                count,
@@ -634,10 +686,6 @@ namespace dxvk {
     // Within this of its place the round is still, for this long
     constexpr float Still     = 0.003f;
     constexpr float StillTime = 0.1f;
-    // It must have come from this far
-    constexpr float Moved     = 0.03f;
-    // It is held this far out of its place before it goes in
-    constexpr float Held      = 0.04f;
 
     for (size_t i = 1; i < count; i++) {
       const VrVector3& at = samples[i].offset;
@@ -651,31 +699,40 @@ namespace dxvk {
       if (samples[end].time - samples[i].time < StillTime)
         continue;
 
-      float far = 0.0f;
-
-      for (size_t j = 0; j < i; j++)
-        far = std::max(far, vrLength(samples[j].offset - at));
-
-      if (far < Moved)
+      if (!timeFromPlace(samples, i, farthestBefore(samples, i), timing))
         continue;
 
-      float reach = std::min(Held, far * 0.75f);
-      size_t grip = i - 1;
-
-      while (grip > 0 && vrLength(samples[grip].offset - at) < reach)
-        grip -= 1;
-
-      VrVector3 from = samples[grip].offset - at;
-
-      timing.out  = samples[0].time;
-      timing.in   = samples[i].time;
-      timing.grip = samples[grip].time;
-      timing.axis = from * (1.0f / vrLength(from));
       place = i;
       return true;
     }
 
     return false;
+  }
+
+
+  bool vrFindLoaderTiming(
+    const VrMagazineSample*     samples,
+    const float*                fromRest,
+          size_t                count,
+          VrMagazineTiming&     timing,
+          size_t&               place) {
+    // Within this of its place in the model the speed loader is home
+    constexpr float Seated = 0.01f;
+
+    // Neither at the start nor at the end: it is brought in and taken away
+    size_t nearest = 0;
+
+    for (size_t i = 1; i + 1 < count; i++) {
+      if (!nearest || fromRest[i] < fromRest[nearest])
+        nearest = i;
+    }
+
+    if (!nearest || fromRest[nearest] > Seated
+     || !timeFromPlace(samples, nearest, farthestBefore(samples, nearest), timing))
+      return false;
+
+    place = nearest;
+    return true;
   }
 
 

@@ -956,6 +956,31 @@ namespace dxvk {
           size_t&               place);
 
   /**
+   * \brief Finds where the game's reload animation puts a speed loader
+   *
+   * The revolvers' animations push their speed loader home and pull it
+   * away at once, without a stop (That Gun, the hunting revolver): it is
+   * home when it comes nearest its place in the model, within a
+   * centimetre, after having been three centimetres away. The rest is as
+   * for a round, see vrFindRoundTiming.
+   *
+   * \param [in] samples The speed loader through the animation, in time
+   *    order, each relative to the same point of the weapon
+   * \param [in] fromRest How far it is from its place in the model at
+   *    each sample, in its parent's frame, in metres
+   * \param [in] count Number of samples
+   * \param [out] timing When it goes in, and from where
+   * \param [out] place The sample where it is home
+   * \returns \c false if it never comes home after moving in
+   */
+  bool vrFindLoaderTiming(
+    const VrMagazineSample*     samples,
+    const float*                fromRest,
+          size_t                count,
+          VrMagazineTiming&     timing,
+          size_t&               place);
+
+  /**
    * \brief Finds when the game's reload animation holds the magazine best
    *
    * The left hand holds the magazine while it carries it: from one sample

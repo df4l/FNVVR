@@ -2779,13 +2779,14 @@ namespace dxvk {
 
     // The barrel runs along the weapon node's x axis, turned down with
     // the hinge part of a break action that is open. A revolver is
-    // flicked open about it, the way its part swings out.
+    // flicked open about it, rolling its top towards the side its cylinder
+    // swings out to.
     if (m_hasHinge) {
       VrGameRotation weaponRotation = readRotation(weapon, VrGame::ObjectWorldRotation);
       VrGameRotation barrelRotation = weaponRotation * (m_swingAction ? VrGameRotation() : m_actionTurn);
       VrVector3 barrel = { barrelRotation.m[0][0], barrelRotation.m[1][0], barrelRotation.m[2][0] };
 
-      if (m_swingAction && vrDot(weaponRotation * m_reloadAnimation.hinge.axis, barrel) < 0.0f)
+      if (m_swingAction && vrDot(weaponRotation * m_reloadAnimation.hinge.flick, barrel) < 0.0f)
         barrel = barrel * -1.0f;
 
       VrVector3& axis = m_swingAction ? m_actionRoll : m_actionBarrel;

@@ -301,6 +301,7 @@ namespace dxvk {
       VrVector3 axis = { turn.x, turn.y, turn.z };
       float length = vrLength(axis);
       animation.axis = length > 1e-6f ? axis * ((turn.w < 0.0f ? -1.0f : 1.0f) / length) : VrVector3();
+      animation.flick = animation.axis;
       return true;
     }
 
@@ -309,7 +310,10 @@ namespace dxvk {
      * \brief Reads how the sequence swings a revolver's cylinder out
      *
      * Of the round's ancestors below the weapon node, the one the sequence
-     * turns furthest.
+     * turns furthest. The flick that opens it rolls the top of the weapon
+     * (its y axis) towards the side the round goes to: the turn's own axis
+     * would roll That Gun the other way from the other revolvers, its crane
+     * being hinged above the cylinder, not below.
      */
     bool readSwing(
       const VrSequenceTracks&       tracks,
@@ -341,6 +345,18 @@ namespace dxvk {
         to        = candidateTo;
         found     = true;
       }
+
+      VrSequencePose closed, open;
+
+      if (!found || !restToAncestor(round, weapon, closed) || !tracks.toAncestor(round, weapon, placed, open))
+        return found;
+
+      // Sideways in the weapon, in game units
+      constexpr float MinSideways = 0.1f;
+      float sideways = open.translate.z - closed.translate.z;
+
+      if (std::abs(sideways) >= MinSideways)
+        animation.flick = { sideways > 0.0f ? 1.0f : -1.0f, 0.0f, 0.0f };
 
       return found;
     }
@@ -532,10 +548,17 @@ namespace dxvk {
 
     VrSequenceTracks tracks(sequence);
 
+    // A revolver that swings its cylinder out is loaded with a speed
+    // loader, found home at its place in the model
+    bool loader = swing && !hinge && !looping;
+    auto loaderParent = readField<uint8_t*>(magazine, VrGame::ObjectParent);
+    VrVector3 loaderRest = readVector(magazine, VrGame::NodeLocalTranslate);
+
     // The magazine in the weapon's frame through the animation, from where
     // it is at the start
     std::vector<VrMagazineSample> samples;
     std::vector<VrSequencePose> poses;
+    std::vector<float> fromRest;
 
     for (uint32_t i = 0; begin + float(i) / SamplesPerSecond <= end; i++) {
       float time = begin + float(i) / SamplesPerSecond;
@@ -547,6 +570,15 @@ namespace dxvk {
       VrVector3 offset = poses.empty() ? VrVector3() : (pose.translate - poses.front().translate);
       samples.push_back({ time, offset * (1.0f / VrGameUnitsPerMetre) });
       poses.push_back(pose);
+
+      if (loader) {
+        VrSequencePose local;
+
+        if (!tracks.toAncestor(magazine, loaderParent, time, local))
+          return false;
+
+        fromRest.push_back(vrLength(local.translate - loaderRest) * (1.0f / VrGameUnitsPerMetre));
+      }
     }
 
     VrMagazineTiming timing;
@@ -554,8 +586,11 @@ namespace dxvk {
 
     animation.round = round;
 
-    if (round ? !vrFindRoundTiming(samples.data(), samples.size(), timing, place)
-              : !vrFindMagazineTiming(samples.data(), samples.size(), timing)) {
+    bool timed = loader ? vrFindLoaderTiming(samples.data(), fromRest.data(), samples.size(), timing, place)
+      : round ? vrFindRoundTiming(samples.data(), samples.size(), timing, place)
+              : vrFindMagazineTiming(samples.data(), samples.size(), timing);
+
+    if (!timed) {
       Logger::info(str::format("VR: The reload animation '", sequenceName ? sequenceName : "",
         round ? "' does not carry the round in" : "' does not take the magazine out and put it back"));
       return false;
