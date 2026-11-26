@@ -467,3 +467,68 @@ TEST_CASE(consumables_gesture_keeps_the_item_without_a_button) {
   CHECK(gesture.update(input, zones) == VrConsumeEvent::None);
   CHECK(gesture.update(input, zones) == VrConsumeEvent::Consumed);
 }
+
+
+TEST_CASE(consumables_gesture_starts_with_the_cap_in_the_other_hand) {
+  VrConsumeZones zones;
+  VrConsumeGestureState gesture;
+  gesture.start(VrConsumeGesture::Mouth, true, false, 1.0f);
+
+  // The grip that had a held item picked up holds its cap already
+  gesture.takeCapInHand();
+  CHECK(!gesture.capOn());
+  CHECK(gesture.capInHand());
+
+  VrConsumeInput input;
+  input.head      = northHead();
+  input.centre    = fromHead(0.0f, 0.10f, -0.08f);
+  input.otherHand = fromHead(0.3f, 0.3f, -0.3f);
+  input.otherGrip = true;
+  input.dt        = 0.25f;
+
+  CHECK(gesture.update(input, zones) == VrConsumeEvent::Arrived);
+
+  input.otherGrip = false;
+  CHECK(gesture.update(input, zones) == VrConsumeEvent::CapDropped);
+}
+
+
+TEST_CASE(consumables_right_hand_hold_mirrors_the_left_one) {
+  // A prop lying along the hand bone's y, its own z up along the bone's -x
+  VrSequencePose inHand;
+  inHand.rotate = {{
+    { 0.0f, 0.0f, -1.0f },
+    { 0.6f, 0.8f,  0.0f },
+    { 0.8f, -0.6f, 0.0f } }};
+  inHand.translate = { 1.0f, 2.0f, 3.0f };
+  inHand.scale     = 1.5f;
+
+  VrGameRotation finger = {{
+    { 1.0f, 0.0f, 0.0f },
+    { 0.0f, 0.8f, 0.6f },
+    { 0.0f, -0.6f, 0.8f } }};
+
+  VrConsumableHold hold = vrMirrorConsumableHold(inHand, { { "Bip01 L Finger11", finger } });
+  const VrGameRotation& r = hold.inHand.rotate;
+
+  // Still a rotation: the prop is turned, not mirrored
+  float det = r.m[0][0] * (r.m[1][1] * r.m[2][2] - r.m[1][2] * r.m[2][1])
+            - r.m[0][1] * (r.m[1][0] * r.m[2][2] - r.m[1][2] * r.m[2][0])
+            + r.m[0][2] * (r.m[1][0] * r.m[2][1] - r.m[1][1] * r.m[2][0]);
+  CHECK_NEAR(det, 1.0f, 1e-5f);
+
+  // Its up (z) is the left one's mirror image in the bone's frame
+  for (uint32_t i = 0; i < 3; i++)
+    CHECK_NEAR(r.m[i][2], inHand.rotate.m[i][2] * (i == 2 ? -1.0f : 1.0f), 1e-6f);
+
+  CHECK_NEAR(hold.inHand.translate.x, 1.0f, 1e-6f);
+  CHECK_NEAR(hold.inHand.translate.y, 2.0f, 1e-6f);
+  CHECK_NEAR(hold.inHand.translate.z, -3.0f, 1e-6f);
+  CHECK_NEAR(hold.inHand.scale, 1.5f, 1e-6f);
+
+  CHECK(hold.fingers.size() == 1);
+  CHECK(hold.fingers[0].name == "Bip01 R Finger11");
+  CHECK_NEAR(hold.fingers[0].rotate.m[1][2], -0.6f, 1e-6f);
+  CHECK_NEAR(hold.fingers[0].rotate.m[2][1], 0.6f, 1e-6f);
+  CHECK_NEAR(hold.fingers[0].rotate.m[1][1], 0.8f, 1e-6f);
+}

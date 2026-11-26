@@ -1402,6 +1402,15 @@ namespace dxvk {
       m_events.released[uint32_t(hand)] = true;
     }
 
+    // An item to be consumed in the hand is picked up first
+    if (const uint8_t* base = m_pickUps[uint32_t(hand)]) {
+      m_pickUps[uint32_t(hand)] = nullptr;
+
+      VrHeldItem item;
+      bool taken = heldItem(hand, item) && item.base == base && store(player, hand, held, false);
+      m_pickedUp[uint32_t(hand)] = taken ? 1 : 0;
+    }
+
     VrGrabHandInput grabInput;
     grabInput.hand = input.tracked ? &input.pose : nullptr;
     grabInput.grip = input.grip;
@@ -1417,7 +1426,7 @@ namespace dxvk {
       case VrGrabRequest::Release:
         // The grip opened at the chest
         if (input.chest && input.tracked && input.free && !input.grip && storable(held, hand)) {
-          store(player, hand, held);
+          store(player, hand, held, true);
           break;
         }
 
@@ -2363,7 +2372,37 @@ namespace dxvk {
   }
 
 
-  void VrPhysicsGrab::store(uint8_t* player, VrHand hand, Held& held) {
+  bool VrPhysicsGrab::heldItem(VrHand hand, VrHeldItem& item) const {
+    const Held& held = m_hands[uint32_t(hand)];
+
+    if (!held.grab.holding() || held.grab.pulling() || !storable(held, hand))
+      return false;
+
+    item.ref  = held.ref;
+    item.base = readField<uint8_t*>(held.ref, VrGame::RefBaseForm);
+    return true;
+  }
+
+
+  void VrPhysicsGrab::pickUp(VrHand hand, const uint8_t* base) {
+    m_pickUps[uint32_t(hand)]  = base;
+    m_pickedUp[uint32_t(hand)] = -1;
+  }
+
+
+  bool VrPhysicsGrab::takePickUp(VrHand hand, bool& taken) {
+    int8_t& result = m_pickedUp[uint32_t(hand)];
+
+    if (result < 0)
+      return false;
+
+    taken  = result > 0;
+    result = -1;
+    return true;
+  }
+
+
+  bool VrPhysicsGrab::store(uint8_t* player, VrHand hand, Held& held, bool atChest) {
     uint8_t* ref   = held.ref;
     uint32_t refId = held.refId;
 
@@ -2373,16 +2412,20 @@ namespace dxvk {
 
     bool taken = reinterpret_cast<RefActivateFn>(VrGame::RefActivate)(ref, nullptr, player, false, nullptr, 1);
 
-    if (taken)
+    // An item picked up to be consumed in the hand stays in it
+    if (taken && atChest)
       m_events.stored[uint32_t(hand)] = true;
-    else
+    else if (!taken)
       m_events.released[uint32_t(hand)] = true;
 
     if (m_loggedStores < MaxLoggedStores) {
-      Logger::info(str::format("VR: The ", handName(hand), " hand let go of ", hexId(refId), " at the chest, ",
+      Logger::info(str::format("VR: The ", handName(hand), " hand let go of ", hexId(refId),
+        atChest ? " at the chest, " : " to consume it, ",
         taken ? "the game picked it up" : "the game's activation refused it, it falls"));
       m_loggedStores++;
     }
+
+    return taken;
   }
 
 

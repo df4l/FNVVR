@@ -1697,29 +1697,39 @@ namespace dxvk {
     if (consume.inGame) {
       consume.head = vrComputeEyeCameraPose(m_gameCameraPose,
         vrComputeEyeInReference(m_reference, m_headPose), VrGameUnitsPerMetre);
-      consume.otherHand = handInGame(right).position;
-      consume.otherGrip = input.actions.isPressed(VrAction::Grab);
+      consume.hands[uint32_t(VrHand::Right)] = handInGame(right).position;
+      consume.hands[uint32_t(VrHand::Left)]  = handInGame(left).position;
+      consume.grips[uint32_t(VrHand::Right)] = input.actions.isPressed(VrAction::Grab);
+      consume.grips[uint32_t(VrHand::Left)]  = input.actions.isPressed(VrAction::TwoHandGrip);
+
+      // A gun or a melee weapon stays in the right hand for an item the
+      // left hand consumes alone, unless the left hand is busy with it
+      int32_t type = -1;
+      VrWeaponDrawn::equippedWeapon(type);
+
+      consume.armed = m_weaponDrawn && !m_weaponDrawn->handsFree()
+        && type > VrGame::WeaponTypeHandToHand && type <= VrGame::WeaponTypeLauncher
+        && !(m_manualReload && m_manualReload->leftHandBusy())
+        && !(m_handThrow && m_handThrow->throwsWithHand());
     }
 
-    switch (m_consumables->update(consume, m_weaponDrawn.get(), m_weaponHand.get())) {
+    VrConsumablesEvent event = m_consumables->update(consume, m_weaponDrawn.get(), m_weaponHand.get(),
+      m_physicsGrab.get());
+    VrHand felt = m_consumables->eventHand(event);
+
+    switch (event) {
       case VrConsumablesEvent::Started:
-        m_backend.applyHaptic(VrHand::Left, QuickTickHaptic, QuickTickDuration);
-        break;
-
       case VrConsumablesEvent::CapTaken:
-        m_backend.applyHaptic(VrHand::Right, QuickTickHaptic, QuickTickDuration);
-        break;
-
       case VrConsumablesEvent::CapBitten:
-        m_backend.applyHaptic(VrHand::Left, QuickTickHaptic, QuickTickDuration);
+        m_backend.applyHaptic(felt, QuickTickHaptic, QuickTickDuration);
         break;
 
       case VrConsumablesEvent::Consumed:
-        m_backend.applyHaptic(VrHand::Left, QuickUsedHaptic, QuickUsedDuration);
+        m_backend.applyHaptic(felt, QuickUsedHaptic, QuickUsedDuration);
         break;
 
       case VrConsumablesEvent::Cancelled:
-        m_backend.applyHaptic(VrHand::Left, NoRoundsHaptic, NoRoundsHapticDuration);
+        m_backend.applyHaptic(felt, NoRoundsHaptic, NoRoundsHapticDuration);
         break;
 
       case VrConsumablesEvent::None:
@@ -1924,9 +1934,11 @@ namespace dxvk {
 
 
   bool VrStereoRenderer::leftGripOnWeapon(const VrInputState& input) const {
-    // A left hand holding an object keeps it off the weapon
+    // A left hand holding an object or an item to consume keeps it off
+    // the weapon
     return input.hasActions && input.actions.isPressed(VrAction::TwoHandGrip)
-      && !(m_physicsGrab && m_physicsGrab->holds(VrHand::Left));
+      && !(m_physicsGrab && m_physicsGrab->holds(VrHand::Left))
+      && !(m_consumables && m_consumables->holds(VrHand::Left));
   }
 
 
@@ -1944,8 +1956,10 @@ namespace dxvk {
     VrGameCameraPose head, rightHand, leftHand;
     hands.frameTime = dt;
 
+    // Not while the left hand holds an item to consume beside the weapon
     bool tracked = state == VrGameStateKind::InGame && m_hasReference && m_hasHeadPose
-      && right.isActive && left.isActive && input.hasActions;
+      && right.isActive && left.isActive && input.hasActions
+      && !(m_consumables && m_consumables->holds(VrHand::Left));
 
     if (tracked) {
       head      = vrComputeEyeCameraPose(m_gameCameraPose,

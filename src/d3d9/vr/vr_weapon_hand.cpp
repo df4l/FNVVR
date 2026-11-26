@@ -628,6 +628,33 @@ namespace dxvk {
     }
 
     /**
+     * \brief Closes the fingers below the right hand bone on a held item
+     *
+     * \param [in] hand The right hand bone
+     * \param [in] grip The rotations of the bones below it
+     * \param [out] fingers The bones' local rotations before, to write back
+     * \returns How many bones were posed
+     */
+    uint32_t poseRightGrip(uint8_t* hand, const std::vector<VrBonePose>& grip,
+        std::array<SavedBone, VrFingerBoneCount>& fingers) {
+      uint32_t count = 0;
+
+      forEachObject(hand, MaxModelDepth, [&grip, &fingers, &count] (uint8_t* object) {
+        auto name = field<const char*>(object, VrGame::ObjectName);
+
+        for (size_t i = 0; name && count < fingers.size() && i < grip.size(); i++) {
+          if (grip[i].name == name) {
+            fingers[count++] = { object, readRotation(object, VrGame::ObjectLocalRotation) };
+            writeRotation(object, VrGame::ObjectLocalRotation, grip[i].rotate);
+            return;
+          }
+        }
+      });
+
+      return count;
+    }
+
+    /**
      * \brief Where a bone below the left hand is in the hand bone's frame
      *
      * With the bones between them posed as placeOtherHand poses them, in
@@ -1648,7 +1675,7 @@ namespace dxvk {
         held = { magazinePose, &magazineInHand(), &m_reloadAnimation.fingers };
       else if (rack && holdsRack())
         held = { rackPose, &m_reloadAnimation.rack.partInHand, &m_reloadAnimation.rack.fingers };
-      else
+      else if (!itemHeldPart(otherHand, shift, held))
         thrownHeldPart(form, otherHand, shift, held);
 
       placeOtherHand(root, otherHand, shift, updateData, held.inHand ? &held : nullptr);
@@ -1838,7 +1865,10 @@ namespace dxvk {
     std::array<SavedBone, VrFingerBoneCount> fingers;
     uint32_t fingerCount = 0;
 
-    if (m_hasFingers[uint32_t(VrHand::Right)])
+    // A right hand holding an item closes its fingers on it
+    if (const std::vector<VrBonePose>* grip = m_holdFingers[uint32_t(VrHand::Right)])
+      fingerCount = poseRightGrip(rightHand, *grip, fingers);
+    else if (m_hasFingers[uint32_t(VrHand::Right)])
       fingerCount = poseRightFingers(rightHand, m_fingerCurls[uint32_t(VrHand::Right)], fingers);
 
     writeRotation(root, VrGame::ObjectLocalRotation, vrTranspose(parent.rotate) * worldRotation);
@@ -1858,19 +1888,7 @@ namespace dxvk {
     // hand closed on it
     if (forearm && m_hasOtherHand) {
       HeldPart held = { };
-
-      if (m_leftHoldInHand) {
-        VrGameCameraPose controller = m_otherHand;
-        controller.position = controller.position - shift;
-
-        VrGameTransform target = vrComputeHeldTransform(controller, FreeHandPose);
-        float handScale = field<float>(otherHand, VrGame::ObjectWorldScale);
-
-        held.pose.rotate    = target.rotate * m_leftHoldInHand->rotate;
-        held.pose.translate = target.translate + target.rotate * m_leftHoldInHand->translate * handScale;
-        held.inHand         = m_leftHoldInHand;
-        held.fingers        = m_leftHoldFingers;
-      }
+      itemHeldPart(otherHand, shift, held);
 
       placeOtherHand(root, otherHand, shift, updateData, held.inHand ? &held : nullptr);
     }
@@ -4040,6 +4058,26 @@ namespace dxvk {
     });
 
     m_hasIdleLighter = true;
+  }
+
+
+  bool VrWeaponHand::itemHeldPart(uint8_t* otherHand, const VrVector3& shift, HeldPart& held) const {
+    const VrGameTransform* inHand = m_holdInHand[uint32_t(VrHand::Left)];
+
+    if (!inHand)
+      return false;
+
+    VrGameCameraPose controller = m_otherHand;
+    controller.position = controller.position - shift;
+
+    VrGameTransform target = vrComputeHeldTransform(controller, FreeHandPose);
+    float handScale = field<float>(otherHand, VrGame::ObjectWorldScale);
+
+    held.pose.rotate    = target.rotate * inHand->rotate;
+    held.pose.translate = target.translate + target.rotate * inHand->translate * handScale;
+    held.inHand         = inHand;
+    held.fingers        = m_holdFingers[uint32_t(VrHand::Left)];
+    return true;
   }
 
 

@@ -327,6 +327,9 @@ namespace dxvk {
     constexpr uintptr_t InventoryEntryForm    = 0x08;
     constexpr uintptr_t WeaponAnimationType   = 0xF4;
     constexpr int32_t   WeaponTypeHandToHand       = 0;
+    /// The last type held in the hand that is not thrown or placed:
+    /// melee weapons and guns are 1 to 9
+    constexpr int32_t   WeaponTypeLauncher         = 9;
 
     /**
      * The player's process is a HighProcess. Its table, and the function in
@@ -4251,6 +4254,8 @@ namespace dxvk {
      */
     constexpr uint8_t   FormTypeAlchemy               = 0x2F;
     constexpr uintptr_t AlchemyEffectList             = 0x3C;
+    /// The characters of its name (TESFullName at +0x30, IDA)
+    constexpr uintptr_t AlchemyFullName               = 0x34;
     constexpr uintptr_t AlchemyModelPath              = 0x50;
     constexpr uintptr_t AlchemyConsumeSound           = 0xC8;
     constexpr uintptr_t EffectItemListCanBePoison     = 0x00405DA0;
@@ -4258,6 +4263,27 @@ namespace dxvk {
     constexpr uintptr_t DataHandlerGetCompiledFile    = 0x00465010;
     constexpr uint8_t   DataHandlerGetCompiledFilePrologue[] = { 0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x83, 0x7D, 0x08, 0x00, 0x7C };
     constexpr uintptr_t TesFileName                   = 0x20;
+
+    /**
+     * An item held in the world and picked up to be consumed is not on a
+     * hotkey: it is used as HotKeyWheelUse uses one, with its own checks
+     * (GOG database, 2026-11-26, prologues compared there):
+     * Actor::QueueEquipObject (__thiscall: item, count, extra list, queue,
+     * force, play sound; ret 0x18), refusing the default stimpak
+     * (BGSDefaultObjectManager::GetDefaultObject, __cdecl with the index,
+     * DefaultObjectStimpak) while the player's health (ActorValueOwner at
+     * ActorValueOwnerBase, __thiscall with the actor value, ret 4, int in
+     * EAX: current at AvOwnerIntSlot, permanent at AvOwnerPermanentIntSlot)
+     * is full, with the text of sFullHealth (SettingValue) in the corner.
+     */
+    constexpr uintptr_t ActorQueueEquipObject         = 0x0088C650;
+    constexpr uint8_t   ActorQueueEquipObjectPrologue[] = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0x89, 0x4D, 0xFC, 0x8B, 0x4D, 0x08 };
+    constexpr uintptr_t DefaultObjectGet              = 0x0058DB10;
+    constexpr uint8_t   DefaultObjectGetPrologue[]    = { 0x55, 0x8B, 0xEC, 0xE8, 0x68, 0xFB, 0xFF, 0xFF, 0x8B, 0xC8, 0xE8, 0xC1 };
+    constexpr uint32_t  DefaultObjectStimpak          = 0;
+    constexpr uintptr_t AvOwnerIntSlot                = 0x08;
+    constexpr uintptr_t AvOwnerPermanentIntSlot       = 0x1C;
+    constexpr uintptr_t SettingFullHealth             = 0x011D2AF0;
 
   }
 

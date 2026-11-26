@@ -122,6 +122,33 @@ namespace dxvk {
   constexpr float VrConsumeReadSeconds = 1.5f;
 
   /**
+   * \brief How a hand holds a prop
+   */
+  struct VrConsumableHold {
+    /// The prop in the hand bone's frame
+    VrSequencePose          inHand;
+    /// The rotations of the bones below the hand
+    std::vector<VrBonePose> fingers;
+  };
+
+  /**
+   * \brief The animation's left hand hold, for the right hand
+   *
+   * The right hand bone and its fingers are the left ones' mirror images
+   * with their local z flipped (vrMirrorHandRotation). The prop cannot be
+   * mirrored: it is turned instead, flipped about its own x as well, which
+   * keeps an item modelled standing up (z up, as the game's items stand)
+   * standing up in the hand: C * r * diag(-1, 1, 1) with C = diag(1, 1, -1).
+   *
+   * \param [in] inHand The prop in the left hand bone's frame
+   * \param [in] fingers The rotations of the bones below the left hand
+   * \returns The same for the right hand, bones renamed
+   */
+  VrConsumableHold vrMirrorConsumableHold(
+    const VrSequencePose&           inHand,
+    const std::vector<VrBonePose>&  fingers);
+
+  /**
    * \brief Reads what a B42 Inject animation does
    *
    * \param [in] animation The animation file

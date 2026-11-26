@@ -28,7 +28,7 @@ namespace dxvk {
     float leaveMargin    = 0.05f;
     /// The largest bound radius counted
     float largestRadius  = 0.15f;
-    /// How near the cap the right controller takes it
+    /// How near the cap the other controller takes it
     float capReach       = 0.12f;
     /// How near the mouth the cap comes to be bitten off
     float biteReach      = 0.06f;
@@ -49,7 +49,7 @@ namespace dxvk {
    * \param [in] head Head pose in the game world (Z up)
    * \param [in] centre Centre of the item's bound in the game world
    * \param [in] radius Radius of the bound, game units
-   * \param [in] otherHand The right hand's position in the game world
+   * \param [in] otherHand The other hand's position in the game world
    * \param [in] margin Metres added to the reaches
    * \param [in] zones The zones
    */
@@ -72,20 +72,20 @@ namespace dxvk {
     float            radius = 0.0f;
     /// The cap's place in the game world, if it is still on
     VrVector3        cap;
-    /// The right hand's position in the game world
+    /// The other hand's position in the game world
     VrVector3        otherHand;
-    /// The right hand's grip, which takes the cap
+    /// The other hand's grip, which takes the cap
     bool             otherGrip = false;
     float            dt        = 0.0f;
   };
 
   enum class VrConsumeEvent {
     None,
-    /// The right hand took the cap off
+    /// The other hand took the cap off
     CapTaken,
     /// The teeth took the cap off, it is spat out
     CapBitten,
-    /// The right hand let the cap go
+    /// The other hand let the cap go
     CapDropped,
     /// The item came where it is consumed, the use clock starts or goes on
     Arrived,
@@ -98,8 +98,9 @@ namespace dxvk {
   /**
    * \brief The gesture of consuming an item held in the left hand
    *
-   * The item comes into the left hand from the quick wheel and stays there
-   * without holding a button. With a cap, the right hand takes it off first
+   * The item comes into a hand (from the quick wheel, the left one) and
+   * stays there without holding a button. With a cap, the other hand takes
+   * it off first
    * (grip near the cap), or the teeth for a cork the animation bites off
    * (the cap brought to the mouth). Then the item is brought where it is consumed and
    * held there for the use clock's time; it may leave and come back, the
@@ -117,6 +118,18 @@ namespace dxvk {
      * \param [in] useSeconds Seconds the item stays where it is consumed
      */
     void start(VrConsumeGesture gesture, bool hasCap, bool capBite, float useSeconds);
+
+    /**
+     * \brief The other hand has the cap already: its grip, held from now,
+     *    keeps it
+     */
+    void takeCapInHand() {
+      if (capOn()) {
+        m_capTaken  = true;
+        m_capHeld   = true;
+        m_otherDown = true;
+      }
+    }
 
     /**
      * \brief Ends the gesture without an event

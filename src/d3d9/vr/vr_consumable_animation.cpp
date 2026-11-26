@@ -6,6 +6,7 @@
 
 #include "vr_consumable_animation.h"
 #include "vr_hand_fingers.h"
+#include "vr_weapon_aim.h"
 
 namespace dxvk {
 
@@ -356,6 +357,34 @@ namespace dxvk {
     }
 
     return true;
+  }
+
+
+  VrConsumableHold vrMirrorConsumableHold(
+    const VrSequencePose&           inHand,
+    const std::vector<VrBonePose>&  fingers) {
+    VrConsumableHold result;
+    result.inHand = inHand;
+
+    for (uint32_t i = 0; i < 3; i++) {
+      for (uint32_t j = 0; j < 3; j++)
+        result.inHand.rotate.m[i][j] = inHand.rotate.m[i][j] * (i == 2 ? -1.0f : 1.0f) * (j == 0 ? -1.0f : 1.0f);
+    }
+
+    result.inHand.translate = { inHand.translate.x, inHand.translate.y, -inHand.translate.z };
+    result.fingers.reserve(fingers.size());
+
+    for (const VrBonePose& bone : fingers) {
+      VrBonePose mirrored = { bone.name, vrMirrorHandRotation(bone.rotate) };
+      size_t side = mirrored.name.find(" L ");
+
+      if (side != std::string::npos)
+        mirrored.name[side + 1] = 'R';
+
+      result.fingers.push_back(std::move(mirrored));
+    }
+
+    return result;
   }
 
 }

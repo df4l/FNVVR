@@ -34,6 +34,20 @@ namespace dxvk {
     using ShowHudMessageFn = uint32_t (__cdecl*)(const char* text, uint32_t emotion, const char* image,
       const char* sound, float time, uint32_t instant);
 
+    // Actor::QueueEquipObject: item, count, extra list, queue, force,
+    // play sound
+    using QueueEquipFn = void (__thiscall*)(void* actor, const void* item, int32_t count, void* extra,
+      bool queue, bool force, bool sound);
+
+    // BGSDefaultObjectManager::GetDefaultObject, __cdecl with the index
+    using DefaultObjectFn = const uint8_t* (__cdecl*)(uint32_t index);
+
+    // ActorValueOwner, __thiscall with the actor value, int in EAX
+    using ActorValueFn = int32_t (__thiscall*)(void* owner, uint32_t value);
+
+    // TESObjectREFR::Get3D, virtual
+    using Get3DFn = uint8_t* (__thiscall*)(void* ref);
+
     using AttachChildFn = void (__thiscall*)(void* node, void* child, uint32_t firstFree);
     using DetachChildFn = void (__thiscall*)(void* node, void* child);
     using UpdateFn      = void (__thiscall*)(void* object, void* data);
@@ -50,6 +64,18 @@ namespace dxvk {
 
     // How long the HUD says what was consumed
     constexpr float MessageSeconds = 2.0f;
+
+    // How long the player's update may take to pick a held item up
+    constexpr float PickUpWait = 0.5f;
+
+    // How long the prop slides from where the held object was to where
+    // the animation holds it
+    constexpr float SlideSeconds = 0.25f;
+
+    // A needle held from the world goes into the body below the chest,
+    // where letting go of an item puts it in the inventory (vrGrabAtChest:
+    // down to 50 cm below the head)
+    constexpr float WorldBodyBelowMin = 0.5f;
 
     // A spat cork: metres per second ahead and up, gravity, radians per
     // second of tumble, seconds before it is hidden
@@ -100,6 +126,18 @@ namespace dxvk {
       transform.rotate    = drawn.rotate * vrTranspose(worldRotation(bone));
       transform.translate = drawn.translate - transform.rotate * field<VrVector3>(bone, VrGame::ObjectWorldTranslation);
       return transform;
+    }
+
+    const char* handName(VrHand hand) {
+      return hand == VrHand::Left ? "left" : "right";
+    }
+
+    const char* handNode(VrHand hand) {
+      return hand == VrHand::Left ? VrGame::LeftHandNodeName : VrGame::RightHandNodeName;
+    }
+
+    VrHand otherHand(VrHand hand) {
+      return VrHand(uint32_t(hand) ^ 1u);
     }
 
     void setLocal(void* object, const VrSequencePose& pose) {
@@ -175,7 +213,17 @@ namespace dxvk {
       return nullptr;
     }
 
-    return std::unique_ptr<VrConsumables>(new VrConsumables(texts));
+    auto consumables = std::unique_ptr<VrConsumables>(new VrConsumables(texts));
+
+    consumables->m_worldItems = VrGameMemory::matches(VrGame::ActorQueueEquipObject,
+        VrGame::ActorQueueEquipObjectPrologue, sizeof(VrGame::ActorQueueEquipObjectPrologue))
+      && VrGameMemory::matches(VrGame::DefaultObjectGet,
+        VrGame::DefaultObjectGetPrologue, sizeof(VrGame::DefaultObjectGetPrologue));
+
+    if (!consumables->m_worldItems)
+      Logger::warn("VR: The game's equip function was not found, items held from the world are not consumed by hand");
+
+    return consumables;
   }
 
 
@@ -191,93 +239,371 @@ namespace dxvk {
 
 
   bool VrConsumables::begin(uint32_t slot, const VrHotKeyItem& item) {
-    if (busy() || !item.present || !item.form || item.formType != VrGame::FormTypeAlchemy)
+    // Not into a hand that holds an object of the world
+    if (busy() || m_leftHolds || !item.present || !item.form)
       return false;
 
-    // A poison goes on the weapon
-    if (reinterpret_cast<CanBePoisonFn>(VrGame::EffectItemListCanBePoison)(
-        item.form + VrGame::AlchemyEffectList, nullptr) & 0xFF)
+    const VrConsumableAnimation* animation = consumableAnimation(item.form);
+
+    if (!animation)
       return false;
 
-    const VrConsumableAnimation* animation = findAnimation(item.form);
-
-    if (!animation || animation->gesture == VrConsumeGesture::Instant)
-      return false;
+    // The left hand consumes it alone beside a weapon in the right one
+    // when nothing has to take a cap off it but the teeth
+    bool leftAlone = !animation->hasCap || !animation->spitSounds.empty();
 
     m_state       = State::Holstering;
+    m_hand        = VrHand::Left;
+    m_fromWheel   = true;
     m_slot        = slot;
     m_item        = item;
     m_itemSound   = read<const uint8_t*>(item.form, VrGame::AlchemyConsumeSound);
     m_animation   = animation;
-    m_inHand      = { animation->inHand.rotate, animation->inHand.translate };
     m_holstered   = false;
+    m_keepWeapon  = m_armed && leftAlone;
+    m_hasSlide    = false;
+    m_capNow      = false;
     m_waited      = 0.0f;
     m_otherDown   = false;
 
-    Logger::info(str::format("VR: '", item.name, "' comes into the left hand to be consumed"));
+    Logger::info(str::format("VR: '", item.name, "' comes into the left hand to be consumed",
+      m_keepWeapon ? ", the weapon stays drawn" : ""));
     return true;
   }
 
 
-  VrConsumablesEvent VrConsumables::update(const VrConsumablesInput& input, VrWeaponDrawn* drawn, VrWeaponHand* hand) {
+  VrConsumablesEvent VrConsumables::update(const VrConsumablesInput& input, VrWeaponDrawn* drawn, VrWeaponHand* hand,
+      VrPhysicsGrab* grab) {
     playPending(input.dt);
-
-    if (m_state == State::Idle)
-      return VrConsumablesEvent::None;
+    m_armed     = input.armed;
+    m_leftHolds = grab && grab->holds(VrHand::Left);
 
     if (!input.inGame) {
+      m_watches = { };
+
+      if (m_state == State::Idle)
+        return VrConsumablesEvent::None;
+
+      // A pick up asked for still ends in the player's update
+      if (m_state == State::PickingUp) {
+        m_state     = State::Idle;
+        m_animation = nullptr;
+        return VrConsumablesEvent::None;
+      }
+
       Logger::info(str::format("VR: '", m_item.name, "' goes back to the inventory, a menu opened"));
       finish(drawn, hand);
       return VrConsumablesEvent::Cancelled;
     }
 
-    if (m_state == State::Holstering) {
-      if (drawn && !drawn->handsFree()) {
-        if (!m_holstered) {
-          drawn->holster(true);
-          m_holstered = true;
+    switch (m_state) {
+      case State::Idle:
+        return watchWorld(input, hand, grab);
+
+      case State::PickingUp:
+        return endPickUp(input, drawn, hand, grab);
+
+      case State::Holstering:
+        if (!m_keepWeapon && drawn && !drawn->handsFree()) {
+          if (!m_holstered) {
+            drawn->holster(true);
+            m_holstered = true;
+          }
+
+          if ((m_waited += input.dt) < HolsterWait)
+            return VrConsumablesEvent::None;
+
+          Logger::warn(str::format("VR: The weapon was not holstered, '", m_item.name, "' goes back to the inventory"));
+          finish(drawn, hand);
+          return VrConsumablesEvent::Cancelled;
         }
 
-        if ((m_waited += input.dt) < HolsterWait)
-          return VrConsumablesEvent::None;
+        if (!startHolding(hand)) {
+          Logger::warn(str::format("VR: The model of '", m_item.name, "' was not attached, it is used at once"));
+          finish(drawn, hand);
+          VrGameHotKeys::use(m_slot);
+          return VrConsumablesEvent::Consumed;
+        }
 
-        Logger::warn(str::format("VR: The weapon was not holstered, '", m_item.name, "' goes back to the inventory"));
-        finish(drawn, hand);
-        return VrConsumablesEvent::Cancelled;
-      }
+        queueSounds(m_animation->drawSounds, 0.0f);
+        return VrConsumablesEvent::Started;
 
-      if (!attachProp(hand)) {
-        Logger::warn(str::format("VR: The model of '", m_item.name, "' was not attached, it is used at once"));
-        finish(drawn, hand);
-        VrGameHotKeys::use(m_slot);
-        return VrConsumablesEvent::Consumed;
-      }
-
-      m_gesture.start(m_animation->gesture, m_cap != nullptr, !m_animation->spitSounds.empty(), m_animation->useSeconds());
-      m_spitting = false;
-      m_clockPlayed  = 0.0f;
-      m_nextUseSound = 0;
-      queueSounds(m_animation->drawSounds, 0.0f);
-      poseParts(m_animation->useStart);
-      m_state = State::Holding;
-      return VrConsumablesEvent::Started;
+      case State::Holding:
+        return hold(input, drawn, hand);
     }
 
-    // The game updates the arms in its own pose, the hands reach their
-    // controllers only where they are drawn: the item is read where the
-    // left hand is drawn
-    VrGameTransform toWorld;
-    VrGameTransform leftDrawn;
-    void* leftBone = skeletonNode(VrGame::LeftHandNodeName);
+    return VrConsumablesEvent::None;
+  }
 
-    if (hand && leftBone && hand->freeHandBone(VrHand::Left, leftDrawn))
-      toWorld = toDrawnHand(leftBone, leftDrawn);
 
-    // The item's bound, and the cap where it is on the item
+  const VrConsumableAnimation* VrConsumables::consumableAnimation(const uint8_t* form) {
+    if (!form || read<uint8_t>(form, VrGame::FormType) != VrGame::FormTypeAlchemy)
+      return nullptr;
+
+    // A poison goes on the weapon
+    if (reinterpret_cast<CanBePoisonFn>(VrGame::EffectItemListCanBePoison)(
+        form + VrGame::AlchemyEffectList, nullptr) & 0xFF)
+      return nullptr;
+
+    const VrConsumableAnimation* animation = findAnimation(form);
+    return animation && animation->gesture != VrConsumeGesture::Instant ? animation : nullptr;
+  }
+
+
+  VrConsumablesEvent VrConsumables::watchWorld(const VrConsumablesInput& input, VrWeaponHand* hand, VrPhysicsGrab* grab) {
+    for (uint32_t i = 0; i < VrHandCount; i++) {
+      Watch& watch = m_watches[i];
+      VrHeldItem held;
+
+      if (!m_worldItems || !grab || !grab->heldItem(VrHand(i), held)) {
+        watch = Watch();
+        continue;
+      }
+
+      // An object taken anew is looked at once
+      if (watch.ref != held.ref || watch.base != held.base) {
+        watch = Watch();
+        watch.ref       = held.ref;
+        watch.base      = held.base;
+        watch.otherDown = input.grips[i ^ 1u];
+        watch.animation = consumableAnimation(held.base);
+
+        if (!watch.animation)
+          continue;
+
+        if (!watch.animation->hasCap)
+          watch.gesture.start(watch.animation->gesture, false, false, watch.animation->useSeconds());
+
+        const char* name = read<const char*>(held.base, VrGame::AlchemyFullName);
+        Logger::info(str::format("VR: The ", handName(VrHand(i)), " hand holds '", name ? name : "",
+          "', which may be consumed in the hand", watch.animation->hasCap ? " once its cap is off" : ""));
+      }
+
+      if (!watch.animation || watch.refused)
+        continue;
+
+      VrConsumablesEvent event = watchHand(input, hand, grab, VrHand(i), held);
+
+      if (event != VrConsumablesEvent::None || busy())
+        return event;
+    }
+
+    return VrConsumablesEvent::None;
+  }
+
+
+  VrConsumablesEvent VrConsumables::watchHand(const VrConsumablesInput& input, VrWeaponHand* hand, VrPhysicsGrab* grab,
+      VrHand side, const VrHeldItem& held) {
+    constexpr float Unit = VrGameUnitsPerMetre;
+
+    Watch& watch = m_watches[uint32_t(side)];
+    const VrConsumableAnimation& animation = *watch.animation;
+    VrHand other = otherHand(side);
+
+    bool otherDown = input.grips[uint32_t(other)];
+    bool otherPressed = otherDown && !watch.otherDown;
+    watch.otherDown = otherDown;
+
+    // The held object where it is drawn: the game moves it with its body
+    uint8_t* object = method<Get3DFn>(held.ref, VrGame::RefGet3DSlot)(held.ref);
+    const float* bound = object ? field<const float*>(object, VrGame::ObjectWorldBound) : nullptr;
+
+    if (!bound || bound[3] <= 0.0f)
+      return VrConsumablesEvent::None;
+
+    VrVector3 centre = { bound[0], bound[1], bound[2] };
+    float radius = std::min(bound[3], m_zones.largestRadius * Unit);
+
+    // The other hand takes the cap unless it holds the weapon or an object
+    bool otherFree = !(side == VrHand::Left && input.armed) && !grab->holds(other);
+
+    if (animation.hasCap) {
+      if (otherPressed && otherFree && vrLength(input.hands[uint32_t(other)] - centre) <= radius + m_zones.capReach * Unit) {
+        startPickUp(hand, grab, side, object, PickUp::CapInHand);
+      } else if (!animation.spitSounds.empty() && vrIsWhereConsumed(VrConsumeGesture::Mouth, input.head,
+          centre, radius, input.hands[uint32_t(other)], 0.0f, m_zones)) {
+        startPickUp(hand, grab, side, object, PickUp::CapAtMouth);
+      }
+
+      return VrConsumablesEvent::None;
+    }
+
+    // Without a cap the held object itself is consumed, with its sounds
+    m_itemSound = read<const uint8_t*>(watch.base, VrGame::AlchemyConsumeSound);
+
+    VrConsumeZones zones = m_zones;
+    zones.bodyBelowMin = WorldBodyBelowMin;
+
     VrConsumeInput gesture;
     gesture.head      = input.head;
-    gesture.otherHand = input.otherHand;
-    gesture.otherGrip = input.otherGrip;
+    gesture.centre    = centre;
+    gesture.radius    = bound[3];
+    gesture.otherHand = input.hands[uint32_t(other)];
+    gesture.otherGrip = otherDown && otherFree;
+    gesture.dt        = input.dt;
+
+    VrConsumeEvent event = watch.gesture.update(gesture, zones);
+    const char* name = read<const char*>(watch.base, VrGame::AlchemyFullName);
+
+    if (event == VrConsumeEvent::Arrived && refusesNow(watch.base)) {
+      watch.refused = true;
+      watch.gesture.reset();
+      return VrConsumablesEvent::None;
+    }
+
+    if (event == VrConsumeEvent::Arrived || event == VrConsumeEvent::Left) {
+      Logger::info(str::format("VR: '", name ? name : "", event == VrConsumeEvent::Arrived
+        ? "', held from the world, is where it is consumed, the use clock runs from "
+        : "', held from the world, left where it is consumed, the use clock waits at ",
+        watch.gesture.clock(), " s"));
+    }
+
+    float clock = watch.gesture.clock();
+    playUseSounds(animation, clock, watch.nextUseSound);
+
+    if (event != VrConsumeEvent::Consumed)
+      return VrConsumablesEvent::None;
+
+    // The sounds after the use play on
+    for (; watch.nextUseSound < animation.useSounds.size(); watch.nextUseSound++) {
+      VrConsumableSound late = animation.useSounds[watch.nextUseSound];
+      late.time -= clock;
+      queueSounds({ late }, 0.0f);
+    }
+
+    startPickUp(hand, grab, side, object, PickUp::Consume);
+    return VrConsumablesEvent::None;
+  }
+
+
+  void VrConsumables::startPickUp(VrWeaponHand* hand, VrPhysicsGrab* grab, VrHand side, uint8_t* object, PickUp kind) {
+    const Watch& watch = m_watches[uint32_t(side)];
+    const char* name = read<const char*>(watch.base, VrGame::AlchemyFullName);
+
+    m_state       = State::PickingUp;
+    m_hand        = side;
+    m_fromWheel   = false;
+    m_pickUp      = kind;
+    m_item        = VrHotKeyItem();
+    m_item.present  = true;
+    m_item.name     = name ? name : "";
+    m_item.form     = watch.base;
+    m_item.formType = VrGame::FormTypeAlchemy;
+    m_itemSound   = read<const uint8_t*>(watch.base, VrGame::AlchemyConsumeSound);
+    m_animation   = watch.animation;
+    m_holstered   = false;
+    m_keepWeapon  = false;
+    m_hasSlide    = false;
+    m_capNow      = kind == PickUp::CapInHand;
+    m_waited      = 0.0f;
+    m_otherDown   = false;
+
+    // The prop starts where the object is in the drawn hand
+    void* bone = skeletonNode(handNode(side));
+    VrGameTransform drawn;
+
+    if (kind != PickUp::Consume && bone && hand && hand->freeHandBone(side, drawn)) {
+      float handScale = field<float>(bone, VrGame::ObjectWorldScale);
+      float inverse   = handScale > 0.0f ? 1.0f / handScale : 1.0f;
+
+      m_slideFrom.rotate    = vrTranspose(drawn.rotate) * worldRotation(object);
+      m_slideFrom.translate = vrTranspose(drawn.rotate)
+        * (field<VrVector3>(object, VrGame::ObjectWorldTranslation) - drawn.translate) * inverse;
+      m_slideFrom.scale     = field<float>(object, VrGame::ObjectWorldScale) * inverse;
+      m_hasSlide  = true;
+      m_slideTime = 0.0f;
+    }
+
+    grab->pickUp(side, watch.base);
+
+    Logger::info(str::format("VR: '", m_item.name, "' is picked up from the ", handName(side), " hand ",
+      kind == PickUp::Consume ? "to be used" : kind == PickUp::CapInHand ? "as the other hand takes its cap"
+        : "as its cork comes to the mouth"));
+  }
+
+
+  VrConsumablesEvent VrConsumables::endPickUp(const VrConsumablesInput& input, VrWeaponDrawn* drawn, VrWeaponHand* hand,
+      VrPhysicsGrab* grab) {
+    bool taken = false;
+
+    if (!grab || !grab->takePickUp(m_hand, taken)) {
+      if ((m_waited += input.dt) < PickUpWait)
+        return VrConsumablesEvent::None;
+
+      Logger::warn(str::format("VR: '", m_item.name, "' was not picked up in time"));
+      m_state     = State::Idle;
+      m_animation = nullptr;
+      return VrConsumablesEvent::None;
+    }
+
+    m_watches[uint32_t(m_hand)] = Watch();
+
+    if (!taken) {
+      Logger::info(str::format("VR: The game did not let '", m_item.name, "' be picked up"));
+      m_state     = State::Idle;
+      m_animation = nullptr;
+      return VrConsumablesEvent::Cancelled;
+    }
+
+    if (m_pickUp == PickUp::Consume) {
+      consume();
+      m_state     = State::Idle;
+      m_animation = nullptr;
+      return VrConsumablesEvent::Consumed;
+    }
+
+    // In the hand now: fists are put away, a weapon stays beside a left
+    // hand that consumes alone (only the teeth take a cork off then)
+    m_keepWeapon = input.armed && m_hand == VrHand::Left && m_pickUp == PickUp::CapAtMouth;
+
+    if (!m_keepWeapon && drawn && !drawn->handsFree()) {
+      drawn->holster(true);
+      m_holstered = true;
+    }
+
+    if (!startHolding(hand)) {
+      Logger::warn(str::format("VR: The model of '", m_item.name, "' was not attached, it stays in the inventory"));
+      finish(drawn, hand);
+      return VrConsumablesEvent::Cancelled;
+    }
+
+    return VrConsumablesEvent::Started;
+  }
+
+
+  bool VrConsumables::startHolding(VrWeaponHand* hand) {
+    if (!attachProp(hand))
+      return false;
+
+    m_gesture.start(m_animation->gesture, m_cap != nullptr, !m_animation->spitSounds.empty(), m_animation->useSeconds());
+    m_spitting     = false;
+    m_nextUseSound = 0;
+    poseParts(m_animation->useStart);
+    m_state = State::Holding;
+    return true;
+  }
+
+
+  VrConsumablesEvent VrConsumables::hold(const VrConsumablesInput& input, VrWeaponDrawn* drawn, VrWeaponHand* hand) {
+    VrHand other = otherHand(m_hand);
+    slideProp(input.dt);
+
+    // The game updates the arms in its own pose, the hands reach their
+    // controllers only where they are drawn: the item is read where its
+    // hand is drawn
+    VrGameTransform toWorld;
+    VrGameTransform boneDrawn;
+    void* bone = skeletonNode(handNode(m_hand));
+
+    if (hand && bone && hand->freeHandBone(m_hand, boneDrawn))
+      toWorld = toDrawnHand(bone, boneDrawn);
+
+    // The item's bound, and the cap where it is on the item. A hand that
+    // holds the weapon takes no cap.
+    VrConsumeInput gesture;
+    gesture.head      = input.head;
+    gesture.otherHand = input.hands[uint32_t(other)];
+    gesture.otherGrip = input.grips[uint32_t(other)] && !m_keepWeapon;
     gesture.dt        = input.dt;
 
     void* propRoot = m_prop ? m_prop->root() : nullptr;
@@ -302,13 +628,29 @@ namespace dxvk {
       gesture.cap = toWorld.rotate * cap + toWorld.translate;
     }
 
-    bool otherPressed = input.otherGrip && !m_otherDown;
-    m_otherDown = input.otherGrip;
+    // The grip that had the game pick a held item up has its cap already
+    if (m_capNow) {
+      m_capNow = false;
+
+      if (m_cap && m_gesture.capOn() && gesture.otherGrip) {
+        m_gesture.takeCapInHand();
+        m_otherDown = true;
+
+        if (!takeCap(hand, toWorld))
+          setCulled(m_cap, true);
+
+        queueSounds(m_animation->capSounds, 0.0f);
+        return VrConsumablesEvent::CapTaken;
+      }
+    }
+
+    bool otherPressed = gesture.otherGrip && !m_otherDown;
+    m_otherDown = gesture.otherGrip;
 
     VrConsumeEvent event = m_gesture.update(gesture, m_zones);
 
     if (otherPressed && m_cap && m_gesture.capOn()) {
-      Logger::info(str::format("VR: The right grip closed ",
+      Logger::info(str::format("VR: The ", handName(other), " grip closed ",
         int(vrLength(gesture.otherHand - gesture.cap) * 100.0f / VrGameUnitsPerMetre), " cm from the cap of '",
         m_item.name, "', it takes it within ", int(m_zones.capReach * 100.0f), " cm"));
     }
@@ -346,17 +688,15 @@ namespace dxvk {
 
     // The animation's sounds and parts follow the use clock
     float clock = m_gesture.clock();
-    const std::vector<VrConsumableSound>& sounds = m_animation->useSounds;
-
-    while (m_nextUseSound < sounds.size() && sounds[m_nextUseSound].time <= clock)
-      playSound(sounds[m_nextUseSound++]);
-
+    playUseSounds(*m_animation, clock, m_nextUseSound);
     poseParts(m_animation->useTime(clock));
 
     if (event != VrConsumeEvent::Consumed)
       return VrConsumablesEvent::None;
 
     // The sounds after the use play on
+    const std::vector<VrConsumableSound>& sounds = m_animation->useSounds;
+
     for (; m_nextUseSound < sounds.size(); m_nextUseSound++) {
       VrConsumableSound late = sounds[m_nextUseSound];
       late.time -= clock;
@@ -366,6 +706,26 @@ namespace dxvk {
     consume();
     finish(drawn, hand);
     return VrConsumablesEvent::Consumed;
+  }
+
+
+  bool VrConsumables::refusesNow(const uint8_t* form) const {
+    // The game's own refusal of the quick wheel's stimpak at full health
+    uint8_t* actor = player();
+
+    if (!actor || form != reinterpret_cast<DefaultObjectFn>(VrGame::DefaultObjectGet)(VrGame::DefaultObjectStimpak))
+      return false;
+
+    void* owner = actor + VrGame::ActorValueOwnerBase;
+
+    if (method<ActorValueFn>(owner, VrGame::AvOwnerIntSlot)(owner, VrGame::AvHealth)
+     != method<ActorValueFn>(owner, VrGame::AvOwnerPermanentIntSlot)(owner, VrGame::AvHealth))
+      return false;
+
+    const char* text = *reinterpret_cast<const char* const*>(VrGame::SettingFullHealth + VrGame::SettingValue);
+    reinterpret_cast<ShowHudMessageFn>(VrGame::ShowHudMessage)(text ? text : "", 0, nullptr, nullptr, MessageSeconds, 0);
+    Logger::info("VR: A stimpak held from the world is refused at full health");
+    return true;
   }
 
 
@@ -421,9 +781,9 @@ namespace dxvk {
 
 
   bool VrConsumables::attachProp(VrWeaponHand* hand) {
-    void* leftHand = skeletonNode(VrGame::LeftHandNodeName);
+    void* bone = skeletonNode(handNode(m_hand));
 
-    if (!leftHand)
+    if (!bone)
       return false;
 
     std::string model = m_animation->prop;
@@ -437,13 +797,30 @@ namespace dxvk {
       model = own;
     }
 
+    // The animation holds it in the left hand, the right one mirrors it
+    m_propPose = m_animation->inHand;
+    m_fingers  = &m_animation->fingers;
+
+    if (m_hand == VrHand::Right) {
+      auto mirrored = m_mirrored.find(m_animation);
+
+      if (mirrored == m_mirrored.end())
+        mirrored = m_mirrored.emplace(m_animation, vrMirrorConsumableHold(m_animation->inHand, m_animation->fingers)).first;
+
+      m_propPose = mirrored->second.inHand;
+      m_fingers  = &mirrored->second.fingers;
+    }
+
+    m_inHand = { m_propPose.rotate, m_propPose.translate };
+
     std::string path = "Meshes\\" + model;
     std::unique_ptr<VrSceneModel>& prop = m_props[path];
 
     if (!prop)
       prop = VrSceneModel::create(path.c_str());
 
-    if (!prop || !prop->attach(leftHand, m_animation->inHand))
+    // A held object's prop starts where the object was
+    if (!prop || !prop->attach(bone, m_hasSlide ? m_slideFrom : m_propPose))
       return false;
 
     m_prop   = prop.get();
@@ -459,12 +836,14 @@ namespace dxvk {
       m_capParent = field<void*>(m_cap, VrGame::ObjectParent);
       setLocal(m_cap, m_animation->capOn);
       setCulled(m_cap, false);
+      updateObject(m_prop->root());
     }
 
     if (hand)
-      hand->holdInLeftHand(&m_inHand, &m_animation->fingers);
+      hand->holdInHand(m_hand, &m_inHand, m_fingers);
 
-    Logger::info(str::format("VR: '", m_item.name, "' is in the left hand (", path, ")",
+    Logger::info(str::format("VR: '", m_item.name, "' is in the ", handName(m_hand), " hand (", path, ")",
+      m_hasSlide ? ", sliding from where the held object was" : "",
       m_animation->hasCap && !m_cap ? ", its cap was not found in the model" : ""));
     return true;
   }
@@ -472,7 +851,7 @@ namespace dxvk {
 
   void VrConsumables::detachProp(VrWeaponHand* hand) {
     if (hand)
-      hand->holdInLeftHand(nullptr, nullptr);
+      hand->holdInHand(m_hand, nullptr, nullptr);
 
     if (m_capHeld)
       dropCap();
@@ -480,26 +859,29 @@ namespace dxvk {
     if (m_prop)
       m_prop->hide();
 
-    m_prop   = nullptr;
-    m_cap    = nullptr;
+    m_prop     = nullptr;
+    m_cap      = nullptr;
+    m_fingers  = nullptr;
+    m_hasSlide = false;
     m_parts.clear();
   }
 
 
   bool VrConsumables::takeCap(VrWeaponHand* hand, const VrGameTransform& toWorld) {
-    void* rightHand = skeletonNode(VrGame::RightHandNodeName);
+    VrHand other = otherHand(m_hand);
+    void* otherBone = skeletonNode(handNode(other));
     VrGameTransform drawn;
 
-    if (!m_cap || !m_capParent || !rightHand || !hand || !hand->freeHandBone(VrHand::Right, drawn)) {
-      Logger::warn(str::format("VR: The cap of '", m_item.name, "' cannot follow the right hand: ",
-        !m_cap ? "no cap" : !m_capParent ? "the cap has no parent" : !rightHand ? "the right hand bone was not found"
-          : "the right hand is not drawn at its controller", ", it is hidden"));
+    if (!m_cap || !m_capParent || !otherBone || !hand || !hand->freeHandBone(other, drawn)) {
+      Logger::warn(str::format("VR: The cap of '", m_item.name, "' cannot follow the ", handName(other), " hand: ",
+        !m_cap ? "no cap" : !m_capParent ? "the cap has no parent" : !otherBone ? "the hand bone was not found"
+          : "the hand is not drawn at its controller", ", it is hidden"));
       return false;
     }
 
     // The cap keeps its place where both hands are drawn, now below the
-    // right hand
-    float handScale = field<float>(rightHand, VrGame::ObjectWorldScale);
+    // other hand
+    float handScale = field<float>(otherBone, VrGame::ObjectWorldScale);
     VrVector3 cap   = toWorld.rotate * field<VrVector3>(m_cap, VrGame::ObjectWorldTranslation) + toWorld.translate;
 
     VrSequencePose local;
@@ -513,12 +895,12 @@ namespace dxvk {
     method<DetachChildFn>(m_capParent, VrGame::NodeDetachChildSlot)(m_capParent, m_cap);
 
     setLocal(m_cap, local);
-    method<AttachChildFn>(rightHand, VrGame::NodeAttachChildSlot)(rightHand, m_cap, 1);
+    method<AttachChildFn>(otherBone, VrGame::NodeAttachChildSlot)(otherBone, m_cap, 1);
     updateObject(m_cap);
 
-    m_capHand = rightHand;
+    m_capHand = otherBone;
     m_capHeld = true;
-    Logger::info(str::format("VR: The right hand took the cap of '", m_item.name, "' off"));
+    Logger::info(str::format("VR: The ", handName(other), " hand took the cap of '", m_item.name, "' off"));
     return true;
   }
 
@@ -630,22 +1012,57 @@ namespace dxvk {
   }
 
 
-  void VrConsumables::consume() {
-    // The item must still be on its hotkey
-    std::array<VrHotKeyItem, VrGame::HotKeySlotCount> items;
-    VrGameHotKeys::read(items);
+  void VrConsumables::slideProp(float dt) {
+    void* root = m_prop ? m_prop->root() : nullptr;
 
-    if (m_slot >= items.size() || items[m_slot].form != m_item.form) {
-      Logger::warn(str::format("VR: '", m_item.name, "' left its hotkey, it is not consumed"));
+    if (!m_hasSlide || !root)
       return;
+
+    m_slideTime += dt;
+    float t = std::min(m_slideTime / SlideSeconds, 1.0f);
+    t = t * t * (3.0f - 2.0f * t);
+
+    VrSequencePose pose;
+    pose.rotate    = vrGameRotationFromQuaternion(vrSlerp(
+      vrQuaternionFromGameRotation(m_slideFrom.rotate), vrQuaternionFromGameRotation(m_propPose.rotate), t));
+    pose.translate = m_slideFrom.translate + (m_propPose.translate - m_slideFrom.translate) * t;
+    pose.scale     = m_slideFrom.scale + (m_propPose.scale - m_slideFrom.scale) * t;
+    setLocal(root, pose);
+
+    if (t >= 1.0f)
+      m_hasSlide = false;
+  }
+
+
+  void VrConsumables::consume() {
+    auto form = const_cast<uint8_t*>(m_item.form);
+    uint8_t* actor = player();
+
+    if (!actor)
+      return;
+
+    // The item must still be on its hotkey
+    if (m_fromWheel) {
+      std::array<VrHotKeyItem, VrGame::HotKeySlotCount> items;
+      VrGameHotKeys::read(items);
+
+      if (m_slot >= items.size() || items[m_slot].form != m_item.form) {
+        Logger::warn(str::format("VR: '", m_item.name, "' left its hotkey, it is not consumed"));
+        return;
+      }
     }
 
     // The animation's sounds were played instead of the item's
-    auto form = const_cast<uint8_t*>(m_item.form);
     const uint8_t* sound = read<const uint8_t*>(form, VrGame::AlchemyConsumeSound);
     field<const uint8_t*>(form, VrGame::AlchemyConsumeSound) = nullptr;
 
-    bool used = VrGameHotKeys::use(m_slot);
+    // An item picked up from the world is used as the quick wheel uses one
+    bool used = true;
+
+    if (m_fromWheel)
+      used = VrGameHotKeys::use(m_slot);
+    else
+      reinterpret_cast<QueueEquipFn>(VrGame::ActorQueueEquipObject)(actor, form, 1, nullptr, false, false, true);
 
     field<const uint8_t*>(form, VrGame::AlchemyConsumeSound) = sound;
 
@@ -668,11 +1085,13 @@ namespace dxvk {
     detachProp(hand);
     m_gesture.reset();
     m_spitting = false;
+    m_capNow   = false;
 
     if (m_holstered && drawn)
       drawn->draw();
 
-    m_holstered = false;
+    m_holstered  = false;
+    m_keepWeapon = false;
     m_animation = nullptr;
     m_state     = State::Idle;
   }
@@ -700,6 +1119,14 @@ namespace dxvk {
 
       i = m_pending.erase(i);
     }
+  }
+
+
+  void VrConsumables::playUseSounds(const VrConsumableAnimation& animation, float clock, size_t& next) {
+    const std::vector<VrConsumableSound>& sounds = animation.useSounds;
+
+    while (next < sounds.size() && sounds[next].time <= clock)
+      playSound(sounds[next++]);
   }
 
 

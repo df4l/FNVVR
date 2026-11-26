@@ -21,6 +21,13 @@ namespace dxvk {
    * \brief What the hands grabbed and let go of since the last call to
    *    VrPhysicsGrab::takeEvents, for the haptics
    */
+  struct VrHeldItem {
+    /// TESObjectREFR in the world
+    uint8_t*       ref  = nullptr;
+    /// Its base object
+    const uint8_t* base = nullptr;
+  };
+
   struct VrPhysicsGrabEvents {
     std::array<bool, VrHandCount> grabbed  = { };
     std::array<bool, VrHandCount> released = { };
@@ -104,7 +111,8 @@ namespace dxvk {
    *
    * An item let go of at the chest goes into the inventory, through the
    * game's own activation by the player, as if it had been picked up
-   * from the world.
+   * from the world. An item held by one hand is also picked up on request
+   * (VrConsumables, to consume it in the hand).
    *
    * As with the game's grab, the object's OnGrab and OnRelease script
    * blocks run, guards see it taken and its new position is saved. The
@@ -236,6 +244,38 @@ namespace dxvk {
       return m_corrections[uint32_t(hand)].valid && held.fitted ? &held.fingers : nullptr;
     }
 
+    /**
+     * \brief The item a hand holds by itself, if it may be picked up
+     *
+     * \param [in] hand The hand
+     * \param [out] item The item's reference and base object
+     * \returns \c false while the hand holds nothing, pulls the object,
+     *    shares it with the other hand, or holds an actor or something that
+     *    is not an inventory item
+     */
+    bool heldItem(VrHand hand, VrHeldItem& item) const;
+
+    /**
+     * \brief Has the player pick up the item a hand holds, in the next
+     *    update of the player
+     *
+     * The hand lets go of it first, then the game's own activation by the
+     * player puts it in the inventory, as if taken from the world.
+     *
+     * \param [in] hand The hand
+     * \param [in] base The base object it must hold then
+     */
+    void pickUp(VrHand hand, const uint8_t* base);
+
+    /**
+     * \brief The end of a pick up asked for with pickUp
+     *
+     * \param [in] hand The hand
+     * \param [out] taken Whether the game took the item
+     * \returns \c false while no pick up ended since the previous call
+     */
+    bool takePickUp(VrHand hand, bool& taken);
+
   private:
 
     struct HandInput {
@@ -342,6 +382,9 @@ namespace dxvk {
     std::array<bool, VrHandCount>        m_hasRig = { };
     std::vector<Released>              m_released;
     VrPhysicsGrabEvents                m_events;
+    /// Pick ups asked for by base object, and their ends
+    std::array<const uint8_t*, VrHandCount> m_pickUps = { };
+    std::array<int8_t, VrHandCount>         m_pickedUp = { -1, -1 };
 
     VrGrabSpringConstants m_spring;
     VrGrabSpringConstants m_limbSpring;
@@ -551,7 +594,7 @@ namespace dxvk {
 
     bool storable(const Held& held, VrHand hand) const;
 
-    void store(uint8_t* player, VrHand hand, Held& held);
+    bool store(uint8_t* player, VrHand hand, Held& held, bool atChest);
 
     bool grab(uint8_t* player, VrHand hand, const VrGameCameraPose& pose);
 
