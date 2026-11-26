@@ -194,6 +194,7 @@ namespace dxvk {
     m_inHand      = { animation->inHand.rotate, animation->inHand.translate };
     m_holstered   = false;
     m_waited      = 0.0f;
+    m_otherDown   = false;
 
     Logger::info(str::format("VR: '", item.name, "' comes into the left hand to be consumed"));
     return true;
@@ -247,7 +248,6 @@ namespace dxvk {
     VrConsumeInput gesture;
     gesture.head      = input.head;
     gesture.otherHand = input.otherHand;
-    gesture.grip      = input.grip;
     gesture.otherGrip = input.otherGrip;
     gesture.dt        = input.dt;
 
@@ -259,22 +259,29 @@ namespace dxvk {
     if (m_cap)
       gesture.cap = field<VrVector3>(m_cap, VrGame::ObjectWorldTranslation);
 
+    bool otherPressed = input.otherGrip && !m_otherDown;
+    m_otherDown = input.otherGrip;
+
     VrConsumeEvent event = m_gesture.update(gesture, m_zones);
+
+    if (otherPressed && m_cap && m_gesture.capOn()) {
+      Logger::info(str::format("VR: The right grip closed ",
+        int(vrLength(gesture.otherHand - gesture.cap) * 100.0f / VrGameUnitsPerMetre), " cm from the cap of '",
+        m_item.name, "', it takes it within ", int(m_zones.capReach * 100.0f), " cm"));
+    }
 
     switch (event) {
       case VrConsumeEvent::CapTaken:
-        takeCap();
+        // The cap has to leave the item even if it cannot follow the hand
+        if (!takeCap())
+          setCulled(m_cap, true);
+
         queueSounds(m_animation->capSounds, 0.0f);
         return VrConsumablesEvent::CapTaken;
 
       case VrConsumeEvent::CapDropped:
         dropCap();
         break;
-
-      case VrConsumeEvent::Cancelled:
-        Logger::info(str::format("VR: '", m_item.name, "' was let go, it goes back to the inventory"));
-        finish(drawn, hand);
-        return VrConsumablesEvent::Cancelled;
 
       default:
         break;
@@ -422,11 +429,15 @@ namespace dxvk {
   }
 
 
-  void VrConsumables::takeCap() {
+  bool VrConsumables::takeCap() {
     void* rightHand = skeletonNode(VrGame::RightHandNodeName);
 
-    if (!m_cap || !m_capParent || !rightHand)
-      return;
+    if (!m_cap || !m_capParent || !rightHand) {
+      Logger::warn(str::format("VR: The cap of '", m_item.name, "' cannot follow the right hand: ",
+        !m_cap ? "no cap" : !m_capParent ? "the cap has no parent" : "the right hand bone was not found",
+        ", it is hidden"));
+      return false;
+    }
 
     // The cap keeps its place in the world, now below the right hand
     VrGameRotation handRotation = worldRotation(rightHand);
@@ -450,6 +461,7 @@ namespace dxvk {
     m_capHand = rightHand;
     m_capHeld = true;
     Logger::info(str::format("VR: The right hand took the cap of '", m_item.name, "' off"));
+    return true;
   }
 
 

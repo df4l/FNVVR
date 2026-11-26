@@ -182,6 +182,10 @@ namespace dxvk {
       return lower(name).find("cap") != std::string::npos;
     }
 
+    bool isSpit(const std::string& path) {
+      return lower(path).find("spit") != std::string::npos;
+    }
+
   }
 
 
@@ -324,6 +328,11 @@ namespace dxvk {
     float firstCap  = -1.0f;
 
     for (const SoundKey& sound : sounds) {
+      // A cork pulled with the teeth is spat out; the right hand takes it
+      // off instead
+      if (result.hasCap && isSpit(sound.path))
+        continue;
+
       if (sound.time <= attachTime + DrawSlack) {
         if (firstDraw < 0.0f)
           firstDraw = sound.time;

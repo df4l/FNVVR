@@ -26,8 +26,7 @@ namespace dxvk {
     VrGameCameraPose head;
     /// The right hand's position in the game world
     VrVector3        otherHand;
-    /// The left hand's grip (holds the item), the right hand's (the cap)
-    bool             grip      = false;
+    /// The right hand's grip, which takes the cap
     bool             otherGrip = false;
     float            dt        = 0.0f;
   };
@@ -40,7 +39,8 @@ namespace dxvk {
     CapTaken,
     /// The item was consumed
     Consumed,
-    /// The item went back to the inventory
+    /// The item went back to the inventory: a menu opened, or the
+    /// weapon was not holstered
     Cancelled,
   };
 
@@ -57,9 +57,10 @@ namespace dxvk {
    * its cap off; the item is consumed once it stayed at the mouth, the body
    * or in front of the eyes for the animation's time: the quick wheel's own
    * use runs then, with the item's consume sound muted (the animation's
-   * sounds play instead), and the HUD says what was consumed. Letting the
-   * left grip go before puts the item back. Without the files, or for a
-   * poison or the doctor's bag, the item is used at once as before.
+   * sounds play instead), and the HUD says what was consumed. The left
+   * hand keeps the item without a button held; opening a menu (the
+   * Pip-Boy) puts it back. Without the files, or for a poison or the
+   * doctor's bag, the item is used at once as before.
    */
   class VrConsumables {
 
@@ -147,6 +148,7 @@ namespace dxvk {
     void*                             m_capHand     = nullptr;
     void*                             m_capHold     = nullptr;
     bool                              m_capHeld     = false;
+    bool                              m_otherDown   = false;
     std::vector<std::pair<void*, const VrConsumablePart*>> m_parts;
 
     std::vector<PendingSound>         m_pending;
@@ -160,7 +162,7 @@ namespace dxvk {
 
     void detachProp(VrWeaponHand* hand);
 
-    void takeCap();
+    bool takeCap();
 
     void dropCap();
 

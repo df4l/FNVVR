@@ -28,8 +28,8 @@ namespace dxvk {
     float leaveMargin    = 0.05f;
     /// The largest bound radius counted
     float largestRadius  = 0.15f;
-    /// How near the cap the other hand takes it
-    float capReach       = 0.08f;
+    /// How near the cap the right controller takes it
+    float capReach       = 0.12f;
   };
 
   /**
@@ -64,8 +64,7 @@ namespace dxvk {
     VrVector3        cap;
     /// The right hand's position in the game world
     VrVector3        otherHand;
-    /// The grips: the left hand's holds the item, the right's takes the cap
-    bool             grip      = false;
+    /// The right hand's grip, which takes the cap
     bool             otherGrip = false;
     float            dt        = 0.0f;
   };
@@ -82,25 +81,20 @@ namespace dxvk {
     Left,
     /// The use clock reached its end: the item is consumed
     Consumed,
-    /// The left hand let the item go before the end: it is not consumed
-    Cancelled,
   };
 
   /**
    * \brief The gesture of consuming an item held in the left hand
    *
-   * The item comes into the left hand from the quick wheel. With a cap,
-   * the right hand takes it off first (grip near the cap). Then the item is
-   * brought where it is consumed and held there for the use clock's time;
-   * it may leave and come back, the clock waits. Letting the left grip go
-   * once it was pressed, or never pressing it, cancels.
+   * The item comes into the left hand from the quick wheel and stays there
+   * without holding a button. With a cap, the right hand takes it off first
+   * (grip near the cap). Then the item is brought where it is consumed and
+   * held there for the use clock's time; it may leave and come back, the
+   * clock waits.
    */
   class VrConsumeGestureState {
 
   public:
-
-    /// Seconds the left grip has to be pressed in, from the start
-    static constexpr float GripWait = 4.0f;
 
     /**
      * \brief Starts with an item in the left hand
@@ -145,12 +139,10 @@ namespace dxvk {
     bool             m_hasCap     = false;
     bool             m_capTaken   = false;
     bool             m_capHeld    = false;
-    bool             m_gripped    = false;
     bool             m_otherDown  = false;
     bool             m_atTarget   = false;
     float            m_useSeconds = 0.0f;
     float            m_clock      = 0.0f;
-    float            m_waited     = 0.0f;
 
   };
 

@@ -73,14 +73,6 @@ namespace dxvk {
     if (!m_active)
       return VrConsumeEvent::None;
 
-    // The left hand holds the item while its grip is in
-    if (input.grip) {
-      m_gripped = true;
-    } else if (m_gripped || (m_waited += input.dt) >= GripWait) {
-      reset();
-      return VrConsumeEvent::Cancelled;
-    }
-
     bool otherPressed = input.otherGrip && !m_otherDown;
     m_otherDown = input.otherGrip;
 

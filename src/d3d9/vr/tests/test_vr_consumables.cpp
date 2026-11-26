@@ -354,7 +354,6 @@ TEST_CASE(consumables_gesture_takes_the_cap_then_counts_at_the_mouth) {
   input.radius    = 0.05f * VrGameUnitsPerMetre;
   input.cap       = fromHead(0.2f, 0.3f, -0.3f);
   input.otherHand = fromHead(0.5f, 0.3f, -0.3f);
-  input.grip      = true;
   input.dt        = 0.25f;
 
   // At the mouth with the cap on: nothing counts
@@ -393,7 +392,6 @@ TEST_CASE(consumables_gesture_waits_when_the_item_leaves) {
   input.head      = northHead();
   input.centre    = fromHead(0.0f, 0.10f, -0.08f);
   input.otherHand = fromHead(0.5f, 0.3f, -0.3f);
-  input.grip      = true;
   input.dt        = 0.2f;
 
   CHECK(gesture.update(input, zones) == VrConsumeEvent::Arrived);
@@ -412,7 +410,7 @@ TEST_CASE(consumables_gesture_waits_when_the_item_leaves) {
 }
 
 
-TEST_CASE(consumables_gesture_is_cancelled_by_the_left_grip) {
+TEST_CASE(consumables_gesture_keeps_the_item_without_a_button) {
   VrConsumeZones zones;
   VrConsumeGestureState gesture;
   VrConsumeInput input;
@@ -420,20 +418,17 @@ TEST_CASE(consumables_gesture_is_cancelled_by_the_left_grip) {
   input.centre = fromHead(0.0f, 0.5f, -0.6f);
   input.dt     = 0.5f;
 
-  // Released after being pressed
+  // Away from the mouth with no button held, for longer than any wait
   gesture.start(VrConsumeGesture::Mouth, false, 1.0f);
-  input.grip = true;
+
+  for (int i = 0; i < 40; i++)
+    CHECK(gesture.update(input, zones) == VrConsumeEvent::None);
+
+  CHECK(gesture.active());
+
+  // Still consumed once brought to the mouth
+  input.centre = fromHead(0.0f, 0.10f, -0.08f);
+  CHECK(gesture.update(input, zones) == VrConsumeEvent::Arrived);
   CHECK(gesture.update(input, zones) == VrConsumeEvent::None);
-  input.grip = false;
-  CHECK(gesture.update(input, zones) == VrConsumeEvent::Cancelled);
-  CHECK(!gesture.active());
-
-  // Never pressed
-  gesture.start(VrConsumeGesture::Mouth, false, 1.0f);
-  VrConsumeEvent last = VrConsumeEvent::None;
-
-  for (int i = 0; i < 20 && last == VrConsumeEvent::None; i++)
-    last = gesture.update(input, zones);
-
-  CHECK(last == VrConsumeEvent::Cancelled);
+  CHECK(gesture.update(input, zones) == VrConsumeEvent::Consumed);
 }

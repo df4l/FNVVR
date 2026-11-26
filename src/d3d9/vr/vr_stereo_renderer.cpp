@@ -1698,7 +1698,6 @@ namespace dxvk {
       consume.head = vrComputeEyeCameraPose(m_gameCameraPose,
         vrComputeEyeInReference(m_reference, m_headPose), VrGameUnitsPerMetre);
       consume.otherHand = handInGame(right).position;
-      consume.grip      = input.actions.isPressed(VrAction::TwoHandGrip);
       consume.otherGrip = input.actions.isPressed(VrAction::Grab);
     }
 
@@ -2168,9 +2167,10 @@ namespace dxvk {
     // A hand busy elsewhere does not punch; one holding an object does
     // not either, the object is swung instead
     std::array<bool, VrHandCount> busy = { };
+    bool consuming = m_consumables && m_consumables->busy();
     busy[uint32_t(VrHand::Right)] = m_rightHandAtPipBoy || m_holster.atHolster()
-      || (m_quickWheel && m_quickWheel->isOpen());
-    busy[uint32_t(VrHand::Left)] = (m_handThrow && m_handThrow->throwsWithHand())
+      || (m_quickWheel && m_quickWheel->isOpen()) || consuming;
+    busy[uint32_t(VrHand::Left)] = consuming || (m_handThrow && m_handThrow->throwsWithHand())
       || (m_manualReload && m_manualReload->leftHandBusy())
       || (m_weaponHand && m_weaponHand->leftHandOnWeapon());
 
@@ -2307,10 +2307,12 @@ namespace dxvk {
     }
 
     // The left hand holding the weapon is not where the screen would be,
-    // nor is one bringing a magazine or a round to it, or arming a grenade
+    // nor is one bringing a magazine, a round or an item to consume to it,
+    // or arming a grenade
     bool gripped = input.hasActions && input.actions.isPressed(VrAction::TwoHandGrip);
     bool loading = (m_manualReload && m_manualReload->leftHandBusy())
-                || (m_handThrow && m_handThrow->leftHandBusy());
+                || (m_handThrow && m_handThrow->leftHandBusy())
+                || (m_consumables && m_consumables->busy());
 
     VrPipBoyGazeInput gaze;
     gaze.head     = input.isHeadTracked ? &input.headPose : nullptr;
@@ -2371,8 +2373,10 @@ namespace dxvk {
   bool VrStereoRenderer::isRightHandAtPipBoy(
     const VrInputState&         input,
           VrGameStateKind       state) {
+    // The right hand taking an item's cap off is near the left wrist too
     if (!m_pipBoyGazeAvailable || state != VrGameStateKind::InGame
-     || m_pipBoyControl.state() != VrPipBoyState::Closed)
+     || m_pipBoyControl.state() != VrPipBoyState::Closed
+     || (m_consumables && m_consumables->busy()))
       return false;
 
     const VrControllerState& left  = input.controllers[uint32_t(VrHand::Left)];
