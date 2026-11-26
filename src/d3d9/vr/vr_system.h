@@ -104,6 +104,7 @@ namespace dxvk {
     VrTurnConfig                         m_turnConfig;
     float                                m_pipBoyScale = 1.0f;
     float                                m_pipBoyAngle = 0.0f;
+    bool                                 m_pipBoyTouch = true;
     bool                                 m_immersiveMinigames = true;
     bool                                 m_manualReload = true;
     bool                                 m_scopes = true;

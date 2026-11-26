@@ -2035,6 +2035,43 @@ namespace dxvk {
     constexpr uint8_t   PickAspectInstruction[]    = { 0xDC, 0x0D, 0x28, 0x81, 0x07, 0x01 };
 
     /**
+     * The Pip-Boy's mouse pick, see findings/pipboy.md §9. RenderPipBoy
+     * calls FOPipboyManager::CheckOrangeButtonsClicked (__thiscall: pressed,
+     * released, float* x, float* y, uint32_t* tab; returns whether the
+     * screen was hit) at PipBoyButtonsPickCallSite, after its update of the
+     * first-person model, then hands the results to
+     * InterfaceManager::SetQueuedPipboyTab (bOverPipBoyScreen,
+     * fPipBoyMouseX/Y, iPipboyMenuToSet), which InterfaceManager::Idle uses
+     * on its next update. The function casts NiCamera::WindowPointToRay
+     * (__thiscall: x, y, NiPoint3* origin, NiPoint3* direction, target)
+     * through the cursor at the two PipBoyScreenRayCallSites, picks the
+     * screen (texture point) with the first and the three tab buttons (a
+     * press, then a release on the same one, gives the tab) with the second.
+     * The screen is FORenderedMenu +0x04 (NiTriShape), the buttons
+     * FOPipboyManager +0xE8 (three NiTriStrips*). Checked in ida-gog.
+     */
+    constexpr uintptr_t PipBoyButtonsPickCallSite   = 0x008763EA;
+    constexpr uintptr_t CheckPipBoyButtons          = 0x007F8720;
+    constexpr uintptr_t PipBoyScreenRayCallSites[]  = { 0x007F8876, 0x007F89BD };
+    constexpr uintptr_t CameraWindowPointToRay      = 0x00A71080;
+    constexpr uintptr_t RenderedMenuScreen          = 0x04;
+    constexpr uintptr_t PipBoyTabButtons            = 0xE8;
+    constexpr uint32_t  PipBoyTabButtonCount        = 3;
+
+    /**
+     * NiTriShape and its data (vtables named in ida-gog): texture
+     * coordinates (NiPoint2*) of NiGeometryData, triangle count (u16) and
+     * triangles (three u16 each) of NiTriShapeData, which
+     * NiTriShapeDynamicData derives from. findings/render.md.
+     */
+    constexpr uintptr_t TriShapeVtable              = 0x0109D454;
+    constexpr uintptr_t TriShapeDataVtable          = 0x0109DAC4;
+    constexpr uintptr_t TriShapeDynamicDataVtable   = 0x0109E32C;
+    constexpr uintptr_t GeometryDataTexCoords       = 0x2C;
+    constexpr uintptr_t TriShapeDataTriangleCount   = 0x40;
+    constexpr uintptr_t TriShapeDataTriangles       = 0x48;
+
+    /**
      * Calls of TESRenderer::GetScreenWidth (GameScreenWidth) where the game
      * derives a shape from the window, for a 4:3 or wider window. ida-gog.
      * - ScreenShot::TakeSaveGameScreenShot (0x00878F60, every save through

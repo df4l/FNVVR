@@ -57,7 +57,7 @@ namespace dxvk {
   /**
    * \brief Where a point is relative to a screen
    */
-  struct VrScreenPoint {
+  struct VrTouchScreenPoint {
     /// Distance in front of the plane, negative behind it, in mesh units
     float     distance = 0.0f;
     /// Texture coordinates of the point's projection on the plane
@@ -73,7 +73,7 @@ namespace dxvk {
   /**
    * \brief Projects a point on a screen
    */
-  VrScreenPoint vrPointOnScreen(const VrTouchScreen& screen, const VrVector3& point);
+  VrTouchScreenPoint vrPointOnScreen(const VrTouchScreen& screen, const VrVector3& point);
 
   /**
    * \brief Where the right index fingertip is relative to the Pip-Boy,
@@ -82,7 +82,7 @@ namespace dxvk {
   struct VrPipBoyTouchPoint {
     /// Distance in front of the screen, negative behind it, in metres
     float     distance = 0.0f;
-    /// Texture point under the fingertip, see VrScreenPoint
+    /// Texture point under the fingertip, see VrTouchScreenPoint
     VrVector2 uv;
     bool      inside = false;
     /// Position on the screen along u and v, in metres

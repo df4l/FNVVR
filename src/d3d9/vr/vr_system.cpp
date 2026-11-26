@@ -273,6 +273,7 @@ namespace dxvk {
     g_vrSystem->m_texts = vrReadTexts();
     g_vrSystem->m_pipBoyScale = options.pipBoyScale;
     g_vrSystem->m_pipBoyAngle = options.pipBoyAngle;
+    g_vrSystem->m_pipBoyTouch = config.getOption<bool>("d3d9.vrPipBoyTouch", true);
     g_vrSystem->m_manualReload = options.manualReload;
     g_vrSystem->m_handPush = config.getOption<bool>("d3d9.vrHandPush", true);
     g_vrSystem->m_eyeAspect = config.getOption<bool>("d3d9.vrEyeAspect", true);
@@ -462,6 +463,7 @@ namespace dxvk {
     if (m_stereoRenderer) {
       m_stereoRenderer->setPipBoyScale(m_pipBoyScale);
       m_stereoRenderer->setPipBoyAngle(m_pipBoyAngle);
+      m_stereoRenderer->setPipBoyTouch(m_pipBoyTouch);
       m_stereoRenderer->setMinigamesEnabled(m_immersiveMinigames);
       m_stereoRenderer->setScopesEnabled(m_scopes);
       m_stereoRenderer->setManualReload(m_manualReload);

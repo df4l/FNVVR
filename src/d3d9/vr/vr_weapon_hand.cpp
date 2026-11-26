@@ -16,6 +16,7 @@
 #include "vr_hand_fingers.h"
 #include "vr_scope_finder.h"
 #include "vr_melee.h"
+#include "vr_pipboy_touch_game.h"
 #include "vr_throw.h"
 #include "vr_weapon_hand.h"
 #include "vr_weapon_parts.h"
@@ -118,6 +119,15 @@ namespace dxvk {
     // and of the index finger
     constexpr char PinchThumbBone[] = "Bip01 L Thumb12";
     constexpr char PinchIndexBone[] = "Bip01 L Finger12";
+
+    // The right hand that touches the Pip-Boy's screen: index straight,
+    // thumb and other fingers closed, and its last two index joints, the
+    // fingertip being past the last one by this share of the phalanx
+    // before it
+    constexpr VrFingerCurls PointingCurls = { 0.8f, 0.0f, 1.0f, 1.0f, 1.0f };
+    constexpr char PointingMiddleBone[] = "Bip01 R Finger11";
+    constexpr char PointingDistalBone[] = "Bip01 R Finger12";
+    constexpr float FingertipExtension  = 0.8f;
 
     // How far from the left hand bone, in metres, the reload animation may
     // hold the new magazine's centre and still carry it: the Gatling
@@ -743,7 +753,11 @@ namespace dxvk {
           bool                  grip,
           VrFirstPersonMode     mode,
           float                 dt) {
-    if (mode != VrFirstPersonMode::Hands && mode != VrFirstPersonMode::FreeHands)
+    // The right hand also points at the Pip-Boy's screen to touch it
+    bool handPosed = mode == VrFirstPersonMode::Hands || mode == VrFirstPersonMode::FreeHands
+      || (mode == VrFirstPersonMode::PipBoy && m_pipBoyTouch);
+
+    if (!handPosed)
       hand = nullptr;
 
     m_frameTime         = dt;
@@ -833,6 +847,14 @@ namespace dxvk {
 
     if (uint8_t* otherHand = findObject(object, VrGame::LeftHandNodeName))
       g_weaponHand->placeOtherHand(object, otherHand, g_weaponHand->m_pipBoyShift, updateData, nullptr);
+
+    // The game's pick of the screen comes right after this update
+    uint8_t* rightHand = g_weaponHand->m_pipBoyPointing ? findObject(object, VrGame::RightHandNodeName) : nullptr;
+
+    if (rightHand) {
+      g_weaponHand->placePointingHand(object, rightHand, g_weaponHand->m_pipBoyShift, updateData);
+      g_weaponHand->measurePipBoyTouch(object, rightHand);
+    }
   }
 
 
@@ -1441,7 +1463,10 @@ namespace dxvk {
 
     // The arms and the weapon are culled one by one from here on. The
     // weapon node, culled while it is holstered, is shown again with them.
-    if (m_hidesModel || (m_hidesHolstered && m_mode != VrFirstPersonMode::FreeHands)) {
+    bool keepsHolstered = m_mode == VrFirstPersonMode::FreeHands
+      || (m_mode == VrFirstPersonMode::PipBoy && m_pipBoyTouch && m_hasHand);
+
+    if (m_hidesModel || (m_hidesHolstered && !keepsHolstered)) {
       showArms(root);
       m_hidesHolstered = false;
     }
@@ -1969,9 +1994,122 @@ namespace dxvk {
       }
     }
 
-    // The game animates the right hand in front of its camera, so it is
-    // hidden with the weapon until it has a pose of its own
-    hideArms(root, true);
+    // The game animates the right hand in front of its camera: it is
+    // hidden with the weapon, unless it points at the screen to touch it
+    uint8_t* rightHand = m_pipBoyTouch && m_hasHand && m_pipBoyPlaced
+      ? findObject(root, VrGame::RightHandNodeName) : nullptr;
+
+    m_pipBoyPointing = rightHand != nullptr;
+
+    if (!rightHand) {
+      hideArms(root, true);
+      return;
+    }
+
+    placePointingHand(root, rightHand, shift, updateData);
+    hideArms(root, false);
+
+    if (uint8_t* weapon = findObject(root, VrGame::WeaponNodeName))
+      hide(weapon, !m_loggedPointing);
+
+    m_hidesHolstered = true;
+
+    if (!m_loggedPointing) {
+      Logger::info("VR: The right hand points at the Pip-Boy's screen, at its controller");
+      m_loggedPointing = true;
+    }
+  }
+
+
+  void VrWeaponHand::placePointingHand(
+          uint8_t*              root,
+          uint8_t*              rightHand,
+    const VrVector3&            shift,
+          void*                 updateData) {
+    // As the free left hand: the forearm is placed so that the hand, at
+    // the free pose's wrist rotation mirrored, lands on its controller
+    uint8_t* forearm = forearmBone(rightHand, VrGame::RightForearmNodeName);
+
+    if (!forearm || forearm == rightHand)
+      return;
+
+    uint8_t* twist = findObject(forearm, VrGame::RightForeTwistNodeName);
+
+    VrGameRotation forearmRotation = readRotation(forearm, VrGame::ObjectWorldRotation);
+    VrVector3 forearmPosition      = readVector(forearm, VrGame::ObjectWorldTranslation);
+    VrVector3 handPosition         = readVector(rightHand, VrGame::ObjectWorldTranslation);
+
+    VrGameCameraPose controller = m_hand;
+    controller.position = controller.position - shift;
+
+    VrGameTransform target = vrComputeHeldTransform(controller, vrMirrorHandPose(FreeHandPose));
+    VrGameRotation wristRotation = vrMirrorHandRotation(FreeHandWrist);
+
+    VrVector3 wrist = vrTranspose(forearmRotation) * (handPosition - forearmPosition);
+    VrGameRotation worldRotation = target.rotate * vrTranspose(wristRotation);
+    VrVector3 worldTranslation   = target.translate - worldRotation * wrist;
+
+    ParentFrame parent = parentFrame(forearm);
+
+    VrGameRotation rotation = readRotation(forearm, VrGame::ObjectLocalRotation);
+    VrVector3 translation   = readVector(forearm, VrGame::NodeLocalTranslate);
+
+    writeRotation(forearm, VrGame::ObjectLocalRotation, vrTranspose(parent.rotate) * worldRotation);
+    writeVector(forearm, VrGame::NodeLocalTranslate, parent.toLocal(worldTranslation));
+
+    std::array<SavedBone, 2> wristBones;
+    uint32_t wristCount = 0;
+
+    wristBones[wristCount++] = { rightHand, readRotation(rightHand, VrGame::ObjectLocalRotation) };
+    writeRotation(rightHand, VrGame::ObjectLocalRotation, wristRotation);
+
+    if (twist) {
+      wristBones[wristCount++] = { twist, readRotation(twist, VrGame::ObjectLocalRotation) };
+      writeRotation(twist, VrGame::ObjectLocalRotation, vrMirrorHandRotation(FreeHandTwist));
+    }
+
+    // The index finger straight, the others closed
+    std::array<SavedBone, VrFingerBoneCount> fingers;
+    uint32_t fingerCount = poseRightFingers(rightHand, PointingCurls, fingers);
+
+    updateObject(forearm, updateData);
+
+    // The next eye's update starts from the game's pose again
+    writeRotation(forearm, VrGame::ObjectLocalRotation, rotation);
+    writeVector(forearm, VrGame::NodeLocalTranslate, translation);
+
+    for (uint32_t i = 0; i < fingerCount; i++)
+      writeRotation(fingers[i].bone, VrGame::ObjectLocalRotation, fingers[i].rotate);
+
+    for (uint32_t i = 0; i < wristCount; i++)
+      writeRotation(wristBones[i].bone, VrGame::ObjectLocalRotation, wristBones[i].rotate);
+
+    // The hand's meshes are not below the forearm, see placeOtherHand
+    forEachObject(root, MaxModelDepth, [forearm, updateData] (uint8_t* object) {
+      uint8_t* geometry = asGeometry(object);
+
+      if (geometry && isSkinnedBelow(geometry, forearm))
+        updateObject(geometry, updateData);
+    });
+  }
+
+
+  void VrWeaponHand::measurePipBoyTouch(uint8_t* root, uint8_t* rightHand) {
+    uint8_t* middle = findObject(rightHand, PointingMiddleBone);
+    uint8_t* distal = findObject(rightHand, PointingDistalBone);
+    uint8_t* leftHand = findObject(root, VrGame::LeftHandNodeName);
+    uint8_t* leftForearm = leftHand ? forearmBone(leftHand, VrGame::LeftForearmNodeName) : nullptr;
+
+    if (!middle || !distal || !leftForearm || !m_pipBoyTouch)
+      return;
+
+    // The tip is past the last joint, about as far as the phalanx before it
+    VrVector3 joint  = readVector(distal, VrGame::ObjectWorldTranslation);
+    VrVector3 tip    = joint + (joint - readVector(middle, VrGame::ObjectWorldTranslation)) * FingertipExtension;
+
+    m_pipBoyTouch->measure(tip,
+      readVector(leftForearm, VrGame::ObjectWorldTranslation),
+      readVector(leftHand, VrGame::ObjectWorldTranslation));
   }
 
 

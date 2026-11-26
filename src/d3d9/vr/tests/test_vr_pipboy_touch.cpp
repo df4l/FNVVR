@@ -54,7 +54,7 @@ TEST_CASE(touch_screen_fits_plane_and_texture) {
   CHECK_NEAR(screen.uAxis.x, 1.0f, 1e-5);
   CHECK_NEAR(screen.vAxis.y, -1.0f, 1e-5);
 
-  VrScreenPoint point = vrPointOnScreen(screen, { 2.0f, 1.5f, 0.5f });
+  VrTouchScreenPoint point = vrPointOnScreen(screen, { 2.0f, 1.5f, 0.5f });
   CHECK_NEAR(point.distance, 0.5f, 1e-5);
   CHECK_NEAR(point.uv.x, 0.75f, 1e-5);
   CHECK_NEAR(point.uv.y, 0.25f, 1e-5);

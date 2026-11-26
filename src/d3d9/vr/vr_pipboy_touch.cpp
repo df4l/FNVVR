@@ -147,8 +147,8 @@ namespace dxvk {
   }
 
 
-  VrScreenPoint vrPointOnScreen(const VrTouchScreen& screen, const VrVector3& point) {
-    VrScreenPoint result;
+  VrTouchScreenPoint vrPointOnScreen(const VrTouchScreen& screen, const VrVector3& point) {
+    VrTouchScreenPoint result;
 
     if (!screen.valid)
       return result;

@@ -366,6 +366,10 @@ namespace dxvk {
 
     renderer->m_pipBoyAnimation = VrPipBoyAnimation::install();
 
+    // The finger is measured on the drawn model, which VrWeaponHand places
+    if (renderer->m_weaponHand)
+      renderer->m_pipBoyTouch = VrPipBoyTouchGame::install();
+
     if (!renderer->m_pipBoyAnimation)
       Logger::info("VR: The Pip-Boy animation waits were not found, the arm is raised and lowered as in the game");
 
@@ -1058,7 +1062,22 @@ namespace dxvk {
     m_controls.setDialogueShown(stereo && m_dialogueSpeaker);
     m_controls.setCompanionWheelShown(stereo && VrMenuCursor::companionWheelShown());
     m_controls.setTerminalPanel(m_terminal ? m_terminal->placement() : nullptr);
+
+    // The fingertip measured on the Pip-Boy drawn in the previous frame;
+    // a menu over the Pip-Boy is pointed at with the lasers
+    if (m_pipBoyTouch) {
+      m_pipBoyTouch->beginFrame();
+
+      bool touchable = m_pipBoyTouchEnabled && state == VrGameStateKind::PipBoy && !m_menuOverPipBoy;
+      m_controls.setPipBoyTouch(touchable ? m_pipBoyTouch->point() : nullptr);
+    }
+
     m_controls.update(input, state, m_hasReference ? &m_reference : nullptr, menuPanel(), dt);
+
+    if (m_pipBoyTouch) {
+      const VrPipBoyTouchState& touch = m_controls.pipBoyTouch();
+      m_pipBoyTouch->setAim(touch.aim, touch.cursorActive);
+    }
 
     if (!m_terminal)
       return;
@@ -1569,9 +1588,15 @@ namespace dxvk {
     for (uint32_t i = 0; i < VrHandCount; i++)
       glue[i] = m_grabGlue[i].update(holds ? m_physicsGrab->handCorrection(VrHand(i)) : nullptr, dt);
 
+    // The right hand points at the Pip-Boy's screen to touch it
+    bool touches = m_pipBoyTouch && m_pipBoyTouchEnabled;
+    m_weaponHand->setPipBoyTouch(touches ? m_pipBoyTouch.get() : nullptr);
+
     if (state == VrGameStateKind::PipBoy && m_hasReference && left.isActive) {
       VrGameCameraPose otherHand = handInGame(left);
-      m_weaponHand->beginFrame(gameCamera, nullptr, &otherHand, false, VrFirstPersonMode::PipBoy, dt);
+      VrGameCameraPose hand      = handInGame(right);
+      m_weaponHand->beginFrame(gameCamera, touches && right.isActive ? &hand : nullptr,
+        &otherHand, false, VrFirstPersonMode::PipBoy, dt);
       return;
     }
 

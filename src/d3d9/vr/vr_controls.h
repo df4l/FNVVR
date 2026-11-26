@@ -8,6 +8,7 @@
 #include "vr_game_state.h"
 #include "vr_head_look.h"
 #include "vr_menu_pointer.h"
+#include "vr_pipboy_touch.h"
 #include "vr_sneak.h"
 
 namespace dxvk {
@@ -21,7 +22,9 @@ namespace dxvk {
    * is told whether the next frame's actions are read for the game or for
    * a menu. In menus the controllers also point at the menu panel with
    * lasers, which drive the game's cursor (see VrMenuPointer), or at the
-   * console's terminal while it is shown (see VrConsoleTerminal).
+   * console's terminal while it is shown (see VrConsoleTerminal). On the
+   * Pip-Boy, the right index finger drives the cursor where no laser does
+   * (see VrPipBoyTouch).
    */
   class VrControls {
 
@@ -238,6 +241,24 @@ namespace dxvk {
     }
 
     /**
+     * \brief Sets where the right index fingertip is on the Pip-Boy
+     *
+     * \param [in] point The fingertip measured on the open Pip-Boy, or
+     *    \c nullptr if its screen cannot be touched now
+     */
+    void setPipBoyTouch(const VrPipBoyTouchPoint* point) {
+      m_hasTouchPoint = point != nullptr;
+      m_touchPoint    = point ? *point : VrPipBoyTouchPoint();
+    }
+
+    /**
+     * \brief What the finger did on the Pip-Boy in the last update
+     */
+    const VrPipBoyTouchState& pipBoyTouch() const {
+      return m_touchState;
+    }
+
+    /**
      * \brief Whether the Pip-Boy control is held to switch the light
      */
     bool switchesPipBoyLight() const {
@@ -357,6 +378,10 @@ namespace dxvk {
     bool                        m_cameraFollowsHead = false;
     VrActionFilter              m_filter;
     VrMenuPointer               m_pointer;
+    VrPipBoyTouch               m_pipBoyTouch;
+    VrPipBoyTouchPoint          m_touchPoint;
+    bool                        m_hasTouchPoint = false;
+    VrPipBoyTouchState          m_touchState;
 
     // Context the backend reads the actions in, chosen one frame ahead
     VrInputContext              m_context = VrInputContext::Game;

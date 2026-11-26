@@ -55,6 +55,7 @@
 #include "vr_pipboy_size.h"
 #include "vr_power_attack_rules.h"
 #include "vr_pipboy_render.h"
+#include "vr_pipboy_touch_game.h"
 #include "vr_preview_window.h"
 #include "vr_prompt_icon.h"
 #include "vr_render_passes.h"
@@ -236,6 +237,15 @@ namespace dxvk {
      */
     void setPipBoyAngle(float degrees) {
       m_pipBoyAngle = degrees;
+    }
+
+    /**
+     * \brief Lets the right index finger touch the Pip-Boy's screen, or not
+     *
+     * \param [in] enabled Whether the screen is touched
+     */
+    void setPipBoyTouch(bool enabled) {
+      m_pipBoyTouchEnabled = enabled;
     }
 
     /**
@@ -513,6 +523,8 @@ namespace dxvk {
 
     // The Pip-Boy opens and closes without the arm animations
     std::unique_ptr<VrPipBoyAnimation> m_pipBoyAnimation;
+    std::unique_ptr<VrPipBoyTouchGame> m_pipBoyTouch;
+    bool                m_pipBoyTouchEnabled = true;
 
     // The player's weapon stays drawn, without the draw and holster animations
     std::unique_ptr<VrWeaponDrawn> m_weaponDrawn;

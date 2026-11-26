@@ -23,6 +23,8 @@
 
 namespace dxvk {
 
+  class VrPipBoyTouchGame;
+
   /**
    * \brief What the first-person model shows in a frame
    */
@@ -31,7 +33,8 @@ namespace dxvk {
     Hands,
     /// The weapon is holstered: both hands are free, each at its controller
     FreeHands,
-    /// The left forearm carries the Pip-Boy, the right hand is hidden
+    /// The left forearm carries the Pip-Boy, the right hand is hidden, or
+    /// points at the screen at its controller when the screen is touched
     PipBoy,
     /// Nothing is drawn: the controllers point at a menu with their lasers,
     /// and the game would otherwise animate the arms in front of its camera
@@ -145,9 +148,12 @@ namespace dxvk {
    *   weapon at once instead of reaching for it.
    * - While the Pip-Boy is shown, the model stays where the game puts it,
    *   the left forearm, which carries the Pip-Boy, is moved to the left
-   *   controller as the free hand is, and the right hand and the weapon
-   *   are hidden. RenderPipBoy updates the model again before it draws the
-   *   Pip-Boy screen, so the forearm is moved again after that update.
+   *   controller as the free hand is, and the weapon is hidden. The right
+   *   hand is hidden too, or, when the screen can be touched, drawn at its
+   *   controller with its index finger pointing. RenderPipBoy updates the
+   *   model again before it draws the Pip-Boy screen, so the forearms are
+   *   moved again after that update, and the fingertip measured on the
+   *   screen for the game's pick that follows, see VrPipBoyTouchGame.
    * - While a menu is pointed at with the lasers, the whole model is
    *   hidden.
    * - The weapon's magazine, a part of its model, is drawn in the left
@@ -387,6 +393,21 @@ namespace dxvk {
      */
     void setPipBoyAngle(float degrees) {
       m_pipBoyAngle = degrees;
+    }
+
+    /**
+     * \brief Lets the right index finger touch the Pip-Boy's screen
+     *
+     * While the Pip-Boy is shown with a right hand pose given to
+     * beginFrame, the right hand is drawn at its controller with its index
+     * finger pointing, and the fingertip is measured on the drawn screen
+     * once RenderPipBoy has placed the model, before the game's pick.
+     *
+     * \param [in] touch The touch, or \c nullptr to keep the right hand
+     *    hidden while the Pip-Boy is shown
+     */
+    void setPipBoyTouch(VrPipBoyTouchGame* touch) {
+      m_pipBoyTouch = touch;
     }
 
     /**
@@ -811,6 +832,12 @@ namespace dxvk {
     // RenderPipBoy's update
     VrVector3        m_pipBoyShift;
     bool             m_pipBoyPlaced = false;
+
+    // The right hand pointing at the Pip-Boy's screen, decided when the
+    // forearm carrying the Pip-Boy was placed
+    VrPipBoyTouchGame* m_pipBoyTouch = nullptr;
+    bool             m_pipBoyPointing = false;
+    bool             m_loggedPointing = false;
 
     // Centre of the Pip-Boy's screen and the way it faces in the left
     // controller's frame
@@ -1274,6 +1301,10 @@ namespace dxvk {
             VrScopePlacement& placement);
 
     void placePipBoyArm(uint8_t* root, const VrVector3& shift, void* updateData);
+
+    void placePointingHand(uint8_t* root, uint8_t* rightHand, const VrVector3& shift, void* updateData);
+
+    void measurePipBoyTouch(uint8_t* root, uint8_t* rightHand);
 
     void readFingerRigs(uint8_t* root);
 

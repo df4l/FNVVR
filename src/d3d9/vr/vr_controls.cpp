@@ -19,6 +19,10 @@ namespace dxvk {
     // Deflection of the navigation stick that counts as gamepad navigation
     constexpr float NavigateThreshold = 0.5f;
 
+    // Length of the right controller's tap when the finger touches the
+    // Pip-Boy's screen, in nanoseconds
+    constexpr int64_t TouchHapticTime = 15'000'000;
+
     constexpr VrAction MenuButtons[] = {
       VrAction::MenuSelect,
       VrAction::MenuBack,
@@ -182,6 +186,24 @@ namespace dxvk {
     VrPointerState pointer = updatePointer(input, actions, panel, surface, padUsed, overTarget, dt);
     m_pointerSurfaceState = pointer.surface;
 
+    // The right index finger is the mouse on the Pip-Boy's screen, where no
+    // laser drives the cursor
+    VrPipBoyTouchInput touch;
+    touch.point   = menu && m_hasTouchPoint && !pointer.cursorActive ? &m_touchPoint : nullptr;
+    touch.padUsed = padUsed;
+    touch.dt      = dt;
+    m_touchState  = m_pipBoyTouch.update(touch);
+
+    if (m_touchState.cursorActive) {
+      pointer.cursorActive = true;
+      pointer.cursor       = m_touchState.cursor;
+      pointer.button       = m_touchState.button;
+      pointer.wheel        = m_touchState.wheel;
+    }
+
+    if (m_touchState.haptic > 0.0f)
+      m_backend.applyHaptic(VrHand::Right, m_touchState.haptic, TouchHapticTime);
+
     if (xClicks && !leftTrigger && !pointer.triggersTaken)
       actions.setPressed(VrAction::MenuLeftTrigger, false);
 
@@ -224,6 +246,7 @@ namespace dxvk {
 
     // The sticks and buttons never take the lasers off the terminal
     m_terminalPointer = updatePointer(input, actions, m_terminalPanel, nullptr, false, true, dt);
+    m_touchState      = m_pipBoyTouch.update(VrPipBoyTouchInput());
 
     // The console has the input: the game's cursor rests and the game's
     // menus see a gamepad at rest
@@ -241,6 +264,7 @@ namespace dxvk {
 
     m_terminalPointer  = VrPointerState();
     m_terminalBack     = false;
+    m_touchState       = m_pipBoyTouch.update(VrPipBoyTouchInput());
 
     VrGamepadHook::setCursorMode(false);
     VrMenuCursor::update(VrPointerState());
