@@ -800,6 +800,53 @@ TEST_CASE(round_timing_needs_the_round_to_move_in_and_stop) {
 }
 
 
+TEST_CASE(loader_timing_finds_a_speed_loader_that_never_stops) {
+  // As That Gun's: carried in from 40 cm out along -x, home at 1.7 s and
+  // pulled away again at once, its place in the model 2 cm back in the
+  // cylinder
+  std::vector<VrMagazineSample> samples;
+  std::vector<float> fromRest;
+
+  for (int32_t i = 0; i <= 150; i++) {
+    float t = float(i) / 60.0f;
+    float out = std::abs(t - 1.7f) * 0.25f;
+    samples.push_back({ t, { -0.02f - out, 0.0f, 0.0f } });
+    fromRest.push_back(out);
+  }
+
+  VrMagazineTiming timing;
+  size_t place = 0;
+  CHECK(!vrFindRoundTiming(samples.data(), samples.size(), timing, place));
+  CHECK(vrFindLoaderTiming(samples.data(), fromRest.data(), samples.size(), timing, place));
+  CHECK(std::abs(timing.in - 1.7f) < 0.01f);
+  CHECK(timing.axis.x < -0.999f);
+  CHECK(timing.grip > 1.52f && timing.grip < 1.56f);
+}
+
+
+TEST_CASE(loader_timing_needs_the_speed_loader_home) {
+  // Comes no nearer than 2 cm from its place, or is home only at the ends
+  std::vector<VrMagazineSample> samples, ends;
+  std::vector<float> fromRest, fromRestAtEnds;
+
+  for (int32_t i = 0; i <= 60; i++) {
+    float t = float(i) / 60.0f;
+    float out = 0.02f + std::abs(t - 0.5f) * 0.5f;
+    samples.push_back({ t, { -out, 0.0f, 0.0f } });
+    fromRest.push_back(out);
+
+    float away = 0.3f * std::sin(3.14159265f * t);
+    ends.push_back({ t, { -away, 0.0f, 0.0f } });
+    fromRestAtEnds.push_back(away);
+  }
+
+  VrMagazineTiming timing;
+  size_t place = 0;
+  CHECK(!vrFindLoaderTiming(samples.data(), fromRest.data(), samples.size(), timing, place));
+  CHECK(!vrFindLoaderTiming(ends.data(), fromRestAtEnds.data(), ends.size(), timing, place));
+}
+
+
 TEST_CASE(hinges_are_found_by_keyword) {
   CHECK(vrClassifyWeaponPart("##DBStock") == VrWeaponPartKind::Hinge);
   CHECK(vrClassifyWeaponPart("##CVSHStock") == VrWeaponPartKind::Hinge);
