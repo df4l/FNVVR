@@ -247,6 +247,10 @@ namespace dxvk {
     uint32_t          m_actorsWait = 0;
     uint32_t*         m_bodyHidden = nullptr;
     uint32_t*         m_handsShown = nullptr;
+    // The world terminal's glass, its glow brought down while the menu's
+    // screen lies on it, and the glow it had
+    uint8_t*          m_glassMaterial = nullptr;
+    float             m_glassEmitMult = 1.0f;
 
     // The button or trigger a gesture presses, held for a few frames
     uint16_t          m_pulse       = 0;
@@ -400,6 +404,8 @@ namespace dxvk {
     void keep(void* object);
 
     void hideRoot(uint8_t* root);
+
+    void dimTerminalGlass(uint8_t* glass);
 
     void hidePlayerBody();
 

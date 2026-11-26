@@ -290,6 +290,10 @@ namespace dxvk {
     constexpr uint32_t  TerminalScreenDepth = 8;
     // Part of the world's glass the menu's screen takes, inside the frame
     constexpr float     TerminalScreenFill  = 0.95f;
+    // The glow of the base game's glass. Dead Money's desk terminal
+    // (nvdlc01_terminaldesk01.nif) glows three times as much, which with HDR
+    // drowns the menu's text added to it: findings/minigames.md §12.
+    constexpr float     TerminalGlassEmitMult = 1.0f;
 
     // How the scenes lie on the casino's objects, in the models' space:
     // findings/minigames.md §6. The game's table is only a top, on the
@@ -1238,6 +1242,8 @@ namespace dxvk {
     for (const char* text : TerminalFakeTexts)
       VrMenuScenes::hideObject(reinterpret_cast<uintptr_t>(root), text, m_objectHidden);
 
+    dimTerminalGlass(glass);
+
     Logger::info(str::format("VR: The terminal shows on the world's ", model->shape));
     standAt(root, object, &m_modelFit, frame);
     return true;
@@ -1464,6 +1470,27 @@ namespace dxvk {
   }
 
 
+  void VrMinigames::dimTerminalGlass(uint8_t* glass) {
+    auto material = field<uint8_t*>(glass, VrGame::GeometryMaterial);
+
+    if (m_glassMaterial || !material)
+      return;
+
+    float& emitMult = field<float>(material, VrGame::MaterialEmitMult);
+
+    if (emitMult <= TerminalGlassEmitMult)
+      return;
+
+    Logger::info(str::format("VR: The terminal's glass glows ", emitMult,
+      " times its colour, brought down to ", TerminalGlassEmitMult, " while the menu shows on it"));
+
+    keep(material);
+    m_glassMaterial = material;
+    m_glassEmitMult = emitMult;
+    emitMult = TerminalGlassEmitMult;
+  }
+
+
   void VrMinigames::hidePlayerBody() {
     // A player sitting is in third person: the body stays on its stool while
     // the view is at the seat. The game turns it on and off with the view,
@@ -1588,6 +1615,11 @@ namespace dxvk {
 
     VrMenuScenes::showHidden(m_objectHidden);
     m_objectHidden.clear();
+
+    if (m_glassMaterial)
+      field<float>(m_glassMaterial, VrGame::MaterialEmitMult) = m_glassEmitMult;
+
+    m_glassMaterial = nullptr;
     VrMenuScenes::showHidden(m_actorsHidden);
     m_actorsHidden.clear();
     m_actorsWait = 0;

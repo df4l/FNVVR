@@ -467,6 +467,16 @@ namespace dxvk {
     constexpr uintptr_t GeometryDataVertices      = 0x20;
 
     /**
+     * NiGeometry's NiMaterialProperty (m_kProperties at +0x9C, its material
+     * at +0x08) and the material's emittance multiplier (m_fEmitMult, read by
+     * NiMaterialProperty::LoadBinary 0x00A75790). With HDR on, the
+     * no-lighting shader multiplies the emittance by it
+     * (BSShaderNoLighting::SetupGeometryConstants_MaterialColor 0x00BC6FE0).
+     */
+    constexpr uintptr_t GeometryMaterial          = 0xA4;
+    constexpr uintptr_t MaterialEmitMult          = 0x40;
+
+    /**
      * NiAVObject transforms: parent, local rotation (row-major 3x3),
      * translation and scale, and world transform. The local scale is the
      * float NiAVObject::SetLocalScale (0x00440490, `fstp [eax+0x64]`) writes.
