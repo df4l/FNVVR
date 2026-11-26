@@ -7,47 +7,53 @@
 namespace dxvk {
 
   /**
-   * \brief The Pip-Boy's screen as a flat surface, fitted to its mesh
+   * \brief The Pip-Boy's screen as a surface, fitted to its mesh
    *
-   * All in the mesh's own space. The screen bulges a little: the plane
-   * goes through its vertices' centre, and the texture coordinates are an
-   * affine map of the point on that plane.
+   * All in the mesh's own space. The mesh's points are an affine map of
+   * their texture coordinates, which gives the plane, plus a quadratic
+   * height above that plane for the glass's bulge. Only the vertices and
+   * their texture coordinates are used, whatever the mesh's triangles.
    */
   struct VrTouchScreen {
     bool      valid = false;
+    /// The vertices' centre, at texture coordinates uv0
     VrVector3 centre;
-    /// Unit normal, on the side the triangles face
+    VrVector2 uv0;
+    /// Unit normal of the plane, on the side the texture reads right from
     VrVector3 normal;
-    /// Unit directions of growing u and v, in the plane
+    /// Movement along the plane per unit of u and of v
+    VrVector3 alongU;
+    VrVector3 alongV;
+    /// Unit directions of alongU and alongV
     VrVector3 uAxis;
     VrVector3 vAxis;
-    /// Texture coordinates at the centre, and how fast they grow per unit
-    /// along the plane: uv = uv0 + (gradU, gradV) . (point - centre)
-    VrVector2 uv0;
+    /// How fast u and v grow along the plane:
+    /// uv = uv0 + (gradU, gradV) . (point - centre)
     VrVector3 gradU;
     VrVector3 gradV;
+    /// Height above the plane at (du, dv) from uv0: curve[0] + curve[1] du
+    /// + curve[2] dv + curve[3] du² + curve[4] du dv + curve[5] dv²
+    float     curve[6] = { };
+    /// Largest distance of a vertex from the plane, in mesh units
+    float     bulge = 0.0f;
     /// Range of the mesh's texture coordinates
     VrVector2 uvMin;
     VrVector2 uvMax;
   };
 
   /**
-   * \brief Fits a flat surface to a screen's mesh
+   * \brief Fits a surface to a screen's mesh
    *
    * \param [in] positions Vertex positions
    * \param [in] uvs Texture coordinates of the vertices
    * \param [in] count Number of vertices
-   * \param [in] triangles Three vertex indices per triangle
-   * \param [in] triangleCount Number of triangles
    * \returns The surface, not valid if the mesh has no area or its
    *    texture coordinates do not vary across it
    */
   VrTouchScreen vrFitTouchScreen(
     const VrVector3*            positions,
     const VrVector2*            uvs,
-          uint32_t              count,
-    const uint16_t*             triangles,
-          uint32_t              triangleCount);
+          uint32_t              count);
 
   /**
    * \brief Turns the surface's front to the other side
@@ -58,15 +64,15 @@ namespace dxvk {
    * \brief Where a point is relative to a screen
    */
   struct VrTouchScreenPoint {
-    /// Distance in front of the plane, negative behind it, in mesh units
+    /// Distance in front of the surface, negative behind it, in mesh units
     float     distance = 0.0f;
-    /// Texture coordinates of the point's projection on the plane
+    /// Texture coordinates of the point's projection on the surface
     VrVector2 uv;
     /// Whether the projection is within the mesh's texture coordinates
     bool      inside = false;
     /// Position along uAxis and vAxis from the centre, in mesh units
     VrVector2 plane;
-    /// The projection on the plane
+    /// The projection on the surface
     VrVector3 surface;
   };
 
@@ -164,11 +170,14 @@ namespace dxvk {
 
     /// The finger hovers the screen from this close, in metres
     constexpr static float HoverDistance   = 0.08f;
-    /// The finger touches the screen from this close, in metres
-    constexpr static float TouchDistance   = 0.006f;
+    /// The finger touches the screen from this close, in metres: the
+    /// fingertip is measured inside the finger, about this far from its pad
+    constexpr static float TouchDistance   = 0.008f;
     /// A touch ends once the finger is this far again, in metres
     constexpr static float ReleaseDistance = 0.015f;
-    /// A finger deeper behind the screen is not on it, in metres
+    /// A finger deeper behind the screen is not hovering it, in metres. A
+    /// touch is kept however deep the finger goes, the drawn hand stays on
+    /// the glass.
     constexpr static float MaxDepth        = 0.06f;
     /// Slide along the screen that turns a touch into a scroll, in metres
     constexpr static float ScrollStart     = 0.012f;

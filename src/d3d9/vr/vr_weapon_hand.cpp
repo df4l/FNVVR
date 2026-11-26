@@ -852,8 +852,14 @@ namespace dxvk {
     uint8_t* rightHand = g_weaponHand->m_pipBoyPointing ? findObject(object, VrGame::RightHandNodeName) : nullptr;
 
     if (rightHand) {
-      g_weaponHand->placePointingHand(object, rightHand, g_weaponHand->m_pipBoyShift, updateData);
-      g_weaponHand->measurePipBoyTouch(object, rightHand);
+      // Measured where the controller puts the finger, then drawn resting
+      // on the glass if it went through
+      VrWeaponHand& hand = *g_weaponHand;
+      hand.placePointingHand(object, rightHand, hand.m_pipBoyShift, VrVector3(), updateData);
+      hand.m_pipBoyRest = hand.measurePipBoyTouch(object, rightHand);
+
+      if (vrLength(hand.m_pipBoyRest) > 0.0f)
+        hand.placePointingHand(object, rightHand, hand.m_pipBoyShift, hand.m_pipBoyRest, updateData);
     }
   }
 
@@ -2002,11 +2008,12 @@ namespace dxvk {
     m_pipBoyPointing = rightHand != nullptr;
 
     if (!rightHand) {
+      m_pipBoyRest = VrVector3();
       hideArms(root, true);
       return;
     }
 
-    placePointingHand(root, rightHand, shift, updateData);
+    placePointingHand(root, rightHand, shift, m_pipBoyRest, updateData);
     hideArms(root, false);
 
     if (uint8_t* weapon = findObject(root, VrGame::WeaponNodeName))
@@ -2025,9 +2032,11 @@ namespace dxvk {
           uint8_t*              root,
           uint8_t*              rightHand,
     const VrVector3&            shift,
+    const VrVector3&            rest,
           void*                 updateData) {
     // As the free left hand: the forearm is placed so that the hand, at
-    // the free pose's wrist rotation mirrored, lands on its controller
+    // the free pose's wrist rotation mirrored, lands on its controller,
+    // moved by rest where the glass stops the finger
     uint8_t* forearm = forearmBone(rightHand, VrGame::RightForearmNodeName);
 
     if (!forearm || forearm == rightHand)
@@ -2040,7 +2049,7 @@ namespace dxvk {
     VrVector3 handPosition         = readVector(rightHand, VrGame::ObjectWorldTranslation);
 
     VrGameCameraPose controller = m_hand;
-    controller.position = controller.position - shift;
+    controller.position = controller.position - shift + rest;
 
     VrGameTransform target = vrComputeHeldTransform(controller, vrMirrorHandPose(FreeHandPose));
     VrGameRotation wristRotation = vrMirrorHandRotation(FreeHandWrist);
@@ -2094,20 +2103,20 @@ namespace dxvk {
   }
 
 
-  void VrWeaponHand::measurePipBoyTouch(uint8_t* root, uint8_t* rightHand) {
+  VrVector3 VrWeaponHand::measurePipBoyTouch(uint8_t* root, uint8_t* rightHand) {
     uint8_t* middle = findObject(rightHand, PointingMiddleBone);
     uint8_t* distal = findObject(rightHand, PointingDistalBone);
     uint8_t* leftHand = findObject(root, VrGame::LeftHandNodeName);
     uint8_t* leftForearm = leftHand ? forearmBone(leftHand, VrGame::LeftForearmNodeName) : nullptr;
 
     if (!middle || !distal || !leftForearm || !m_pipBoyTouch)
-      return;
+      return VrVector3();
 
     // The tip is past the last joint, about as far as the phalanx before it
     VrVector3 joint  = readVector(distal, VrGame::ObjectWorldTranslation);
     VrVector3 tip    = joint + (joint - readVector(middle, VrGame::ObjectWorldTranslation)) * FingertipExtension;
 
-    m_pipBoyTouch->measure(tip,
+    return m_pipBoyTouch->measure(tip,
       readVector(leftForearm, VrGame::ObjectWorldTranslation),
       readVector(leftHand, VrGame::ObjectWorldTranslation));
   }

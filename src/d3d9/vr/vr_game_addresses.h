@@ -2059,17 +2059,15 @@ namespace dxvk {
     constexpr uint32_t  PipBoyTabButtonCount        = 3;
 
     /**
-     * NiTriShape and its data (vtables named in ida-gog): texture
-     * coordinates (NiPoint2*) of NiGeometryData, triangle count (u16) and
-     * triangles (three u16 each) of NiTriShapeData, which
-     * NiTriShapeDynamicData derives from. findings/render.md.
+     * The screen is whatever NiGeometry FOPipboyManager::InitModels
+     * (0x007F8BA0) finds under "pipboyscreen" (DynamicCast to NiGeometry,
+     * NiTriStrips in the vanilla model): its NiGeometryData, told by its
+     * RTTI (ms_RTTI named in ida-gog), gives the texture coordinates
+     * (NiPoint2*, m_pkTexture) beside the vertices. The game picks it with
+     * texture coordinates, so its vertex data is kept on the CPU.
      */
-    constexpr uintptr_t TriShapeVtable              = 0x0109D454;
-    constexpr uintptr_t TriShapeDataVtable          = 0x0109DAC4;
-    constexpr uintptr_t TriShapeDynamicDataVtable   = 0x0109E32C;
+    constexpr uintptr_t NiGeometryDataRtti          = 0x011F4884;
     constexpr uintptr_t GeometryDataTexCoords       = 0x2C;
-    constexpr uintptr_t TriShapeDataTriangleCount   = 0x40;
-    constexpr uintptr_t TriShapeDataTriangles       = 0x48;
 
     /**
      * Calls of TESRenderer::GetScreenWidth (GameScreenWidth) where the game

@@ -21,7 +21,10 @@ namespace dxvk {
    * tab clicked in one eye is not undone by the next one.
    *
    * The fingertip is measured on the drawn model by VrWeaponHand, which
-   * calls measure once both forearms are placed for RenderPipBoy.
+   * calls measure once both forearms are placed for RenderPipBoy. The
+   * screen stops the finger: once it comes from the front, the hand is
+   * drawn resting on the glass however far the controller goes through,
+   * until the finger is lifted or slides off the screen.
    *
    * Only used on the game's main thread.
    */
@@ -33,6 +36,14 @@ namespace dxvk {
     constexpr static float RayBack     = 0.05f;
     /// A tab button is looked for this far from the fingertip, in metres
     constexpr static float ButtonReach = 0.03f;
+    /// The finger's pad rests on the glass this far from the measured
+    /// fingertip, in metres
+    constexpr static float FingerPad   = 0.007f;
+    /// The glass stops the finger this far past the screen's texture, as a
+    /// fraction of it
+    constexpr static float RestMargin  = 0.03f;
+    /// A hand deeper behind the screen is let through, in metres
+    constexpr static float RestDepth   = 0.3f;
 
     ~VrPipBoyTouchGame();
 
@@ -75,11 +86,14 @@ namespace dxvk {
      * forearms are placed, before the game's pick. All points are in the
      * space the model is drawn in.
      *
-     * \param [in] fingertip The right index fingertip
+     * \param [in] fingertip The right index fingertip, where the
+     *    controller puts it
      * \param [in] elbow The left forearm bone
      * \param [in] wrist The left hand bone
+     * \returns How far to move the right hand so that the finger rests on
+     *    the glass, zero if it does not touch it
      */
-    void measure(const VrVector3& fingertip, const VrVector3& elbow, const VrVector3& wrist);
+    VrVector3 measure(const VrVector3& fingertip, const VrVector3& elbow, const VrVector3& wrist);
 
   private:
 
@@ -89,7 +103,6 @@ namespace dxvk {
     struct ScreenCache {
       const void*   data      = nullptr;
       uint32_t      vertices  = 0;
-      uint32_t      triangles = 0;
       VrVector2     firstUv;
       VrVector2     lastUv;
       VrTouchScreen screen;
@@ -98,6 +111,12 @@ namespace dxvk {
     ScreenCache        m_cache;
     bool               m_loggedScreen = false;
     bool               m_loggedTouch  = false;
+    bool               m_loggedRest   = false;
+
+    // Whether the finger was last in front of the glass, and whether the
+    // glass stops it
+    bool               m_inFront = false;
+    bool               m_resting = false;
 
     VrPipBoyTouchPoint m_point;
     bool               m_hasPoint = false;

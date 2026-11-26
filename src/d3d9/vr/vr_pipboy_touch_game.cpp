@@ -22,6 +22,7 @@ namespace dxvk {
     using RayFn = bool (__fastcall*)(void* camera, void* unused,
       int32_t x, int32_t y, float* origin, float* direction, void* target);
     using GetPipBoyFn = uint8_t* (__cdecl*)();
+    using GetRttiFn   = const void* (__fastcall*)(const void* object, void* unused);
 
     VrPipBoyTouchGame* g_touch = nullptr;
 
@@ -73,6 +74,30 @@ namespace dxvk {
       frame.translate = readVector(object, VrGame::ObjectWorldTranslation);
       frame.scale     = field<float>(object, VrGame::ObjectWorldScale);
       return frame;
+    }
+
+    const void* rttiOf(const void* object) {
+      auto getRtti = field<GetRttiFn*>(static_cast<const uint8_t*>(object), 0)[VrGame::ObjectGetRttiSlot / sizeof(void*)];
+      return getRtti(object, nullptr);
+    }
+
+    bool isKindOf(const void* object, uintptr_t rtti) {
+      const void* r = rttiOf(object);
+
+      for (uint32_t i = 0; r && i < 16; i++) {
+        if (reinterpret_cast<uintptr_t>(r) == rtti)
+          return true;
+
+        r = field<const void*>(static_cast<const uint8_t*>(r), VrGame::RttiBase);
+      }
+
+      return false;
+    }
+
+    const char* rttiName(const void* object) {
+      const void* r = object ? rttiOf(object) : nullptr;
+      const char* name = r ? field<const char*>(static_cast<const uint8_t*>(r), VrGame::RttiName) : nullptr;
+      return name ? name : "none";
     }
 
     uint8_t* pipBoy() {
@@ -146,15 +171,18 @@ namespace dxvk {
   }
 
 
-  void VrPipBoyTouchGame::measure(const VrVector3& fingertip, const VrVector3& elbow, const VrVector3& wrist) {
+  VrVector3 VrPipBoyTouchGame::measure(const VrVector3& fingertip, const VrVector3& elbow, const VrVector3& wrist) {
     m_hasRay = false;
 
     uint8_t* manager = pipBoy();
     auto geometry = manager ? field<const uint8_t*>(manager, VrGame::RenderedMenuScreen) : nullptr;
     const VrTouchScreen* fitted = geometry ? screen(geometry) : nullptr;
 
-    if (!fitted)
-      return;
+    if (!fitted) {
+      m_inFront = false;
+      m_resting = false;
+      return VrVector3();
+    }
 
     // The screen faces away from the forearm's axis
     WorldFrame frame = worldFrame(geometry);
@@ -192,9 +220,36 @@ namespace dxvk {
       }
     }
 
+    // The glass stops a finger that came from the front, until it is
+    // lifted or slides off the screen
+    VrVector2 margin = {
+      (faced.uvMax.x - faced.uvMin.x) * RestMargin,
+      (faced.uvMax.y - faced.uvMin.y) * RestMargin };
+
+    bool over = point.uv.x >= faced.uvMin.x - margin.x && point.uv.x <= faced.uvMax.x + margin.x
+             && point.uv.y >= faced.uvMin.y - margin.y && point.uv.y <= faced.uvMax.y + margin.y
+             && point.distance >= -RestDepth;
+
     if (!m_frameMeasured) {
       m_framePoint    = point;
       m_frameMeasured = true;
+
+      bool front = point.distance >= FingerPad;
+      m_resting  = over && !front && (m_resting || m_inFront);
+      m_inFront  = over && front;
+    }
+
+    VrVector3 push;
+
+    if (m_resting && over && point.distance < FingerPad) {
+      float depth = FingerPad - point.distance;
+      push = normal * (depth * VrGameUnitsPerMetre);
+
+      if (!m_loggedRest) {
+        Logger::info(str::format("VR: The right index finger rests on the Pip-Boy's screen, the hand drawn ",
+          depth, " m in front of its controller"));
+        m_loggedRest = true;
+      }
     }
 
     // The pick looks along the screen's normal at the point or the button
@@ -218,54 +273,54 @@ namespace dxvk {
         point.distance, " m from it, at ", point.uv.x, ", ", point.uv.y));
       m_loggedTouch = true;
     }
+
+    return push;
   }
 
 
   const VrTouchScreen* VrPipBoyTouchGame::screen(const uint8_t* geometry) {
-    auto data = field<const uint8_t*>(geometry, VrGame::GeometryModelData);
+    auto data = isKindOf(geometry, VrGame::NiGeometryRtti)
+      ? field<const uint8_t*>(geometry, VrGame::GeometryModelData) : nullptr;
+    data = data && isKindOf(data, VrGame::NiGeometryDataRtti) ? data : nullptr;
 
-    bool shape = field<uintptr_t>(geometry, 0) == VrGame::TriShapeVtable && data
-      && (field<uintptr_t>(data, 0) == VrGame::TriShapeDataVtable
-       || field<uintptr_t>(data, 0) == VrGame::TriShapeDynamicDataVtable);
+    auto positions = data ? field<const VrVector3*>(data, VrGame::GeometryDataVertices) : nullptr;
+    auto uvs       = data ? field<const VrVector2*>(data, VrGame::GeometryDataTexCoords) : nullptr;
+    uint32_t vertices = data ? field<uint16_t>(data, VrGame::GeometryDataVertexCount) : 0;
 
-    auto positions = shape ? field<const VrVector3*>(data, VrGame::GeometryDataVertices) : nullptr;
-    auto uvs       = shape ? field<const VrVector2*>(data, VrGame::GeometryDataTexCoords) : nullptr;
-    auto triangles = shape ? field<const uint16_t*>(data, VrGame::TriShapeDataTriangles) : nullptr;
-
-    if (!positions || !uvs || !triangles) {
-      if (!m_loggedScreen)
-        Logger::warn("VR: The Pip-Boy's screen is not a triangle shape with texture coordinates, it cannot be touched");
+    if (!positions || !uvs || !vertices) {
+      if (!m_loggedScreen) {
+        Logger::warn(str::format("VR: The Pip-Boy's screen (", rttiName(geometry), ", data ", rttiName(data),
+          ") has no vertices with texture coordinates, it cannot be touched"));
+      }
 
       m_loggedScreen = true;
       return nullptr;
     }
 
-    uint32_t vertices  = field<uint16_t>(data, VrGame::GeometryDataVertexCount);
-    uint32_t count     = field<uint16_t>(data, VrGame::TriShapeDataTriangleCount);
-
     // The game scales the screen's texture coordinates once, in place
-    bool same = data == m_cache.data && vertices == m_cache.vertices && count == m_cache.triangles
-      && vertices && !std::memcmp(&uvs[0], &m_cache.firstUv, sizeof(VrVector2))
+    bool same = data == m_cache.data && vertices == m_cache.vertices
+      && !std::memcmp(&uvs[0], &m_cache.firstUv, sizeof(VrVector2))
       && !std::memcmp(&uvs[vertices - 1], &m_cache.lastUv, sizeof(VrVector2));
 
     if (!same) {
-      m_cache.data      = data;
-      m_cache.vertices  = vertices;
-      m_cache.triangles = count;
-      m_cache.screen    = vrFitTouchScreen(positions, uvs, vertices, triangles, count);
-
-      if (vertices) {
-        m_cache.firstUv = uvs[0];
-        m_cache.lastUv  = uvs[vertices - 1];
-      }
+      m_cache.data     = data;
+      m_cache.vertices = vertices;
+      m_cache.firstUv  = uvs[0];
+      m_cache.lastUv   = uvs[vertices - 1];
+      m_cache.screen   = vrFitTouchScreen(positions, uvs, vertices);
 
       const VrTouchScreen& fit = m_cache.screen;
 
-      if (!fit.valid)
-        Logger::warn("VR: The Pip-Boy's screen mesh is not flat with texture coordinates, it cannot be touched");
-      else
-        Logger::info(str::format("VR: The Pip-Boy's screen fitted from ", vertices, " vertices, texture ",
-          fit.uvMin.x, ", ", fit.uvMin.y, " to ", fit.uvMax.x, ", ", fit.uvMax.y));
+      if (!fit.valid) {
+        Logger::warn(str::format("VR: The Pip-Boy's screen (", rttiName(geometry),
+          ") is not a surface with texture coordinates, it cannot be touched"));
+      } else {
+        float scale = field<float>(geometry, VrGame::ObjectWorldScale) / VrGameUnitsPerMetre;
+        Logger::info(str::format("VR: The Pip-Boy's screen (", rttiName(geometry), ") fitted from ", vertices,
+          " vertices, texture ", fit.uvMin.x, ", ", fit.uvMin.y, " to ", fit.uvMax.x, ", ", fit.uvMax.y,
+          ", ", vrLength(fit.alongU) * (fit.uvMax.x - fit.uvMin.x) * scale, " by ",
+          vrLength(fit.alongV) * (fit.uvMax.y - fit.uvMin.y) * scale, " m, bulging ", fit.bulge * scale, " m"));
+      }
     }
 
     return m_cache.screen.valid ? &m_cache.screen : nullptr;

@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include "vr_math.h"
 #include "vr_pipboy_touch.h"
@@ -22,34 +23,67 @@ namespace dxvk {
       return true;
     }
 
-    float determinant(const float m[3][3]) {
-      return m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
-           - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
-           + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
-    }
-
     /**
-     * \brief Solves m * x = b by Cramer's rule
+     * \brief Solves m * x = b, n unknowns, by Gaussian elimination
      * \returns \c false if m is singular
      */
-    bool solve(const float m[3][3], const float b[3], float x[3]) {
-      float d = determinant(m);
+    template<uint32_t N>
+    bool solve(float (&m)[N][N], float (&b)[N], float (&x)[N]) {
+      for (uint32_t c = 0; c < N; c++) {
+        uint32_t pivot = c;
 
-      if (!(std::abs(d) > 1e-20f))
-        return false;
-
-      for (uint32_t c = 0; c < 3; c++) {
-        float column[3][3];
-
-        for (uint32_t i = 0; i < 3; i++) {
-          for (uint32_t j = 0; j < 3; j++)
-            column[i][j] = j == c ? b[i] : m[i][j];
+        for (uint32_t r = c + 1; r < N; r++) {
+          if (std::abs(m[r][c]) > std::abs(m[pivot][c]))
+            pivot = r;
         }
 
-        x[c] = determinant(column) / d;
+        if (!(std::abs(m[pivot][c]) > 1e-12f))
+          return false;
+
+        std::swap(m[c], m[pivot]);
+        std::swap(b[c], b[pivot]);
+
+        for (uint32_t r = c + 1; r < N; r++) {
+          float k = m[r][c] / m[c][c];
+
+          for (uint32_t j = c; j < N; j++)
+            m[r][j] -= k * m[c][j];
+
+          b[r] -= k * b[c];
+        }
+      }
+
+      for (uint32_t c = N; c-- > 0; ) {
+        float sum = b[c];
+
+        for (uint32_t j = c + 1; j < N; j++)
+          sum -= m[c][j] * x[j];
+
+        x[c] = sum / m[c][c];
       }
 
       return true;
+    }
+
+    void curveTerms(float du, float dv, float (&terms)[6]) {
+      terms[0] = 1.0f;
+      terms[1] = du;
+      terms[2] = dv;
+      terms[3] = du * du;
+      terms[4] = du * dv;
+      terms[5] = dv * dv;
+    }
+
+    float height(const VrTouchScreen& screen, float du, float dv) {
+      float terms[6];
+      curveTerms(du, dv, terms);
+
+      float h = 0.0f;
+
+      for (uint32_t i = 0; i < 6; i++)
+        h += screen.curve[i] * terms[i];
+
+      return h;
     }
 
   }
@@ -58,37 +92,21 @@ namespace dxvk {
   VrTouchScreen vrFitTouchScreen(
     const VrVector3*            positions,
     const VrVector2*            uvs,
-          uint32_t              count,
-    const uint16_t*             triangles,
-          uint32_t              triangleCount) {
+          uint32_t              count) {
     VrTouchScreen screen;
 
-    if (!positions || !uvs || !triangles || count < 3 || !triangleCount)
-      return screen;
-
-    // The triangles' area-weighted normal
-    VrVector3 normal;
-
-    for (uint32_t i = 0; i < triangleCount; i++) {
-      uint16_t a = triangles[3 * i + 0];
-      uint16_t b = triangles[3 * i + 1];
-      uint16_t c = triangles[3 * i + 2];
-
-      if (a >= count || b >= count || c >= count)
-        return screen;
-
-      normal = normal + cross(positions[b] - positions[a], positions[c] - positions[a]);
-    }
-
-    if (!normalized(normal, screen.normal))
+    if (!positions || !uvs || count < 3)
       return screen;
 
     VrVector3 centre;
+    VrVector2 uv0 = { 0.0f, 0.0f };
     screen.uvMin = uvs[0];
     screen.uvMax = uvs[0];
 
     for (uint32_t i = 0; i < count; i++) {
       centre = centre + positions[i];
+      uv0.x += uvs[i].x;
+      uv0.y += uvs[i].y;
       screen.uvMin.x = std::min(screen.uvMin.x, uvs[i].x);
       screen.uvMin.y = std::min(screen.uvMin.y, uvs[i].y);
       screen.uvMax.x = std::max(screen.uvMax.x, uvs[i].x);
@@ -96,46 +114,80 @@ namespace dxvk {
     }
 
     screen.centre = centre * (1.0f / float(count));
+    screen.uv0    = { uv0.x / float(count), uv0.y / float(count) };
 
-    // Any two directions across the plane
-    VrVector3 other = std::abs(screen.normal.x) < 0.9f ? VrVector3 { 1.0f, 0.0f, 0.0f } : VrVector3 { 0.0f, 1.0f, 0.0f };
-    VrVector3 e1, e2;
-
-    if (!normalized(cross(screen.normal, other), e1))
-      return screen;
-
-    e2 = cross(screen.normal, e1);
-
-    // Least squares of uv = k1 * a + k2 * b + k0 over the vertices, with
-    // (a, b) the vertex's position along e1 and e2 from the centre
-    float m[3][3] = { };
-    float bu[3] = { };
-    float bv[3] = { };
+    // Least squares of point = centre + alongU du + alongV dv, with (du, dv)
+    // the texture coordinates from their mean
+    float m[2][2] = { };
+    VrVector3 bu, bv;
 
     for (uint32_t i = 0; i < count; i++) {
+      float du = uvs[i].x - screen.uv0.x;
+      float dv = uvs[i].y - screen.uv0.y;
       VrVector3 offset = positions[i] - screen.centre;
-      float row[3] = { vrDot(offset, e1), vrDot(offset, e2), 1.0f };
 
-      for (uint32_t r = 0; r < 3; r++) {
-        for (uint32_t c = 0; c < 3; c++)
-          m[r][c] += row[r] * row[c];
+      m[0][0] += du * du;
+      m[0][1] += du * dv;
+      m[1][1] += dv * dv;
+      bu = bu + offset * du;
+      bv = bv + offset * dv;
+    }
 
-        bu[r] += row[r] * uvs[i].x;
-        bv[r] += row[r] * uvs[i].y;
+    float det = m[0][0] * m[1][1] - m[0][1] * m[0][1];
+
+    if (!(std::abs(det) > 1e-20f))
+      return screen;
+
+    screen.alongU = (bu * m[1][1] - bv * m[0][1]) * (1.0f / det);
+    screen.alongV = (bv * m[0][0] - bu * m[0][1]) * (1.0f / det);
+
+    // Texture rows go down: seen from the front, u grows to the right and v
+    // downwards
+    if (!normalized(cross(screen.alongV, screen.alongU), screen.normal)
+     || !normalized(screen.alongU, screen.uAxis)
+     || !normalized(screen.alongV, screen.vAxis))
+      return screen;
+
+    // The dual basis of alongU and alongV in the plane
+    float uu = vrDot(screen.alongU, screen.alongU);
+    float uv = vrDot(screen.alongU, screen.alongV);
+    float vv = vrDot(screen.alongV, screen.alongV);
+    float gram = uu * vv - uv * uv;
+
+    if (!(gram > 1e-20f))
+      return screen;
+
+    screen.gradU = (screen.alongU * vv - screen.alongV * uv) * (1.0f / gram);
+    screen.gradV = (screen.alongV * uu - screen.alongU * uv) * (1.0f / gram);
+
+    // The glass's bulge above the plane, flat if the mesh has too few
+    // vertices to tell
+    float cm[6][6] = { };
+    float cb[6] = { };
+
+    for (uint32_t i = 0; i < count; i++) {
+      float h = vrDot(positions[i] - screen.centre, screen.normal);
+      screen.bulge = std::max(screen.bulge, std::abs(h));
+
+      float terms[6];
+      curveTerms(uvs[i].x - screen.uv0.x, uvs[i].y - screen.uv0.y, terms);
+
+      for (uint32_t r = 0; r < 6; r++) {
+        for (uint32_t c = 0; c < 6; c++)
+          cm[r][c] += terms[r] * terms[c];
+
+        cb[r] += terms[r] * h;
       }
     }
 
-    float ku[3], kv[3];
+    float curve[6] = { };
 
-    if (!solve(m, bu, ku) || !solve(m, bv, kv))
-      return screen;
+    if (count >= 6 && solve(cm, cb, curve)) {
+      for (uint32_t i = 0; i < 6; i++)
+        screen.curve[i] = std::isfinite(curve[i]) ? curve[i] : 0.0f;
+    }
 
-    screen.gradU = e1 * ku[0] + e2 * ku[1];
-    screen.gradV = e1 * kv[0] + e2 * kv[1];
-    screen.uv0   = { ku[2], kv[2] };
-
-    screen.valid = normalized(screen.gradU, screen.uAxis)
-                && normalized(screen.gradV, screen.vAxis);
+    screen.valid = true;
     return screen;
   }
 
@@ -143,6 +195,10 @@ namespace dxvk {
   VrTouchScreen vrFlipTouchScreen(const VrTouchScreen& screen) {
     VrTouchScreen flipped = screen;
     flipped.normal = screen.normal * -1.0f;
+
+    for (uint32_t i = 0; i < 6; i++)
+      flipped.curve[i] = -screen.curve[i];
+
     return flipped;
   }
 
@@ -154,13 +210,16 @@ namespace dxvk {
       return result;
 
     VrVector3 offset = point - screen.centre;
-    result.distance  = vrDot(offset, screen.normal);
-    result.surface   = point - screen.normal * result.distance;
+    float du = vrDot(screen.gradU, offset);
+    float dv = vrDot(screen.gradV, offset);
+    float h  = height(screen, du, dv);
 
-    VrVector3 across = result.surface - screen.centre;
-    result.uv.x  = screen.uv0.x + vrDot(screen.gradU, across);
-    result.uv.y  = screen.uv0.y + vrDot(screen.gradV, across);
-    result.plane = { vrDot(across, screen.uAxis), vrDot(across, screen.vAxis) };
+    VrVector3 across = screen.alongU * du + screen.alongV * dv;
+
+    result.distance = vrDot(offset, screen.normal) - h;
+    result.surface  = screen.centre + across + screen.normal * h;
+    result.uv       = { screen.uv0.x + du, screen.uv0.y + dv };
+    result.plane    = { vrDot(across, screen.uAxis), vrDot(across, screen.vAxis) };
 
     result.inside = result.uv.x >= screen.uvMin.x && result.uv.x <= screen.uvMax.x
                  && result.uv.y >= screen.uvMin.y && result.uv.y <= screen.uvMax.y;
@@ -182,8 +241,10 @@ namespace dxvk {
     if (input.padUsed)
       reset();
 
-    // The screen first: a button is only looked for away from it
-    bool onScreen = point.inside && point.distance >= -MaxDepth;
+    // The screen first: a button is only looked for away from it. A touch
+    // is kept however deep the finger goes, the drawn hand stays on the glass
+    bool touchingScreen = m_touching && m_held.kind == VrPipBoyAimKind::Screen;
+    bool onScreen = point.inside && (touchingScreen || point.distance >= -MaxDepth);
     bool onButton = !onScreen && point.button >= 0;
     float distance = onScreen ? point.distance : point.buttonDistance;
     bool near = (onScreen || onButton) && distance <= HoverDistance;
@@ -238,7 +299,7 @@ namespace dxvk {
     bool onHeld = m_held.kind == VrPipBoyAimKind::Screen ? onScreen : !onScreen && point.button == m_held.button;
 
     // Lifted: a tap clicks where it touched, a slide does not
-    if (!onHeld || distance > ReleaseDistance || distance < -MaxDepth) {
+    if (!onHeld || distance > ReleaseDistance) {
       m_touching = false;
 
       if (!m_scrolled) {

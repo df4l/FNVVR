@@ -838,6 +838,9 @@ namespace dxvk {
     VrPipBoyTouchGame* m_pipBoyTouch = nullptr;
     bool             m_pipBoyPointing = false;
     bool             m_loggedPointing = false;
+    // How far the glass last pushed the pointing hand back from its
+    // controller, in the drawing space
+    VrVector3        m_pipBoyRest;
 
     // Centre of the Pip-Boy's screen and the way it faces in the left
     // controller's frame
@@ -1302,9 +1305,9 @@ namespace dxvk {
 
     void placePipBoyArm(uint8_t* root, const VrVector3& shift, void* updateData);
 
-    void placePointingHand(uint8_t* root, uint8_t* rightHand, const VrVector3& shift, void* updateData);
+    void placePointingHand(uint8_t* root, uint8_t* rightHand, const VrVector3& shift, const VrVector3& rest, void* updateData);
 
-    void measurePipBoyTouch(uint8_t* root, uint8_t* rightHand);
+    VrVector3 measurePipBoyTouch(uint8_t* root, uint8_t* rightHand);
 
     void readFingerRigs(uint8_t* root);
 

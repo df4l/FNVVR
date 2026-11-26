@@ -19,9 +19,7 @@ namespace {
     const VrVector2 uvs[] = {
       { 0.0f, 0.0f }, { 1.0f, 0.0f },
       { 0.0f, 1.0f }, { 1.0f, 1.0f } };
-    // Counter-clockwise seen from +Z
-    const uint16_t triangles[] = { 0, 2, 1,  1, 2, 3 };
-    return vrFitTouchScreen(positions, uvs, 4, triangles, 2);
+    return vrFitTouchScreen(positions, uvs, 4);
   }
 
   VrPipBoyTouchPoint onScreen(float distance, float u, float v) {
@@ -76,17 +74,47 @@ TEST_CASE(touch_screen_fits_plane_and_texture) {
 TEST_CASE(touch_screen_rejects_degenerate_meshes) {
   const VrVector3 line[] = { { 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 2.0f, 0.0f, 0.0f } };
   const VrVector2 uvs[]  = { { 0.0f, 0.0f }, { 0.5f, 0.0f }, { 1.0f, 0.0f } };
-  const uint16_t triangle[] = { 0, 1, 2 };
-  CHECK(!vrFitTouchScreen(line, uvs, 3, triangle, 1).valid);
+  CHECK(!vrFitTouchScreen(line, uvs, 3).valid);
 
-  // Texture coordinates that do not vary
+  // Texture coordinates that do not vary, or only along one line
   const VrVector3 flat[] = { { 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f } };
   const VrVector2 same[] = { { 0.5f, 0.5f }, { 0.5f, 0.5f }, { 0.5f, 0.5f } };
-  CHECK(!vrFitTouchScreen(flat, same, 3, triangle, 1).valid);
+  CHECK(!vrFitTouchScreen(flat, same, 3).valid);
+  CHECK(!vrFitTouchScreen(flat, uvs, 3).valid);
 
-  // An index past the vertices
-  const uint16_t bad[] = { 0, 1, 7 };
-  CHECK(!vrFitTouchScreen(flat, uvs, 3, bad, 1).valid);
+  CHECK(!vrFitTouchScreen(flat, nullptr, 3).valid);
+}
+
+
+TEST_CASE(touch_screen_follows_the_glass_bulge) {
+  // A 3 x 3 grid on z = 1 - (x² + y²) / 16, as the flat screen above
+  VrVector3 positions[9];
+  VrVector2 uvs[9];
+
+  for (uint32_t i = 0; i < 9; i++) {
+    float x = -4.0f + 4.0f * float(i % 3);
+    float y =  3.0f - 3.0f * float(i / 3);
+    positions[i] = { x, y, 1.0f - (x * x + y * y) / 16.0f };
+    uvs[i]       = { (x + 4.0f) / 8.0f, (3.0f - y) / 6.0f };
+  }
+
+  VrTouchScreen screen = vrFitTouchScreen(positions, uvs, 9);
+  CHECK(screen.valid);
+  CHECK_NEAR(screen.normal.z, 1.0f, 1e-5);
+  CHECK(screen.bulge > 1.0f);
+
+  VrTouchScreenPoint point = vrPointOnScreen(screen, { 0.0f, 0.0f, 2.0f });
+  CHECK_NEAR(point.distance, 1.0f, 1e-4);
+  CHECK_NEAR(point.surface.z, 1.0f, 1e-4);
+
+  point = vrPointOnScreen(screen, { 4.0f, -3.0f, 1.0f });
+  CHECK_NEAR(point.distance, 1.5625f, 1e-4);
+  CHECK_NEAR(point.uv.x, 1.0f, 1e-5);
+  CHECK_NEAR(point.uv.y, 1.0f, 1e-5);
+
+  // The other side bulges the other way
+  point = vrPointOnScreen(vrFlipTouchScreen(screen), { 0.0f, 0.0f, 2.0f });
+  CHECK_NEAR(point.distance, -1.0f, 1e-4);
 }
 
 
@@ -141,6 +169,24 @@ TEST_CASE(touch_tap_clicks_where_it_touched) {
   state = step(touch, onScreen(0.03f, 0.61f, 0.2f));
   CHECK(!state.button);
   CHECK_NEAR(state.aim.surface.x, 0.61f, 1e-6);
+}
+
+
+TEST_CASE(touch_is_kept_while_pushed_deep) {
+  VrPipBoyTouch touch;
+  step(touch, onScreen(0.03f, 0.4f, 0.4f));
+  step(touch, onScreen(0.005f, 0.4f, 0.4f));
+
+  // The controller goes far through the glass, the drawn hand stays on it
+  VrPipBoyTouchState state = step(touch, onScreen(-0.12f, 0.4f, 0.4f));
+  CHECK(!state.button);
+  CHECK(state.aim.kind == VrPipBoyAimKind::Screen);
+
+  state = step(touch, onScreen(0.0f, 0.4f, 0.4f));
+  CHECK(!state.button);
+
+  state = step(touch, onScreen(0.03f, 0.4f, 0.4f));
+  CHECK(state.button);
 }
 
 
