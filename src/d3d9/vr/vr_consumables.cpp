@@ -13,6 +13,7 @@
 #include "vr_game_memory.h"
 #include "vr_game_nodes.h"
 #include "vr_game_sound.h"
+#include "vr_math.h"
 #include "vr_module_path.h"
 #include "vr_texts.h"
 #include "vr_weapon_drawn.h"
@@ -49,6 +50,14 @@ namespace dxvk {
 
     // How long the HUD says what was consumed
     constexpr float MessageSeconds = 2.0f;
+
+    // A spat cork: metres per second ahead and up, gravity, radians per
+    // second of tumble, seconds before it is hidden
+    constexpr float SpitSpeedAhead    = 2.5f;
+    constexpr float SpitSpeedUp       = 1.0f;
+    constexpr float SpitGravity       = 9.81f;
+    constexpr float SpitSpin          = 15.0f;
+    constexpr float SpitFlightSeconds = 0.6f;
 
     template<typename T>
     T& field(void* object, uintptr_t offset) {
@@ -244,7 +253,8 @@ namespace dxvk {
         return VrConsumablesEvent::Consumed;
       }
 
-      m_gesture.start(m_animation->gesture, m_cap != nullptr, m_animation->useSeconds());
+      m_gesture.start(m_animation->gesture, m_cap != nullptr, !m_animation->spitSounds.empty(), m_animation->useSeconds());
+      m_spitting = false;
       m_clockPlayed  = 0.0f;
       m_nextUseSound = 0;
       queueSounds(m_animation->drawSounds, 0.0f);
@@ -305,6 +315,10 @@ namespace dxvk {
         queueSounds(m_animation->capSounds, 0.0f);
         return VrConsumablesEvent::CapTaken;
 
+      case VrConsumeEvent::CapBitten:
+        biteCap();
+        return VrConsumablesEvent::CapBitten;
+
       case VrConsumeEvent::CapDropped:
         dropCap();
         break;
@@ -312,6 +326,9 @@ namespace dxvk {
       default:
         break;
     }
+
+    if (m_spitting)
+      flySpitCap(input.head, input.dt, toWorld);
 
     // The animation's sounds and parts follow the use clock
     float clock = m_gesture.clock();
@@ -508,6 +525,75 @@ namespace dxvk {
   }
 
 
+  void VrConsumables::biteCap() {
+    // The cork's mesh sits away from its origin, at the neck: its centre in
+    // the cork's own frame is what flies
+    const float* bound = field<const float*>(m_cap, VrGame::ObjectWorldBound);
+    float scale        = field<float>(m_cap, VrGame::ObjectWorldScale);
+    m_capMesh = bound && bound[3] > 0.0f && scale > 0.0f
+      ? vrTranspose(worldRotation(m_cap)) * (VrVector3 { bound[0], bound[1], bound[2] }
+          - field<VrVector3>(m_cap, VrGame::ObjectWorldTranslation)) * (1.0f / scale)
+      : VrVector3();
+
+    setCulled(m_cap, true);
+    queueSounds(m_animation->capSounds, 0.0f);
+    queueSounds(m_animation->spitSounds, 0.0f);
+
+    m_spitting   = true;
+    m_spitFlying = false;
+    m_spitTime   = 0.0f;
+    m_spitDelay  = m_animation->spitSounds.front().time;
+    Logger::info(str::format("VR: The teeth took the cap of '", m_item.name, "' off, it is spat out after ",
+      m_spitDelay, " s"));
+  }
+
+
+  void VrConsumables::flySpitCap(const VrGameCameraPose& head, float dt, const VrGameTransform& toWorld) {
+    constexpr float Unit = VrGameUnitsPerMetre;
+    m_spitTime += dt;
+
+    if (m_spitTime < m_spitDelay)
+      return;
+
+    float time = m_spitTime - m_spitDelay;
+
+    // Off the lips, ahead and a little up, as the spit sound plays
+    if (!m_spitFlying) {
+      m_spitFrom     = vrMouthPosition(head, m_zones);
+      m_spitVelocity = head.forward * (SpitSpeedAhead * Unit) + VrVector3 { 0.0f, 0.0f, SpitSpeedUp * Unit };
+      m_spitFlying   = true;
+      setCulled(m_cap, false);
+    }
+
+    if (time > SpitFlightSeconds) {
+      setCulled(m_cap, true);
+      m_spitting = false;
+      return;
+    }
+
+    VrVector3 at = m_spitFrom + m_spitVelocity * time
+      - VrVector3 { 0.0f, 0.0f, 0.5f * SpitGravity * Unit * time * time };
+
+    // The cork stays below the item, whose parent is read where the left
+    // hand is drawn; it tumbles as it flies
+    VrGameRotation parentRotation = toWorld.rotate * worldRotation(m_capParent);
+    VrVector3 parentPosition      = toWorld.rotate * field<VrVector3>(m_capParent, VrGame::ObjectWorldTranslation) + toWorld.translate;
+    float parentScale             = field<float>(m_capParent, VrGame::ObjectWorldScale);
+
+    if (parentScale <= 0.0f)
+      parentScale = 1.0f;
+
+    VrSequencePose local = m_animation->capOn;
+    local.rotate = vrTranspose(parentRotation)
+      * vrGameRotationFromQuaternion(vrQuaternionFromAxisAngle(head.right, -SpitSpin * time))
+      * parentRotation * local.rotate;
+
+    VrVector3 origin = at - parentRotation * (local.rotate * m_capMesh) * (parentScale * local.scale);
+    local.translate  = vrTranspose(parentRotation) * (origin - parentPosition) * (1.0f / parentScale);
+    setLocal(m_cap, local);
+  }
+
+
   void VrConsumables::poseParts(float time) {
     for (const auto& part : m_parts)
       setLocal(part.first, VrKfAnimation::sample(part.second->track, time));
@@ -551,6 +637,7 @@ namespace dxvk {
   void VrConsumables::finish(VrWeaponDrawn* drawn, VrWeaponHand* hand) {
     detachProp(hand);
     m_gesture.reset();
+    m_spitting = false;
 
     if (m_holstered && drawn)
       drawn->draw();

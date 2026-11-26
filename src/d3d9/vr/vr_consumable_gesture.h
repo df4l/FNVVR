@@ -30,7 +30,17 @@ namespace dxvk {
     float largestRadius  = 0.15f;
     /// How near the cap the right controller takes it
     float capReach       = 0.12f;
+    /// How near the mouth the cap comes to be bitten off
+    float biteReach      = 0.06f;
   };
+
+  /**
+   * \brief Where the mouth is, below and in front of the eyes
+   *
+   * \param [in] head Head pose in the game world (Z up)
+   * \param [in] zones The zones
+   */
+  VrVector3 vrMouthPosition(const VrGameCameraPose& head, const VrConsumeZones& zones);
 
   /**
    * \brief Whether an item is where it is consumed
@@ -73,6 +83,8 @@ namespace dxvk {
     None,
     /// The right hand took the cap off
     CapTaken,
+    /// The teeth took the cap off, it is spat out
+    CapBitten,
     /// The right hand let the cap go
     CapDropped,
     /// The item came where it is consumed, the use clock starts or goes on
@@ -88,7 +100,8 @@ namespace dxvk {
    *
    * The item comes into the left hand from the quick wheel and stays there
    * without holding a button. With a cap, the right hand takes it off first
-   * (grip near the cap). Then the item is brought where it is consumed and
+   * (grip near the cap), or the teeth for a cork the animation bites off
+   * (the cap brought to the mouth). Then the item is brought where it is consumed and
    * held there for the use clock's time; it may leave and come back, the
    * clock waits.
    */
@@ -99,10 +112,11 @@ namespace dxvk {
     /**
      * \brief Starts with an item in the left hand
      *
-     * \param [in] hasCap Whether the right hand takes a cap off first
+     * \param [in] hasCap Whether a cap is taken off first
+     * \param [in] capBite Whether the teeth may take it off too
      * \param [in] useSeconds Seconds the item stays where it is consumed
      */
-    void start(VrConsumeGesture gesture, bool hasCap, float useSeconds);
+    void start(VrConsumeGesture gesture, bool hasCap, bool capBite, float useSeconds);
 
     /**
      * \brief Ends the gesture without an event
@@ -137,6 +151,7 @@ namespace dxvk {
     VrConsumeGesture m_gesture    = VrConsumeGesture::Mouth;
     bool             m_active     = false;
     bool             m_hasCap     = false;
+    bool             m_capBite    = false;
     bool             m_capTaken   = false;
     bool             m_capHeld    = false;
     bool             m_otherDown  = false;

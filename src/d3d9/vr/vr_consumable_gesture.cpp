@@ -6,6 +6,12 @@
 
 namespace dxvk {
 
+  VrVector3 vrMouthPosition(const VrGameCameraPose& head, const VrConsumeZones& zones) {
+    constexpr float Unit = VrGameUnitsPerMetre;
+    return head.position - head.up * (zones.mouthBelow * Unit) + head.forward * (zones.mouthAhead * Unit);
+  }
+
+
   bool vrIsWhereConsumed(
           VrConsumeGesture      gesture,
     const VrGameCameraPose&     head,
@@ -19,8 +25,7 @@ namespace dxvk {
 
     switch (gesture) {
       case VrConsumeGesture::Mouth: {
-        VrVector3 mouth = head.position - head.up * (zones.mouthBelow * Unit) + head.forward * (zones.mouthAhead * Unit);
-        return vrLength(centre - mouth) <= bound + (zones.mouthReach + margin) * Unit;
+        return vrLength(centre - vrMouthPosition(head, zones)) <= bound + (zones.mouthReach + margin) * Unit;
       }
 
       case VrConsumeGesture::Body: {
@@ -55,11 +60,12 @@ namespace dxvk {
   }
 
 
-  void VrConsumeGestureState::start(VrConsumeGesture gesture, bool hasCap, float useSeconds) {
+  void VrConsumeGestureState::start(VrConsumeGesture gesture, bool hasCap, bool capBite, float useSeconds) {
     reset();
     m_gesture    = gesture;
     m_active     = true;
     m_hasCap     = hasCap;
+    m_capBite    = hasCap && capBite;
     m_useSeconds = std::max(useSeconds, 0.0f);
   }
 
@@ -81,6 +87,11 @@ namespace dxvk {
         m_capTaken = true;
         m_capHeld  = true;
         return VrConsumeEvent::CapTaken;
+      }
+
+      if (m_capBite && vrLength(input.cap - vrMouthPosition(input.head, zones)) <= zones.biteReach * VrGameUnitsPerMetre) {
+        m_capTaken = true;
+        return VrConsumeEvent::CapBitten;
       }
 
       return VrConsumeEvent::None;

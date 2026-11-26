@@ -1710,6 +1710,10 @@ namespace dxvk {
         m_backend.applyHaptic(VrHand::Right, QuickTickHaptic, QuickTickDuration);
         break;
 
+      case VrConsumablesEvent::CapBitten:
+        m_backend.applyHaptic(VrHand::Left, QuickTickHaptic, QuickTickDuration);
+        break;
+
       case VrConsumablesEvent::Consumed:
         m_backend.applyHaptic(VrHand::Left, QuickUsedHaptic, QuickUsedDuration);
         break;

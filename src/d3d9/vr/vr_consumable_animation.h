@@ -91,6 +91,9 @@ namespace dxvk {
     std::vector<VrConsumableSound> drawSounds;
     std::vector<VrConsumableSound> capSounds;
     std::vector<VrConsumableSound> useSounds;
+    /// A cork the animation pulls with the teeth is spat out: these sounds
+    /// follow the cap's when the cap is bitten off, timed as theirs
+    std::vector<VrConsumableSound> spitSounds;
     float                          useStart = 0.0f;
     float                          useEnd   = 0.0f;
     float                          useRate  = 1.0f;

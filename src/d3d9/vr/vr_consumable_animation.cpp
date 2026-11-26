@@ -327,11 +327,14 @@ namespace dxvk {
     float firstDraw = -1.0f;
     float firstCap  = -1.0f;
 
+    std::vector<VrConsumableSound> spits;
+
     for (const SoundKey& sound : sounds) {
-      // A cork pulled with the teeth is spat out; the right hand takes it
-      // off instead
-      if (result.hasCap && isSpit(sound.path))
+      // A cork pulled with the teeth is spat out, only if it is bitten off
+      if (result.hasCap && isSpit(sound.path)) {
+        spits.push_back({ sound.time, sound.path });
         continue;
+      }
 
       if (sound.time <= attachTime + DrawSlack) {
         if (firstDraw < 0.0f)
@@ -345,6 +348,11 @@ namespace dxvk {
         float time = std::max(0.0f, (sound.time - result.useStart) / result.useRate);
         result.useSounds.push_back({ time, sound.path });
       }
+    }
+
+    for (VrConsumableSound& spit : spits) {
+      spit.time = std::max(0.0f, spit.time - (firstCap < 0.0f ? capOff : firstCap));
+      result.spitSounds.push_back(spit);
     }
 
     return true;

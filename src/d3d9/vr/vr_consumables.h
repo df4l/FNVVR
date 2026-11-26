@@ -37,6 +37,8 @@ namespace dxvk {
     Started,
     /// The right hand took the cap off
     CapTaken,
+    /// The teeth took the cap off
+    CapBitten,
     /// The item was consumed
     Consumed,
     /// The item went back to the inventory: a menu opened, or the
@@ -54,7 +56,8 @@ namespace dxvk {
    * weapon is holstered meanwhile and drawn again after. The prop of the
    * animation (or the item's own model) is attached to the left hand bone,
    * the hand closed on it as the animation holds it; the right hand takes
-   * its cap off; the item is consumed once it stayed at the mouth, the body
+   * its cap off, or the teeth for a cork the animation spits out (then it
+   * flies off the mouth); the item is consumed once it stayed at the mouth, the body
    * or in front of the eyes for the animation's time: the quick wheel's own
    * use runs then, with the item's consume sound muted (the animation's
    * sounds play instead), and the HUD says what was consumed. The left
@@ -149,6 +152,15 @@ namespace dxvk {
     void*                             m_capHold     = nullptr;
     bool                              m_capHeld     = false;
     bool                              m_otherDown   = false;
+
+    /// A bitten cap: hidden in the mouth, then spat out
+    bool                              m_spitting    = false;
+    bool                              m_spitFlying  = false;
+    float                             m_spitTime    = 0.0f;
+    float                             m_spitDelay   = 0.0f;
+    VrVector3                         m_spitFrom;
+    VrVector3                         m_spitVelocity;
+    VrVector3                         m_capMesh;
     std::vector<std::pair<void*, const VrConsumablePart*>> m_parts;
 
     std::vector<PendingSound>         m_pending;
@@ -165,6 +177,10 @@ namespace dxvk {
     bool takeCap(VrWeaponHand* hand, const VrGameTransform& toWorld);
 
     void dropCap();
+
+    void biteCap();
+
+    void flySpitCap(const VrGameCameraPose& head, float dt, const VrGameTransform& toWorld);
 
     void poseParts(float time);
 

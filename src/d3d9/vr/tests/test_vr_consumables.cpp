@@ -180,6 +180,7 @@ namespace {
       { 0.07f, "ScriptLine: Goo1.AuxVarSetStr \"*_InJSP\" \"fx\\Hit\\Draw.wav\"" },
       { 0.1f,  "ScriptLine: Goo1.AuxVarSetFlt \"*_InjM\" 1" },
       { 0.8f,  "ScriptLine: Goo1.AuxVarSetStr \"*_InJSP\" \"fx\\Hit\\CapOff.wav\"" },
+      { 1.2f,  "ScriptLine: Goo1.AuxVarSetStr \"*_InJSP\" \"fx\\Hit\\CorkSpit.wav\"" },
       { 1.9f,  "ScriptLine: Goo1.AuxVarSetStr \"*_InJSP\" \"fx\\Hit\\Glug.wav\"" },
       { 2.2f,  "ScriptLine: Goo1.AuxVarSetFlt \"*_InJS\" 1" },
       { 2.9f,  "ScriptLine: Goo1.AuxVarSetFlt \"*_InjM\" 3" },
@@ -230,7 +231,7 @@ TEST_CASE(consumables_kf_tracks_and_keys_are_read) {
 
   CHECK(animation.read(file.data(), file.size()));
   CHECK(animation.tracks().size() == 4);
-  CHECK(animation.textKeys().size() == 9);
+  CHECK(animation.textKeys().size() == 10);
   CHECK_NEAR(animation.length(), 3.0f, 1e-5f);
 
   const VrKfTrack* cap = animation.track("##Cap_B42");
@@ -292,6 +293,8 @@ TEST_CASE(consumables_animation_gives_prop_cap_and_sounds) {
   CHECK(animation.drawSounds.size() == 1 && animation.drawSounds[0].path == "fx\\Hit\\Draw.wav");
   CHECK(animation.capSounds.size() == 1 && animation.capSounds[0].path == "fx\\Hit\\CapOff.wav");
   CHECK(animation.useSounds.size() == 2);
+  CHECK(animation.spitSounds.size() == 1 && animation.spitSounds[0].path == "fx\\Hit\\CorkSpit.wav");
+  CHECK_NEAR(animation.spitSounds[0].time, 0.4f, 1e-4f);
   CHECK(animation.useSounds[1].path.empty());
   CHECK_NEAR(animation.useSounds[0].time, 1.9f - animation.useStart, 1e-4f);
 }
@@ -346,7 +349,7 @@ TEST_CASE(consumables_zones_mouth_body_and_eyes) {
 TEST_CASE(consumables_gesture_takes_the_cap_then_counts_at_the_mouth) {
   VrConsumeZones zones;
   VrConsumeGestureState gesture;
-  gesture.start(VrConsumeGesture::Mouth, true, 1.0f);
+  gesture.start(VrConsumeGesture::Mouth, true, false, 1.0f);
 
   VrConsumeInput input;
   input.head      = northHead();
@@ -383,10 +386,42 @@ TEST_CASE(consumables_gesture_takes_the_cap_then_counts_at_the_mouth) {
 }
 
 
+TEST_CASE(consumables_gesture_bites_the_cork_off_at_the_mouth) {
+  VrConsumeZones zones;
+  VrConsumeInput input;
+  input.head      = northHead();
+  input.centre    = fromHead(0.0f, 0.10f, -0.25f);
+  input.radius    = 0.05f * VrGameUnitsPerMetre;
+  input.otherHand = fromHead(0.5f, 0.3f, -0.3f);
+  input.dt        = 0.25f;
+
+  // A cap the animation does not bite stays on at the mouth
+  VrConsumeGestureState gesture;
+  gesture.start(VrConsumeGesture::Mouth, true, false, 1.0f);
+  input.cap = fromHead(0.0f, 0.06f, -0.08f);
+  CHECK(gesture.update(input, zones) == VrConsumeEvent::None);
+  CHECK(gesture.capOn());
+
+  // A cork: away from the mouth nothing happens, at the lips it is bitten
+  gesture.start(VrConsumeGesture::Mouth, true, true, 1.0f);
+  input.cap = fromHead(0.0f, 0.25f, -0.20f);
+  CHECK(gesture.update(input, zones) == VrConsumeEvent::None);
+
+  input.cap = fromHead(0.0f, 0.07f, -0.09f);
+  CHECK(gesture.update(input, zones) == VrConsumeEvent::CapBitten);
+  CHECK(!gesture.capOn());
+  CHECK(!gesture.capInHand());
+
+  // Then the bottle counts at the mouth, no cap to drop
+  input.centre = fromHead(0.0f, 0.10f, -0.08f);
+  CHECK(gesture.update(input, zones) == VrConsumeEvent::Arrived);
+}
+
+
 TEST_CASE(consumables_gesture_waits_when_the_item_leaves) {
   VrConsumeZones zones;
   VrConsumeGestureState gesture;
-  gesture.start(VrConsumeGesture::Mouth, false, 0.5f);
+  gesture.start(VrConsumeGesture::Mouth, false, false, 0.5f);
 
   VrConsumeInput input;
   input.head      = northHead();
@@ -419,7 +454,7 @@ TEST_CASE(consumables_gesture_keeps_the_item_without_a_button) {
   input.dt     = 0.5f;
 
   // Away from the mouth with no button held, for longer than any wait
-  gesture.start(VrConsumeGesture::Mouth, false, 1.0f);
+  gesture.start(VrConsumeGesture::Mouth, false, false, 1.0f);
 
   for (int i = 0; i < 40; i++)
     CHECK(gesture.update(input, zones) == VrConsumeEvent::None);
