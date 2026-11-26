@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Hands
+
+- **Consumables by hand** (needs the animations, meshes and sounds of "Hit - B42 Inject Anim Pack - Season 1" in `Data`; without them nothing changes): an aid item picked on the quick wheel goes into the left hand. Bring it to the mouth to drink or eat it, to the thigh or the right forearm for a syringe, in front of the eyes for a magazine. A bottle's cap or cork is taken off with the right grip, or bitten off and spat out. A drawn weapon is put away meanwhile and comes back after.
+
 ### Fixes
 
 - **Dead Money terminals readable**: the desk terminals of the Puesta del Sol switching station glowed so bright behind their text that it could not be read. Their screen now glows as the base game's while you use them.
