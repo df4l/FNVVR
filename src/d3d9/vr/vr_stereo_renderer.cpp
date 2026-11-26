@@ -1077,6 +1077,7 @@ namespace dxvk {
     if (m_pipBoyTouch) {
       const VrPipBoyTouchState& touch = m_controls.pipBoyTouch();
       m_pipBoyTouch->setAim(touch.aim, touch.cursorActive);
+      m_pipBoyTouch->updateMap(touch.dragsMap, touch.zoom);
     }
 
     if (!m_terminal)

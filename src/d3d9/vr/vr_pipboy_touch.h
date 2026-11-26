@@ -100,6 +100,8 @@ namespace dxvk {
     int32_t   button = -1;
     /// Distance from the fingertip to that button's surface, in metres
     float     buttonDistance = 0.0f;
+    /// Whether the screen shows a map, which a slide drags
+    bool      map = false;
   };
 
   /**
@@ -141,8 +143,14 @@ namespace dxvk {
     VrVector2   cursor;
     /// Left mouse button
     bool        button = false;
+    /// Right mouse button
+    bool        rightButton = false;
     /// Mouse wheel movement, 120 per notch, positive scrolls up
     int32_t     wheel  = 0;
+    /// Whether the finger drags the map: the aim follows it
+    bool        dragsMap = false;
+    /// Zoom steps of the map, positive zooms in
+    int32_t     zoom   = 0;
     /// Where the game's pick looks
     VrPipBoyAim aim;
     /// Vibration of the right controller to start now, 0 for none
@@ -159,6 +167,12 @@ namespace dxvk {
    * and releasing the mouse button on two frames. Sliding along the screen
    * while touching scrolls, one wheel notch per \ref ScrollStep, as on a
    * phone. The tab buttons beside the screen are tapped the same way.
+   *
+   * A touch held still for \ref LongPressTime is the right mouse button,
+   * as on a phone's long press: the PC game drops the item under it and
+   * places a marker on the map. On a map, a slide drags the map instead of
+   * scrolling, and a slide that starts with a second tap, within
+   * \ref DoubleTapTime of the first, zooms it: down zooms in, up zooms out.
    *
    * The finger keeps the cursor until a gamepad menu button or the
    * navigation stick is used, so that the gamepad's highlight does not come
@@ -185,9 +199,20 @@ namespace dxvk {
     constexpr static float ScrollStep      = 0.008f;
     /// Mouse wheel movement of one notch
     constexpr static int32_t WheelNotch    = 120;
-    /// Vibration when the finger touches, and at each notch
+    /// A touch held still this long is a long press, in seconds
+    constexpr static float LongPressTime   = 0.6f;
+    /// ... if it never slid further than this, in metres
+    constexpr static float LongPressSlop   = 0.005f;
+    /// A touch this soon after a tap is a double tap, in seconds
+    constexpr static float DoubleTapTime   = 0.35f;
+    /// ... if it is this close to the tap, in metres
+    constexpr static float DoubleTapReach  = 0.025f;
+    /// Slide along the screen of one zoom step, in metres
+    constexpr static float ZoomStep        = 0.01f;
+    /// Vibration when the finger touches, at each notch and on a long press
     constexpr static float TouchHaptic     = 0.35f;
     constexpr static float NotchHaptic     = 0.15f;
+    constexpr static float LongPressHaptic = 0.6f;
 
     VrPipBoyTouchState update(const VrPipBoyTouchInput& input);
 
@@ -199,14 +224,27 @@ namespace dxvk {
     bool        m_scrolled  = false;
     /// Whether the button pressed by a tap is released this frame
     bool        m_click     = false;
+    /// Whether the touch was a long press, which a lift does not click,
+    /// and whether it slid too far to be one
+    bool        m_longPressed = false;
+    bool        m_slid        = false;
+    /// Whether the touch drags a map, and whether it zooms it
+    bool        m_dragsMap  = false;
+    bool        m_zooms     = false;
     VrVector2   m_cursor;
     VrPipBoyAim m_held;
-    float       m_touchStart   = 0.0f;
+    VrVector2   m_touchStart;
+    float       m_touchTime    = 0.0f;
     float       m_scrollAnchor = 0.0f;
+    /// Time since the last tap, and where it touched
+    float       m_sinceTap     = DoubleTapTime + 1.0f;
+    VrVector2   m_tapPoint;
 
     void reset();
 
-    void updateTouch(const VrPipBoyTouchPoint& point, bool onScreen, float distance, VrPipBoyTouchState& state);
+    void updateTouch(const VrPipBoyTouchPoint& point, bool onScreen, float distance, float dt, VrPipBoyTouchState& state);
+
+    void slide(const VrPipBoyTouchPoint& point, VrPipBoyTouchState& state);
 
   };
 

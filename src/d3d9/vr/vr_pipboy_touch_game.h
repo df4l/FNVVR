@@ -22,9 +22,13 @@ namespace dxvk {
    *
    * The fingertip is measured on the drawn model by VrWeaponHand, which
    * calls measure once both forearms are placed for RenderPipBoy. The
-   * screen stops the finger: once it comes from the front, the hand is
-   * drawn resting on the glass however far the controller goes through,
-   * until the finger is lifted or slides off the screen.
+   * screen and the tab buttons stop the finger: once it comes from the
+   * front, the hand is drawn resting on the glass or on the button however
+   * far the controller goes through, until the finger is lifted or slides
+   * off them.
+   *
+   * On the map, the finger drags and zooms it as the gamepad's sticks do
+   * (updateMap).
    *
    * Only used on the game's main thread.
    */
@@ -36,6 +40,8 @@ namespace dxvk {
     constexpr static float RayBack     = 0.05f;
     /// A tab button is looked for this far from the fingertip, in metres
     constexpr static float ButtonReach = 0.03f;
+    /// A tab button stops the finger this far past its sides, in metres
+    constexpr static float ButtonMargin = 0.004f;
     /// The finger's pad rests on the glass this far from the measured
     /// fingertip, in metres
     constexpr static float FingerPad   = 0.007f;
@@ -80,6 +86,15 @@ namespace dxvk {
     void setAim(const VrPipBoyAim& aim, bool active);
 
     /**
+     * \brief Drags and zooms the Pip-Boy's map
+     *
+     * \param [in] drags Whether the finger drags the map: it follows the
+     *    point of the game's pick, which follows the finger
+     * \param [in] zoom Zoom steps, positive zooms in
+     */
+    void updateMap(bool drags, int32_t zoom);
+
+    /**
      * \brief Measures the fingertip on the drawn Pip-Boy
      *
      * Called in RenderPipBoy's update of the first-person model, once the
@@ -99,6 +114,24 @@ namespace dxvk {
 
     VrPipBoyTouchGame() = default;
 
+    /// A tab button as a plate parallel to the screen, in the drawing
+    /// space: its top's height above the screen and its extent along the
+    /// screen's u and v directions from the screen's centre
+    struct ButtonPlate {
+      bool      valid  = false;
+      float     height = 0.0f;
+      VrVector2 min;
+      VrVector2 max;
+    };
+
+    /// The screen's frame in the drawing space, where buttons are measured
+    struct ScreenFrame {
+      VrVector3 centre;
+      VrVector3 normal;
+      VrVector3 u;
+      VrVector3 v;
+    };
+
     /// The screen fitted to its mesh, and what it was fitted to
     struct ScreenCache {
       const void*   data      = nullptr;
@@ -113,10 +146,18 @@ namespace dxvk {
     bool               m_loggedTouch  = false;
     bool               m_loggedRest   = false;
 
-    // Whether the finger was last in front of the glass, and whether the
-    // glass stops it
+    // Whether the finger was last in front of the glass or a button, and
+    // whether they stop it
     bool               m_inFront = false;
     bool               m_resting = false;
+    bool               m_loggedButtonRest = false;
+
+    // The map's calls were found; the map is dragged from the pick's point
+    bool               m_mapCalls = false;
+    bool               m_dragsMap = false;
+    double             m_mapMouseX = 0.0;
+    double             m_mapMouseY = 0.0;
+    bool               m_loggedMap = false;
 
     VrPipBoyTouchPoint m_point;
     bool               m_hasPoint = false;
@@ -140,6 +181,10 @@ namespace dxvk {
     uint32_t           m_pickTab = 0;
 
     const VrTouchScreen* screen(const uint8_t* geometry);
+
+    static ButtonPlate buttonPlate(const uint8_t* manager, uint32_t index, const ScreenFrame& frame);
+
+    static uint8_t* shownMap();
 
     static char __fastcall checkButtonsHook(
             void*                 pipBoy,

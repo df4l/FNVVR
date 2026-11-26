@@ -198,6 +198,7 @@ namespace dxvk {
       pointer.cursorActive = true;
       pointer.cursor       = m_touchState.cursor;
       pointer.button       = m_touchState.button;
+      pointer.rightButton  = m_touchState.rightButton;
       pointer.wheel        = m_touchState.wheel;
     }
 

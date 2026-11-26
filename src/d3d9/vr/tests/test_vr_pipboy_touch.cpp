@@ -32,6 +32,12 @@ namespace {
     return point;
   }
 
+  VrPipBoyTouchPoint onMap(float distance, float u, float v) {
+    VrPipBoyTouchPoint point = onScreen(distance, u, v);
+    point.map = true;
+    return point;
+  }
+
   VrPipBoyTouchState step(VrPipBoyTouch& touch, const VrPipBoyTouchPoint& point, bool padUsed = false) {
     VrPipBoyTouchInput input;
     input.point   = &point;
@@ -224,6 +230,115 @@ TEST_CASE(touch_slide_scrolls_without_clicking) {
   CHECK(!state.button);
   state = step(touch, onScreen(0.04f, 0.5f, 1.0f));
   CHECK(!state.button);
+}
+
+
+TEST_CASE(touch_long_press_is_the_right_button) {
+  VrPipBoyTouch touch;
+  step(touch, onScreen(0.03f, 0.3f, 0.3f));
+  step(touch, onScreen(0.0f, 0.3f, 0.3f));
+
+  uint32_t rightPresses = 0;
+  bool released = true;
+
+  for (uint32_t i = 0; i < 90; i++) {
+    VrPipBoyTouchState state = step(touch, onScreen(-0.005f, 0.3f, 0.3f));
+    CHECK(!state.button);
+
+    if (state.rightButton) {
+      CHECK(released);
+      CHECK(state.haptic > VrPipBoyTouch::TouchHaptic);
+      CHECK(state.aim.kind == VrPipBoyAimKind::Screen);
+      rightPresses++;
+    }
+
+    released = !state.rightButton;
+  }
+
+  CHECK(rightPresses == 1);
+
+  // Lifted after a long press: no click
+  VrPipBoyTouchState state = step(touch, onScreen(0.03f, 0.3f, 0.3f));
+  CHECK(!state.button);
+  state = step(touch, onScreen(0.03f, 0.3f, 0.3f));
+  CHECK(!state.button);
+}
+
+
+TEST_CASE(touch_slow_slide_is_no_long_press) {
+  VrPipBoyTouch touch;
+  step(touch, onScreen(0.03f, 0.5f, 0.5f));
+  step(touch, onScreen(0.0f, 0.5f, 0.5f));
+
+  // 1 cm in a second: neither a scroll yet nor a long press
+  for (uint32_t i = 1; i <= 90; i++) {
+    VrPipBoyTouchState state = step(touch, onScreen(0.0f, 0.5f, 0.5f + float(i) * 0.0017f));
+    CHECK(!state.rightButton);
+  }
+}
+
+
+TEST_CASE(touch_slide_drags_a_map) {
+  VrPipBoyTouch touch;
+  step(touch, onMap(0.03f, 0.5f, 0.5f));
+  step(touch, onMap(0.0f, 0.5f, 0.5f));
+
+  // Sideways: a list would not scroll, a map is dragged
+  bool dragged = false;
+
+  for (uint32_t i = 1; i <= 10; i++) {
+    float u = 0.5f + float(i) * 0.03f;
+    VrPipBoyTouchState state = step(touch, onMap(0.0f, u, 0.5f));
+    CHECK(state.wheel == 0);
+    CHECK(state.zoom == 0);
+    CHECK(!state.rightButton);
+
+    if (state.dragsMap) {
+      CHECK_NEAR(state.aim.surface.x, u, 1e-6);
+      dragged = true;
+    }
+  }
+
+  CHECK(dragged);
+
+  VrPipBoyTouchState state = step(touch, onMap(0.04f, 0.8f, 0.5f));
+  CHECK(!state.button);
+  CHECK(!state.dragsMap);
+}
+
+
+TEST_CASE(touch_double_tap_slide_zooms_a_map) {
+  VrPipBoyTouch touch;
+  step(touch, onMap(0.03f, 0.5f, 0.5f));
+  step(touch, onMap(0.0f, 0.5f, 0.5f));
+  CHECK(step(touch, onMap(0.03f, 0.5f, 0.5f)).button);
+  step(touch, onMap(0.03f, 0.5f, 0.5f));
+
+  // Touched again at once, then slid down
+  step(touch, onMap(0.0f, 0.5f, 0.5f));
+  int32_t zoom = 0;
+
+  for (uint32_t i = 1; i <= 10; i++) {
+    VrPipBoyTouchState state = step(touch, onMap(0.0f, 0.5f, 0.5f + float(i) * 0.05f));
+    CHECK(state.wheel == 0);
+    CHECK(!state.dragsMap);
+    zoom += state.zoom;
+  }
+
+  CHECK(zoom > 0);
+  CHECK(!step(touch, onMap(0.04f, 0.5f, 1.0f)).button);
+
+  // A slide long after a tap drags the map
+  for (uint32_t i = 0; i < 60; i++)
+    step(touch, onMap(0.04f, 0.5f, 0.5f));
+
+  step(touch, onMap(0.0f, 0.5f, 0.5f));
+  bool dragged = false;
+
+  for (uint32_t i = 1; i <= 10; i++)
+    dragged |= step(touch, onMap(0.0f, 0.5f, 0.5f + float(i) * 0.05f)).dragsMap;
+
+  CHECK(dragged);
 }
 
 

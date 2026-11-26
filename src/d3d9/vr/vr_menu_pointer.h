@@ -95,6 +95,8 @@ namespace dxvk {
     VrVector2 cursor;
     /// Left mouse button
     bool      button       = false;
+    /// Right mouse button
+    bool      rightButton  = false;
     /// Mouse wheel movement, 120 per notch, positive scrolls up
     int32_t   wheel        = 0;
     std::array<VrPointerBeam, VrHandCount> beams;

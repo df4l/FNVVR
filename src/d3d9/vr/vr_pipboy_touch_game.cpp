@@ -23,6 +23,10 @@ namespace dxvk {
       int32_t x, int32_t y, float* origin, float* direction, void* target);
     using GetPipBoyFn = uint8_t* (__cdecl*)();
     using GetRttiFn   = const void* (__fastcall*)(const void* object, void* unused);
+    using IsTopMenuFn = bool (__cdecl*)(uint32_t menuId);
+    using TileSetFloatFn = void (__thiscall*)(void* tile, uint32_t trait, float value, bool propagate);
+    using ZoomMapFn   = void (__thiscall*)(void* map, bool in, float factor);
+    using PipBoyMouseFn = double (__thiscall*)(void* interfaceManager);
 
     VrPipBoyTouchGame* g_touch = nullptr;
 
@@ -128,6 +132,81 @@ namespace dxvk {
   }
 
 
+  VrPipBoyTouchGame::ButtonPlate VrPipBoyTouchGame::buttonPlate(
+    const uint8_t*              manager,
+          uint32_t              index,
+    const ScreenFrame&          frame) {
+    ButtonPlate plate;
+
+    auto extend = [&] (const VrVector3& p) {
+      VrVector3 offset = p - frame.centre;
+      float height = vrDot(offset, frame.normal);
+      VrVector2 at = { vrDot(offset, frame.u), vrDot(offset, frame.v) };
+
+      if (!plate.valid) {
+        plate.valid  = true;
+        plate.height = height;
+        plate.min    = at;
+        plate.max    = at;
+      } else {
+        plate.height = std::max(plate.height, height);
+        plate.min    = { std::min(plate.min.x, at.x), std::min(plate.min.y, at.y) };
+        plate.max    = { std::max(plate.max.x, at.x), std::max(plate.max.y, at.y) };
+      }
+    };
+
+    auto button = field<const uint8_t*>(manager, VrGame::PipBoyTabButtons + 4 * index);
+
+    if (!button)
+      return plate;
+
+    auto data = isKindOf(button, VrGame::NiGeometryRtti)
+      ? field<const uint8_t*>(button, VrGame::GeometryModelData) : nullptr;
+    data = data && isKindOf(data, VrGame::NiGeometryDataRtti) ? data : nullptr;
+
+    auto positions = data ? field<const VrVector3*>(data, VrGame::GeometryDataVertices) : nullptr;
+    uint32_t vertices = data ? field<uint16_t>(data, VrGame::GeometryDataVertexCount) : 0;
+
+    if (positions && vertices) {
+      WorldFrame world = worldFrame(button);
+
+      for (uint32_t i = 0; i < vertices; i++)
+        extend(world.toWorld(positions[i]));
+
+      return plate;
+    }
+
+    // Without its vertices, the button's bound
+    VrVector3 centre;
+    float radius = 0.0f;
+
+    if (buttonBound(manager, index, centre, radius)) {
+      VrVector3 axes[] = { frame.normal, frame.u, frame.v };
+
+      for (const VrVector3& axis : axes) {
+        extend(centre + axis * radius);
+        extend(centre - axis * radius);
+      }
+    }
+
+    return plate;
+  }
+
+
+  uint8_t* VrPipBoyTouchGame::shownMap() {
+    if (!reinterpret_cast<IsTopMenuFn>(VrGame::IsTopMenu)(VrGame::MapMenuId))
+      return nullptr;
+
+    auto map = *reinterpret_cast<uint8_t* const*>(VrGame::MapMenuInstance);
+
+    if (!map || !field<void*>(map, VrGame::MapMenuMapTile))
+      return nullptr;
+
+    uint32_t page = field<uint32_t>(map, VrGame::MapMenuPage);
+    return page == VrGame::MapMenuLocalMapPage || page == VrGame::MapMenuWorldMapPage ? map : nullptr;
+  }
+
+
   std::unique_ptr<VrPipBoyTouchGame> VrPipBoyTouchGame::install() {
     if (g_touch)
       return nullptr;
@@ -151,7 +230,18 @@ namespace dxvk {
     std::unique_ptr<VrPipBoyTouchGame> touch(new VrPipBoyTouchGame());
     g_touch = touch.get();
 
+    touch->m_mapCalls =
+         VrGameMemory::matches(VrGame::IsTopMenu, VrGame::IsTopMenuPrologue, sizeof(VrGame::IsTopMenuPrologue))
+      && VrGameMemory::matches(VrGame::TileSetFloat, VrGame::TileSetFloatPrologue, sizeof(VrGame::TileSetFloatPrologue))
+      && VrGameMemory::matches(VrGame::MapMenuZoom, VrGame::MapMenuZoomPrologue, sizeof(VrGame::MapMenuZoomPrologue))
+      && VrGameMemory::matches(VrGame::PipBoyMouseX, VrGame::PipBoyMousePrologue, sizeof(VrGame::PipBoyMousePrologue))
+      && VrGameMemory::matches(VrGame::PipBoyMouseY, VrGame::PipBoyMousePrologue, sizeof(VrGame::PipBoyMousePrologue));
+
     Logger::info("VR: The Pip-Boy's screen can be touched with the right index finger");
+
+    if (!touch->m_mapCalls)
+      Logger::warn("VR: The Pip-Boy map's calls were not found, the finger scrolls it as a list");
+
     return touch;
   }
 
@@ -160,6 +250,7 @@ namespace dxvk {
     m_point         = m_framePoint;
     m_hasPoint      = m_frameMeasured;
     m_frameMeasured = false;
+    m_point.map     = m_hasPoint && m_mapCalls && shownMap();
     m_picked        = false;
     m_hasRay        = false;
   }
@@ -168,6 +259,58 @@ namespace dxvk {
   void VrPipBoyTouchGame::setAim(const VrPipBoyAim& aim, bool active) {
     m_aim    = aim;
     m_active = active;
+  }
+
+
+  void VrPipBoyTouchGame::updateMap(bool drags, int32_t zoom) {
+    uint8_t* map = m_mapCalls ? shownMap() : nullptr;
+    void* tile = map ? field<void*>(map, VrGame::MapMenuMapTile) : nullptr;
+    auto setFloat = reinterpret_cast<TileSetFloatFn>(VrGame::TileSetFloat);
+
+    if (!tile) {
+      m_dragsMap = false;
+      return;
+    }
+
+    for (int32_t i = 0; i < std::abs(zoom); i++)
+      reinterpret_cast<ZoomMapFn>(VrGame::MapMenuZoom)(map, zoom > 0, VrGame::MapMenuWheelZoom);
+
+    if (!drags) {
+      // As the gamepad's stick once it is let go
+      if (m_dragsMap) {
+        setFloat(tile, VrGame::TileDragStartX, -1.0f, true);
+        setFloat(tile, VrGame::TileDragStartY, -1.0f, true);
+      }
+
+      m_dragsMap = false;
+      return;
+    }
+
+    // The point of the last pick, in the map's units
+    void* interfaceManager = *reinterpret_cast<void* const*>(VrGame::InterfaceManager);
+
+    if (!interfaceManager)
+      return;
+
+    double x = reinterpret_cast<PipBoyMouseFn>(VrGame::PipBoyMouseX)(interfaceManager);
+    double y = reinterpret_cast<PipBoyMouseFn>(VrGame::PipBoyMouseY)(interfaceManager);
+
+    if (m_dragsMap) {
+      // The map moves with the finger, as the stick's drag does the other way
+      setFloat(tile, VrGame::TileDragStartX, 1.0f, true);
+      setFloat(tile, VrGame::TileDragStartY, 1.0f, true);
+      setFloat(tile, VrGame::TileDragDeltaX, float(x - m_mapMouseX), true);
+      setFloat(tile, VrGame::TileDragDeltaX, 0.0f, true);
+      setFloat(tile, VrGame::TileDragDeltaY, float(y - m_mapMouseY), true);
+      setFloat(tile, VrGame::TileDragDeltaY, 0.0f, true);
+    } else if (!m_loggedMap) {
+      Logger::info("VR: The right index finger drags the Pip-Boy's map");
+      m_loggedMap = true;
+    }
+
+    m_dragsMap  = true;
+    m_mapMouseX = x;
+    m_mapMouseY = y;
   }
 
 
@@ -204,51 +347,68 @@ namespace dxvk {
     point.plane    = { onScreen.plane.x * toMetres, onScreen.plane.y * toMetres };
     point.surface  = onScreen.surface;
 
-    // The nearest tab button within reach, from its bound
+    // The tab button the finger is over, within reach of its top
+    ScreenFrame screenFrame;
+    screenFrame.centre = centre;
+    screenFrame.normal = normal;
+    screenFrame.u      = frame.rotate * faced.uAxis;
+    screenFrame.v      = frame.rotate * faced.vAxis;
+
+    VrVector3 fromCentre = fingertip - centre;
+    VrVector2 fingerAt   = { vrDot(fromCentre, screenFrame.u), vrDot(fromCentre, screenFrame.v) };
+    float fingerHeight   = vrDot(fromCentre, normal);
+    float buttonMargin   = ButtonMargin * VrGameUnitsPerMetre;
+
     for (uint32_t i = 0; i < VrGame::PipBoyTabButtonCount; i++) {
-      VrVector3 buttonCentre;
-      float radius = 0.0f;
+      ButtonPlate plate = buttonPlate(manager, i, screenFrame);
 
-      if (!buttonBound(manager, i, buttonCentre, radius))
-        continue;
+      bool over = plate.valid
+        && fingerAt.x >= plate.min.x - buttonMargin && fingerAt.x <= plate.max.x + buttonMargin
+        && fingerAt.y >= plate.min.y - buttonMargin && fingerAt.y <= plate.max.y + buttonMargin;
 
-      float distance = (vrLength(fingertip - buttonCentre) - radius) / VrGameUnitsPerMetre;
+      float distance = (fingerHeight - plate.height) / VrGameUnitsPerMetre;
 
-      if (distance <= ButtonReach && (point.button < 0 || distance < point.buttonDistance)) {
+      if (over && distance <= ButtonReach && distance >= -RestDepth
+       && (point.button < 0 || distance < point.buttonDistance)) {
         point.button         = int32_t(i);
         point.buttonDistance = distance;
       }
     }
 
-    // The glass stops a finger that came from the front, until it is
-    // lifted or slides off the screen
+    // The glass and the buttons stop a finger that came from the front,
+    // until it is lifted or slides off them
     VrVector2 margin = {
       (faced.uvMax.x - faced.uvMin.x) * RestMargin,
       (faced.uvMax.y - faced.uvMin.y) * RestMargin };
 
-    bool over = point.uv.x >= faced.uvMin.x - margin.x && point.uv.x <= faced.uvMax.x + margin.x
-             && point.uv.y >= faced.uvMin.y - margin.y && point.uv.y <= faced.uvMax.y + margin.y
-             && point.distance >= -RestDepth;
+    bool overScreen = point.uv.x >= faced.uvMin.x - margin.x && point.uv.x <= faced.uvMax.x + margin.x
+                   && point.uv.y >= faced.uvMin.y - margin.y && point.uv.y <= faced.uvMax.y + margin.y
+                   && point.distance >= -RestDepth;
+    bool overButton = !overScreen && point.button >= 0;
+    bool over = overScreen || overButton;
+    float surfaceDistance = overScreen ? point.distance : point.buttonDistance;
 
     if (!m_frameMeasured) {
       m_framePoint    = point;
       m_frameMeasured = true;
 
-      bool front = point.distance >= FingerPad;
+      bool front = surfaceDistance >= FingerPad;
       m_resting  = over && !front && (m_resting || m_inFront);
       m_inFront  = over && front;
     }
 
     VrVector3 push;
 
-    if (m_resting && over && point.distance < FingerPad) {
-      float depth = FingerPad - point.distance;
+    if (m_resting && over && surfaceDistance < FingerPad) {
+      float depth = FingerPad - surfaceDistance;
       push = normal * (depth * VrGameUnitsPerMetre);
 
-      if (!m_loggedRest) {
-        Logger::info(str::format("VR: The right index finger rests on the Pip-Boy's screen, the hand drawn ",
-          depth, " m in front of its controller"));
-        m_loggedRest = true;
+      bool& logged = overScreen ? m_loggedRest : m_loggedButtonRest;
+
+      if (!logged) {
+        Logger::info(str::format("VR: The right index finger rests on the Pip-Boy's ",
+          overScreen ? "screen" : "tab button", ", the hand drawn ", depth, " m in front of its controller"));
+        logged = true;
       }
     }
 

@@ -2070,6 +2070,38 @@ namespace dxvk {
     constexpr uintptr_t GeometryDataTexCoords       = 0x2C;
 
     /**
+     * The Pip-Boy's map, dragged and zoomed by the finger, see
+     * findings/pipboy.md §9.2. MapMenu is menu 0x3FF (MapMenu::DoGamepad
+     * checks it with IsTopMenu), its instance MapMenu::pMe; uiCurrentPage
+     * +0x80 is 32 on the local map and 33 on the world map, pMapTile +0x84
+     * the map image's tile. The gamepad's stick drags the map in
+     * MapMenu::DoGamepad (0x00799790): Tile::Set (TileSetFloat) of
+     * DragStartX/Y to 1, then Tile::Poke (set, then set to 0) of
+     * DragDeltaX/Y by the move in menu units, which the map's x and y add
+     * (menus/main/map_menu.xml); DragStartX/Y back to -1 once it stops.
+     * MapMenu::ZoomMap (__thiscall: bool in, float factor) zooms, by 1.1 per
+     * wheel notch (MapMenu::DoWheelMove 0x0079C530).
+     * InterfaceManager::GetPipboyMouseX/Y (__thiscall, return a double) give
+     * the point of the Pip-Boy's pick in menu units. ida-gog.
+     */
+    constexpr uint32_t  MapMenuId                = 0x3FF;
+    constexpr uintptr_t MapMenuInstance          = 0x011DA368;
+    constexpr uintptr_t MapMenuPage              = 0x80;
+    constexpr uintptr_t MapMenuMapTile           = 0x84;
+    constexpr uint32_t  MapMenuLocalMapPage      = 32;
+    constexpr uint32_t  MapMenuWorldMapPage      = 33;
+    constexpr uint32_t  TileDragStartX           = 0xFEA;
+    constexpr uint32_t  TileDragStartY           = 0xFEB;
+    constexpr uint32_t  TileDragDeltaX           = 0xFEE;
+    constexpr uint32_t  TileDragDeltaY           = 0xFEF;
+    constexpr uintptr_t MapMenuZoom              = 0x0079C5A0;
+    constexpr uint8_t   MapMenuZoomPrologue[]    = { 0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x48, 0x01, 0x00, 0x00, 0x56, 0x89, 0x4D };
+    constexpr float     MapMenuWheelZoom         = 1.1f;
+    constexpr uintptr_t PipBoyMouseX             = 0x007697F0;
+    constexpr uintptr_t PipBoyMouseY             = 0x007983C0;
+    constexpr uint8_t   PipBoyMousePrologue[]    = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x14, 0x89, 0x4D, 0xFC, 0x8B, 0x45, 0xFC };
+
+    /**
      * Calls of TESRenderer::GetScreenWidth (GameScreenWidth) where the game
      * derives a shape from the window, for a 4:3 or wider window. ida-gog.
      * - ScreenShot::TakeSaveGameScreenShot (0x00878F60, every save through

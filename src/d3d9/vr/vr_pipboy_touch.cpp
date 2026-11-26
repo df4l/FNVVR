@@ -13,6 +13,10 @@ namespace dxvk {
       return { a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x };
     }
 
+    float gap(const VrVector2& a, const VrVector2& b) {
+      return std::hypot(a.x - b.x, a.y - b.y);
+    }
+
     bool normalized(const VrVector3& v, VrVector3& unit) {
       float length = vrLength(v);
 
@@ -236,6 +240,7 @@ namespace dxvk {
     }
 
     const VrPipBoyTouchPoint& point = *input.point;
+    m_sinceTap = std::min(m_sinceTap + input.dt, DoubleTapTime + 1.0f);
 
     // The gamepad takes the menus back, and drops a touch on the way
     if (input.padUsed)
@@ -254,7 +259,7 @@ namespace dxvk {
       state.aim = m_held;
       m_click   = false;
     } else if (m_touching || (near && m_hovering && distance <= TouchDistance && distance >= -MaxDepth)) {
-      updateTouch(point, onScreen, distance, state);
+      updateTouch(point, onScreen, distance, input.dt, state);
     } else if (near) {
       state.aim.kind = onScreen ? VrPipBoyAimKind::Screen : VrPipBoyAimKind::Button;
       state.aim.surface = point.surface;
@@ -279,32 +284,45 @@ namespace dxvk {
     const VrPipBoyTouchPoint&   point,
           bool                  onScreen,
           float                 distance,
+          float                 dt,
           VrPipBoyTouchState&   state) {
     if (!m_touching) {
       m_touching     = true;
       m_scrolled     = false;
-      m_touchStart   = point.plane.y;
+      m_longPressed  = false;
+      m_slid         = false;
+      m_touchStart   = point.plane;
+      m_touchTime    = 0.0f;
       m_scrollAnchor = point.plane.y;
 
       m_held.kind    = onScreen ? VrPipBoyAimKind::Screen : VrPipBoyAimKind::Button;
       m_held.surface = point.surface;
       m_held.button  = onScreen ? -1 : point.button;
 
+      // A second tap on a map zooms it as it slides
+      m_dragsMap = onScreen && point.map;
+      m_zooms    = m_dragsMap && m_sinceTap <= DoubleTapTime
+                && gap(point.plane, m_tapPoint) <= DoubleTapReach;
+
       if (onScreen)
         m_cursor = point.uv;
 
       state.haptic = TouchHaptic;
+    } else {
+      m_touchTime += dt;
     }
 
     bool onHeld = m_held.kind == VrPipBoyAimKind::Screen ? onScreen : !onScreen && point.button == m_held.button;
 
-    // Lifted: a tap clicks where it touched, a slide does not
+    // Lifted: a tap clicks where it touched, a slide or a long press does not
     if (!onHeld || distance > ReleaseDistance) {
       m_touching = false;
 
-      if (!m_scrolled) {
+      if (!m_scrolled && !m_longPressed) {
         m_click      = true;
         state.button = true;
+        m_sinceTap   = 0.0f;
+        m_tapPoint   = m_touchStart;
       }
 
       state.aim = m_held;
@@ -313,28 +331,62 @@ namespace dxvk {
 
     state.aim = m_held;
 
-    if (m_held.kind != VrPipBoyAimKind::Screen)
+    if (m_held.kind != VrPipBoyAimKind::Screen || m_longPressed)
       return;
 
-    // A finger sliding down drags the list down, as on a phone: the lines
-    // above come into view, which the game calls scrolling up
-    if (!m_scrolled && std::abs(point.plane.y - m_touchStart) > ScrollStart)
+    // A map is dragged any way, a list only scrolls up and down
+    float moved = m_dragsMap ? gap(point.plane, m_touchStart) : std::abs(point.plane.y - m_touchStart.y);
+
+    m_slid = m_slid || gap(point.plane, m_touchStart) > LongPressSlop;
+
+    if (!m_scrolled && moved > ScrollStart)
       m_scrolled = true;
 
-    if (!m_scrolled)
+    if (m_scrolled) {
+      slide(point, state);
+    } else if (!m_slid && m_touchTime >= LongPressTime) {
+      // Held still: the right mouse button, pressed on this frame and
+      // released on the next
+      m_longPressed     = true;
+      state.rightButton = true;
+      state.haptic      = LongPressHaptic;
+    }
+  }
+
+
+  void VrPipBoyTouch::slide(
+    const VrPipBoyTouchPoint&   point,
+          VrPipBoyTouchState&   state) {
+    if (m_dragsMap && !m_zooms) {
+      // The game's pick follows the finger, the map follows the pick
+      m_held.surface = point.surface;
+      state.aim      = m_held;
+      state.dragsMap = true;
       return;
-
-    while (point.plane.y - m_scrollAnchor >= ScrollStep) {
-      state.wheel    += WheelNotch;
-      m_scrollAnchor += ScrollStep;
     }
 
-    while (point.plane.y - m_scrollAnchor <= -ScrollStep) {
-      state.wheel    -= WheelNotch;
-      m_scrollAnchor -= ScrollStep;
+    // A finger sliding down drags a list down, as on a phone: the lines
+    // above come into view, which the game calls scrolling up. On a map it
+    // zooms in.
+    float step = m_zooms ? ZoomStep : ScrollStep;
+    int32_t notches = 0;
+
+    while (point.plane.y - m_scrollAnchor >= step) {
+      notches++;
+      m_scrollAnchor += step;
     }
 
-    if (state.wheel)
+    while (point.plane.y - m_scrollAnchor <= -step) {
+      notches--;
+      m_scrollAnchor -= step;
+    }
+
+    if (m_zooms)
+      state.zoom  += notches;
+    else
+      state.wheel += notches * WheelNotch;
+
+    if (notches)
       state.haptic = std::max(state.haptic, NotchHaptic);
   }
 
@@ -345,6 +397,9 @@ namespace dxvk {
     m_touching = false;
     m_scrolled = false;
     m_click    = false;
+    m_longPressed = false;
+    m_dragsMap = false;
+    m_zooms    = false;
     m_held     = VrPipBoyAim();
   }
 

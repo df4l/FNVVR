@@ -23,6 +23,10 @@ namespace dxvk {
 
     VrPointerState g_state;
 
+    /// Whether the pointer pressed the right button, which only the touch
+    /// of the Pip-Boy does: otherwise the button is left to the mouse
+    bool g_rightButtonDown = false;
+
     uintptr_t g_pluginMouseWheel = 0;
 
     /// What the poll call reached before us, the game's function or a plugin's hook
@@ -46,6 +50,11 @@ namespace dxvk {
 
       uint32_t left = field<int32_t>(input, VrGame::InputMouseSwapped) ? 1 : 0;
       field<uint8_t>(input, VrGame::InputMouseButtons + left) = g_state.button ? ButtonDown : 0;
+
+      if (g_state.rightButton || g_rightButtonDown)
+        field<uint8_t>(input, VrGame::InputMouseButtons + 1 - left) = g_state.rightButton ? ButtonDown : 0;
+
+      g_rightButtonDown = g_state.rightButton;
     }
 
     void __fastcall updateCursorHook(void* interfaceManager, void* unused) {
