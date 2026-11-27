@@ -49,6 +49,9 @@ namespace dxvk {
     // Longest wait for the runtime to start the launcher's session
     constexpr double               PanelSessionStartSeconds = 5.0;
 
+    // Time between tries at bringing a lost session back
+    constexpr double               RecoverySeconds      = 2.0;
+
     // Seconds of frames in each frame statistics line
     constexpr double               StatsPeriodSeconds   = 10.0;
 
@@ -186,12 +189,7 @@ namespace dxvk {
 
   VrOpenXrBackend::~VrOpenXrBackend() {
     endSession();
-
-    // The actions belong to the instance
-    m_input = nullptr;
-
-    if (m_instance != XR_NULL_HANDLE && m_xr->destroyInstance)
-      m_xr->destroyInstance(m_instance);
+    closeInstance();
   }
 
 
@@ -215,8 +213,26 @@ namespace dxvk {
     if (XR_SUCCEEDED(result))
       return true;
 
-    Logger::err(str::format("VR: OpenXR ", what, " failed: ", resultString(result)));
+    logFailure(str::format("VR: OpenXR ", what, " failed: ", resultString(result)));
     return false;
+  }
+
+
+  void VrOpenXrBackend::logFailure(const std::string& message) const {
+    std::lock_guard<dxvk::mutex> lock(m_failureMutex);
+
+    switch (m_failures.count(message)) {
+      case VrXrFailureVerdict::Log:
+        Logger::err(message);
+        break;
+
+      case VrXrFailureVerdict::LogLast:
+        Logger::err(str::format(message, " (repeated, no longer logged until the next session)"));
+        break;
+
+      case VrXrFailureVerdict::Skip:
+        break;
+    }
   }
 
 
@@ -232,8 +248,22 @@ namespace dxvk {
 
     Logger::info(str::format("VR: Loaded ", str::fromws(m_loader->path().c_str())));
 
-    if (!createInstance() || !findSystem())
+    m_runtimeReady = openInstance();
+    return m_runtimeReady;
+  }
+
+
+  bool VrOpenXrBackend::openInstance() {
+    if (m_instance == XR_NULL_HANDLE && !createInstance()) {
+      closeInstance();
       return false;
+    }
+
+    if (!findSystem())
+      return false;
+
+    if (m_instanceReady)
+      return true;
 
     logViewConfiguration();
 
@@ -250,8 +280,21 @@ namespace dxvk {
     Logger::info(str::format("VR: OpenXR Vulkan API versions: min ", xrVersionString(requirements.minApiVersionSupported),
       ", max ", xrVersionString(requirements.maxApiVersionSupported)));
 
-    m_runtimeReady = true;
+    m_instanceReady = true;
     return true;
+  }
+
+
+  void VrOpenXrBackend::closeInstance() {
+    // The actions belong to the instance
+    m_input = nullptr;
+
+    if (m_instance != XR_NULL_HANDLE && m_xr->destroyInstance)
+      m_xr->destroyInstance(m_instance);
+
+    m_instance      = XR_NULL_HANDLE;
+    m_system        = XR_NULL_SYSTEM_ID;
+    m_instanceReady = false;
   }
 
 
@@ -341,7 +384,9 @@ namespace dxvk {
     XrResult result = m_xr->getSystem(m_instance, &info, &m_system);
 
     if (result == XR_ERROR_FORM_FACTOR_UNAVAILABLE) {
-      Logger::err("VR: The OpenXR runtime sees no headset: connect it before starting the game");
+      logFailure(m_recoverable
+        ? "VR: The OpenXR runtime sees no headset, VR comes back when it does"
+        : "VR: The OpenXR runtime sees no headset: connect it before starting the game");
       return false;
     }
 
@@ -498,6 +543,14 @@ namespace dxvk {
     if (m_input && !m_input->attach(m_session))
       m_input = nullptr;
 
+    { std::lock_guard<dxvk::mutex> lock(m_failureMutex);
+      m_failures.clear();
+    }
+
+    // A session could not be created on a lost instance
+    m_lost        = false;
+    m_recoverable = m_panelDevice == nullptr;
+
     Logger::info("VR: OpenXR session created, waiting for the runtime to start it");
 
     // The runtime usually tells the session to start right away
@@ -580,6 +633,7 @@ namespace dxvk {
     // Destroying the session ends it, whatever state it is in. No frame is
     // closed: the device and its queue may be gone already.
     destroySession();
+    m_recoverable = false;
 
     // The panel session's device outlives the swapchains made on it
     m_panelDevice = nullptr;
@@ -636,6 +690,49 @@ namespace dxvk {
   }
 
 
+  void VrOpenXrBackend::loseSession(bool instance) {
+    m_lost          = true;
+    m_instanceLost |= instance;
+  }
+
+
+  void VrOpenXrBackend::recover() {
+    if (!m_recoverable)
+      return;
+
+    double now = steadySeconds();
+
+    if (now < m_nextRecovery)
+      return;
+
+    m_nextRecovery = now + RecoverySeconds;
+
+    if (m_session != XR_NULL_HANDLE) {
+      // The copies into the swapchains run on the game's queue
+      if (m_binding.lockQueue)
+        m_binding.lockQueue();
+
+      destroySession();
+
+      if (m_binding.releaseQueue)
+        m_binding.releaseQueue();
+
+      Logger::info("VR: The lost OpenXR session is destroyed, VR comes back when the runtime does");
+    }
+
+    if (m_instanceLost) {
+      closeInstance();
+      m_instanceLost = false;
+    }
+
+    // Fails quietly, a few log lines at most, while the headset is away
+    if (!openInstance() || !beginSession(m_binding))
+      return;
+
+    Logger::info("VR: OpenXR session made again after its loss");
+  }
+
+
   VrSessionState VrOpenXrBackend::sessionState() const {
     if (m_lost)
       return VrSessionState::Lost;
@@ -654,8 +751,9 @@ namespace dxvk {
 
   void VrOpenXrBackend::pollEvents() {
     XrEventDataBuffer event = { XR_TYPE_EVENT_DATA_BUFFER };
+    XrResult result;
 
-    while (m_xr->pollEvent(m_instance, &event) == XR_SUCCESS) {
+    while ((result = m_xr->pollEvent(m_instance, &event)) == XR_SUCCESS) {
       switch (event.type) {
         case XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED: {
           auto& changed = reinterpret_cast<const XrEventDataSessionStateChanged&>(event);
@@ -665,8 +763,8 @@ namespace dxvk {
         } break;
 
         case XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING:
-          Logger::warn("VR: The OpenXR runtime is going away, VR stops");
-          m_lost = true;
+          Logger::warn("VR: The OpenXR runtime is going away, VR stops until it is back");
+          loseSession(true);
           break;
 
         case XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING:
@@ -684,6 +782,10 @@ namespace dxvk {
 
       event = { XR_TYPE_EVENT_DATA_BUFFER };
     }
+
+    // The runtime went away without telling
+    if (result == XR_ERROR_INSTANCE_LOST)
+      loseSession(true);
   }
 
 
@@ -719,8 +821,8 @@ namespace dxvk {
         break;
 
       case XR_SESSION_STATE_LOSS_PENDING:
-        Logger::warn("VR: The OpenXR session is being lost, VR stops");
-        m_lost = true;
+        Logger::warn("VR: The OpenXR session is being lost, VR stops until it is back");
+        loseSession(false);
         break;
 
       default:
@@ -744,6 +846,9 @@ namespace dxvk {
 
   VrFrameTiming VrOpenXrBackend::waitFrame() {
     VrFrameTiming timing;
+
+    if (m_lost)
+      recover();
 
     if (m_session == XR_NULL_HANDLE || m_lost)
       return timing;
@@ -770,6 +875,9 @@ namespace dxvk {
     m_frameState = { XR_TYPE_FRAME_STATE };
     XrResult result = m_xr->waitFrame(m_session, nullptr, &m_frameState);
 
+    if (result == XR_ERROR_SESSION_LOST || result == XR_ERROR_INSTANCE_LOST)
+      loseSession(result == XR_ERROR_INSTANCE_LOST);
+
     if (!check(result, "xrWaitFrame"))
       return timing;
 
@@ -777,7 +885,7 @@ namespace dxvk {
     measureFrame(waitStart, steadySeconds());
 
     if (result == XR_SESSION_LOSS_PENDING)
-      m_lost = true;
+      loseSession(false);
 
     if (!m_loggedWait) {
       Logger::info(str::format("VR: First OpenXR frame, display period ",

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased (since v1.1.0 `afeeaa18`)
+
+### Fixes (reported by joschi127, issue #18)
+
+- **Laser clicks without a mouse**: with no mouse connected when the game started, the laser could point at menus but its clicks did nothing on list rows and other entries that act on release. Fix by joschi127.
+- **OpenXR comes back after a lost session**: a streamed headset going to sleep, a dropped link or a restarted streamer no longer leaves VR off until the game is restarted; the session is made again once the runtime sees the headset.
+- **Occlusion culling**: a rare crash after a long time in menus or loading screens (an answer read for an object already forgotten) can no longer happen.
+- **OpenXR log**: a call that keeps failing is logged three times, not on every frame.
+
 ## v1.1.0 (2026-11-26, since v1.0.0 `011a5e11`)
 
 ### Hands

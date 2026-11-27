@@ -396,6 +396,16 @@ namespace dxvk {
       logStats();
 
     if (m_frame % PruneFrames == 0) {
+      // A reset record stays in its eye's list until that eye's next
+      // readAnswers, which may come long after when the world is not drawn
+      // (menus, loading screens): drop it now, before it can be freed
+      for (uint32_t eye = 0; eye < EyeCount; eye++) {
+        std::vector<Record*>& pending = m_pending[eye];
+
+        pending.erase(std::remove_if(pending.begin(), pending.end(),
+          [eye] (const Record* r) { return !r->eyes[eye].pending; }), pending.end());
+      }
+
       for (auto i = m_records.begin(); i != m_records.end(); ) {
         Record& r = i->second;
         bool pending = r.eyes[0].pending || r.eyes[1].pending;
