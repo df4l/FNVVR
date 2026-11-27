@@ -177,6 +177,16 @@ namespace dxvk {
      */
     bool initializeRuntime();
 
+    /**
+     * \brief Creates the instance if there is none and finds the headset
+     *
+     * The input and the Vulkan requirements are set up once per instance.
+     * Called again to bring VR back after a lost session.
+     */
+    bool openInstance();
+
+    void closeInstance();
+
     bool createInstance();
 
     bool findSystem();
@@ -186,6 +196,19 @@ namespace dxvk {
     bool createSpaces();
 
     void destroySession();
+
+    /**
+     * \brief Marks the session lost, and the instance with it if it is
+     */
+    void loseSession(bool instance);
+
+    /**
+     * \brief Tries to bring a lost game session back, a few times a second at most
+     *
+     * The session is destroyed, the instance too when it was lost, and
+     * both are made again once the runtime sees the headset.
+     */
+    void recover();
 
     /**
      * \brief Handles the runtime's events, starting and ending the session
@@ -256,6 +279,11 @@ namespace dxvk {
 
     bool check(XrResult result, const char* what) const;
 
+    /**
+     * \brief Logs an error, a few times only if it repeats
+     */
+    void logFailure(const std::string& message) const;
+
     std::unique_ptr<VrOpenXrLoader>   m_loader;
     std::unique_ptr<Functions>        m_xr;
     std::unique_ptr<VrXrImageCopy>    m_copy;
@@ -265,6 +293,8 @@ namespace dxvk {
 
     bool                              m_initialized    = false;
     bool                              m_runtimeReady   = false;
+    /// The input and the Vulkan requirements are set up for this instance
+    bool                              m_instanceReady  = false;
     bool                              m_localFloor     = false;
     bool                              m_eyeGazeExtension = false;
     /// The headset has an eye tracker the runtime gives the gaze of
@@ -286,6 +316,12 @@ namespace dxvk {
     /// xrBeginSession was called, and xrEndSession not yet
     bool                              m_running        = false;
     bool                              m_lost           = false;
+    bool                              m_instanceLost   = false;
+    /// The session is the game's: a lost one is made again, the
+    /// launcher's ends with its loop
+    bool                              m_recoverable    = false;
+    /// Earliest time of the next try at bringing a lost session back
+    double                            m_nextRecovery   = 0.0;
 
     XrFrameState                      m_frameState     = { XR_TYPE_FRAME_STATE };
     /// xrWaitFrame returned a frame that xrBeginFrame did not start yet
