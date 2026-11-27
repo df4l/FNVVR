@@ -11,6 +11,7 @@
 #include "vr_backend.h"
 #include "vr_frame_stats.h"
 #include "vr_openxr_convert.h"
+#include "vr_openxr_failure_log.h"
 
 namespace dxvk {
 
@@ -307,6 +308,10 @@ namespace dxvk {
     Swapchain                         m_fadeImage;
     /// Opacity the fade's image was last filled with, or -1
     float                             m_fadeFilled     = -1.0f;
+
+    /// Failed calls are logged from the game, launcher and submission threads
+    mutable dxvk::mutex               m_failureMutex;
+    mutable VrXrFailureLog            m_failures;
 
     FrameClock                        m_frameClock;
     VrFrameStats                      m_stats          = VrFrameStats(1, 0.0);

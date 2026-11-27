@@ -215,7 +215,22 @@ namespace dxvk {
     if (XR_SUCCEEDED(result))
       return true;
 
-    Logger::err(str::format("VR: OpenXR ", what, " failed: ", resultString(result)));
+    std::string message = str::format("VR: OpenXR ", what, " failed: ", resultString(result));
+    std::lock_guard<dxvk::mutex> lock(m_failureMutex);
+
+    switch (m_failures.count(message)) {
+      case VrXrFailureVerdict::Log:
+        Logger::err(message);
+        break;
+
+      case VrXrFailureVerdict::LogLast:
+        Logger::err(str::format(message, " (repeated, no longer logged until the next session)"));
+        break;
+
+      case VrXrFailureVerdict::Skip:
+        break;
+    }
+
     return false;
   }
 
@@ -497,6 +512,10 @@ namespace dxvk {
 
     if (m_input && !m_input->attach(m_session))
       m_input = nullptr;
+
+    { std::lock_guard<dxvk::mutex> lock(m_failureMutex);
+      m_failures.clear();
+    }
 
     Logger::info("VR: OpenXR session created, waiting for the runtime to start it");
 
