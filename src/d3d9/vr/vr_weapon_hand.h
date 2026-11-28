@@ -838,6 +838,8 @@ namespace dxvk {
     VrPipBoyTouchGame* m_pipBoyTouch = nullptr;
     bool             m_pipBoyPointing = false;
     bool             m_loggedPointing = false;
+    // The pointing hand's size and meshes are logged once per opening
+    bool             m_loggedPointingHand = false;
     // How far the glass last pushed the pointing hand back from its
     // controller, in the drawing space
     VrVector3        m_pipBoyRest;
@@ -1308,6 +1310,8 @@ namespace dxvk {
     void placePointingHand(uint8_t* root, uint8_t* rightHand, const VrVector3& shift, const VrVector3& rest, void* updateData);
 
     VrVector3 measurePipBoyTouch(uint8_t* root, uint8_t* rightHand);
+
+    void logPointingHand(uint8_t* root, uint8_t* rightHand, const VrVector3& tip);
 
     void readFingerRigs(uint8_t* root);
 

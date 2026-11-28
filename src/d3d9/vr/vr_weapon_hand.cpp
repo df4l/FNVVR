@@ -2009,6 +2009,7 @@ namespace dxvk {
 
     if (!rightHand) {
       m_pipBoyRest = VrVector3();
+      m_loggedPointingHand = false;
       hideArms(root, true);
       return;
     }
@@ -2116,9 +2117,40 @@ namespace dxvk {
     VrVector3 joint  = readVector(distal, VrGame::ObjectWorldTranslation);
     VrVector3 tip    = joint + (joint - readVector(middle, VrGame::ObjectWorldTranslation)) * FingertipExtension;
 
+    if (!m_loggedPointingHand) {
+      logPointingHand(root, rightHand, tip);
+      m_loggedPointingHand = true;
+    }
+
     return m_pipBoyTouch->measure(tip,
       readVector(leftForearm, VrGame::ObjectWorldTranslation),
       readVector(leftHand, VrGame::ObjectWorldTranslation));
+  }
+
+
+  void VrWeaponHand::logPointingHand(uint8_t* root, uint8_t* rightHand, const VrVector3& tip) {
+    // Outfits change the meshes drawn on the hand, not its bones: both are
+    // logged to compare what the finger is measured on with what is drawn
+    VrVector3 wrist = readVector(rightHand, VrGame::ObjectWorldTranslation);
+    float scale = field<float>(rightHand, VrGame::ObjectWorldScale);
+
+    std::string meshes;
+
+    forEachObject(root, MaxModelDepth, [rightHand, &meshes] (uint8_t* object) {
+      uint8_t* geometry = asGeometry(object);
+
+      if (!geometry || !isSkinnedBelow(geometry, rightHand))
+        return;
+
+      auto name = field<const char*>(geometry, VrGame::ObjectName);
+      bool culled = field<uint32_t>(geometry, VrGame::ObjectFlags) & VrGame::ObjectFlagAppCulled;
+
+      meshes += str::format(meshes.empty() ? "" : ", ", "'", name ? name : "", "'", culled ? " (hidden)" : "");
+    });
+
+    Logger::info(str::format("VR: The pointing right hand measures ",
+      vrLength(tip - wrist) / VrGameUnitsPerMetre, " m from the wrist to the fingertip, scale ", scale,
+      ", drawn with ", meshes.empty() ? std::string("no mesh") : meshes));
   }
 
 
