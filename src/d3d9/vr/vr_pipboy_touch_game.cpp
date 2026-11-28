@@ -230,9 +230,11 @@ namespace dxvk {
     std::unique_ptr<VrPipBoyTouchGame> touch(new VrPipBoyTouchGame());
     g_touch = touch.get();
 
-    touch->m_mapCalls =
-         VrGameMemory::matches(VrGame::IsTopMenu, VrGame::IsTopMenuPrologue, sizeof(VrGame::IsTopMenuPrologue))
-      && VrGameMemory::matches(VrGame::TileSetFloat, VrGame::TileSetFloatPrologue, sizeof(VrGame::TileSetFloatPrologue))
+    touch->m_hoverCalls = VrGameMemory::matches(VrGame::TileSetFloat,
+      VrGame::TileSetFloatPrologue, sizeof(VrGame::TileSetFloatPrologue));
+
+    touch->m_mapCalls = touch->m_hoverCalls
+      && VrGameMemory::matches(VrGame::IsTopMenu, VrGame::IsTopMenuPrologue, sizeof(VrGame::IsTopMenuPrologue))
       && VrGameMemory::matches(VrGame::MapMenuZoom, VrGame::MapMenuZoomPrologue, sizeof(VrGame::MapMenuZoomPrologue))
       && VrGameMemory::matches(VrGame::PipBoyMouseX, VrGame::PipBoyMousePrologue, sizeof(VrGame::PipBoyMousePrologue))
       && VrGameMemory::matches(VrGame::PipBoyMouseY, VrGame::PipBoyMousePrologue, sizeof(VrGame::PipBoyMousePrologue));
@@ -241,6 +243,9 @@ namespace dxvk {
 
     if (!touch->m_mapCalls)
       Logger::warn("VR: The Pip-Boy map's calls were not found, the finger scrolls it as a list");
+
+    if (!touch->m_hoverCalls)
+      Logger::warn("VR: The interface's tile calls were not found, the last line the finger hovered stays lit");
 
     return touch;
   }
@@ -257,8 +262,45 @@ namespace dxvk {
 
 
   void VrPipBoyTouchGame::setAim(const VrPipBoyAim& aim, bool active) {
+    // Only a finger leaving with the cursor still its own: the gamepad
+    // taking the menus back moves its focus, which takes the highlight off
+    if (m_active && active && m_aim.kind != VrPipBoyAimKind::None && aim.kind == VrPipBoyAimKind::None)
+      clearHover();
+
     m_aim    = aim;
     m_active = active;
+  }
+
+
+  void VrPipBoyTouchGame::clearHover() {
+    // The interface takes the highlight off the tile under the mouse only
+    // when its next pick differs, and it picks only while the cursor moves:
+    // the finger gone, the cursor rests and the last tile stays lit. Done
+    // as InterfaceManager::ClearOverTileTarget without the menu's leave, so
+    // that the item under the finger stays selected for the gamepad's
+    // buttons (the focus, pMouseOverTarget, is left alone).
+    auto interfaceManager = *reinterpret_cast<uint8_t* const*>(VrGame::InterfaceManager);
+
+    if (!interfaceManager || !m_hoverCalls)
+      return;
+
+    auto& overTile = *reinterpret_cast<void**>(interfaceManager + VrGame::InterfaceOverTile);
+    auto& overMenu = *reinterpret_cast<void**>(interfaceManager + VrGame::InterfaceOverMenu);
+
+    if (!overTile)
+      return;
+
+    reinterpret_cast<TileSetFloatFn>(VrGame::TileSetFloat)(overTile, VrGame::TileMouseover, 0.0f, true);
+
+    // Forgotten, so that the finger lights the same tile again when it
+    // comes back to it
+    overTile = nullptr;
+    overMenu = nullptr;
+
+    if (!m_loggedHover) {
+      Logger::info("VR: The right index finger left the Pip-Boy's screen, the line it hovered is no longer lit");
+      m_loggedHover = true;
+    }
   }
 
 

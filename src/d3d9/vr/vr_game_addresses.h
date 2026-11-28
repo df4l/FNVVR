@@ -2108,6 +2108,22 @@ namespace dxvk {
     constexpr float     MapMenuWheelZoom         = 1.1f;
     constexpr uintptr_t PipBoyMouseX             = 0x007697F0;
     constexpr uintptr_t PipBoyMouseY             = 0x007983C0;
+
+    /**
+     * The highlight of the tile under the mouse, see findings/pipboy.md
+     * §9.3. InterfaceManager::Idle (0x0070C4A0) sets the mouseover trait
+     * (0xFC3, Tile::Set at 0x0070D46B) of the tile PickMenus returns and
+     * keeps it in pOverTileTarget (+0xCC) and its menu in pOverTileMenu
+     * (+0xD0); pMouseOverTarget (+0xBC) is the focus, which the gamepad
+     * moves with SetCurrentFocusTarget (0x00715860, clears the hovered
+     * tile's trait). In mouse mode it clears the trait only when another
+     * pick differs, and picks only while the cursor moves: a cursor left
+     * still keeps the last tile lit (super_text_box.xml draws its box
+     * while mouseover is 1). Tile deletion nulls +0xCC/+0xD0
+     * (Interface::TileIsBeingDeleted 0x00706C20). ida-gog.
+     */
+    constexpr uintptr_t InterfaceOverMenu        = 0xD0;
+    constexpr uint32_t  TileMouseover            = 0xFC3;
     constexpr uint8_t   PipBoyMousePrologue[]    = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x14, 0x89, 0x4D, 0xFC, 0x8B, 0x45, 0xFC };
 
     /**

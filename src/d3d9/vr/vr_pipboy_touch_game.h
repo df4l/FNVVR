@@ -30,6 +30,10 @@ namespace dxvk {
    * On the map, the finger drags and zooms it as the gamepad's sticks do
    * (updateMap).
    *
+   * Once the finger leaves the screen, the highlight of the last line or
+   * tab it hovered is taken off, which the interface only does when the
+   * mouse moves on (clearHover).
+   *
    * Only used on the game's main thread.
    */
   class VrPipBoyTouchGame {
@@ -82,6 +86,9 @@ namespace dxvk {
      * \param [in] aim The point or button, see VrPipBoyTouchState
      * \param [in] active Whether the finger has the cursor: otherwise the
      *    game picks along the camera as it does without the mod
+     *
+     * The finger moving away with the cursor still its own takes the
+     * highlight off the last tile it hovered.
      */
     void setAim(const VrPipBoyAim& aim, bool active);
 
@@ -159,6 +166,10 @@ namespace dxvk {
     double             m_mapMouseY = 0.0;
     bool               m_loggedMap = false;
 
+    // Tile::Set was found, the hover's highlight can be taken off
+    bool               m_hoverCalls = false;
+    bool               m_loggedHover = false;
+
     VrPipBoyTouchPoint m_point;
     bool               m_hasPoint = false;
     VrPipBoyTouchPoint m_framePoint;
@@ -185,6 +196,8 @@ namespace dxvk {
     static ButtonPlate buttonPlate(const uint8_t* manager, uint32_t index, const ScreenFrame& frame);
 
     static uint8_t* shownMap();
+
+    void clearHover();
 
     static char __fastcall checkButtonsHook(
             void*                 pipBoy,
